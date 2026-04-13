@@ -10,6 +10,7 @@ helpFile=readme_jp.rtf
 noHelpFile=ファイルが見つかりません。[readme_jp.rtf]ファイルが[readboard]フォルダにあることを確認してください。
 komi65Describe=過去の着手履歴が再現されない為、アゲハマの数が不正確な場合があります。ルールを「エリアスコア+コミ7.0目+HasButton」に設定することで、日本式の数え方をシミュレートできます。
 MainForm_rdoFox=野狐
+MainForm_rdoFoxBack=野狐(バックグラウンド着手)
 MainForm_rdoTygem=タイゼム
 MainForm_rdoSina=新浪
 MainForm_rdoBack=バックグラウンド

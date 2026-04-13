@@ -10,6 +10,7 @@ helpFile=readme_en.rtf
 noHelpFile=Can not find file,Please check [readme_en.rtf] file is in the folder [readboard]
 komi65Describe=Because of lack of move history,captured stone number will be incorrectly,So only area scoring can be used.You can set rules [area scoring + 7.0 komi + hasbutton] to simulate Japanese rule.
 MainForm_rdoFox=FoxWQ
+MainForm_rdoFoxBack=FoxWQ(BG Play)
 MainForm_rdoTygem=Tygem
 MainForm_rdoSina=Sina
 MainForm_rdoBack=Background

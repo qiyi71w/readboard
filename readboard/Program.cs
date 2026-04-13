@@ -61,12 +61,10 @@ namespace readboard
                 System.Environment.Exit(0);
             language = arg[5].ToString();
             String languageFileName = "language_" + language + ".txt";
+            addDefaultLangItems();
             if (File.Exists(languageFileName))
             {
                 readLangItemsFromFile(languageFileName);
-            }
-            else {
-                addDefaultLangItems();
             }
             //if (arg[5].Equals("0"))
             //{
@@ -130,6 +128,7 @@ namespace readboard
             langItems.Add("komi65Describe", "由于同步时无法获取提子数,日本规则(数目)将变得不准确,需要同步日本规则贴6.5目的棋局时可在Katago中使用[数子+贴目7.0+收后方贴还0.5目]规则模拟");
 
             langItems.Add("MainForm_rdoFox", "野狐");
+            langItems.Add("MainForm_rdoFoxBack", "野狐(后台落子)");
             langItems.Add("MainForm_rdoTygem", "弈城");
             langItems.Add("MainForm_rdoSina", "新浪");
             langItems.Add("MainForm_rdoBack", "其他(后台)");
@@ -202,7 +201,7 @@ namespace readboard
             {
                 string[] param = line.Split('=');
                 if(param.Length == 2)
-                    langItems.Add(param[0], param[1]);
+                    langItems[param[0]] = param[1];
             }
         }
 

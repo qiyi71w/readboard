@@ -35,6 +35,7 @@
             this.btnKeepSync = new System.Windows.Forms.Button();
             this.btnClearBoard = new System.Windows.Forms.Button();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.rdoFoxBack = new System.Windows.Forms.RadioButton();
             this.rdoFore = new System.Windows.Forms.RadioButton();
             this.rdoSina = new System.Windows.Forms.RadioButton();
             this.rdoBack = new System.Windows.Forms.RadioButton();
@@ -139,6 +140,7 @@
             // 
             // groupBox1
             // 
+            this.groupBox1.Controls.Add(this.rdoFoxBack);
             this.groupBox1.Controls.Add(this.rdoFore);
             this.groupBox1.Controls.Add(this.rdoSina);
             this.groupBox1.Controls.Add(this.rdoBack);
@@ -146,14 +148,26 @@
             this.groupBox1.Controls.Add(this.rdoFox);
             this.groupBox1.Location = new System.Drawing.Point(7, -2);
             this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Size = new System.Drawing.Size(326, 32);
+            this.groupBox1.Size = new System.Drawing.Size(500, 32);
             this.groupBox1.TabIndex = 14;
             this.groupBox1.TabStop = false;
+            // 
+            // rdoFoxBack
+            // 
+            this.rdoFoxBack.AutoSize = true;
+            this.rdoFoxBack.Location = new System.Drawing.Point(56, 11);
+            this.rdoFoxBack.Name = "rdoFoxBack";
+            this.rdoFoxBack.Size = new System.Drawing.Size(107, 16);
+            this.rdoFoxBack.TabIndex = 15;
+            this.rdoFoxBack.TabStop = true;
+            this.rdoFoxBack.Text = "野狐(后台落子)";
+            this.rdoFoxBack.UseVisualStyleBackColor = true;
+            this.rdoFoxBack.CheckedChanged += new System.EventHandler(this.radioButtonFoxBack_CheckedChanged);
             // 
             // rdoFore
             // 
             this.rdoFore.AutoSize = true;
-            this.rdoFore.Location = new System.Drawing.Point(239, 11);
+            this.rdoFore.Location = new System.Drawing.Point(402, 11);
             this.rdoFore.Name = "rdoFore";
             this.rdoFore.Size = new System.Drawing.Size(83, 16);
             this.rdoFore.TabIndex = 14;
@@ -165,7 +179,7 @@
             // rdoSina
             // 
             this.rdoSina.AutoSize = true;
-            this.rdoSina.Location = new System.Drawing.Point(104, 11);
+            this.rdoSina.Location = new System.Drawing.Point(228, 11);
             this.rdoSina.Name = "rdoSina";
             this.rdoSina.Size = new System.Drawing.Size(47, 16);
             this.rdoSina.TabIndex = 13;
@@ -177,7 +191,7 @@
             // rdoBack
             // 
             this.rdoBack.AutoSize = true;
-            this.rdoBack.Location = new System.Drawing.Point(154, 11);
+            this.rdoBack.Location = new System.Drawing.Point(287, 11);
             this.rdoBack.Name = "rdoBack";
             this.rdoBack.Size = new System.Drawing.Size(83, 16);
             this.rdoBack.TabIndex = 12;
@@ -189,7 +203,7 @@
             // rdoTygem
             // 
             this.rdoTygem.AutoSize = true;
-            this.rdoTygem.Location = new System.Drawing.Point(54, 11);
+            this.rdoTygem.Location = new System.Drawing.Point(174, 11);
             this.rdoTygem.Name = "rdoTygem";
             this.rdoTygem.Size = new System.Drawing.Size(47, 16);
             this.rdoTygem.TabIndex = 11;
@@ -410,7 +424,7 @@
             // 
             // btnHelp
             // 
-            this.btnHelp.Location = new System.Drawing.Point(409, 4);
+            this.btnHelp.Location = new System.Drawing.Point(512, 4);
             this.btnHelp.Name = "btnHelp";
             this.btnHelp.Size = new System.Drawing.Size(44, 26);
             this.btnHelp.TabIndex = 30;
@@ -519,7 +533,7 @@
             // 
             // btnSettings
             // 
-            this.btnSettings.Location = new System.Drawing.Point(335, 4);
+            this.btnSettings.Location = new System.Drawing.Point(560, 4);
             this.btnSettings.Name = "btnSettings";
             this.btnSettings.Size = new System.Drawing.Size(71, 26);
             this.btnSettings.TabIndex = 33;
@@ -550,7 +564,7 @@
             // 
             // btnKomi65
             // 
-            this.btnKomi65.Location = new System.Drawing.Point(335, 35);
+            this.btnKomi65.Location = new System.Drawing.Point(512, 35);
             this.btnKomi65.Name = "btnKomi65";
             this.btnKomi65.Size = new System.Drawing.Size(118, 25);
             this.btnKomi65.TabIndex = 36;
@@ -582,7 +596,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(459, 182);
+            this.ClientSize = new System.Drawing.Size(640, 182);
             this.Controls.Add(this.btnCircleRow1);
             this.Controls.Add(this.btnFastSync);
             this.Controls.Add(this.btnKomi65);
@@ -636,6 +650,7 @@
         private System.Windows.Forms.Button btnKeepSync;
         private System.Windows.Forms.Button btnClearBoard;
         private System.Windows.Forms.GroupBox groupBox1;
+        private System.Windows.Forms.RadioButton rdoFoxBack;
         private System.Windows.Forms.RadioButton rdoSina;
         private System.Windows.Forms.RadioButton rdoBack;
         private System.Windows.Forms.RadioButton rdoTygem;

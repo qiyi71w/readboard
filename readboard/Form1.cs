@@ -16,6 +16,7 @@ using Point = OpenCvSharp.Point;
 using System.Threading.Tasks;
 using System.Drawing.Imaging;
 using System.ComponentModel;
+using LwInterop = Interop.lw;
 
 namespace readboard
 {
@@ -56,7 +57,13 @@ namespace readboard
         //   int sy1ty5=0;
         //int all;
         //  System.Timers.Timer t;
-        public static int type = 0;
+        private const int TYPE_FOX = 0;
+        private const int TYPE_TYGEM = 1;
+        private const int TYPE_SINA = 2;
+        private const int TYPE_BACKGROUND = 3;
+        private const int TYPE_FOX_BACKGROUND_PLACE = 4;
+        private const int TYPE_FOREGROUND = 5;
+        public static int type = TYPE_FOX;
         // Boolean isQTYC = false;
         // int boardWidth=19;
         int boardH = 19;
@@ -85,7 +92,7 @@ namespace readboard
 
         private Boolean isJavaFrame = false;
         private int javaX, javaY;
-        lw.lwsoft lw;
+        LwInterop.lwsoft lw;
         Boolean canUsePrintWindow = true;
         Boolean isFirstGetPos = true;
         Boolean cansetFirstGetPos = true;
@@ -104,6 +111,43 @@ namespace readboard
             public int Top;
             public int Right;
             public int Bottom;
+        }
+
+        private static Boolean IsFoxSyncType(int syncType)
+        {
+            return syncType == TYPE_FOX || syncType == TYPE_FOX_BACKGROUND_PLACE;
+        }
+
+        private static Boolean UsesManualSelectionType(int syncType)
+        {
+            return syncType == TYPE_BACKGROUND || syncType == TYPE_FOREGROUND;
+        }
+
+        private static Boolean SupportsFastSyncType(int syncType)
+        {
+            return IsFoxSyncType(syncType) || syncType == TYPE_TYGEM || syncType == TYPE_SINA;
+        }
+
+        private void setNativeBoardMode(int syncType)
+        {
+            type = syncType;
+            this.btnCircleBoard.Enabled = false;
+            this.btnCircleRow1.Enabled = false;
+            this.btnClickBoard.Enabled = true;
+            this.btnFastSync.Enabled = true;
+            if (this.rdoOtherBoard.Checked)
+                this.rdo19x19.Checked = true;
+            this.rdoOtherBoard.Enabled = false;
+        }
+
+        private void setManualSelectionMode(int syncType)
+        {
+            type = syncType;
+            this.btnClickBoard.Enabled = false;
+            this.btnCircleRow1.Enabled = true;
+            this.btnCircleBoard.Enabled = true;
+            this.btnFastSync.Enabled = false;
+            this.rdoOtherBoard.Enabled = true;
         }
 
 
@@ -547,19 +591,22 @@ namespace readboard
                 this.rdo19x19.Checked = true;
             switch (type)
             {
-                case 0:
+                case TYPE_FOX:
                     rdoFox.Checked = true;
                     break;
-                case 1:
+                case TYPE_TYGEM:
                     rdoTygem.Checked = true;
                     break;
-                case 2:
+                case TYPE_SINA:
                     rdoSina.Checked = true;
                     break;
-                case 5:
+                case TYPE_FOX_BACKGROUND_PLACE:
+                    rdoFoxBack.Checked = true;
+                    break;
+                case TYPE_FOREGROUND:
                     rdoFore.Checked = true;
                     break;
-                case 3:
+                case TYPE_BACKGROUND:
                     rdoBack.Checked = true;
                     break;
             }
@@ -577,7 +624,7 @@ namespace readboard
             this.MaximizeBox = false;
             pcurrentWin = this;
 
-            if (type == 0 || type == 1 || type == 2)
+            if (SupportsFastSyncType(type))
                 this.btnFastSync.Enabled = true;
             else
                 this.btnFastSync.Enabled = false;
@@ -595,7 +642,7 @@ namespace readboard
                 //注册成功!             
                 try
                 {
-                    lw = new lw.lwsoft();
+                    lw = new LwInterop.lwsoft();
                     canUseLW = false;// true;
                 }
                 catch (Exception)
@@ -629,6 +676,7 @@ namespace readboard
                 chkAutoPlay.Enabled = false;
             }
             this.rdoFox.Text = getLangStr("MainForm_rdoFox");
+            this.rdoFoxBack.Text = getLangStr("MainForm_rdoFoxBack");
             this.rdoTygem.Text = getLangStr("MainForm_rdoTygem");
             this.rdoSina.Text = getLangStr("MainForm_rdoSina");
             this.rdoBack.Text = getLangStr("MainForm_rdoBack");
@@ -955,7 +1003,7 @@ namespace readboard
                 }
                 RgbInfo[] rgbArray = new RgbInfo[0];
                 int totalWidth = -1;
-                if (type == 0)
+                if (IsFoxSyncType(type))
                 {
                     if (!classNameStr.ToLower().Equals("#32770"))
                     {
@@ -1020,6 +1068,7 @@ namespace readboard
             this.btnFastSync.Text = getLangStr("stopSync");//Program.isChn ? "停止同步" : "StopSync";
             startedSync = true;
             this.rdoFox.Enabled = false;
+            this.rdoFoxBack.Enabled = false;
             this.rdoTygem.Enabled = false;
             //checkBox1.Enabled = false;
             // chkAutoPlay.Enabled = checkBox1.Checked;
@@ -1042,6 +1091,7 @@ namespace readboard
             this.btnFastSync.Text = getLangStr("stopSync");//Program.isChn ? "停止同步" : "StopSync";
             //  button5click = true;
             this.rdoFox.Enabled = false;
+            this.rdoFoxBack.Enabled = false;
             this.rdoTygem.Enabled = false;
             //checkBox1.Enabled = false;
             // chkAutoPlay.Enabled = checkBox1.Checked;
@@ -1067,6 +1117,7 @@ namespace readboard
             this.btnOneTimeSync.Enabled = true;
             this.btnKeepSync.Enabled = true;
             this.rdoFox.Enabled = true;
+            this.rdoFoxBack.Enabled = true;
             this.rdoSina.Enabled = true;
             //} 
             this.rdoTygem.Enabled = true;
@@ -1079,7 +1130,7 @@ namespace readboard
             this.rdoOtherBoard.Enabled = true;
             this.rdoFore.Enabled = true;
             //
-            if (type == 3 || type == 5)
+            if (UsesManualSelectionType(type))
             {
                 this.btnCircleRow1.Enabled = true;
                 this.btnCircleBoard.Enabled = true;
@@ -1100,7 +1151,7 @@ namespace readboard
             if (needForceUnbind)
             {
                 needForceUnbind = false;
-                lw.lwsoft lwh = new lw.lwsoft();
+                LwInterop.lwsoft lwh = new LwInterop.lwsoft();
                 lwh.ForceUnBindWindow((int)hwnd);
             }
         }
@@ -1256,7 +1307,7 @@ namespace readboard
                 int y2;
                 if (Program.showInBoard)
                     Send("noinboard");
-                if (type == 0)
+                if (IsFoxSyncType(type))
                 {
                     // hwnd = dm.FindWindow("#32770", "");
                     // hwndFoxPlace = -1;
@@ -1415,7 +1466,9 @@ namespace readboard
                 }
                 Action2<String> a = new Action2<String>(startKeepingSync);
                 Invoke(a, "");
-                if (type == 0)
+                RgbInfo[] detectedRgbArray;
+                int detectedTotalWidth;
+                if (IsFoxSyncType(type))
                 {
                     rectX1 = x1;
                     rectY1 = y1;
@@ -1425,7 +1478,7 @@ namespace readboard
                             MessageBox.Show(getLangStr("notRightBoard"));
                         isRightGoban = false;
                     }
-                    if (!getFoxPos(hwnd, out RgbInfo[] rgbArray, out int totalWidth))
+                    if (!getFoxPos(hwnd, out detectedRgbArray, out detectedTotalWidth))
                     {
                         sx1 = 0;
                         sy1 = 0;
@@ -1456,7 +1509,7 @@ namespace readboard
                         width = (int)(width / factor);
                         height = (int)(height / factor);
                     }
-                    if (!getTygemPos(hwnd, out RgbInfo[] rgbArray, out int totalWidth))
+                    if (!getTygemPos(hwnd, out detectedRgbArray, out detectedTotalWidth))
                     {
                         sx1 = 0;
                         sy1 = 0;
@@ -1477,7 +1530,7 @@ namespace readboard
                             MessageBox.Show(getLangStr("notRightBoard"));
                         isRightGoban = false;
                     }
-                    if (!getSinaPos(hwnd, out RgbInfo[] rgbArray, out int totalWidth))
+                    if (!getSinaPos(hwnd, out detectedRgbArray, out detectedTotalWidth))
                     {
                         sx1 = 0;
                         sy1 = 0;
@@ -1561,7 +1614,7 @@ namespace readboard
 
         private void OutPutTime()
         {
-            lw.lwsoft lwh = null;
+            LwInterop.lwsoft lwh = null;
             Send("sync");
             Boolean firstTime = true;
             while (keepSync)
@@ -1626,7 +1679,7 @@ namespace readboard
                     }
                     RgbInfo[] rgbArray = new RgbInfo[0];
                     int totalWidth = -1;
-                    if (type == 0)
+                    if (IsFoxSyncType(type))
                     {
                         rectX1 = x1;
                         rectY1 = y1;
@@ -2175,13 +2228,13 @@ namespace readboard
             return (100 * sum) / (width * height);
         }
 
-        private void OutPut(Boolean first, RgbInfo[] rgbArray, lw.lwsoft lwh, int totalWidth)
+        private void OutPut(Boolean first, RgbInfo[] rgbArray, LwInterop.lwsoft lwh, int totalWidth)
         {
             if (width < this.boardW || height < this.boardH)
                 return;
             if (savedPlace && syncBoth)
             {
-                lwh = new lw.lwsoft();
+                lwh = new LwInterop.lwsoft();
                 lwh.BindWindow((int)hwnd, 0, 4, 0, 0, 0);
                 needForceUnbind = true;
                 savedPlace = false;
@@ -2216,61 +2269,33 @@ namespace readboard
         private void radioButton1_CheckedChanged(object sender, EventArgs e)
         {
             if (this.rdoFox.Checked)
-            {
-                type = 0;
-                this.btnCircleBoard.Enabled = false;
-                this.btnCircleRow1.Enabled = false;
-                this.btnClickBoard.Enabled = true;
-                this.btnFastSync.Enabled = true;
-                if (this.rdoOtherBoard.Checked)
-                    this.rdo19x19.Checked = true;
-                this.rdoOtherBoard.Enabled = false;
-            }
+                setNativeBoardMode(TYPE_FOX);
         }
 
         private void radioButton2_CheckedChanged(object sender, EventArgs e)
         {
             if (this.rdoTygem.Checked)
-            {
-                type = 1;
-                this.btnCircleBoard.Enabled = false;
-                this.btnCircleRow1.Enabled = false;
-                this.btnClickBoard.Enabled = true;
-                this.btnFastSync.Enabled = true;
-                if (this.rdoOtherBoard.Checked)
-                    this.rdo19x19.Checked = true;
-                this.rdoOtherBoard.Enabled = false;
-            }
+                setNativeBoardMode(TYPE_TYGEM);
         }
 
         private void radioButton3_CheckedChanged(object sender, EventArgs e)
         {
             if (this.rdoBack.Checked)
-            {
-                type = 3;
-                this.btnClickBoard.Enabled = false;
-                this.btnCircleRow1.Enabled = true;
-                this.btnCircleBoard.Enabled = true;
-                this.btnFastSync.Enabled = false;
-                this.rdoOtherBoard.Enabled = true;
-            }
+                setManualSelectionMode(TYPE_BACKGROUND);
         }
 
         private void radioButton4_CheckedChanged(object sender, EventArgs e)
         {
 
             if (this.rdoSina.Checked)
-            {
-                type = 2;
-                this.btnCircleBoard.Enabled = false;
-                this.btnCircleRow1.Enabled = false;
-                this.btnClickBoard.Enabled = true;
-                this.btnFastSync.Enabled = true;
-                if (this.rdoOtherBoard.Checked)
-                    this.rdo19x19.Checked = true;
-                this.rdoOtherBoard.Enabled = false;
-            }
+                setNativeBoardMode(TYPE_SINA);
 
+        }
+
+        private void radioButtonFoxBack_CheckedChanged(object sender, EventArgs e)
+        {
+            if (this.rdoFoxBack.Checked)
+                setNativeBoardMode(TYPE_FOX_BACKGROUND_PLACE);
         }
 
         public void saveOtherConfig()
@@ -2312,7 +2337,7 @@ namespace readboard
             Send("endsync");
             if (needForceUnbind)
             {
-                lw.lwsoft lwh = new lw.lwsoft();
+                LwInterop.lwsoft lwh = new LwInterop.lwsoft();
                 lwh.ForceUnBindWindow((int)hwnd);
             }
             System.Diagnostics.Process.GetCurrentProcess().Kill();
@@ -2413,6 +2438,12 @@ namespace readboard
                 SwitchToThisWindow(fatherHwnd, true);
                 foreMouseClick((int)Math.Round(rectX1 + sx1 + widthMagrin * (x + 0.5)), (int)Math.Round(rectY1 + sy1 + heightMagrin * (y + 0.5)), true,true);
             }
+            else if (type == TYPE_FOX_BACKGROUND_PLACE)
+            {
+                int clientX = (int)Math.Round(sx1 + widthMagrin * (x + 0.5));
+                int clientY = (int)Math.Round(sy1 + heightMagrin * (y + 0.5));
+                backMouseClick(clientX, clientY, hwnd);
+            }
             else
             {
                 int xx = 0;
@@ -2450,11 +2481,13 @@ namespace readboard
             if (!keepSync || !syncBoth || width < boardW)
                 return;
             int times = 10;
+            bool placed = false;
             if ((type == 0) && canUseLW)
             {
                 savedPlace = true;
                 savedX = x;
                 savedY = y;
+                placed = true;
             }
             else
             {
@@ -2462,23 +2495,36 @@ namespace readboard
                 {
                     placeStone(x, y);
                     times--;
-                    if (times == 0)
+                    if (!Program.verifyMove)
+                    {
+                        placed = true;
                         break;
-                } while (Program.verifyMove && !VerifyMove(x, y, false));
+                    }
+                    placed = VerifyMove(x, y, false);
+                    if (placed)
+                        break;
+                } while (times > 0);
             }
-            Send("placeComplete");
+            if (placed)
+                Send("placeComplete");
+            else
+                Send("error place failed");
         }
 
+        private const int MK_LBUTTON = 0x0001;
+        uint WM_MOUSEMOVE = 0x200;
         uint WM_LBUTTONDOWN = 0x201;
         uint WM_LBUTTONUP = 0x202;
 
         [DllImport("user32.dll", SetLastError = true)]
-        static extern bool PostMessage(IntPtr hWnd, uint Msg, int wParam, int lParam);
+        static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, int wParam, int lParam);
 
         private void backMouseClick(int x, int y, IntPtr hwnd)
         {
-            PostMessage(hwnd, WM_LBUTTONDOWN, 0, x + (y << 16));
-            PostMessage(hwnd, WM_LBUTTONUP, 0, x + (y << 16));
+            int lParam = x + (y << 16);
+            SendMessage(hwnd, WM_MOUSEMOVE, 0, lParam);
+            SendMessage(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lParam);
+            SendMessage(hwnd, WM_LBUTTONUP, 0, lParam);
         }
 
         public enum MouseEventFlags
@@ -2636,14 +2682,7 @@ namespace readboard
         private void rdoqiantai_CheckedChanged(object sender, EventArgs e)
         {
             if (this.rdoFore.Checked)
-            {
-                type = 5;
-                this.btnClickBoard.Enabled = false;
-                this.btnCircleRow1.Enabled = true;
-                this.btnCircleBoard.Enabled = true;
-                this.btnFastSync.Enabled = false;
-                this.rdoOtherBoard.Enabled = true;
-            }
+                setManualSelectionMode(TYPE_FOREGROUND);
         }
 
         private void chkAutoPlay_CheckedChanged(object sender, EventArgs e)
