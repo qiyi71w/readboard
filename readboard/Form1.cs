@@ -93,6 +93,10 @@ namespace readboard
         private Boolean isJavaFrame = false;
         private int javaX, javaY;
         LwInterop.lwsoft lw;
+        private Button btnTheme;
+        private ContextMenuStrip themeMenu;
+        private ToolStripMenuItem menuThemeOptimized;
+        private ToolStripMenuItem menuThemeClassic;
         Boolean canUsePrintWindow = true;
         Boolean isFirstGetPos = true;
         Boolean cansetFirstGetPos = true;
@@ -136,6 +140,353 @@ namespace readboard
             return new System.Drawing.Point(
                 Math.Min(Math.Max(workingArea.Left, location.X), maxX),
                 Math.Min(Math.Max(workingArea.Top, location.Y), maxY));
+        }
+
+        private void RestoreSavedWindowLocation()
+        {
+            if (posX == -1 || posY == -1)
+                return;
+
+            Location = ClampToScreenWorkingArea(new System.Drawing.Point(posX, posY), Size);
+        }
+
+        private bool IsOptimizedTheme()
+        {
+            return Program.uiThemeMode == Program.UiThemeOptimized;
+        }
+
+        private void EnsureThemeControls()
+        {
+            if (btnTheme != null)
+                return;
+
+            btnTheme = new Button();
+            btnTheme.Name = "btnTheme";
+            btnTheme.Size = new System.Drawing.Size(68, 32);
+            btnTheme.TabIndex = 39;
+            btnTheme.UseVisualStyleBackColor = true;
+            btnTheme.Click += btnTheme_Click;
+
+            themeMenu = new ContextMenuStrip();
+            themeMenu.ShowImageMargin = false;
+            menuThemeOptimized = new ToolStripMenuItem();
+            menuThemeClassic = new ToolStripMenuItem();
+            menuThemeOptimized.Click += menuThemeOptimized_Click;
+            menuThemeClassic.Click += menuThemeClassic_Click;
+            themeMenu.Items.Add(menuThemeOptimized);
+            themeMenu.Items.Add(menuThemeClassic);
+            Controls.Add(btnTheme);
+            btnTheme.BringToFront();
+        }
+
+        private void ApplyThemeControlTexts()
+        {
+            EnsureThemeControls();
+            btnTheme.Text = getLangStr("MainForm_btnTheme");
+            menuThemeOptimized.Text = getLangStr("MainForm_themeOptimized");
+            menuThemeClassic.Text = getLangStr("MainForm_themeClassic");
+            menuThemeOptimized.Checked = IsOptimizedTheme();
+            menuThemeClassic.Checked = !IsOptimizedTheme();
+        }
+
+        private void btnTheme_Click(object sender, EventArgs e)
+        {
+            if (themeMenu != null)
+                themeMenu.Show(btnTheme, new System.Drawing.Point(0, btnTheme.Height));
+        }
+
+        private void menuThemeOptimized_Click(object sender, EventArgs e)
+        {
+            SwitchTheme(Program.UiThemeOptimized);
+        }
+
+        private void menuThemeClassic_Click(object sender, EventArgs e)
+        {
+            SwitchTheme(Program.UiThemeClassic);
+        }
+
+        private void SwitchTheme(int themeMode)
+        {
+            if (Program.uiThemeMode == themeMode)
+                return;
+
+            Program.uiThemeMode = themeMode;
+            ApplyMainFormUi();
+            saveOtherConfig();
+        }
+
+        private void ApplyMainFormUi()
+        {
+            SuspendLayout();
+            AutoScaleMode = AutoScaleMode.None;
+            DoubleBuffered = true;
+            EnsureThemeControls();
+            ClientSize = new System.Drawing.Size(792, 374);
+            groupBox1.Text = getLangStr("MainForm_groupPlatform");
+            groupBox2.Text = getLangStr("MainForm_groupBoard");
+            groupBox4.Text = getLangStr("MainForm_groupSync");
+            rdoOtherBoard.Text = getLangStr("MainForm_rdoCustomBoard");
+            label6.Text = "x";
+            ApplyMainFormTypography();
+            ApplyThemeControlTexts();
+            ApplyMainFormTheme();
+            ArrangeMainHeader();
+            ArrangeMainBoardSection();
+            ArrangeMainSyncSection();
+            ArrangeMainActions();
+            RestoreSavedWindowLocation();
+            ResumeLayout(false);
+            PerformLayout();
+        }
+
+        private void ApplyMainFormTypography()
+        {
+            Font = UiTheme.BodyFont;
+
+            foreach (GroupBox group in new[] { groupBox1, groupBox2, groupBox4 })
+                group.Font = UiTheme.SectionFont;
+
+            foreach (Control surface in new Control[] { flowLayoutPanel1, flowLayoutPanel2, panel1, panel2, panel3, panel4 })
+                surface.Font = UiTheme.BodyFont;
+
+            foreach (ButtonBase option in new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite })
+                option.Font = UiTheme.BodyFont;
+
+            foreach (TextBox textBox in new[] { textBox1, textBox2, textBox3, txtBoardWidth, txtBoardHeight })
+                textBox.Font = UiTheme.BodyFont;
+
+            foreach (Label label in new[] { lblBoardSize, lblPlayCondition, lblTime, lblTotalVisits, lblBestMoveVisits, label6 })
+                label.Font = UiTheme.BodyFont;
+
+            foreach (Button button in new[] { btnFastSync, btnKeepSync, btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnClearBoard, btnTheme })
+                button.Font = UiTheme.BodyFont;
+        }
+
+        private void ApplyMainFormTheme()
+        {
+            if (IsOptimizedTheme())
+            {
+                UiTheme.ApplyWindow(this);
+                ApplyOptimizedMainFormTheme();
+                return;
+            }
+
+            ApplyClassicMainFormTheme();
+        }
+
+        private void ApplyOptimizedMainFormTheme()
+        {
+            foreach (GroupBox group in new[] { groupBox1, groupBox2, groupBox4 })
+                UiTheme.StyleGroupBox(group);
+
+            foreach (Control surface in new Control[] { flowLayoutPanel1, flowLayoutPanel2, panel1, panel2, panel3, panel4 })
+                UiTheme.StylePanelSurface(surface);
+
+            foreach (ButtonBase option in new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite })
+                UiTheme.StyleOption(option);
+
+            foreach (TextBox textBox in new[] { textBox1, textBox2, textBox3, txtBoardWidth, txtBoardHeight })
+                UiTheme.StyleInput(textBox);
+
+            foreach (Label label in new[] { lblBoardSize, lblPlayCondition, lblTime, lblTotalVisits, lblBestMoveVisits, label6 })
+                UiTheme.StyleSubtleLabel(label);
+
+            foreach (Button button in new[] { btnFastSync, btnKeepSync })
+                UiTheme.StylePrimaryButton(button);
+
+            foreach (Button button in new[] { btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnTheme })
+                UiTheme.StyleSecondaryButton(button);
+
+            UiTheme.StyleDangerButton(btnClearBoard);
+        }
+
+        private void ApplyClassicMainFormTheme()
+        {
+            BackColor = SystemColors.Control;
+            ForeColor = SystemColors.ControlText;
+            Font = Control.DefaultFont;
+
+            foreach (GroupBox group in new[] { groupBox1, groupBox2, groupBox4 })
+            {
+                group.BackColor = SystemColors.Control;
+                group.ForeColor = SystemColors.ControlText;
+                group.Font = Control.DefaultFont;
+                group.Padding = new Padding(3);
+            }
+
+            foreach (Control surface in new Control[] { flowLayoutPanel1, flowLayoutPanel2, panel1, panel2, panel3, panel4 })
+            {
+                surface.BackColor = SystemColors.Control;
+                surface.ForeColor = SystemColors.ControlText;
+                surface.Font = Control.DefaultFont;
+            }
+
+            foreach (ButtonBase option in new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite })
+            {
+                option.BackColor = SystemColors.Control;
+                option.ForeColor = SystemColors.ControlText;
+                option.Font = Control.DefaultFont;
+                option.Cursor = Cursors.Default;
+                option.FlatStyle = FlatStyle.Standard;
+                option.UseVisualStyleBackColor = true;
+            }
+
+            foreach (TextBox textBox in new[] { textBox1, textBox2, textBox3, txtBoardWidth, txtBoardHeight })
+            {
+                textBox.BackColor = SystemColors.Window;
+                textBox.ForeColor = SystemColors.WindowText;
+                textBox.Font = Control.DefaultFont;
+                textBox.BorderStyle = BorderStyle.Fixed3D;
+            }
+
+            foreach (Label label in new[] { lblBoardSize, lblPlayCondition, lblTime, lblTotalVisits, lblBestMoveVisits, label6 })
+            {
+                label.BackColor = Color.Transparent;
+                label.ForeColor = SystemColors.ControlText;
+                label.Font = Control.DefaultFont;
+                label.BorderStyle = BorderStyle.None;
+                label.Padding = Padding.Empty;
+            }
+
+            foreach (Button button in new[] { btnFastSync, btnKeepSync })
+            {
+                button.FlatStyle = FlatStyle.System;
+                button.UseVisualStyleBackColor = true;
+                button.Font = Control.DefaultFont;
+                button.Cursor = Cursors.Default;
+            }
+
+            foreach (Button button in new[] { btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnTheme })
+            {
+                button.FlatStyle = FlatStyle.System;
+                button.UseVisualStyleBackColor = true;
+                button.Font = Control.DefaultFont;
+                button.Cursor = Cursors.Default;
+            }
+
+            btnClearBoard.FlatStyle = FlatStyle.System;
+            btnClearBoard.UseVisualStyleBackColor = true;
+            btnClearBoard.Font = Control.DefaultFont;
+            btnClearBoard.Cursor = Cursors.Default;
+        }
+
+        private void ArrangeMainHeader()
+        {
+            const int left = 12;
+            const int top = 12;
+            const int buttonHeight = 32;
+            const int utilityLeft = 530;
+            const int settingsWidth = 72;
+            const int helpWidth = 68;
+            const int themeWidth = 68;
+            const int utilityGap = 8;
+
+            groupBox1.SetBounds(left, top, 506, 72);
+            rdoFox.Location = new System.Drawing.Point(14, 31);
+            rdoFoxBack.Location = new System.Drawing.Point(72, 31);
+            rdoTygem.Location = new System.Drawing.Point(184, 31);
+            rdoSina.Location = new System.Drawing.Point(244, 31);
+            rdoBack.Location = new System.Drawing.Point(302, 31);
+            rdoFore.Location = new System.Drawing.Point(398, 31);
+            btnSettings.SetBounds(utilityLeft, top, settingsWidth, buttonHeight);
+            btnHelp.SetBounds(utilityLeft + settingsWidth + utilityGap, top, helpWidth, buttonHeight);
+            btnTheme.SetBounds(utilityLeft + settingsWidth + helpWidth + utilityGap * 2, top, themeWidth, buttonHeight);
+            btnKomi65.SetBounds(utilityLeft, top + buttonHeight + 8, 174, buttonHeight);
+        }
+
+        private void ArrangeMainBoardSection()
+        {
+            const int left = 12;
+            const int top = 102;
+            const int textBoxWidth = 34;
+            const int inputTop = 27;
+            const int inputHeight = 24;
+            const int customInputGap = 12;
+            const int separatorGap = 4;
+
+            groupBox2.SetBounds(left, top, 438, 72);
+            lblBoardSize.SetBounds(16, 30, 52, 20);
+            lblBoardSize.TextAlign = ContentAlignment.MiddleLeft;
+            rdo19x19.Location = new System.Drawing.Point(74, 29);
+            rdo13x13.Location = new System.Drawing.Point(132, 29);
+            rdo9x9.Location = new System.Drawing.Point(198, 29);
+            rdoOtherBoard.Location = new System.Drawing.Point(246, 29);
+            txtBoardWidth.AutoSize = false;
+            txtBoardHeight.AutoSize = false;
+            int customInputLeft = rdoOtherBoard.Right + customInputGap;
+            txtBoardWidth.SetBounds(customInputLeft, inputTop, textBoxWidth, inputHeight);
+            txtBoardWidth.TextAlign = HorizontalAlignment.Center;
+            label6.TextAlign = ContentAlignment.MiddleCenter;
+            label6.SetBounds(txtBoardWidth.Right + separatorGap, 30, 10, 18);
+            txtBoardHeight.SetBounds(label6.Right + separatorGap, inputTop, textBoxWidth, inputHeight);
+            txtBoardHeight.TextAlign = HorizontalAlignment.Center;
+        }
+
+        private void ArrangeMainSyncSection()
+        {
+            const int rowHeight = 24;
+            const int timeFieldGap = 8;
+
+            groupBox4.SetBounds(12, 184, 750, 100);
+            flowLayoutPanel1.SetBounds(16, 28, 716, 30);
+            flowLayoutPanel2.SetBounds(16, 62, 716, 30);
+            flowLayoutPanel1.WrapContents = false;
+            flowLayoutPanel2.WrapContents = false;
+            chkBothSync.Margin = new Padding(0, 5, 12, 0);
+            radioBlack.Margin = new Padding(0, 5, 12, 0);
+            chkAutoPlay.Margin = new Padding(0, 5, 12, 0);
+            radioWhite.Margin = new Padding(0, 5, 12, 0);
+            panel1.Margin = new Padding(12, 2, 0, 0);
+            panel2.Margin = new Padding(12, 2, 0, 0);
+            panel3.Margin = new Padding(12, 2, 0, 0);
+            panel4.Margin = new Padding(12, 2, 0, 0);
+            panel1.AutoSize = false;
+            panel2.AutoSize = false;
+            panel3.AutoSize = false;
+            panel4.AutoSize = false;
+            panel1.Size = new System.Drawing.Size(129 + timeFieldGap, rowHeight);
+            panel2.Size = new System.Drawing.Size(112, rowHeight);
+            panel3.Size = new System.Drawing.Size(61, rowHeight);
+            panel4.Size = new System.Drawing.Size(112, rowHeight);
+            lblPlayCondition.AutoSize = false;
+            lblTotalVisits.AutoSize = false;
+            lblTime.AutoSize = false;
+            lblBestMoveVisits.AutoSize = false;
+            lblPlayCondition.SetBounds(0, 3, 107, 18);
+            lblTotalVisits.SetBounds(0, 3, 101, 18);
+            lblTime.SetBounds(0, 3, 53, 18);
+            lblBestMoveVisits.SetBounds(0, 3, 101, 18);
+            lblPlayCondition.TextAlign = ContentAlignment.MiddleLeft;
+            lblTotalVisits.TextAlign = ContentAlignment.MiddleLeft;
+            lblTime.TextAlign = ContentAlignment.MiddleLeft;
+            lblBestMoveVisits.TextAlign = ContentAlignment.MiddleLeft;
+            textBox1.AutoSize = false;
+            textBox2.AutoSize = false;
+            textBox3.AutoSize = false;
+            textBox1.Margin = new Padding(timeFieldGap, 1, 0, 0);
+            textBox2.Margin = new Padding(8, 1, 0, 0);
+            textBox3.Margin = new Padding(8, 1, 0, 0);
+            textBox1.Size = new System.Drawing.Size(68, rowHeight);
+            textBox2.Size = new System.Drawing.Size(92, rowHeight);
+            textBox3.Size = new System.Drawing.Size(92, rowHeight);
+        }
+
+        private void ArrangeMainActions()
+        {
+            const int firstRowTop = 294;
+            const int secondRowTop = 332;
+            const int buttonHeight = 32;
+
+            btnFastSync.SetBounds(12, firstRowTop, 118, buttonHeight);
+            btnClickBoard.SetBounds(142, firstRowTop, 186, buttonHeight);
+            btnCircleBoard.SetBounds(340, firstRowTop, 104, buttonHeight);
+            btnCircleRow1.SetBounds(456, firstRowTop, 104, buttonHeight);
+            chkShowInBoard.Location = new System.Drawing.Point(576, firstRowTop + 8);
+            btnKeepSync.SetBounds(12, secondRowTop, 128, buttonHeight);
+            btnOneTimeSync.SetBounds(152, secondRowTop, 112, buttonHeight);
+            btnTogglePonder.SetBounds(276, secondRowTop, 112, buttonHeight);
+            btnExchange.SetBounds(400, secondRowTop, 104, buttonHeight);
+            btnClearBoard.SetBounds(516, secondRowTop, 110, buttonHeight);
         }
 
         private void setNativeBoardMode(int syncType)
@@ -483,7 +834,7 @@ namespace readboard
                 if ((line = sr.ReadLine()) != null)
                 {
                     string[] arr = line.Split('_');
-                    if (arr.Length == 12)
+                    if (arr.Length >= 12)
                     {
                         try
                         {
@@ -525,7 +876,7 @@ namespace readboard
                 if ((line = sr.ReadLine()) != null)
                 {
                     string[] arr = line.Split('_');
-                    if (arr.Length == 12)
+                    if (arr.Length >= 12)
                     {
                         try
                         {
@@ -543,6 +894,8 @@ namespace readboard
                                 posY = Convert.ToInt32(arr[9]);
                                 Program.useEnhanceScreen = (Convert.ToInt32(arr[10]) == 1);
                                 Program.playPonder = (Convert.ToInt32(arr[11]) == 1);
+                                if (arr.Length >= 13)
+                                    Program.uiThemeMode = Convert.ToInt32(arr[12]);
                                 if (posX != -1 && posY != -1)
                                 {
                                     System.Drawing.Point desiredLocation = new System.Drawing.Point(posX, posY);
@@ -713,6 +1066,7 @@ namespace readboard
             this.btnExchange.Text = getLangStr("MainForm_btnExchange");
             this.btnClearBoard.Text = getLangStr("MainForm_btnClearBoard");
             this.Text = getLangStr("MainForm_title");
+            ApplyMainFormUi();
             var toolTip1 = new ToolTip();
             toolTip1.SetToolTip(this.chkShowInBoard, "Ctrl+X");
             Send("ready");
@@ -2325,7 +2679,7 @@ namespace readboard
             catch (Exception)
             {
             }
-            wr.WriteLine(Program.version+"_"+this.boardW + "_" + this.boardH + "_" + customW + "_" + customH + "_" + Program.timeinterval + "_" + (syncBoth ? "1" : "0") + "_" + Program.grayOffset + "_" + posX + "_" + posY + "_" + (Program.useEnhanceScreen ? "1" : "0") + "_" + (Program.playPonder ? "1" : "0"));
+            wr.WriteLine(Program.version+"_"+this.boardW + "_" + this.boardH + "_" + customW + "_" + customH + "_" + Program.timeinterval + "_" + (syncBoth ? "1" : "0") + "_" + Program.grayOffset + "_" + posX + "_" + posY + "_" + (Program.useEnhanceScreen ? "1" : "0") + "_" + (Program.playPonder ? "1" : "0") + "_" + Program.uiThemeMode);
             wr.Close();
         }
 
