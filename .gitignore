@@ -2,3 +2,5 @@
 packages/
 readboard/obj/
 readboard/Interop.lw.dll
+.codex/
+release/

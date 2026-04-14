@@ -226,7 +226,10 @@
     </PropertyGroup>
     <Error Condition="!Exists('..\packages\OpenCvSharp3-AnyCPU.4.0.0.20181129\build\OpenCvSharp3-AnyCPU.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\OpenCvSharp3-AnyCPU.4.0.0.20181129\build\OpenCvSharp3-AnyCPU.props'))" />
   </Target>
-  <Target Name="GenerateLwInterop" BeforeTargets="ResolveAssemblyReferences">
+  <Target Name="GenerateLwInterop"
+          BeforeTargets="ResolveAssemblyReferences"
+          Inputs="$(MSBuildProjectDirectory)\lw.dll;$(MSBuildProjectDirectory)\generate_lw_interop.ps1"
+          Outputs="$(LwInteropAssembly)">
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\generate_lw_interop.ps1&quot; -Source &quot;$(MSBuildProjectDirectory)\lw.dll&quot; -Output &quot;$(LwInteropAssembly)&quot;" />
   </Target>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

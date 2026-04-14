@@ -128,6 +128,16 @@ namespace readboard
             return IsFoxSyncType(syncType) || syncType == TYPE_TYGEM || syncType == TYPE_SINA;
         }
 
+        private static System.Drawing.Point ClampToScreenWorkingArea(System.Drawing.Point location, System.Drawing.Size windowSize)
+        {
+            Rectangle workingArea = Screen.FromPoint(location).WorkingArea;
+            int maxX = Math.Max(workingArea.Left, workingArea.Right - windowSize.Width);
+            int maxY = Math.Max(workingArea.Top, workingArea.Bottom - windowSize.Height);
+            return new System.Drawing.Point(
+                Math.Min(Math.Max(workingArea.Left, location.X), maxX),
+                Math.Min(Math.Max(workingArea.Top, location.Y), maxY));
+        }
+
         private void setNativeBoardMode(int syncType)
         {
             type = syncType;
@@ -535,11 +545,10 @@ namespace readboard
                                 Program.playPonder = (Convert.ToInt32(arr[11]) == 1);
                                 if (posX != -1 && posY != -1)
                                 {
-                                    var h = Screen.PrimaryScreen.Bounds.Height;
-                                    var w = Screen.PrimaryScreen.Bounds.Width;
-                                    this.Location = new System.Drawing.Point(Math.Min(Math.Max(0, posX), w - 476), Math.Min(Math.Max(0, posY), h - 217));
+                                    System.Drawing.Point desiredLocation = new System.Drawing.Point(posX, posY);
+                                    this.Location = ClampToScreenWorkingArea(desiredLocation, this.Size);
                                 }
-                            }                       
+                            }
                         }
                         catch (Exception)
                         {
@@ -2442,7 +2451,7 @@ namespace readboard
             {
                 int clientX = (int)Math.Round(sx1 + widthMagrin * (x + 0.5));
                 int clientY = (int)Math.Round(sy1 + heightMagrin * (y + 0.5));
-                backMouseClick(clientX, clientY, hwnd);
+                sendBackgroundMouseClickWithMove(clientX, clientY, hwnd);
             }
             else
             {
@@ -2451,7 +2460,7 @@ namespace readboard
                 Boolean isScaled = GetSupportDpiState(hwnd);
                 xx = (int)Math.Round((sx1 + widthMagrin * (x + 0.5)) * (isScaled ? 1 : factor));
                 yy = (int)Math.Round((sy1 + heightMagrin * (y + 0.5)) * (isScaled ? 1 : factor));
-                backMouseClick(xx, yy, hwnd);
+                postBackgroundMouseClick(xx, yy, hwnd);
             }
         }
 
@@ -2517,11 +2526,28 @@ namespace readboard
         uint WM_LBUTTONUP = 0x202;
 
         [DllImport("user32.dll", SetLastError = true)]
+        static extern bool PostMessage(IntPtr hWnd, uint Msg, int wParam, int lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
         static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, int wParam, int lParam);
 
-        private void backMouseClick(int x, int y, IntPtr hwnd)
+        private static int buildMouseLParam(int x, int y)
         {
-            int lParam = x + (y << 16);
+            return (x & 0xFFFF) | ((y & 0xFFFF) << 16);
+        }
+
+        // Keep legacy background modes non-blocking to preserve their historical behavior.
+        private void postBackgroundMouseClick(int x, int y, IntPtr hwnd)
+        {
+            int lParam = buildMouseLParam(x, y);
+            PostMessage(hwnd, WM_LBUTTONDOWN, 0, lParam);
+            PostMessage(hwnd, WM_LBUTTONUP, 0, lParam);
+        }
+
+        // Fox background placement needs a blocking move/click sequence in client coordinates.
+        private void sendBackgroundMouseClickWithMove(int x, int y, IntPtr hwnd)
+        {
+            int lParam = buildMouseLParam(x, y);
             SendMessage(hwnd, WM_MOUSEMOVE, 0, lParam);
             SendMessage(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lParam);
             SendMessage(hwnd, WM_LBUTTONUP, 0, lParam);
