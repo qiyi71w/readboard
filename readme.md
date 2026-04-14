@@ -6,6 +6,6 @@
 
 Board synchronization tool for [LizzieYzy](https://github.com/yzyray/lizzieyzy) and [LizzieYzy-Next](https://github.com/wimi321/lizzieyzy-next)
 
-新增选项，支持了野狐后台落子（不能最小化，仅限windows）
+新增选项，支持了野狐后台落子（不能最小化，仅限 Windows）
 
 ![演示图](assets/demo.png)

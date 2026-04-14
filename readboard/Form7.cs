@@ -51,16 +51,18 @@ namespace readboard
         private void ArrangeTipsLayout()
         {
             const int left = 18;
-            const int width = 436;
+            const int buttonGap = 12;
+            int contentWidth = ClientSize.Width - left * 2;
 
             lblTips.TextAlign = ContentAlignment.MiddleLeft;
             lblTips1.TextAlign = ContentAlignment.MiddleLeft;
-            int textBottom = LayoutWrappedLabel(lblTips, left, 18, width, true) + 10;
-            int footerTop = LayoutWrappedLabel(lblTips1, left, textBottom, width, false) + 18;
+            int textBottom = LayoutWrappedLabel(lblTips, left, 18, contentWidth, true) + 10;
+            int footerTop = LayoutWrappedLabel(lblTips1, left, textBottom, contentWidth, false) + 18;
             int secondaryWidth = Math.Max(118, TextRenderer.MeasureText(btnNotAskAgain.Text, btnNotAskAgain.Font).Width + 28);
             int primaryWidth = Math.Max(96, TextRenderer.MeasureText(btnConfirm.Text, btnConfirm.Font).Width + 28);
-            btnNotAskAgain.SetBounds(472 - 18 - primaryWidth - 12 - secondaryWidth, footerTop, secondaryWidth, 32);
-            btnConfirm.SetBounds(472 - 18 - primaryWidth, footerTop, primaryWidth, 32);
+            int confirmLeft = ClientSize.Width - left - primaryWidth;
+            btnNotAskAgain.SetBounds(confirmLeft - buttonGap - secondaryWidth, footerTop, secondaryWidth, 32);
+            btnConfirm.SetBounds(confirmLeft, footerTop, primaryWidth, 32);
             ClientSize = new Size(472, btnConfirm.Bottom + 18);
         }
 

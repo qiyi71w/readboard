@@ -101,6 +101,8 @@ namespace readboard
         Boolean isFirstGetPos = true;
         Boolean cansetFirstGetPos = true;
         Boolean isSecondTime = false;
+        private bool isMainFormSizeInitialized = false;
+        private static readonly System.Drawing.Size MainFormDefaultSize = new System.Drawing.Size(792, 374);
 
         Boolean needForceUnbind = false;
         [DllImport("user32.dll")]
@@ -153,6 +155,46 @@ namespace readboard
         private bool IsOptimizedTheme()
         {
             return Program.uiThemeMode == Program.UiThemeOptimized;
+        }
+
+        private IEnumerable<GroupBox> MainThemeGroups()
+        {
+            return new[] { groupBox1, groupBox2, groupBox4 };
+        }
+
+        private IEnumerable<Control> MainThemeSurfaces()
+        {
+            return new Control[] { flowLayoutPanel1, flowLayoutPanel2, panel1, panel2, panel3, panel4 };
+        }
+
+        private IEnumerable<ButtonBase> MainThemeOptions()
+        {
+            return new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite };
+        }
+
+        private IEnumerable<TextBox> MainThemeInputs()
+        {
+            return new[] { textBox1, textBox2, textBox3, txtBoardWidth, txtBoardHeight };
+        }
+
+        private IEnumerable<Label> MainThemeLabels()
+        {
+            return new[] { lblBoardSize, lblPlayCondition, lblTime, lblTotalVisits, lblBestMoveVisits, label6 };
+        }
+
+        private IEnumerable<Button> MainPrimaryButtons()
+        {
+            return new[] { btnFastSync, btnKeepSync };
+        }
+
+        private IEnumerable<Button> MainSecondaryButtons()
+        {
+            return new[] { btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnTheme };
+        }
+
+        private IEnumerable<Button> MainTypographyButtons()
+        {
+            return new[] { btnFastSync, btnKeepSync, btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnClearBoard, btnTheme };
         }
 
         private void EnsureThemeControls()
@@ -221,7 +263,11 @@ namespace readboard
             AutoScaleMode = AutoScaleMode.None;
             DoubleBuffered = true;
             EnsureThemeControls();
-            ClientSize = new System.Drawing.Size(792, 374);
+            if (!isMainFormSizeInitialized)
+            {
+                ClientSize = MainFormDefaultSize;
+                isMainFormSizeInitialized = true;
+            }
             groupBox1.Text = getLangStr("MainForm_groupPlatform");
             groupBox2.Text = getLangStr("MainForm_groupBoard");
             groupBox4.Text = getLangStr("MainForm_groupSync");
@@ -243,22 +289,22 @@ namespace readboard
         {
             Font = UiTheme.BodyFont;
 
-            foreach (GroupBox group in new[] { groupBox1, groupBox2, groupBox4 })
+            foreach (GroupBox group in MainThemeGroups())
                 group.Font = UiTheme.SectionFont;
 
-            foreach (Control surface in new Control[] { flowLayoutPanel1, flowLayoutPanel2, panel1, panel2, panel3, panel4 })
+            foreach (Control surface in MainThemeSurfaces())
                 surface.Font = UiTheme.BodyFont;
 
-            foreach (ButtonBase option in new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite })
+            foreach (ButtonBase option in MainThemeOptions())
                 option.Font = UiTheme.BodyFont;
 
-            foreach (TextBox textBox in new[] { textBox1, textBox2, textBox3, txtBoardWidth, txtBoardHeight })
+            foreach (TextBox textBox in MainThemeInputs())
                 textBox.Font = UiTheme.BodyFont;
 
-            foreach (Label label in new[] { lblBoardSize, lblPlayCondition, lblTime, lblTotalVisits, lblBestMoveVisits, label6 })
+            foreach (Label label in MainThemeLabels())
                 label.Font = UiTheme.BodyFont;
 
-            foreach (Button button in new[] { btnFastSync, btnKeepSync, btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnClearBoard, btnTheme })
+            foreach (Button button in MainTypographyButtons())
                 button.Font = UiTheme.BodyFont;
         }
 
@@ -276,25 +322,25 @@ namespace readboard
 
         private void ApplyOptimizedMainFormTheme()
         {
-            foreach (GroupBox group in new[] { groupBox1, groupBox2, groupBox4 })
+            foreach (GroupBox group in MainThemeGroups())
                 UiTheme.StyleGroupBox(group);
 
-            foreach (Control surface in new Control[] { flowLayoutPanel1, flowLayoutPanel2, panel1, panel2, panel3, panel4 })
+            foreach (Control surface in MainThemeSurfaces())
                 UiTheme.StylePanelSurface(surface);
 
-            foreach (ButtonBase option in new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite })
+            foreach (ButtonBase option in MainThemeOptions())
                 UiTheme.StyleOption(option);
 
-            foreach (TextBox textBox in new[] { textBox1, textBox2, textBox3, txtBoardWidth, txtBoardHeight })
+            foreach (TextBox textBox in MainThemeInputs())
                 UiTheme.StyleInput(textBox);
 
-            foreach (Label label in new[] { lblBoardSize, lblPlayCondition, lblTime, lblTotalVisits, lblBestMoveVisits, label6 })
+            foreach (Label label in MainThemeLabels())
                 UiTheme.StyleSubtleLabel(label);
 
-            foreach (Button button in new[] { btnFastSync, btnKeepSync })
+            foreach (Button button in MainPrimaryButtons())
                 UiTheme.StylePrimaryButton(button);
 
-            foreach (Button button in new[] { btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnTheme })
+            foreach (Button button in MainSecondaryButtons())
                 UiTheme.StyleSecondaryButton(button);
 
             UiTheme.StyleDangerButton(btnClearBoard);
@@ -306,7 +352,7 @@ namespace readboard
             ForeColor = SystemColors.ControlText;
             Font = Control.DefaultFont;
 
-            foreach (GroupBox group in new[] { groupBox1, groupBox2, groupBox4 })
+            foreach (GroupBox group in MainThemeGroups())
             {
                 group.BackColor = SystemColors.Control;
                 group.ForeColor = SystemColors.ControlText;
@@ -314,14 +360,14 @@ namespace readboard
                 group.Padding = new Padding(3);
             }
 
-            foreach (Control surface in new Control[] { flowLayoutPanel1, flowLayoutPanel2, panel1, panel2, panel3, panel4 })
+            foreach (Control surface in MainThemeSurfaces())
             {
                 surface.BackColor = SystemColors.Control;
                 surface.ForeColor = SystemColors.ControlText;
                 surface.Font = Control.DefaultFont;
             }
 
-            foreach (ButtonBase option in new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite })
+            foreach (ButtonBase option in MainThemeOptions())
             {
                 option.BackColor = SystemColors.Control;
                 option.ForeColor = SystemColors.ControlText;
@@ -331,7 +377,7 @@ namespace readboard
                 option.UseVisualStyleBackColor = true;
             }
 
-            foreach (TextBox textBox in new[] { textBox1, textBox2, textBox3, txtBoardWidth, txtBoardHeight })
+            foreach (TextBox textBox in MainThemeInputs())
             {
                 textBox.BackColor = SystemColors.Window;
                 textBox.ForeColor = SystemColors.WindowText;
@@ -339,7 +385,7 @@ namespace readboard
                 textBox.BorderStyle = BorderStyle.Fixed3D;
             }
 
-            foreach (Label label in new[] { lblBoardSize, lblPlayCondition, lblTime, lblTotalVisits, lblBestMoveVisits, label6 })
+            foreach (Label label in MainThemeLabels())
             {
                 label.BackColor = Color.Transparent;
                 label.ForeColor = SystemColors.ControlText;
@@ -348,7 +394,7 @@ namespace readboard
                 label.Padding = Padding.Empty;
             }
 
-            foreach (Button button in new[] { btnFastSync, btnKeepSync })
+            foreach (Button button in MainPrimaryButtons())
             {
                 button.FlatStyle = FlatStyle.System;
                 button.UseVisualStyleBackColor = true;
@@ -356,7 +402,7 @@ namespace readboard
                 button.Cursor = Cursors.Default;
             }
 
-            foreach (Button button in new[] { btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnTheme })
+            foreach (Button button in MainSecondaryButtons())
             {
                 button.FlatStyle = FlatStyle.System;
                 button.UseVisualStyleBackColor = true;
@@ -375,42 +421,49 @@ namespace readboard
             const int left = 12;
             const int top = 12;
             const int buttonHeight = 32;
-            const int utilityLeft = 530;
+            const int optionLeft = 14;
+            const int optionTop = 31;
+            const int optionGap = 10;
             const int settingsWidth = 72;
             const int helpWidth = 68;
             const int themeWidth = 68;
             const int utilityGap = 8;
+            int utilityRight = ClientSize.Width - left;
+            int themeLeft = utilityRight - themeWidth;
+            int helpLeft = themeLeft - utilityGap - helpWidth;
+            int settingsLeft = helpLeft - utilityGap - settingsWidth;
 
-            groupBox1.SetBounds(left, top, 506, 72);
-            rdoFox.Location = new System.Drawing.Point(14, 31);
-            rdoFoxBack.Location = new System.Drawing.Point(72, 31);
-            rdoTygem.Location = new System.Drawing.Point(184, 31);
-            rdoSina.Location = new System.Drawing.Point(244, 31);
-            rdoBack.Location = new System.Drawing.Point(302, 31);
-            rdoFore.Location = new System.Drawing.Point(398, 31);
-            btnSettings.SetBounds(utilityLeft, top, settingsWidth, buttonHeight);
-            btnHelp.SetBounds(utilityLeft + settingsWidth + utilityGap, top, helpWidth, buttonHeight);
-            btnTheme.SetBounds(utilityLeft + settingsWidth + helpWidth + utilityGap * 2, top, themeWidth, buttonHeight);
-            btnKomi65.SetBounds(utilityLeft, top + buttonHeight + 8, 174, buttonHeight);
+            groupBox1.SetBounds(left, top, settingsLeft - left - utilityGap, 72);
+            rdoFox.Location = new System.Drawing.Point(optionLeft, optionTop);
+            rdoFoxBack.Location = new System.Drawing.Point(rdoFox.Right + optionGap, optionTop);
+            rdoTygem.Location = new System.Drawing.Point(rdoFoxBack.Right + optionGap, optionTop);
+            rdoSina.Location = new System.Drawing.Point(rdoTygem.Right + optionGap, optionTop);
+            rdoBack.Location = new System.Drawing.Point(rdoSina.Right + optionGap, optionTop);
+            rdoFore.Location = new System.Drawing.Point(rdoBack.Right + optionGap, optionTop);
+            btnSettings.SetBounds(settingsLeft, top, settingsWidth, buttonHeight);
+            btnHelp.SetBounds(helpLeft, top, helpWidth, buttonHeight);
+            btnTheme.SetBounds(themeLeft, top, themeWidth, buttonHeight);
+            btnKomi65.SetBounds(settingsLeft, top + buttonHeight + utilityGap, utilityRight - settingsLeft, buttonHeight);
         }
 
         private void ArrangeMainBoardSection()
         {
             const int left = 12;
             const int top = 102;
+            const int optionTop = 29;
+            const int optionGap = 8;
             const int textBoxWidth = 34;
             const int inputTop = 27;
             const int inputHeight = 24;
             const int customInputGap = 12;
             const int separatorGap = 4;
 
-            groupBox2.SetBounds(left, top, 438, 72);
             lblBoardSize.SetBounds(16, 30, 52, 20);
             lblBoardSize.TextAlign = ContentAlignment.MiddleLeft;
-            rdo19x19.Location = new System.Drawing.Point(74, 29);
-            rdo13x13.Location = new System.Drawing.Point(132, 29);
-            rdo9x9.Location = new System.Drawing.Point(198, 29);
-            rdoOtherBoard.Location = new System.Drawing.Point(246, 29);
+            rdo19x19.Location = new System.Drawing.Point(lblBoardSize.Right + 6, optionTop);
+            rdo13x13.Location = new System.Drawing.Point(rdo19x19.Right + optionGap, optionTop);
+            rdo9x9.Location = new System.Drawing.Point(rdo13x13.Right + optionGap, optionTop);
+            rdoOtherBoard.Location = new System.Drawing.Point(rdo9x9.Right + optionGap + 4, optionTop);
             txtBoardWidth.AutoSize = false;
             txtBoardHeight.AutoSize = false;
             int customInputLeft = rdoOtherBoard.Right + customInputGap;
@@ -420,16 +473,19 @@ namespace readboard
             label6.SetBounds(txtBoardWidth.Right + separatorGap, 30, 10, 18);
             txtBoardHeight.SetBounds(label6.Right + separatorGap, inputTop, textBoxWidth, inputHeight);
             txtBoardHeight.TextAlign = HorizontalAlignment.Center;
+            groupBox2.SetBounds(left, top, txtBoardHeight.Right + 16, 72);
         }
 
         private void ArrangeMainSyncSection()
         {
             const int rowHeight = 24;
             const int timeFieldGap = 8;
+            int groupWidth = ClientSize.Width - 42;
+            int rowWidth = groupWidth - 34;
 
-            groupBox4.SetBounds(12, 184, 750, 100);
-            flowLayoutPanel1.SetBounds(16, 28, 716, 30);
-            flowLayoutPanel2.SetBounds(16, 62, 716, 30);
+            groupBox4.SetBounds(12, 184, groupWidth, 100);
+            flowLayoutPanel1.SetBounds(16, 28, rowWidth, 30);
+            flowLayoutPanel2.SetBounds(16, 62, rowWidth, 30);
             flowLayoutPanel1.WrapContents = false;
             flowLayoutPanel2.WrapContents = false;
             chkBothSync.Margin = new Padding(0, 5, 12, 0);
@@ -476,17 +532,18 @@ namespace readboard
             const int firstRowTop = 294;
             const int secondRowTop = 332;
             const int buttonHeight = 32;
+            const int buttonGap = 12;
 
             btnFastSync.SetBounds(12, firstRowTop, 118, buttonHeight);
-            btnClickBoard.SetBounds(142, firstRowTop, 186, buttonHeight);
-            btnCircleBoard.SetBounds(340, firstRowTop, 104, buttonHeight);
-            btnCircleRow1.SetBounds(456, firstRowTop, 104, buttonHeight);
-            chkShowInBoard.Location = new System.Drawing.Point(576, firstRowTop + 8);
+            btnClickBoard.SetBounds(btnFastSync.Right + buttonGap, firstRowTop, 186, buttonHeight);
+            btnCircleBoard.SetBounds(btnClickBoard.Right + buttonGap, firstRowTop, 104, buttonHeight);
+            btnCircleRow1.SetBounds(btnCircleBoard.Right + buttonGap, firstRowTop, 104, buttonHeight);
+            chkShowInBoard.Location = new System.Drawing.Point(btnCircleRow1.Right + 16, firstRowTop + 8);
             btnKeepSync.SetBounds(12, secondRowTop, 128, buttonHeight);
-            btnOneTimeSync.SetBounds(152, secondRowTop, 112, buttonHeight);
-            btnTogglePonder.SetBounds(276, secondRowTop, 112, buttonHeight);
-            btnExchange.SetBounds(400, secondRowTop, 104, buttonHeight);
-            btnClearBoard.SetBounds(516, secondRowTop, 110, buttonHeight);
+            btnOneTimeSync.SetBounds(btnKeepSync.Right + buttonGap, secondRowTop, 112, buttonHeight);
+            btnTogglePonder.SetBounds(btnOneTimeSync.Right + buttonGap, secondRowTop, 112, buttonHeight);
+            btnExchange.SetBounds(btnTogglePonder.Right + buttonGap, secondRowTop, 104, buttonHeight);
+            btnClearBoard.SetBounds(btnExchange.Right + buttonGap, secondRowTop, 110, buttonHeight);
         }
 
         private void setNativeBoardMode(int syncType)

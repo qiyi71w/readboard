@@ -52,6 +52,13 @@ namespace readboard
 
         public static void StyleOption(ButtonBase option)
         {
+            option.FlatStyle = FlatStyle.Flat;
+            option.FlatAppearance.BorderColor = SurfaceBorder;
+            option.FlatAppearance.BorderSize = 1;
+            option.FlatAppearance.CheckedBackColor = HighlightBack;
+            option.FlatAppearance.MouseOverBackColor = HighlightBack;
+            option.FlatAppearance.MouseDownBackColor = HighlightBack;
+            option.UseVisualStyleBackColor = false;
             option.BackColor = SurfaceBackground;
             option.ForeColor = PrimaryText;
             option.Font = BodyFont;

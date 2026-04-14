@@ -111,9 +111,15 @@ namespace readboard
         private void ArrangeSettingsLayout()
         {
             const int left = 18;
-            const int right = 286;
             const int top = 18;
-            const int contentWidth = 522;
+            const int fieldRowGap = 38;
+            const int footerGap = 14;
+            const int buttonHeight = 32;
+            const int confirmButtonWidth = 84;
+            const int resetButtonWidth = 124;
+            const int buttonGap = 12;
+            int contentWidth = ClientSize.Width - left * 2;
+            int right = ClientSize.Width - left - FieldLabelWidth - 8 - FieldInputWidth;
 
             chkAutoMin.Location = new Point(left, top);
             chkPonder.Location = new Point(170, top);
@@ -124,17 +130,19 @@ namespace readboard
             int fieldsTop = LayoutWrappedLabel(lblBackForeOnly, left, 110, contentWidth, true) + 20;
             LayoutSettingsField(lblSyncInterval, txtSyncInterval, left, fieldsTop);
             LayoutSettingsField(lblGrayOffsets, txtGrayOffsets, right, fieldsTop);
-            LayoutSettingsField(lblBlackOffsets, txtBlackOffsets, left, fieldsTop + 38);
-            LayoutSettingsField(lblBlackPercents, txtBlackPercents, right, fieldsTop + 38);
-            LayoutSettingsField(lblWhiteOffsets, txtWhiteOffsets, left, fieldsTop + 76);
-            LayoutSettingsField(lblWhitePercents, txtWhitePercents, right, fieldsTop + 76);
+            LayoutSettingsField(lblBlackOffsets, txtBlackOffsets, left, fieldsTop + fieldRowGap);
+            LayoutSettingsField(lblBlackPercents, txtBlackPercents, right, fieldsTop + fieldRowGap);
+            LayoutSettingsField(lblWhiteOffsets, txtWhiteOffsets, left, fieldsTop + fieldRowGap * 2);
+            LayoutSettingsField(lblWhitePercents, txtWhitePercents, right, fieldsTop + fieldRowGap * 2);
             int tipsTop = fieldsTop + 120;
             tipsTop = LayoutWrappedLabel(lblTips, left, tipsTop, contentWidth, false) + 8;
             tipsTop = LayoutWrappedLabel(lblTips1, left, tipsTop, contentWidth, false) + 8;
-            int footerTop = LayoutWrappedLabel(lblTips2, left, tipsTop, contentWidth, false) + 14;
-            btnReset.SetBounds(left, footerTop, 124, 32);
-            btnCancel.SetBounds(360, footerTop, 84, 32);
-            btnConfirm.SetBounds(456, footerTop, 84, 32);
+            int footerTop = LayoutWrappedLabel(lblTips2, left, tipsTop, contentWidth, false) + footerGap;
+            int confirmLeft = ClientSize.Width - left - confirmButtonWidth;
+            int cancelLeft = confirmLeft - buttonGap - confirmButtonWidth;
+            btnReset.SetBounds(left, footerTop, resetButtonWidth, buttonHeight);
+            btnCancel.SetBounds(cancelLeft, footerTop, confirmButtonWidth, buttonHeight);
+            btnConfirm.SetBounds(confirmLeft, footerTop, confirmButtonWidth, buttonHeight);
             ClientSize = new Size(560, btnConfirm.Bottom + 18);
         }
 
