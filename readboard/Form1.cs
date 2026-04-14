@@ -535,11 +535,14 @@ namespace readboard
                                 Program.playPonder = (Convert.ToInt32(arr[11]) == 1);
                                 if (posX != -1 && posY != -1)
                                 {
-                                    var h = Screen.PrimaryScreen.Bounds.Height;
-                                    var w = Screen.PrimaryScreen.Bounds.Width;
-                                    this.Location = new System.Drawing.Point(Math.Min(Math.Max(0, posX), w - 476), Math.Min(Math.Max(0, posY), h - 217));
+                                    Rectangle screenBounds = Screen.PrimaryScreen.Bounds;
+                                    int maxX = Math.Max(screenBounds.Left, screenBounds.Right - this.Width);
+                                    int maxY = Math.Max(screenBounds.Top, screenBounds.Bottom - this.Height);
+                                    this.Location = new System.Drawing.Point(
+                                        Math.Min(Math.Max(screenBounds.Left, posX), maxX),
+                                        Math.Min(Math.Max(screenBounds.Top, posY), maxY));
                                 }
-                            }                       
+                            }
                         }
                         catch (Exception)
                         {
@@ -2442,7 +2445,7 @@ namespace readboard
             {
                 int clientX = (int)Math.Round(sx1 + widthMagrin * (x + 0.5));
                 int clientY = (int)Math.Round(sy1 + heightMagrin * (y + 0.5));
-                backMouseClick(clientX, clientY, hwnd);
+                backMouseClickSync(clientX, clientY, hwnd);
             }
             else
             {
@@ -2517,9 +2520,19 @@ namespace readboard
         uint WM_LBUTTONUP = 0x202;
 
         [DllImport("user32.dll", SetLastError = true)]
+        static extern bool PostMessage(IntPtr hWnd, uint Msg, int wParam, int lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
         static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, int wParam, int lParam);
 
         private void backMouseClick(int x, int y, IntPtr hwnd)
+        {
+            int lParam = x + (y << 16);
+            PostMessage(hwnd, WM_LBUTTONDOWN, 0, lParam);
+            PostMessage(hwnd, WM_LBUTTONUP, 0, lParam);
+        }
+
+        private void backMouseClickSync(int x, int y, IntPtr hwnd)
         {
             int lParam = x + (y << 16);
             SendMessage(hwnd, WM_MOUSEMOVE, 0, lParam);
