@@ -36,6 +36,9 @@ namespace readboard
         public static int grayOffset = 50;
         public static Boolean useEnhanceScreen = false;
         public static Boolean playPonder = true;
+        public const int UiThemeClassic = 0;
+        public const int UiThemeOptimized = 1;
+        public static int uiThemeMode = UiThemeOptimized;
      //   public static Boolean scaleForBack = false;
 
         public static double factor = 1.0;
@@ -135,6 +138,7 @@ namespace readboard
             langItems.Add("MainForm_rdoFore", "其他(前台)");
             langItems.Add("MainForm_btnSettings", "参数设置");
             langItems.Add("MainForm_btnHelp", "帮助");
+            langItems.Add("MainForm_btnTheme", "主题");
             langItems.Add("MainForm_btnFastSync", "一键同步");
             langItems.Add("MainForm_lblBoardSize", "棋盘:");
             langItems.Add("MainForm_btnKomi65", "6.5目规则设置方法");
@@ -156,6 +160,12 @@ namespace readboard
             langItems.Add("MainForm_btnExchange", "交换顺序");
             langItems.Add("MainForm_btnClearBoard", "清空棋盘");
             langItems.Add("MainForm_title", "棋盘同步工具");
+            langItems.Add("MainForm_rdoCustomBoard", "自定义");
+            langItems.Add("MainForm_groupPlatform", "平台类型");
+            langItems.Add("MainForm_groupBoard", "棋盘规格");
+            langItems.Add("MainForm_groupSync", "同步与自动落子");
+            langItems.Add("MainForm_themeOptimized", "修复版主题");
+            langItems.Add("MainForm_themeClassic", "默认主题");
 
             langItems.Add("MagnifierForm_title", "放大镜");
 
