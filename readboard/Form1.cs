@@ -44,7 +44,7 @@ namespace readboard
         //object qx1;
         // object qy1;
 
-        Boolean keepSync = false;
+        volatile Boolean keepSync = false;
         int sx1;
         int sy1;
         int width;
@@ -108,14 +108,11 @@ namespace readboard
         private const int OneQuarterDivisor = 4;
         private const int TwoThirdsNumerator = 2;
         private const int TwoThirdsDenominator = 6;
+        private const int PendingMoveWaitTimeoutMs = 250;
         private const int TcpReaderBufferSize = 4096;
-        private static readonly int[] EmptyBoardState = new int[0];
-        private readonly object recognizedBoardLock = new object();
-        private readonly AutoResetEvent recognizedBoardEvent = new AutoResetEvent(false);
+        private readonly object tcpConnectionLock = new object();
         private readonly object pendingMoveLock = new object();
         private readonly AutoResetEvent pendingMoveEvent = new AutoResetEvent(false);
-        private int[] latestRecognizedBoard = EmptyBoardState;
-        private int recognizedBoardVersion = 0;
         private int pendingMoveX = -1;
         private int pendingMoveY = -1;
         private int pendingMoveAttempts = 0;
@@ -779,6 +776,24 @@ namespace readboard
             return title.ToString();
         }
 
+        private NetworkStream GetTcpStreamSnapshot()
+        {
+            lock (tcpConnectionLock)
+            {
+                return io;
+            }
+        }
+
+        private void WriteTcpPayload(byte[] by)
+        {
+            lock (tcpConnectionLock)
+            {
+                if (io == null)
+                    return;
+                io.Write(by, 0, by.Length);
+            }
+        }
+
         public void SendError(String strMsg)
         {
             if (useTcp)
@@ -786,7 +801,7 @@ namespace readboard
                 try
                 {
                     byte[] by = Encoding.UTF8.GetBytes("error: " + strMsg + "\r\n");
-                    io.Write(by, 0, by.Length);
+                    WriteTcpPayload(by);
                 }
                 catch (Exception e)
                 {
@@ -809,7 +824,7 @@ namespace readboard
                 try
                 {
                     byte[] by = Encoding.UTF8.GetBytes(strMsg + "\r\n");
-                    io.Write(by, 0, by.Length);
+                    WriteTcpPayload(by);
                 }
                 catch (Exception e)
                 {
@@ -842,23 +857,28 @@ namespace readboard
 
         private void Receive()
         {
+            NetworkStream stream = GetTcpStreamSnapshot();
+            StreamReader reader = null;
+            if (stream == null)
+            {
+                CompletePendingMove(false);
+                return;
+            }
             try
             {
-                using (StreamReader reader = new StreamReader(io, Encoding.UTF8, false, TcpReaderBufferSize))
+                reader = new StreamReader(stream, Encoding.UTF8, false, TcpReaderBufferSize);
+                String line;
+                while ((line = reader.ReadLine()) != null)
                 {
-                    String line;
-                    while ((line = reader.ReadLine()) != null)
+                    if (line.Length == 0)
+                        continue;
+                    try
                     {
-                        if (line.Length == 0)
-                            continue;
-                        try
-                        {
-                            readPlace(line);
-                        }
-                        catch (Exception ex)
-                        {
-                            SendError(ex.ToString());
-                        }
+                        readPlace(line);
+                    }
+                    catch (Exception ex)
+                    {
+                        SendError(ex.ToString());
                     }
                 }
                 CompletePendingMove(false);
@@ -871,21 +891,26 @@ namespace readboard
             finally
             {
                 CloseTcpConnection();
+                if (reader != null)
+                    reader.Dispose();
             }
         }
 
         private void CloseTcpConnection()
         {
-            if (io != null)
+            NetworkStream stream = null;
+            TcpClient tcpClient = null;
+            lock (tcpConnectionLock)
             {
-                io.Close();
+                stream = io;
+                tcpClient = client;
                 io = null;
-            }
-            if (client != null)
-            {
-                client.Close();
                 client = null;
             }
+            if (stream != null)
+                stream.Close();
+            if (tcpClient != null)
+                tcpClient.Close();
         }
         private void readPlace(String a)
         {
@@ -934,8 +959,23 @@ namespace readboard
                 try
                 {
                     port = Convert.ToInt32(serverPort);
-                    client = new TcpClient("127.0.0.1", port);
-                    io = client.GetStream();
+                    TcpClient tcpClient = null;
+                    try
+                    {
+                        tcpClient = new TcpClient("127.0.0.1", port);
+                        NetworkStream stream = tcpClient.GetStream();
+                        lock (tcpConnectionLock)
+                        {
+                            client = tcpClient;
+                            io = stream;
+                        }
+                        tcpClient = null;
+                    }
+                    finally
+                    {
+                        if (tcpClient != null)
+                            tcpClient.Close();
+                    }
                     threadReceive = new Thread(new ThreadStart(Receive));
                     threadReceive.IsBackground = true;
                     threadReceive.Start();
@@ -1640,6 +1680,7 @@ namespace readboard
 
         private void stopKeepingSync()
         {
+            keepSync = false;
             Action2<String> a = new Action2<String>(Action2Test);
             if (!isContinuousSyncing)
             {
@@ -2119,130 +2160,136 @@ namespace readboard
             Send("sync");
             ResetSyncCaches();
             Boolean firstTime = true;
-            while (keepSync)
+            try
             {
-                int x1;
-                int y1;
-                int x2;
-                int y2;
-                RECT rect = new RECT();
-                GetWindowRect(hwnd, ref rect);
-                x2 = rect.Right;
-                y2 = rect.Bottom;
-                x1 = rect.Left;
-                y1 = rect.Top;
-                if (Program.showInBoard && type != 5)
+                while (keepSync)
                 {
-                    string inBoardMessage;
-                    if (GetSupportDpiState(hwnd))
-                        inBoardMessage = "inboard " + (int)((sx1 + x1) / factor) + " " + (int)((sy1 + y1) / factor) + " " + Math.Round(width / factor) + " " + Math.Round(height / factor) + " " + (factor > 1 ? "99_" + factor + "_" + type.ToString() : type.ToString());
-                    else
-                        inBoardMessage = "inboard " + (sx1 + (int)(x1 / factor)) + " " + (sy1 + (int)(y1 / factor)) + " " + width + " " + height + " " + (factor > 1 ? "99_" + factor + "_" + type.ToString() : type.ToString());
-                    SendInBoardIfChanged(inBoardMessage);
-                }
-                TryDispatchPendingMove();
-                if (type == 5)
-                {
-                    OutPut3(firstTime);
-                }
-                else
-                {
-
-                    int size = width * height;
-                    if ((int)x1 == 0 && (int)x2 == 0 && (int)y1 == 0 && (int)y2 == 0)
+                    int x1;
+                    int y1;
+                    int x2;
+                    int y2;
+                    RECT rect = new RECT();
+                    GetWindowRect(hwnd, ref rect);
+                    x2 = rect.Right;
+                    y2 = rect.Bottom;
+                    x1 = rect.Left;
+                    y1 = rect.Top;
+                    if (Program.showInBoard && type != 5)
                     {
-                        //MessageBox.Show("请选择棋盘,同步停止");
-                        Send("stopsync");
-                        stopKeepingSync();
-                        return;
+                        string inBoardMessage;
+                        if (GetSupportDpiState(hwnd))
+                            inBoardMessage = "inboard " + (int)((sx1 + x1) / factor) + " " + (int)((sy1 + y1) / factor) + " " + Math.Round(width / factor) + " " + Math.Round(height / factor) + " " + (factor > 1 ? "99_" + factor + "_" + type.ToString() : type.ToString());
+                        else
+                            inBoardMessage = "inboard " + (sx1 + (int)(x1 / factor)) + " " + (sy1 + (int)(y1 / factor)) + " " + width + " " + height + " " + (factor > 1 ? "99_" + factor + "_" + type.ToString() : type.ToString());
+                        SendInBoardIfChanged(inBoardMessage);
                     }
-                    if (isJavaFrame)
-                    {
-                        javaX = x1;
-                        javaY = y1;
-                    }
-                    RgbInfo[] rgbArray = new RgbInfo[0];
-                    int totalWidth = -1;
-                    if (IsFoxSyncType(type))
-                    {
-                        rectX1 = x1;
-                        rectY1 = y1;
-
-                        if (!getFoxPos(hwnd, out rgbArray, out totalWidth))
-                        {
-                            sx1 = 0;
-                            sy1 = 0;
-                            width = 0;
-                            height = 0;
-                            if (isContinuousSyncing)
-                            {
-                                stopKeepingSync();
-                                return;
-                            }
-                        }
-                    }
-                    if (type == 1)
-                    {
-                        sx1 = 0;
-                        sy1 = 0;
-                        width = x2 - x1;
-                        height = y2 - y1;
-                        if (!GetSupportDpiState(hwnd))
-                        {
-                            width = (int)(width / factor);
-                            height = (int)(height / factor);
-                        }
-                        if (!getTygemPos(hwnd, out rgbArray, out totalWidth))
-                        {
-                            sx1 = 0;
-                            sy1 = 0;
-                            width = 0;
-                            height = 0;
-                            if (isContinuousSyncing)
-                            {
-                                stopKeepingSync();
-                                return;
-                            }
-                        }
-                    }
-                    if (type == 2)
-                    {
-                        if (!getSinaPos(hwnd, out rgbArray, out totalWidth))
-                        {
-                            sx1 = 0;
-                            sy1 = 0;
-                            width = 0;
-                            height = 0;
-                            if (isContinuousSyncing)
-                            {
-                                stopKeepingSync();
-                                return;
-                            }
-                        }
-                    }
-                    Boolean changedSize = size != width * height;
-                    if (changedSize)
-                    {
-                        Send("clear");
-                        lastSentBoardPayload = null;
-                    }
-                    if (type == 3)
+                    TryDispatchPendingMove();
+                    if (type == 5)
                     {
                         OutPut3(firstTime);
                     }
                     else
                     {
-                        OutPut(firstTime, rgbArray, null, totalWidth);
+
+                        int size = width * height;
+                        if ((int)x1 == 0 && (int)x2 == 0 && (int)y1 == 0 && (int)y2 == 0)
+                        {
+                            stopKeepingSync();
+                            return;
+                        }
+                        if (isJavaFrame)
+                        {
+                            javaX = x1;
+                            javaY = y1;
+                        }
+                        RgbInfo[] rgbArray = new RgbInfo[0];
+                        int totalWidth = -1;
+                        if (IsFoxSyncType(type))
+                        {
+                            rectX1 = x1;
+                            rectY1 = y1;
+
+                            if (!getFoxPos(hwnd, out rgbArray, out totalWidth))
+                            {
+                                sx1 = 0;
+                                sy1 = 0;
+                                width = 0;
+                                height = 0;
+                                if (isContinuousSyncing)
+                                {
+                                    stopKeepingSync();
+                                    return;
+                                }
+                            }
+                        }
+                        if (type == 1)
+                        {
+                            sx1 = 0;
+                            sy1 = 0;
+                            width = x2 - x1;
+                            height = y2 - y1;
+                            if (!GetSupportDpiState(hwnd))
+                            {
+                                width = (int)(width / factor);
+                                height = (int)(height / factor);
+                            }
+                            if (!getTygemPos(hwnd, out rgbArray, out totalWidth))
+                            {
+                                sx1 = 0;
+                                sy1 = 0;
+                                width = 0;
+                                height = 0;
+                                if (isContinuousSyncing)
+                                {
+                                    stopKeepingSync();
+                                    return;
+                                }
+                            }
+                        }
+                        if (type == 2)
+                        {
+                            if (!getSinaPos(hwnd, out rgbArray, out totalWidth))
+                            {
+                                sx1 = 0;
+                                sy1 = 0;
+                                width = 0;
+                                height = 0;
+                                if (isContinuousSyncing)
+                                {
+                                    stopKeepingSync();
+                                    return;
+                                }
+                            }
+                        }
+                        Boolean changedSize = size != width * height;
+                        if (changedSize)
+                        {
+                            Send("clear");
+                            lastSentBoardPayload = null;
+                        }
+                        if (type == 3)
+                        {
+                            OutPut3(firstTime);
+                        }
+                        else
+                        {
+                            OutPut(firstTime, rgbArray, null, totalWidth);
+                        }
                     }
+                    try
+                    {
+                        Thread.Sleep(Program.timeinterval);
+                    }
+                    catch (Exception) { }
+                    firstTime = false;
                 }
-                try
-                {
-                    Thread.Sleep(Program.timeinterval);
-                }
-                catch (Exception) { }
-                firstTime = false;
             }
-            Send("stopsync");
+            finally
+            {
+                keepSync = false;
+                CompletePendingMove(false);
+                Send("stopsync");
+            }
         }
 
         private readonly struct RgbInfo
@@ -2285,21 +2332,6 @@ namespace readboard
         {
             lastSentBoardPayload = null;
             lastSentInBoardPayload = null;
-            lock (recognizedBoardLock)
-            {
-                latestRecognizedBoard = EmptyBoardState;
-                recognizedBoardVersion++;
-            }
-        }
-
-        private void UpdateRecognizedBoard(int[] boardState)
-        {
-            lock (recognizedBoardLock)
-            {
-                latestRecognizedBoard = boardState;
-                recognizedBoardVersion++;
-            }
-            recognizedBoardEvent.Set();
         }
 
         private void QueuePendingMove(int x, int y, bool verify)
@@ -2331,7 +2363,7 @@ namespace readboard
                     if (!keepSync)
                         return false;
                 }
-                pendingMoveEvent.WaitOne();
+                pendingMoveEvent.WaitOne(PendingMoveWaitTimeoutMs);
             }
         }
 
@@ -2340,7 +2372,7 @@ namespace readboard
             bool shouldSignal = false;
             lock (pendingMoveLock)
             {
-                if (!pendingMoveActive && !pendingMoveCompleted)
+                if (pendingMoveCompleted || !pendingMoveActive)
                     return;
                 pendingMoveActive = false;
                 pendingMoveCompleted = true;
@@ -2733,7 +2765,6 @@ namespace readboard
                 payloadBuilder.Append('\n');
             }
             bool boardValid = !allWhite && !allBlack;
-            UpdateRecognizedBoard(resultValue);
             ResolvePendingMove(resultValue, boardValid);
             if (boardValid)
                 SendBoardPayloadIfChanged(payloadBuilder.ToString(), sendList);
