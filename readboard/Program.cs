@@ -47,7 +47,19 @@ namespace readboard
         public static System.Drawing.Bitmap bitmap;
         public static String language = "cn";
         public static Hashtable  langItems = new Hashtable();
-               
+
+        public static void ReplaceBitmap(System.Drawing.Bitmap newBitmap)
+        {
+            System.Drawing.Bitmap oldBitmap = Interlocked.Exchange(ref bitmap, newBitmap);
+            if (oldBitmap != null)
+                oldBitmap.Dispose();
+        }
+
+        public static void DisposeBitmap()
+        {
+            ReplaceBitmap(null);
+        }
+
         //public static Thread th;
         //public  static Boolean run =true;
         // static Form Form1;

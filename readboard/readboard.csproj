@@ -36,7 +36,7 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
+    <OutputPath>bin\x86\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -45,12 +45,12 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>x86</PlatformTarget>
     <DebugType>pdbonly</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\x86\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
+    <Prefer32Bit>true</Prefer32Bit>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
@@ -233,7 +233,15 @@
           Outputs="$(LwInteropAssembly)">
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\generate_lw_interop.ps1&quot; -Source &quot;$(MSBuildProjectDirectory)\lw.dll&quot; -Output &quot;$(LwInteropAssembly)&quot;" />
   </Target>
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+  <Target Name="RemoveUnusedOpenCvSharpX64Runtime"
+          BeforeTargets="GetCopyToOutputDirectoryItems"
+          Condition="'$(PlatformTarget)' == 'x86'">
+    <ItemGroup>
+      <_NoneWithTargetPath Remove="@(_NoneWithTargetPath)"
+                           Condition="'%(TargetPath)' == 'dll\x64\OpenCvSharpExtern.dll' Or '%(TargetPath)' == 'dll\x64\opencv_ffmpeg400_64.dll'" />
+    </ItemGroup>
+  </Target>
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
   </Target>

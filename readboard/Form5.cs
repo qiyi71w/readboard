@@ -6,11 +6,27 @@ namespace readboard
 {
     public partial class MagnifierForm : Form
     {
+        private const int CaptureSize = 20;
+        private const int CaptureOffset = CaptureSize / 2;
+        private const int ZoomSize = 120;
+        private const int CrosshairThickness = 5;
+        private const int CrosshairHalfLength = 15;
+
+        private static readonly Size CaptureBitmapSize = new Size(CaptureSize, CaptureSize);
+        private static readonly Rectangle ZoomBounds = new Rectangle(0, 0, ZoomSize, ZoomSize);
+
+        private Bitmap captureBitmap;
+        private Bitmap zoomBitmap;
+        private Graphics captureGraphics;
+        private Graphics zoomGraphics;
+        private Pen crosshairPen;
+
         public MagnifierForm()
         {
             InitializeComponent();
             CheckForIllegalCrossThreadCalls = false;
             this.Text = getLangStr("MagnifierForm_title");
+            InitializeMagnifierBuffers();
         }
 
         private String getLangStr(String itemName)
@@ -27,76 +43,87 @@ namespace readboard
             return result;
         }
 
-
-
-        public void setPic(int x,int y)
+        public void setPic(int x, int y)
         {
-
-            System.Drawing.Bitmap bitmap = new Bitmap(20, 20);
-            using (System.Drawing.Graphics graphics = Graphics.FromImage(bitmap))
-            {
-                graphics.CopyFromScreen(x-10, y-10, 0, 0, new System.Drawing.Size(20, 20));
-                
-            }
-            System.Drawing.Bitmap bitmap2 = ZoomImage(bitmap, 120, 120);
-            
-            pictureBox1.Image = bitmap2;
-          
-
+            CaptureScreenArea(x, y);
+            RenderMagnifierFrame();
+            pictureBox1.Invalidate();
         }
 
-
-        private Bitmap ZoomImage(Bitmap bitmap, int destHeight, int destWidth)
+        protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            try
+            ReleaseMagnifierBuffers();
+            base.OnFormClosed(e);
+        }
+
+        private void InitializeMagnifierBuffers()
+        {
+            captureBitmap = new Bitmap(CaptureSize, CaptureSize);
+            captureGraphics = Graphics.FromImage(captureBitmap);
+            zoomBitmap = new Bitmap(ZoomSize, ZoomSize);
+            zoomGraphics = Graphics.FromImage(zoomBitmap);
+            crosshairPen = new Pen(Color.Red, CrosshairThickness);
+
+            zoomGraphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+            zoomGraphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+            zoomGraphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            pictureBox1.Image = zoomBitmap;
+        }
+
+        private void CaptureScreenArea(int x, int y)
+        {
+            captureGraphics.CopyFromScreen(x - CaptureOffset, y - CaptureOffset, 0, 0, CaptureBitmapSize);
+        }
+
+        private void RenderMagnifierFrame()
+        {
+            zoomGraphics.Clear(Color.Transparent);
+            zoomGraphics.DrawImage(captureBitmap, ZoomBounds, 0, 0, CaptureSize, CaptureSize, GraphicsUnit.Pixel);
+            DrawCrosshair();
+        }
+
+        private void DrawCrosshair()
+        {
+            int center = ZoomSize / 2;
+            zoomGraphics.DrawLine(crosshairPen, center - CrosshairHalfLength, center, center + CrosshairHalfLength, center);
+            zoomGraphics.DrawLine(crosshairPen, center, center - CrosshairHalfLength, center, center + CrosshairHalfLength);
+        }
+
+        private void ReleaseMagnifierBuffers()
+        {
+            if (pictureBox1 != null && !pictureBox1.IsDisposed)
             {
-                System.Drawing.Image sourImage = bitmap;
-                int width = 0, height = 0;
-                //按比例缩放             
-                int sourWidth = sourImage.Width;
-                int sourHeight = sourImage.Height;
-                if (sourHeight > destHeight || sourWidth > destWidth)
-                {
-                    if ((sourWidth * destHeight) > (sourHeight * destWidth))
-                    {
-                        width = destWidth;
-                        height = (destWidth * sourHeight) / sourWidth;
-                    }
-                    else
-                    {
-                        height = destHeight;
-                        width = (sourWidth * destHeight) / sourHeight;
-                    }
-                }
-                else
-                {
-                    width = sourWidth;
-                    height = sourHeight;
-                }
-                Bitmap destBitmap = new Bitmap(destWidth, destHeight);
-                Graphics g = Graphics.FromImage(destBitmap);
-                g.Clear(Color.Transparent);
-                //设置画布的描绘质量           
-                g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
-                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                g.DrawImage(sourImage, new Rectangle(0,0 , destWidth, destHeight), 0, 0, sourImage.Width, sourImage.Height, GraphicsUnit.Pixel);
-                g.DrawLine(new Pen(Color.Red, 5), 45, 60, 75, 60);
-                g.DrawLine(new Pen(Color.Red, 5), 60, 45, 60, 75);
-                g.Dispose();
-                
-                //设置压缩质量       
-                //System.Drawing.Imaging.EncoderParameters encoderParams = new System.Drawing.Imaging.EncoderParameters();
-                //long[] quality = new long[1];
-                //quality[0] = 100;
-                //System.Drawing.Imaging.EncoderParameter encoderParam = new System.Drawing.Imaging.EncoderParameter(System.Drawing.Imaging.Encoder.Quality, quality);
-                //encoderParams.Param[0] = encoderParam;
-                sourImage.Dispose();
-                return destBitmap;
+                pictureBox1.Image = null;
             }
-            catch
+
+            if (zoomGraphics != null)
             {
-                return bitmap;
+                zoomGraphics.Dispose();
+                zoomGraphics = null;
+            }
+
+            if (captureGraphics != null)
+            {
+                captureGraphics.Dispose();
+                captureGraphics = null;
+            }
+
+            if (zoomBitmap != null)
+            {
+                zoomBitmap.Dispose();
+                zoomBitmap = null;
+            }
+
+            if (captureBitmap != null)
+            {
+                captureBitmap.Dispose();
+                captureBitmap = null;
+            }
+
+            if (crosshairPen != null)
+            {
+                crosshairPen.Dispose();
+                crosshairPen = null;
             }
         }
     }
