@@ -10,6 +10,9 @@ namespace readboard
         private const string DefaultText = "N/A";
         private const string DefaultReleaseNotes = "No release notes.";
         private const string DefaultMissingDownloadUrlMessage = "Download link is unavailable.";
+        private const string DefaultInvalidDownloadUrlFormatMessage = "Download link format is invalid.";
+        private const string DefaultUnsupportedDownloadUrlSchemeMessage =
+            "Download link must use http or https.";
         private const string DefaultOpenDownloadUrlFailedMessage = "Unable to open the download link.";
         private const string DefaultDialogTitle = "Update";
 
@@ -154,11 +157,12 @@ namespace readboard
         private void btnDownload_Click(object sender, EventArgs e)
         {
             Uri downloadUri;
-            if (!TryCreateDownloadUri(out downloadUri))
+            string validationMessage;
+            if (!TryCreateDownloadUri(out downloadUri, out validationMessage))
             {
                 MessageBox.Show(
                     this,
-                    NormalizeFallbackText(model.MissingDownloadUrlMessage, DefaultMissingDownloadUrlMessage),
+                    validationMessage,
                     GetDialogTitle(),
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
@@ -182,30 +186,57 @@ namespace readboard
             }
         }
 
-        private bool TryCreateDownloadUri(out Uri downloadUri)
+        private bool TryCreateDownloadUri(out Uri downloadUri, out string validationMessage)
         {
             downloadUri = null;
+            validationMessage = null;
             if (string.IsNullOrWhiteSpace(model.DownloadUrl))
             {
+                validationMessage = NormalizeFallbackText(
+                    model.MissingDownloadUrlMessage,
+                    DefaultMissingDownloadUrlMessage);
                 return false;
             }
 
+            string normalizedUrl = model.DownloadUrl.Trim();
             Uri parsedUri;
-            if (!Uri.TryCreate(model.DownloadUrl, UriKind.Absolute, out parsedUri))
+            if (!Uri.TryCreate(normalizedUrl, UriKind.Absolute, out parsedUri))
             {
+                validationMessage = BuildDownloadUrlValidationMessage(
+                    model.InvalidDownloadUrlFormatMessage,
+                    DefaultInvalidDownloadUrlFormatMessage,
+                    normalizedUrl);
                 return false;
             }
 
-            bool isHttpScheme =
-                string.Equals(parsedUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(parsedUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
-            if (!isHttpScheme)
+            if (!IsSupportedDownloadScheme(parsedUri))
             {
+                validationMessage = BuildDownloadUrlValidationMessage(
+                    model.UnsupportedDownloadUrlSchemeMessage,
+                    DefaultUnsupportedDownloadUrlSchemeMessage,
+                    normalizedUrl);
                 return false;
             }
 
             downloadUri = parsedUri;
             return true;
+        }
+
+        private static bool IsSupportedDownloadScheme(Uri uri)
+        {
+            return string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string BuildDownloadUrlValidationMessage(
+            string configuredMessage,
+            string defaultMessage,
+            string detail)
+        {
+            string message = NormalizeFallbackText(configuredMessage, defaultMessage);
+            return string.IsNullOrWhiteSpace(detail)
+                ? message
+                : message + Environment.NewLine + detail.Trim();
         }
 
         private void btnClose_Click(object sender, EventArgs e)
