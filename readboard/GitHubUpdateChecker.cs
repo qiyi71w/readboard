@@ -201,11 +201,31 @@ namespace readboard
             return new GitHubReleaseInfo
             {
                 Tag = ReadRequiredString(payload, "tag_name", false),
-                Name = ReadRequiredString(payload, "name", true),
-                Body = ReadRequiredString(payload, "body", true),
+                Name = ReadOptionalString(payload, "name"),
+                Body = ReadOptionalString(payload, "body"),
                 HtmlUrl = ReadRequiredString(payload, "html_url", false),
                 PublishedAt = ReadPublishedAt(payload)
             };
+        }
+
+        private static string ReadOptionalString(
+            IDictionary<string, object> payload,
+            string key)
+        {
+            object value;
+            if (!payload.TryGetValue(key, out value) || value == null)
+            {
+                return null;
+            }
+
+            string stringValue = value as string;
+            if (stringValue == null)
+            {
+                throw new InvalidOperationException(
+                    "Latest release field '" + key + "' is not a string.");
+            }
+
+            return stringValue;
         }
 
         private static string ReadRequiredString(
