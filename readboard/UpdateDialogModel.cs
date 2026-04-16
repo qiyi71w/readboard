@@ -18,6 +18,10 @@ namespace readboard
 
         public string MissingDownloadUrlMessage { get; set; }
 
+        public string InvalidDownloadUrlFormatMessage { get; set; }
+
+        public string UnsupportedDownloadUrlSchemeMessage { get; set; }
+
         public string OpenDownloadUrlFailedMessage { get; set; }
     }
 }

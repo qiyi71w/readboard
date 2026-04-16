@@ -1331,6 +1331,8 @@ namespace readboard
                 UnavailableText = getLangStr("Update_notProvided"),
                 EmptyReleaseNotesText = getLangStr("Update_releaseNotesUnavailable"),
                 MissingDownloadUrlMessage = getLangStr("Update_missingDownloadUrl"),
+                InvalidDownloadUrlFormatMessage = getLangStr("Update_invalidDownloadUrlFormat"),
+                UnsupportedDownloadUrlSchemeMessage = getLangStr("Update_unsupportedDownloadUrlScheme"),
                 OpenDownloadUrlFailedMessage = getLangStr("Update_openDownloadFailed")
             };
             using (FormUpdate formUpdate = new FormUpdate(model))

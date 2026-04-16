@@ -256,9 +256,20 @@ namespace readboard
             return stringValue;
         }
 
-        private static DateTime ReadPublishedAt(IDictionary<string, object> payload)
+        private static DateTime? ReadPublishedAt(IDictionary<string, object> payload)
         {
-            string publishedAtValue = ReadRequiredString(payload, "published_at", false);
+            object rawValue;
+            if (!payload.TryGetValue("published_at", out rawValue) || rawValue == null)
+            {
+                return null;
+            }
+
+            string publishedAtValue = rawValue as string;
+            if (string.IsNullOrWhiteSpace(publishedAtValue))
+            {
+                return null;
+            }
+
             DateTime publishedAt;
             bool isValidDate = DateTime.TryParse(
                 publishedAtValue,
@@ -270,8 +281,7 @@ namespace readboard
                 return publishedAt;
             }
 
-            throw new InvalidOperationException(
-                "Latest release field 'published_at' is not a valid date: " + publishedAtValue);
+            return null;
         }
 
         private static Task<string> DownloadLatestReleaseJsonAsync()
