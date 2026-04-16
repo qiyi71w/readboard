@@ -60,6 +60,7 @@ Update_close=닫기
 Update_notProvided=제공되지 않음
 Update_releaseNotesUnavailable=업데이트 내용이 없습니다.
 Update_missingDownloadUrl=다운로드 링크가 없습니다.
+Update_openDownloadFailed=다운로드 링크를 열 수 없습니다.
 MagnifierForm_title=돋보기
 SettingsForm_title=설정
 SettingsForm_chkPonder=수읽기

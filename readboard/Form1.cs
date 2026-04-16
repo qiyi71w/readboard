@@ -1299,12 +1299,15 @@ namespace readboard
         {
             Control control = FindControl(root, controlName);
             if (control == null)
-                throw new InvalidOperationException("Control not found: " + controlName);
+                return;
             control.Text = text;
         }
 
         private static Control FindControl(Control root, string controlName)
         {
+            if (root == null || string.IsNullOrEmpty(controlName))
+                return null;
+
             if (root.Name == controlName)
                 return root;
             foreach (Control child in root.Controls)
@@ -1327,7 +1330,8 @@ namespace readboard
                 DownloadUrl = result.ReleaseUrl,
                 UnavailableText = getLangStr("Update_notProvided"),
                 EmptyReleaseNotesText = getLangStr("Update_releaseNotesUnavailable"),
-                MissingDownloadUrlMessage = getLangStr("Update_missingDownloadUrl")
+                MissingDownloadUrlMessage = getLangStr("Update_missingDownloadUrl"),
+                OpenDownloadUrlFailedMessage = getLangStr("Update_openDownloadFailed")
             };
             using (FormUpdate formUpdate = new FormUpdate(model))
             {
@@ -1368,16 +1372,12 @@ namespace readboard
             }
         }
 
-        private void CompleteUpdateCheck(UpdateCheckResult result, Exception exception)
+        private async void btnCheckUpdate_Click(object sender, EventArgs e)
         {
             try
             {
-                if (exception != null)
-                {
-                    ShowUpdateCheckFailed(exception.Message);
-                    return;
-                }
-
+                SetCheckUpdateButtonBusy(true);
+                UpdateCheckResult result = await updateChecker.CheckAsync();
                 if (result == null)
                     throw new InvalidOperationException("Update check returned no result.");
                 HandleUpdateCheckResult(result);
@@ -1390,49 +1390,6 @@ namespace readboard
             {
                 SetCheckUpdateButtonBusy(false);
             }
-        }
-
-        private static Exception GetUpdateTaskException(Task<UpdateCheckResult> task)
-        {
-            if (task == null)
-                return new InvalidOperationException("Update check task is unavailable.");
-            if (task.IsFaulted && task.Exception != null)
-                return task.Exception.GetBaseException();
-            if (task.IsCanceled)
-                return new TaskCanceledException(task);
-            return null;
-        }
-
-        private void CompleteUpdateCheckOnUiThread(Task<UpdateCheckResult> task)
-        {
-            Exception exception = GetUpdateTaskException(task);
-            UpdateCheckResult result = exception == null ? task.Result : null;
-            CompleteUpdateCheck(result, exception);
-        }
-
-        private void btnCheckUpdate_Click(object sender, EventArgs e)
-        {
-            SetCheckUpdateButtonBusy(true);
-            Task<UpdateCheckResult> updateTask;
-            try
-            {
-                updateTask = updateChecker.CheckAsync();
-            }
-            catch (Exception ex)
-            {
-                CompleteUpdateCheck(null, ex);
-                return;
-            }
-
-            if (updateTask == null)
-            {
-                CompleteUpdateCheck(null, new InvalidOperationException("Update check returned no result."));
-                return;
-            }
-
-            updateTask.ContinueWith(
-                CompleteUpdateCheckOnUiThread,
-                TaskScheduler.FromCurrentSynchronizationContext());
         }
 
         public void sendPonderStatus()

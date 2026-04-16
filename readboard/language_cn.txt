@@ -60,6 +60,7 @@ Update_close=关闭
 Update_notProvided=未提供
 Update_releaseNotesUnavailable=暂无更新说明。
 Update_missingDownloadUrl=未提供下载链接。
+Update_openDownloadFailed=无法打开下载链接。
 MagnifierForm_title=放大镜
 SettingsForm_title=参数设置
 SettingsForm_chkPonder=后台思考

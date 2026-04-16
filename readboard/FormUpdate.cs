@@ -10,6 +10,7 @@ namespace readboard
         private const string DefaultText = "N/A";
         private const string DefaultReleaseNotes = "No release notes.";
         private const string DefaultMissingDownloadUrlMessage = "Download link is unavailable.";
+        private const string DefaultOpenDownloadUrlFailedMessage = "Unable to open the download link.";
         private const string DefaultDialogTitle = "Update";
 
         private readonly UpdateDialogModel model;
@@ -163,7 +164,21 @@ namespace readboard
                 return;
             }
 
-            Process.Start(model.DownloadUrl);
+            try
+            {
+                Process.Start(model.DownloadUrl);
+            }
+            catch (Exception)
+            {
+                MessageBox.Show(
+                    this,
+                    NormalizeFallbackText(
+                        model.OpenDownloadUrlFailedMessage,
+                        DefaultOpenDownloadUrlFailedMessage),
+                    GetDialogTitle(),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
 
         private void btnClose_Click(object sender, EventArgs e)

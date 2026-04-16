@@ -193,6 +193,7 @@ namespace readboard
             langItems.Add("Update_notProvided", "未提供");
             langItems.Add("Update_releaseNotesUnavailable", "暂无更新说明。");
             langItems.Add("Update_missingDownloadUrl", "未提供下载链接。");
+            langItems.Add("Update_openDownloadFailed", "无法打开下载链接。");
 
             langItems.Add("MagnifierForm_title", "放大镜");
 

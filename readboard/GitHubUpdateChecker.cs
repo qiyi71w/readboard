@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
@@ -20,16 +21,16 @@ namespace readboard
             (SecurityProtocolType)Tls12ProtocolValue;
 
         private readonly Func<string> _currentVersionProvider;
-        private readonly Func<string> _latestReleaseJsonProvider;
+        private readonly Func<Task<string>> _latestReleaseJsonProvider;
 
         public GitHubUpdateChecker()
-            : this(AppReleaseVersion.GetCurrentVersion, DownloadLatestReleaseJson)
+            : this(AppReleaseVersion.GetCurrentVersion, DownloadLatestReleaseJsonAsync)
         {
         }
 
         internal GitHubUpdateChecker(
             Func<string> currentVersionProvider,
-            Func<string> latestReleaseJsonProvider)
+            Func<Task<string>> latestReleaseJsonProvider)
         {
             if (currentVersionProvider == null)
             {
@@ -47,34 +48,48 @@ namespace readboard
 
         public Task<UpdateCheckResult> CheckAsync()
         {
-            return Task<UpdateCheckResult>.Factory.StartNew(
-                CheckCore,
-                CancellationToken.None,
-                TaskCreationOptions.None,
-                TaskScheduler.Default);
-        }
-
-        private UpdateCheckResult CheckCore()
-        {
             string currentVersion = null;
+            SemanticVersion currentSemanticVersion;
 
             try
             {
                 currentVersion = _currentVersionProvider();
-                SemanticVersion currentSemanticVersion =
-                    ParseSemanticVersion(currentVersion, "Current version");
-                GitHubReleaseInfo latestRelease = ParseLatestRelease(_latestReleaseJsonProvider());
-                SemanticVersion latestSemanticVersion =
-                    ParseSemanticVersion(latestRelease.Tag, "Latest release tag");
-                return CreateSuccessResult(
-                    currentSemanticVersion,
-                    latestSemanticVersion,
-                    latestRelease);
+                currentSemanticVersion = ParseSemanticVersion(currentVersion, "Current version");
             }
             catch (Exception exception)
             {
-                return CreateFailureResult(currentVersion, exception);
+                return CreateCompletedTask(CreateFailureResult(currentVersion, exception));
             }
+
+            Task<string> latestReleaseJsonTask;
+            try
+            {
+                latestReleaseJsonTask = _latestReleaseJsonProvider();
+            }
+            catch (Exception exception)
+            {
+                return CreateCompletedTask(CreateFailureResult(currentVersion, exception));
+            }
+
+            if (latestReleaseJsonTask == null)
+            {
+                return CreateCompletedTask(
+                    CreateFailureResult(
+                        currentVersion,
+                        new InvalidOperationException("Latest release request returned no task.")));
+            }
+
+            var completion = new TaskCompletionSource<UpdateCheckResult>();
+            latestReleaseJsonTask.ContinueWith(
+                task => CompleteCheck(
+                    completion,
+                    currentVersion,
+                    currentSemanticVersion,
+                    task),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return completion.Task;
         }
 
         private static UpdateCheckResult CreateSuccessResult(
@@ -114,6 +129,47 @@ namespace readboard
                 ReleaseUrl = null,
                 ErrorMessage = baseException.Message
             };
+        }
+
+        private static Task<UpdateCheckResult> CreateCompletedTask(UpdateCheckResult result)
+        {
+            var completion = new TaskCompletionSource<UpdateCheckResult>();
+            completion.SetResult(result);
+            return completion.Task;
+        }
+
+        private static void CompleteCheck(
+            TaskCompletionSource<UpdateCheckResult> completion,
+            string currentVersion,
+            SemanticVersion currentSemanticVersion,
+            Task<string> latestReleaseJsonTask)
+        {
+            try
+            {
+                if (latestReleaseJsonTask.IsCanceled)
+                {
+                    throw new TaskCanceledException("Latest release request was canceled.");
+                }
+
+                if (latestReleaseJsonTask.IsFaulted)
+                {
+                    throw latestReleaseJsonTask.Exception;
+                }
+
+                GitHubReleaseInfo latestRelease =
+                    ParseLatestRelease(latestReleaseJsonTask.Result);
+                SemanticVersion latestSemanticVersion =
+                    ParseSemanticVersion(latestRelease.Tag, "Latest release tag");
+                completion.SetResult(
+                    CreateSuccessResult(
+                        currentSemanticVersion,
+                        latestSemanticVersion,
+                        latestRelease));
+            }
+            catch (Exception exception)
+            {
+                completion.SetResult(CreateFailureResult(currentVersion, exception));
+            }
         }
 
         private static SemanticVersion ParseSemanticVersion(string value, string label)
@@ -198,47 +254,105 @@ namespace readboard
                 "Latest release field 'published_at' is not a valid date: " + publishedAtValue);
         }
 
-        private static string DownloadLatestReleaseJson()
+        private static Task<string> DownloadLatestReleaseJsonAsync()
         {
-            EnableTls12();
-            HttpWebRequest request = CreateLatestReleaseRequest();
+            EnableGlobalTls12();
 
-            using (var response = (HttpWebResponse)request.GetResponse())
-            using (Stream responseStream = response.GetResponseStream())
+            var handler = new HttpClientHandler
             {
-                if (responseStream == null)
-                {
-                    throw new InvalidOperationException("Latest release response stream is empty.");
-                }
+                AutomaticDecompression =
+                    DecompressionMethods.GZip | DecompressionMethods.Deflate
+            };
+            HttpClient client = CreateLatestReleaseClient(handler);
 
-                using (var reader = new StreamReader(responseStream))
-                {
-                    return reader.ReadToEnd();
-                }
+            Task<string> downloadTask;
+            try
+            {
+                downloadTask = client.GetStringAsync(LatestReleaseApiUrl);
             }
+            catch
+            {
+                DisposeHttpResources(client, handler);
+                throw;
+            }
+
+            var completion = new TaskCompletionSource<string>();
+            downloadTask.ContinueWith(
+                task => CompleteDownload(completion, client, handler, task),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return completion.Task;
         }
 
-        private static void EnableTls12()
+        // net40 only exposes TLS selection through the process-wide ServicePointManager switch.
+        private static void EnableGlobalTls12()
         {
             ServicePointManager.SecurityProtocol =
                 ServicePointManager.SecurityProtocol | Tls12SecurityProtocol;
         }
 
-        private static HttpWebRequest CreateLatestReleaseRequest()
+        private static HttpClient CreateLatestReleaseClient(HttpClientHandler handler)
         {
-            var request = (HttpWebRequest)WebRequest.Create(LatestReleaseApiUrl);
-            request.Accept = GitHubAcceptHeader;
-            request.UserAgent = GitHubUserAgent;
-            request.AutomaticDecompression =
-                DecompressionMethods.GZip | DecompressionMethods.Deflate;
-            request.Timeout = RequestTimeoutMilliseconds;
-            request.ReadWriteTimeout = RequestTimeoutMilliseconds;
-            return request;
+            var client = new HttpClient(handler);
+            client.Timeout = TimeSpan.FromMilliseconds(RequestTimeoutMilliseconds);
+            client.DefaultRequestHeaders.Accept.Add(
+                new MediaTypeWithQualityHeaderValue(GitHubAcceptHeader));
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(GitHubUserAgent);
+            return client;
+        }
+
+        private static void CompleteDownload(
+            TaskCompletionSource<string> completion,
+            HttpClient client,
+            HttpClientHandler handler,
+            Task<string> downloadTask)
+        {
+            try
+            {
+                if (downloadTask.IsCanceled)
+                {
+                    throw new TaskCanceledException("Latest release request was canceled.");
+                }
+
+                if (downloadTask.IsFaulted)
+                {
+                    throw downloadTask.Exception;
+                }
+
+                completion.SetResult(downloadTask.Result);
+            }
+            catch (Exception exception)
+            {
+                completion.SetException(exception);
+            }
+            finally
+            {
+                DisposeHttpResources(client, handler);
+            }
+        }
+
+        private static void DisposeHttpResources(
+            HttpClient client,
+            HttpClientHandler handler)
+        {
+            if (client != null)
+            {
+                client.Dispose();
+            }
+
+            if (handler != null)
+            {
+                handler.Dispose();
+            }
         }
 
         private struct SemanticVersion : IComparable<SemanticVersion>
         {
             private const int VersionSegmentCount = 3;
+            private const int VersionPrefixLength = 1;
+            private const char PreReleaseSeparator = '-';
+            private const char BuildMetadataSeparator = '+';
 
             private readonly int _major;
             private readonly int _minor;
@@ -318,10 +432,33 @@ namespace readboard
                 string normalizedValue = value.Trim();
                 if (normalizedValue.StartsWith("v", StringComparison.OrdinalIgnoreCase))
                 {
-                    normalizedValue = normalizedValue.Substring(1);
+                    normalizedValue = normalizedValue.Substring(VersionPrefixLength);
+                }
+
+                int suffixIndex = FindSuffixIndex(normalizedValue);
+                if (suffixIndex >= 0)
+                {
+                    normalizedValue = normalizedValue.Substring(0, suffixIndex);
                 }
 
                 return normalizedValue;
+            }
+
+            private static int FindSuffixIndex(string value)
+            {
+                int preReleaseIndex = value.IndexOf(PreReleaseSeparator);
+                int buildMetadataIndex = value.IndexOf(BuildMetadataSeparator);
+                if (preReleaseIndex < 0)
+                {
+                    return buildMetadataIndex;
+                }
+
+                if (buildMetadataIndex < 0)
+                {
+                    return preReleaseIndex;
+                }
+
+                return Math.Min(preReleaseIndex, buildMetadataIndex);
             }
 
             private static bool TryParseSegment(string value, out int number)

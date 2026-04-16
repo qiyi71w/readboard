@@ -17,5 +17,7 @@ namespace readboard
         public string EmptyReleaseNotesText { get; set; }
 
         public string MissingDownloadUrlMessage { get; set; }
+
+        public string OpenDownloadUrlFailedMessage { get; set; }
     }
 }
