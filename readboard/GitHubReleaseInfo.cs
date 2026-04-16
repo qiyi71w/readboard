@@ -12,6 +12,6 @@ namespace readboard
 
         public string HtmlUrl { get; internal set; }
 
-        public DateTime PublishedAt { get; internal set; }
+        public DateTime? PublishedAt { get; internal set; }
     }
 }

@@ -153,7 +153,8 @@ namespace readboard
 
         private void btnDownload_Click(object sender, EventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(model.DownloadUrl))
+            Uri downloadUri;
+            if (!TryCreateDownloadUri(out downloadUri))
             {
                 MessageBox.Show(
                     this,
@@ -166,7 +167,7 @@ namespace readboard
 
             try
             {
-                Process.Start(model.DownloadUrl);
+                Process.Start(downloadUri.AbsoluteUri);
             }
             catch (Exception)
             {
@@ -179,6 +180,32 @@ namespace readboard
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
             }
+        }
+
+        private bool TryCreateDownloadUri(out Uri downloadUri)
+        {
+            downloadUri = null;
+            if (string.IsNullOrWhiteSpace(model.DownloadUrl))
+            {
+                return false;
+            }
+
+            Uri parsedUri;
+            if (!Uri.TryCreate(model.DownloadUrl, UriKind.Absolute, out parsedUri))
+            {
+                return false;
+            }
+
+            bool isHttpScheme =
+                string.Equals(parsedUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(parsedUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+            if (!isHttpScheme)
+            {
+                return false;
+            }
+
+            downloadUri = parsedUri;
+            return true;
         }
 
         private void btnClose_Click(object sender, EventArgs e)
