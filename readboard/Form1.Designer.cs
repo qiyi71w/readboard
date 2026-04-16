@@ -61,6 +61,7 @@
             this.lblBestMoveVisits = new System.Windows.Forms.Label();
             this.textBox3 = new System.Windows.Forms.TextBox();
             this.btnHelp = new System.Windows.Forms.Button();
+            this.btnCheckUpdate = new System.Windows.Forms.Button();
             this.lblPlayCondition = new System.Windows.Forms.Label();
             this.groupBox4 = new System.Windows.Forms.GroupBox();
             this.flowLayoutPanel2 = new System.Windows.Forms.FlowLayoutPanel();
@@ -432,6 +433,16 @@
             this.btnHelp.UseVisualStyleBackColor = true;
             this.btnHelp.Click += new System.EventHandler(this.button1_Click);
             // 
+            // btnCheckUpdate
+            // 
+            this.btnCheckUpdate.Location = new System.Drawing.Point(538, 126);
+            this.btnCheckUpdate.Name = "btnCheckUpdate";
+            this.btnCheckUpdate.Size = new System.Drawing.Size(92, 23);
+            this.btnCheckUpdate.TabIndex = 31;
+            this.btnCheckUpdate.Text = "检查更新";
+            this.btnCheckUpdate.UseVisualStyleBackColor = true;
+            this.btnCheckUpdate.Click += new System.EventHandler(this.btnCheckUpdate_Click);
+            // 
             // lblPlayCondition
             // 
             this.lblPlayCondition.AutoSize = true;
@@ -536,7 +547,7 @@
             this.btnSettings.Location = new System.Drawing.Point(560, 4);
             this.btnSettings.Name = "btnSettings";
             this.btnSettings.Size = new System.Drawing.Size(71, 26);
-            this.btnSettings.TabIndex = 33;
+            this.btnSettings.TabIndex = 32;
             this.btnSettings.Text = "参数设置";
             this.btnSettings.UseVisualStyleBackColor = true;
             this.btnSettings.Click += new System.EventHandler(this.btnSettings_Click);
@@ -603,6 +614,7 @@
             this.Controls.Add(this.chkShowInBoard);
             this.Controls.Add(this.btnExchange);
             this.Controls.Add(this.btnSettings);
+            this.Controls.Add(this.btnCheckUpdate);
             this.Controls.Add(this.groupBox4);
             this.Controls.Add(this.btnHelp);
             this.Controls.Add(this.groupBox2);
@@ -671,6 +683,7 @@
         private System.Windows.Forms.Label lblTotalVisits;
         private System.Windows.Forms.TextBox textBox3;
         private System.Windows.Forms.Button btnHelp;
+        private System.Windows.Forms.Button btnCheckUpdate;
         private System.Windows.Forms.Label lblPlayCondition;
         private System.Windows.Forms.GroupBox groupBox4;
         private System.Windows.Forms.RadioButton rdoFore;

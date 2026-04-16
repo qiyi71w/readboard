@@ -151,6 +151,8 @@ namespace readboard
             langItems.Add("MainForm_btnSettings", "参数设置");
             langItems.Add("MainForm_btnHelp", "帮助");
             langItems.Add("MainForm_btnTheme", "主题");
+            langItems.Add("MainForm_btnCheckUpdate", "检查更新");
+            langItems.Add("MainForm_btnCheckUpdate_Checking", "检查中");
             langItems.Add("MainForm_btnFastSync", "一键同步");
             langItems.Add("MainForm_lblBoardSize", "棋盘:");
             langItems.Add("MainForm_btnKomi65", "6.5目规则设置方法");
@@ -178,6 +180,19 @@ namespace readboard
             langItems.Add("MainForm_groupSync", "同步与自动落子");
             langItems.Add("MainForm_themeOptimized", "修复版主题");
             langItems.Add("MainForm_themeClassic", "默认主题");
+            langItems.Add("Update_upToDate", "已是最新版本");
+            langItems.Add("Update_checkFailed", "检查更新失败");
+            langItems.Add("Update_unknownError", "未知错误");
+            langItems.Add("Update_dialogTitle", "发现新版本");
+            langItems.Add("Update_currentVersion", "当前版本");
+            langItems.Add("Update_latestVersion", "最新版本");
+            langItems.Add("Update_releaseDate", "发布日期");
+            langItems.Add("Update_releaseNotes", "更新说明");
+            langItems.Add("Update_download", "去下载");
+            langItems.Add("Update_close", "关闭");
+            langItems.Add("Update_notProvided", "未提供");
+            langItems.Add("Update_releaseNotesUnavailable", "暂无更新说明。");
+            langItems.Add("Update_missingDownloadUrl", "未提供下载链接。");
 
             langItems.Add("MagnifierForm_title", "放大镜");
 

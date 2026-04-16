@@ -80,6 +80,12 @@ namespace readboard
         float factor = 1.0f;
         private KeyboardHookListener hookListener;
         private int port = 0;
+        private readonly GitHubUpdateChecker updateChecker = new GitHubUpdateChecker();
+
+        Boolean savedPlace = false;
+        int savedX;
+        int savedY;
+
         int posX = -1;
         int posY = -1;
 
@@ -206,12 +212,12 @@ namespace readboard
 
         private IEnumerable<Button> MainSecondaryButtons()
         {
-            return new[] { btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnTheme };
+            return new[] { btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnCheckUpdate, btnTheme };
         }
 
         private IEnumerable<Button> MainTypographyButtons()
         {
-            return new[] { btnFastSync, btnKeepSync, btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnClearBoard, btnTheme };
+            return new[] { btnFastSync, btnKeepSync, btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnCheckUpdate, btnClearBoard, btnTheme };
         }
 
         private void EnsureThemeControls()
@@ -461,6 +467,7 @@ namespace readboard
             btnHelp.SetBounds(helpLeft, top, helpWidth, buttonHeight);
             btnTheme.SetBounds(themeLeft, top, themeWidth, buttonHeight);
             btnKomi65.SetBounds(settingsLeft, top + buttonHeight + utilityGap, utilityRight - settingsLeft, buttonHeight);
+            btnCheckUpdate.SetBounds(settingsLeft, btnKomi65.Bottom + utilityGap, utilityRight - settingsLeft, buttonHeight);
         }
 
         private void ArrangeMainBoardSection()
@@ -1219,6 +1226,7 @@ namespace readboard
             this.rdoFore.Text = getLangStr("MainForm_rdoFore");
             this.btnSettings.Text = getLangStr("MainForm_btnSettings");
             this.btnHelp.Text = getLangStr("MainForm_btnHelp");
+            this.btnCheckUpdate.Text = getLangStr("MainForm_btnCheckUpdate");
             this.btnFastSync.Text = getLangStr("MainForm_btnFastSync");
             this.lblBoardSize.Text = getLangStr("MainForm_lblBoardSize");
             this.btnKomi65.Text = getLangStr("MainForm_btnKomi65");
@@ -1258,6 +1266,173 @@ namespace readboard
                 SendError(e.ToString());              
             }
             return result;
+        }
+
+        private void SetCheckUpdateButtonBusy(Boolean isChecking)
+        {
+            this.btnCheckUpdate.Enabled = !isChecking;
+            this.btnCheckUpdate.Text = isChecking
+                ? getLangStr("MainForm_btnCheckUpdate_Checking")
+                : getLangStr("MainForm_btnCheckUpdate");
+        }
+
+        private static string FormatReleaseDate(DateTime? publishedAt)
+        {
+            return publishedAt.HasValue
+                ? publishedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                : string.Empty;
+        }
+
+        private void ApplyUpdateDialogLanguage(FormUpdate formUpdate)
+        {
+            formUpdate.Text = getLangStr("Update_dialogTitle");
+            SetControlText(formUpdate, "lblTitle", getLangStr("Update_dialogTitle"));
+            SetControlText(formUpdate, "lblCurrentVersion", getLangStr("Update_currentVersion"));
+            SetControlText(formUpdate, "lblLatestVersion", getLangStr("Update_latestVersion"));
+            SetControlText(formUpdate, "lblReleaseDate", getLangStr("Update_releaseDate"));
+            SetControlText(formUpdate, "lblReleaseNotes", getLangStr("Update_releaseNotes"));
+            SetControlText(formUpdate, "btnDownload", getLangStr("Update_download"));
+            SetControlText(formUpdate, "btnClose", getLangStr("Update_close"));
+        }
+
+        private void SetControlText(Control root, string controlName, string text)
+        {
+            Control control = FindControl(root, controlName);
+            if (control == null)
+                throw new InvalidOperationException("Control not found: " + controlName);
+            control.Text = text;
+        }
+
+        private static Control FindControl(Control root, string controlName)
+        {
+            if (root.Name == controlName)
+                return root;
+            foreach (Control child in root.Controls)
+            {
+                Control result = FindControl(child, controlName);
+                if (result != null)
+                    return result;
+            }
+            return null;
+        }
+
+        private void ShowUpdateAvailable(UpdateCheckResult result)
+        {
+            UpdateDialogModel model = new UpdateDialogModel
+            {
+                CurrentVersion = result.CurrentVersion,
+                LatestVersion = result.LatestVersion,
+                ReleaseDate = FormatReleaseDate(result.PublishedAt),
+                ReleaseNotes = result.ReleaseNotes,
+                DownloadUrl = result.ReleaseUrl,
+                UnavailableText = getLangStr("Update_notProvided"),
+                EmptyReleaseNotesText = getLangStr("Update_releaseNotesUnavailable"),
+                MissingDownloadUrlMessage = getLangStr("Update_missingDownloadUrl")
+            };
+            using (FormUpdate formUpdate = new FormUpdate(model))
+            {
+                ApplyUpdateDialogLanguage(formUpdate);
+                formUpdate.ShowDialog(this);
+            }
+        }
+
+        private void ShowUpdateUpToDate()
+        {
+            MessageBox.Show(this, getLangStr("Update_upToDate"), getLangStr("MainForm_btnCheckUpdate"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void ShowUpdateCheckFailed(string errorMessage)
+        {
+            string reason = string.IsNullOrWhiteSpace(errorMessage)
+                ? getLangStr("Update_unknownError")
+                : errorMessage;
+            string message = getLangStr("Update_checkFailed") + Environment.NewLine + reason;
+            MessageBox.Show(this, message, getLangStr("MainForm_btnCheckUpdate"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
+        private void HandleUpdateCheckResult(UpdateCheckResult result)
+        {
+            switch (result.Status)
+            {
+                case UpdateCheckStatus.UpdateAvailable:
+                    ShowUpdateAvailable(result);
+                    return;
+                case UpdateCheckStatus.UpToDate:
+                    ShowUpdateUpToDate();
+                    return;
+                case UpdateCheckStatus.Failed:
+                    ShowUpdateCheckFailed(result.ErrorMessage);
+                    return;
+                default:
+                    throw new InvalidEnumArgumentException("result.Status", (int)result.Status, typeof(UpdateCheckStatus));
+            }
+        }
+
+        private void CompleteUpdateCheck(UpdateCheckResult result, Exception exception)
+        {
+            try
+            {
+                if (exception != null)
+                {
+                    ShowUpdateCheckFailed(exception.Message);
+                    return;
+                }
+
+                if (result == null)
+                    throw new InvalidOperationException("Update check returned no result.");
+                HandleUpdateCheckResult(result);
+            }
+            catch (Exception ex)
+            {
+                ShowUpdateCheckFailed(ex.Message);
+            }
+            finally
+            {
+                SetCheckUpdateButtonBusy(false);
+            }
+        }
+
+        private static Exception GetUpdateTaskException(Task<UpdateCheckResult> task)
+        {
+            if (task == null)
+                return new InvalidOperationException("Update check task is unavailable.");
+            if (task.IsFaulted && task.Exception != null)
+                return task.Exception.GetBaseException();
+            if (task.IsCanceled)
+                return new TaskCanceledException(task);
+            return null;
+        }
+
+        private void CompleteUpdateCheckOnUiThread(Task<UpdateCheckResult> task)
+        {
+            Exception exception = GetUpdateTaskException(task);
+            UpdateCheckResult result = exception == null ? task.Result : null;
+            CompleteUpdateCheck(result, exception);
+        }
+
+        private void btnCheckUpdate_Click(object sender, EventArgs e)
+        {
+            SetCheckUpdateButtonBusy(true);
+            Task<UpdateCheckResult> updateTask;
+            try
+            {
+                updateTask = updateChecker.CheckAsync();
+            }
+            catch (Exception ex)
+            {
+                CompleteUpdateCheck(null, ex);
+                return;
+            }
+
+            if (updateTask == null)
+            {
+                CompleteUpdateCheck(null, new InvalidOperationException("Update check returned no result."));
+                return;
+            }
+
+            updateTask.ContinueWith(
+                CompleteUpdateCheckOnUiThread,
+                TaskScheduler.FromCurrentSynchronizationContext());
         }
 
         public void sendPonderStatus()

@@ -4,3 +4,8 @@ readboard/obj/
 readboard/Interop.lw.dll
 .codex/
 release/
+temp-build/
+temp-merge-build/
+temp-package-build/
+temp-ui-build/
+temp-theme-build/
