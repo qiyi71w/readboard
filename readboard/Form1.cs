@@ -27,15 +27,9 @@ namespace readboard
         public static int oy1;
         private int selectionY1;
         int oy2;
-        //  public static CDmSoft dm;
-        //public static CDmSoft dm2;
         IntPtr hwnd = IntPtr.Zero;
-        //int hwndFoxPlace = 0;
         Form2 form2;
 
-        //object qx1;
-        // object qy1;
-        //int rectSize;
         private const int TYPE_FOX = 0;
         private const int TYPE_TYGEM = 1;
         private const int TYPE_SINA = 2;
@@ -1033,15 +1027,6 @@ namespace readboard
                 Program.factor = factor;
             }
             ApplyLoadedConfiguration();
-            //if (Program.showScaleHint && factor > 1)
-            //{
-
-            //    Form6 form6 = new Form6();
-            //    form6.ShowDialog();
-
-            //}
-            //dm = new CDmSoft();
-            //dm.SetShowErrorMsg(0);
             this.MaximizeBox = false;
             if (!launchOptions.AiTime.Equals(" "))
                 textBox1.Text = launchOptions.AiTime;
@@ -1965,13 +1950,6 @@ namespace readboard
         private void Button2_Click(object sender, EventArgs e)
         {
             isMannulCircle = false;
-            //Form5 form5 = new Form5();
-            //object x;
-            //object y;
-            //dm.GetCursorPos(out x, out y);
-
-            //form5.setPic((int)x, (int)y);
-            //form5.Show();
             selectBoard();
         }
 

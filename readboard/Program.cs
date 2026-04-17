@@ -84,12 +84,6 @@ namespace readboard
             set { Config.VerifyMove = value; }
         }
 
-        public static bool showScaleHint
-        {
-            get { return Config.ShowScaleHint; }
-            set { Config.ShowScaleHint = value; }
-        }
-
         public static bool showInBoard
         {
             get { return Config.ShowInBoard; }
