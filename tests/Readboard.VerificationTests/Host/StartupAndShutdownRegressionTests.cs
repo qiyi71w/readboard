@@ -89,6 +89,16 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void ShowInBoardToggle_ReplaysForegroundFoxProtocolStateImmediately()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)");
+
+            Assert.Contains("CanUseForegroundFoxInBoardProtocol()", methodSlice);
+            Assert.Contains("SendForegroundFoxInBoardCommand(chkShowInBoard.Checked && sessionCoordinator.SyncBoth);", methodSlice);
+        }
+
+        [Fact]
         public void ShowInBoardTooltip_ClearsCtrlXHintWhenShortcutIsDisabled()
         {
             string source = LoadSource("readboard", "Form1.cs");
@@ -223,6 +233,20 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void BackgroundSelectionWindowBinding_ResolvesBothCircleModesFromSelectionCenter()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string snapSlice = GetMethodSlice(source, "public void Snap(int x1, int y1, int x2, int y2)");
+            string moveSlice = GetMethodSlice(source, "void mh_MouseMoveEvent(object sender, MouseEventArgs e)");
+            string clickSlice = GetMethodSlice(source, "void mh_MouseMoveEvent2(object sender, MouseEventArgs e)");
+
+            Assert.Contains("if (CurrentSyncType == TYPE_BACKGROUND)", snapSlice);
+            Assert.Contains("BeginResolveBackgroundSelectionWindowAsync();", snapSlice);
+            Assert.DoesNotContain("CurrentSyncType == TYPE_BACKGROUND && !isMannulCircle", moveSlice);
+            Assert.DoesNotContain("CurrentSyncType == TYPE_BACKGROUND && !isMannulCircle", clickSlice);
+        }
+
+        [Fact]
         public void Program_StopsStartupHandshakeAfterShutdownRequest()
         {
             string source = LoadSource("readboard", "Program.cs");
@@ -248,8 +272,14 @@ namespace Readboard.VerificationTests.Host
             int startIndex = IndexOfRequired(source, methodSignature);
             int nextMethodIndex = source.IndexOf("\n        private ", startIndex + methodSignature.Length, StringComparison.Ordinal);
             int publicMethodIndex = source.IndexOf("\n        public ", startIndex + methodSignature.Length, StringComparison.Ordinal);
+            int defaultMethodIndex = source.IndexOf("\n        void ", startIndex + methodSignature.Length, StringComparison.Ordinal);
+            int internalMethodIndex = source.IndexOf("\n        internal ", startIndex + methodSignature.Length, StringComparison.Ordinal);
             if (publicMethodIndex >= 0 && (nextMethodIndex < 0 || publicMethodIndex < nextMethodIndex))
                 nextMethodIndex = publicMethodIndex;
+            if (defaultMethodIndex >= 0 && (nextMethodIndex < 0 || defaultMethodIndex < nextMethodIndex))
+                nextMethodIndex = defaultMethodIndex;
+            if (internalMethodIndex >= 0 && (nextMethodIndex < 0 || internalMethodIndex < nextMethodIndex))
+                nextMethodIndex = internalMethodIndex;
             if (nextMethodIndex < 0)
                 nextMethodIndex = source.Length;
             return source.Substring(startIndex, nextMethodIndex - startIndex);

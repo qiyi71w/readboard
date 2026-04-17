@@ -19,7 +19,6 @@ namespace readboard
     public partial class MainForm : Form, IProtocolCommandHost, ISyncCoordinatorHost
     {
         // Boolean showDebugImage = true;
-        Boolean pressed = false;
         Boolean clicked = false;
 
         public static int ox1;
@@ -1284,29 +1283,33 @@ namespace readboard
         //static extern void BlockInput(bool Block);
         public void Snap(int x1, int y1, int x2, int y2)
         {
-            pressed = true;
             UpdateSelectionBounds(
                 Math.Min(x1, x2),
                 Math.Min(y1, y2),
                 Math.Max(x1, x2),
                 Math.Max(y1, y2));
-            if (!isMannulCircle)
-            {
-                if (!TryCalibrateSelectionBounds())
-                    MessageBox.Show(getLangStr("recgnizeFaild"));// Program.isChn ? "不能识别棋盘,请调整被同步棋盘大小后重新选择或尝试[框选1路线]" : "Can not detect board,Please zoom the board and try again or use [CircleRow1]");
-                else if (CurrentSyncType == TYPE_BACKGROUND)
-                {
-                    BeginResolveBackgroundSelectionWindowAsync();
-                }
-            }
-            else
-            {
-                int gapX = (int)Math.Round((ox2 - selectionX1) / ((boardW - 1) * 2f));
-                int gapY = (int)Math.Round((oy2 - selectionY1) / ((boardH - 1) * 2f));
-                UpdateSelectionBounds(selectionX1 - gapX, selectionY1 - gapY, ox2 + gapX, oy2 + gapY);
-            }
+            if (!TryFinalizeSelectionBounds())
+                MessageBox.Show(getLangStr("recgnizeFaild"));// Program.isChn ? "不能识别棋盘,请调整被同步棋盘大小后重新选择或尝试[框选1路线]" : "Can not detect board,Please zoom the board and try again or use [CircleRow1]");
+            else if (CurrentSyncType == TYPE_BACKGROUND)
+                BeginResolveBackgroundSelectionWindowAsync();
             this.WindowState = FormWindowState.Normal;
             //mh.Enabled = false;
+        }
+
+        private bool TryFinalizeSelectionBounds()
+        {
+            if (!isMannulCircle)
+                return TryCalibrateSelectionBounds();
+
+            ExpandManualSelectionBounds();
+            return true;
+        }
+
+        private void ExpandManualSelectionBounds()
+        {
+            int gapX = (int)Math.Round((ox2 - selectionX1) / ((boardW - 1) * 2f));
+            int gapY = (int)Math.Round((oy2 - selectionY1) / ((boardH - 1) * 2f));
+            UpdateSelectionBounds(selectionX1 - gapX, selectionY1 - gapY, ox2 + gapX, oy2 + gapY);
         }
 
         private bool TryCalibrateSelectionBounds()
@@ -1350,18 +1353,13 @@ namespace readboard
 
         void mh_MouseMoveEvent(object sender, MouseEventArgs e)
         {
-            if (CurrentSyncType == TYPE_BACKGROUND && !isMannulCircle)
+            if (CurrentSyncType == TYPE_BACKGROUND)
                 return;
-            if (pressed)
-            {
-                pressed = false;
-                hwnd = getMousePointHwnd();
-            }
         }
 
         void mh_MouseMoveEvent2(object sender, MouseEventArgs e)
         {
-            if (CurrentSyncType == TYPE_BACKGROUND && !isMannulCircle)
+            if (CurrentSyncType == TYPE_BACKGROUND)
                 return;
             if (clicked)
             {
@@ -1877,6 +1875,8 @@ namespace readboard
             if (isInitializingProtocolState)
                 return;
             PersistConfiguration();
+            if (CanUseForegroundFoxInBoardProtocol())
+                SendForegroundFoxInBoardCommand(chkShowInBoard.Checked && sessionCoordinator.SyncBoth);
             if (chkShowInBoard.Checked)
             {
                 if (Program.showInBoardHint)
