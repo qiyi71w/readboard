@@ -7,6 +7,13 @@ namespace readboard
 {
     internal sealed class DualFormatAppConfigStore : IAppConfigStore
     {
+        private enum LegacyMainConfigStatus
+        {
+            MissingOrInvalid = 0,
+            Imported = 1,
+            MachineMismatch = 2
+        }
+
         private const string JsonFileName = "config.readboard.json";
         private const string LegacyMainFileName = "config_readboard.txt";
         private const string LegacyOtherFileName = "config_readboard_others.txt";
@@ -62,16 +69,21 @@ namespace readboard
 
         private bool ImportLegacyConfig(AppConfig config)
         {
-            bool hasLegacyMain = ApplyLegacyMainConfig(config);
+            LegacyMainConfigStatus legacyMainStatus = ApplyLegacyMainConfig(config);
+            if (legacyMainStatus == LegacyMainConfigStatus.MachineMismatch)
+                return false;
+
             bool hasLegacyOther = ApplyLegacyOtherConfig(config);
-            return hasLegacyMain || hasLegacyOther;
+            return legacyMainStatus == LegacyMainConfigStatus.Imported || hasLegacyOther;
         }
 
-        private bool ApplyLegacyMainConfig(AppConfig config)
+        private LegacyMainConfigStatus ApplyLegacyMainConfig(AppConfig config)
         {
             string[] parts = ReadLegacyParts(LegacyMainFileName);
-            if (parts == null || parts.Length < 12 || !string.Equals(parts[10], machineKey, StringComparison.Ordinal))
-                return false;
+            if (parts == null || parts.Length < 12)
+                return LegacyMainConfigStatus.MissingOrInvalid;
+            if (!string.Equals(parts[10], machineKey, StringComparison.Ordinal))
+                return LegacyMainConfigStatus.MachineMismatch;
 
             config.BlackOffset = ReadInt(parts[0], config.BlackOffset);
             config.BlackPercent = ReadInt(parts[1], config.BlackPercent);
@@ -84,7 +96,7 @@ namespace readboard
             config.ShowInBoardHint = ReadBool(parts[8], config.ShowInBoardHint);
             config.AutoMinimize = ReadBool(parts[9], config.AutoMinimize);
             config.SyncMode = (SyncMode)ReadInt(parts[11], (int)config.SyncMode);
-            return true;
+            return LegacyMainConfigStatus.Imported;
         }
 
         private bool ApplyLegacyOtherConfig(AppConfig config)

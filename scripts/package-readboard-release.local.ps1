@@ -18,8 +18,6 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectRoot = Join-Path $repoRoot 'readboard'
 $projectFile = Join-Path $projectRoot 'readboard.csproj'
 $assemblyInfoPath = Join-Path $projectRoot 'Properties\AssemblyInfo.cs'
-$legacyProtocolVersion = '220430'
-$defaultLegacyOtherConfig = "$legacyProtocolVersion`_19_19_-1_-1_200_0_50_-1_-1_0_1_1"
 
 if (-not $ReleaseRoot) {
     $ReleaseRoot = Join-Path $repoRoot 'release'
@@ -53,7 +51,9 @@ $nativeRuntimeFiles = @(
 $requiredBuildFiles = @(
     'readboard.exe',
     'readboard.exe.config',
-    'MouseKeyboardActivityMonitor.dll'
+    'MouseKeyboardActivityMonitor.dll',
+    'dll\x86\OpenCvSharpExtern.dll',
+    'dll\x86\opencv_ffmpeg400.dll'
 )
 
 function Get-ReleaseVersion {
@@ -159,7 +159,7 @@ function Copy-RelativeFiles {
     foreach ($relativePath in $RelativePaths) {
         $sourcePath = Join-Path $SourceDir $relativePath
         if (-not (Test-Path -LiteralPath $sourcePath)) {
-            continue
+            throw "构建输出不完整，缺少: $relativePath"
         }
 
         $destinationPath = Join-Path $DestinationDir $relativePath
@@ -167,13 +167,6 @@ function Copy-RelativeFiles {
         New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
         Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
     }
-}
-
-function Write-LegacyOtherConfig {
-    param([string]$DestinationDir)
-
-    $path = Join-Path $DestinationDir 'config_readboard_others.txt'
-    [System.IO.File]::WriteAllText($path, $defaultLegacyOtherConfig + [Environment]::NewLine, [System.Text.Encoding]::UTF8)
 }
 
 function New-ReleaseArchive {
@@ -210,7 +203,6 @@ New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
 Copy-MatchingFiles -SourceDir $BuildOutputDir -Patterns $buildPatterns -DestinationDir $releaseDirectory
 Copy-MatchingFiles -SourceDir $projectRoot -Patterns $staticPatterns -DestinationDir $releaseDirectory
 Copy-RelativeFiles -SourceDir $BuildOutputDir -RelativePaths $nativeRuntimeFiles -DestinationDir $releaseDirectory
-Write-LegacyOtherConfig -DestinationDir $releaseDirectory
 New-ReleaseArchive -SourceDirectory $releaseDirectory -DestinationZipPath $releaseZipPath
 
 Write-Host "PackageDir=$releaseDirectory"

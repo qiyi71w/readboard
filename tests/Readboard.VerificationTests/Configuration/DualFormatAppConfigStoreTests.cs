@@ -54,6 +54,27 @@ namespace Readboard.VerificationTests
             }
         }
 
+        [Fact]
+        public void Load_IgnoresLegacyOtherConfigWhenMainConfigBelongsToDifferentMachine()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard.txt"),
+                    "101_42_77_18_1_0_1_0_1_1_SOME-OTHER-MACHINE_4");
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard_others.txt"),
+                    "220430_13_13_15_16_150_1_61_320_240_1_0_1");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.False(result.HasExistingConfig);
+                AssertDefaultConfig(result.Config);
+                Assert.False(File.Exists(workspace.PathFor("config.readboard.json")));
+            }
+        }
+
         private static void AssertImportedFixtureConfig(AppConfig config)
         {
             Assert.Equal(101, config.BlackOffset);
@@ -89,6 +110,31 @@ namespace Readboard.VerificationTests
             Assert.Contains("\"BoardWidth\":13", json);
             Assert.Contains("\"SyncBoth\":true", json);
             Assert.Contains("\"PlayPonder\":false", json);
+        }
+
+        private static void AssertDefaultConfig(AppConfig config)
+        {
+            Assert.Equal(96, config.BlackOffset);
+            Assert.Equal(33, config.BlackPercent);
+            Assert.Equal(96, config.WhiteOffset);
+            Assert.Equal(33, config.WhitePercent);
+            Assert.True(config.UseMagnifier);
+            Assert.True(config.VerifyMove);
+            Assert.Equal(SyncMode.Fox, config.SyncMode);
+            Assert.Equal(19, config.BoardWidth);
+            Assert.Equal(19, config.BoardHeight);
+            Assert.Equal(-1, config.CustomBoardWidth);
+            Assert.Equal(-1, config.CustomBoardHeight);
+            Assert.Equal(200, config.SyncIntervalMs);
+            Assert.False(config.SyncBoth);
+            Assert.Equal(50, config.GrayOffset);
+            Assert.Equal(-1, config.WindowPosX);
+            Assert.Equal(-1, config.WindowPosY);
+            Assert.False(config.UseEnhanceScreen);
+            Assert.True(config.PlayPonder);
+            Assert.Equal(1, config.UiThemeMode);
+            Assert.Equal(ProtocolVersion, config.ProtocolVersion);
+            Assert.Equal(FixtureMachineKey, config.MachineKey);
         }
     }
 }
