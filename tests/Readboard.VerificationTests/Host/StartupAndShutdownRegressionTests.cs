@@ -114,6 +114,35 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void MainForm_ShutdownStopsAndDisposesGlobalHooks()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string shutdownSlice = GetMethodSlice(source, "public void shutdown(bool persistConfiguration)");
+            string helperSlice = GetMethodSlice(source, "private void DisposeInputHooks()");
+
+            Assert.Contains("DisposeInputHooks();", shutdownSlice);
+            Assert.Contains("hookListener.KeyDown -= HookListener_KeyDown;", helperSlice);
+            Assert.Contains("hookListener.KeyUp -= HookListener_KeyUp;", helperSlice);
+            Assert.Contains("hookListener.Stop();", helperSlice);
+            Assert.Contains("hookListener.Dispose();", helperSlice);
+            Assert.Contains("mh.MouseMove -= mh_MouseMoveEvent;", helperSlice);
+            Assert.Contains("mh.MouseClick -= mh_MouseMoveEvent2;", helperSlice);
+            Assert.Contains("mh.Enabled = false;", helperSlice);
+            Assert.Contains("mh.Stop();", helperSlice);
+            Assert.Contains("mh.Dispose();", helperSlice);
+        }
+
+        [Fact]
+        public void MainForm_ShutdownUsesCoordinatorStopInsteadOfBlockingStopSyncSession()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string shutdownSlice = GetMethodSlice(source, "public void shutdown(bool persistConfiguration)");
+
+            Assert.DoesNotContain("sessionCoordinator.StopSyncSession();", shutdownSlice);
+            Assert.Contains("sessionCoordinator.Stop();", shutdownSlice);
+        }
+
+        [Fact]
         public void Program_StopsStartupHandshakeAfterShutdownRequest()
         {
             string source = LoadSource("readboard", "Program.cs");

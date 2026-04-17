@@ -94,7 +94,7 @@ namespace readboard
 
         public void Stop()
         {
-            StopSyncSession();
+            StopSyncSessionCore(true);
             transport.MessageReceived -= OnMessageReceived;
             CancelPendingMove();
             continuousSyncStoppedEvent.Set();

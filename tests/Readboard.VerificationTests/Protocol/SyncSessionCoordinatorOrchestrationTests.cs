@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 using readboard;
 
@@ -137,6 +138,112 @@ namespace Readboard.VerificationTests.Protocol
             Assert.True(request.UseEnhancedCapture);
         }
 
+        [Fact]
+        public void TryStartKeepSync_StartsBackgroundWorkerThread()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Foreground, IntPtr.Zero);
+            SetProperty(snapshot, "SampleIntervalMs", 1000);
+            HostRecorder hostRecorder = new HostRecorder(snapshot);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=foreground")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+
+            Thread worker = WaitForWorkerThread(coordinator, "keepSyncThread");
+            Assert.True(worker.IsBackground);
+
+            Invoke(coordinator, "StopSyncSession");
+            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+        }
+
+        [Fact]
+        public void TryStartContinuousSync_StartsBackgroundWorkerThread()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            Type locatorInterfaceType = RequireType(assembly, "readboard.ISyncWindowLocator");
+
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, IntPtr.Zero);
+            HostRecorder hostRecorder = new HostRecorder(snapshot);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object locator = CreateProxy(locatorInterfaceType, (method, args) => IntPtr.Zero);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=fox")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            SetProperty(runtime, "WindowLocator", locator);
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            Assert.True((bool)Invoke(coordinator, "TryStartContinuousSync"));
+
+            Thread worker = WaitForWorkerThread(coordinator, "continuousSyncThread");
+            Assert.True(worker.IsBackground);
+
+            Invoke(coordinator, "StopSyncSession");
+            Assert.True(hostRecorder.ContinuousStopped.Wait(TimeSpan.FromSeconds(1)));
+        }
+
+        [Fact]
+        public async Task Stop_DoesNotHangWhenKeepSyncWorkerBlocksInCapture()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            BlockingCaptureService captureService = new BlockingCaptureService(CreateFrame());
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Foreground, IntPtr.Zero);
+            SetProperty(snapshot, "SampleIntervalMs", 0);
+            HostRecorder hostRecorder = new HostRecorder(snapshot);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", captureService);
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=foreground")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            Invoke(coordinator, "AttachRuntime", runtime);
+            Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
+
+            try
+            {
+                Task stopTask = Task.Run(() => coordinator.Stop());
+                Task finishedTask = await Task.WhenAny(stopTask, Task.Delay(TimeSpan.FromSeconds(1)));
+                Assert.Same(stopTask, finishedTask);
+                await stopTask;
+            }
+            finally
+            {
+                captureService.Release();
+            }
+
+            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+        }
+
         private static object CreateProxy(Type interfaceType, Func<MethodInfo, object[], object> handler)
         {
             MethodInfo createMethod = null;
@@ -233,6 +340,28 @@ namespace Readboard.VerificationTests.Protocol
             PropertyInfo property = target.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             Assert.True(property != null, "Missing property: " + propertyName);
             property.SetValue(target, value, null);
+        }
+
+        private static Thread WaitForWorkerThread(object target, string fieldName)
+        {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(1);
+            while (DateTime.UtcNow < deadline)
+            {
+                Thread worker = ReadWorkerThread(target, fieldName);
+                if (worker != null)
+                    return worker;
+                Thread.Sleep(10);
+            }
+
+            Assert.Fail("Expected worker thread field to be populated: " + fieldName);
+            return null;
+        }
+
+        private static Thread ReadWorkerThread(object target, string fieldName)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.True(field != null, "Missing worker thread field: " + fieldName);
+            return (Thread)field.GetValue(target);
         }
 
         private class ReflectionProxy : DispatchProxy
@@ -407,6 +536,40 @@ namespace Readboard.VerificationTests.Protocol
                     Success = true,
                     Frame = frame
                 };
+            }
+        }
+
+        private sealed class BlockingCaptureService : IBoardCaptureService
+        {
+            private readonly BoardFrame frame;
+            private int captureCount;
+            private readonly ManualResetEventSlim releaseEvent = new ManualResetEventSlim(false);
+
+            public BlockingCaptureService(BoardFrame frame)
+            {
+                this.frame = frame;
+            }
+
+            public ManualResetEventSlim BlockedCaptureStarted { get; } = new ManualResetEventSlim(false);
+
+            public BoardCaptureResult Capture(BoardCaptureRequest request)
+            {
+                if (Interlocked.Increment(ref captureCount) > 1)
+                {
+                    BlockedCaptureStarted.Set();
+                    releaseEvent.Wait();
+                }
+
+                return new BoardCaptureResult
+                {
+                    Success = true,
+                    Frame = frame
+                };
+            }
+
+            public void Release()
+            {
+                releaseEvent.Set();
             }
         }
 

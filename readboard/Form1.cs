@@ -1472,11 +1472,9 @@ namespace readboard
                 return;
 
             isShuttingDown = true;
-            sessionCoordinator.StopSyncSession();
             if (persistConfiguration)
                 PersistConfiguration();
-            if (mh != null)
-                mh.Enabled = false;
+            DisposeInputHooks();
             SendShutdownProtocol();
             Program.DisposeBitmap();
             sessionCoordinator.Stop();
@@ -1494,6 +1492,26 @@ namespace readboard
             if (!closeRequestedBeforeHandle || IsDisposed)
                 return;
             BeginInvoke((Action)Close);
+        }
+
+        private void DisposeInputHooks()
+        {
+            if (hookListener != null)
+            {
+                hookListener.KeyDown -= HookListener_KeyDown;
+                hookListener.KeyUp -= HookListener_KeyUp;
+                hookListener.Stop();
+                hookListener.Dispose();
+                hookListener = null;
+            }
+            if (mh == null)
+                return;
+            mh.MouseMove -= mh_MouseMoveEvent;
+            mh.MouseClick -= mh_MouseMoveEvent2;
+            mh.Enabled = false;
+            mh.Stop();
+            mh.Dispose();
+            mh = null;
         }
 
         private void form_closing(object sender, FormClosingEventArgs e)

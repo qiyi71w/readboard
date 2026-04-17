@@ -6,6 +6,7 @@ namespace readboard
     internal sealed partial class SyncSessionCoordinator
     {
         private const int ContinuousSyncPollIntervalMs = 100;
+        private const int ShutdownWorkerJoinTimeoutMs = 500;
 
         private readonly object workerLock = new object();
         private readonly ManualResetEventSlim keepSyncStopRequestedEvent = new ManualResetEventSlim(true);
@@ -81,11 +82,16 @@ namespace readboard
 
         public void StopSyncSession()
         {
+            StopSyncSessionCore(false);
+        }
+
+        private void StopSyncSessionCore(bool allowTimedWorkerJoin)
+        {
             EndContinuousSync();
             EndKeepSync();
             keepSyncStopRequestedEvent.Set();
-            JoinWorker(keepSyncThread);
-            JoinWorker(continuousSyncThread);
+            JoinWorker(keepSyncThread, allowTimedWorkerJoin);
+            JoinWorker(continuousSyncThread, allowTimedWorkerJoin);
             CompleteStopCleanup();
         }
 
@@ -504,6 +510,8 @@ namespace readboard
         private void StartContinuousSyncWorker()
         {
             Thread worker = new Thread(RunContinuousSyncLoop);
+            worker.IsBackground = true;
+            worker.Name = "ReadboardContinuousSyncWorker";
             worker.SetApartmentState(ApartmentState.STA);
             lock (workerLock)
             {
@@ -515,6 +523,8 @@ namespace readboard
         private void StartKeepSyncWorker()
         {
             Thread worker = new Thread(RunKeepSyncLoop);
+            worker.IsBackground = true;
+            worker.Name = "ReadboardKeepSyncWorker";
             worker.SetApartmentState(ApartmentState.STA);
             lock (workerLock)
             {
@@ -533,11 +543,19 @@ namespace readboard
                 ReleasePlacementBinding(runtimeDependencies.Host);
         }
 
-        private void JoinWorker(Thread worker)
+        private void JoinWorker(Thread worker, bool allowTimedJoin)
         {
             if (worker == null || worker == Thread.CurrentThread)
                 return;
-            worker.Join();
+            if (!allowTimedJoin)
+            {
+                worker.Join();
+                return;
+            }
+
+            if (worker.Join(ShutdownWorkerJoinTimeoutMs))
+                return;
+            SendError("Timed out waiting for sync worker to stop during shutdown: " + worker.Name);
         }
 
         private bool WaitForNextSample(int sampleIntervalMs)
