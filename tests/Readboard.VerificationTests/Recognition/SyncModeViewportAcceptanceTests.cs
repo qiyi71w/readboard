@@ -47,6 +47,141 @@ namespace Readboard.VerificationTests.Recognition
             Assert.True(viewport.CellHeight > 0d);
         }
 
+        [Theory]
+        [InlineData((int)SyncMode.Fox, 2, 3, 12, 12)]
+        [InlineData((int)SyncMode.FoxBackgroundPlace, 2, 3, 12, 12)]
+        [InlineData((int)SyncMode.Sina, 3, 2, 15, 15)]
+        public void TryResolveViewport_IgnoresFullWindowSeedBoundsForNativeSyncMode(
+            int syncModeValue,
+            int x,
+            int y,
+            int width,
+            int height)
+        {
+            SyncMode syncMode = (SyncMode)syncModeValue;
+            Bitmap bitmap = CreateModeBitmap(syncMode);
+            BoardFrame frame = new BoardFrame
+            {
+                SyncMode = syncMode,
+                BoardSize = new BoardDimensions(5, 5),
+                Image = bitmap,
+                Viewport = new BoardViewport
+                {
+                    SourceBounds = new PixelRect(0, 0, bitmap.Width, bitmap.Height),
+                    ScreenBounds = new PixelRect(10, 20, bitmap.Width, bitmap.Height),
+                    CellWidth = bitmap.Width / 5d,
+                    CellHeight = bitmap.Height / 5d
+                }
+            };
+
+            BoardViewport viewport = ResolveViewport(frame);
+
+            Assert.Equal(x, viewport.SourceBounds.X);
+            Assert.Equal(y, viewport.SourceBounds.Y);
+            Assert.Equal(width, viewport.SourceBounds.Width);
+            Assert.Equal(height, viewport.SourceBounds.Height);
+        }
+
+        [Theory]
+        [InlineData((int)SyncMode.Tygem, 0, 0, 20, 20)]
+        [InlineData((int)SyncMode.Sina, 3, 2, 15, 15)]
+        public void TryResolveViewport_UsesEquivalentBoundsForBitmapAndPixelBuffer(
+            int syncModeValue,
+            int x,
+            int y,
+            int width,
+            int height)
+        {
+            SyncMode syncMode = (SyncMode)syncModeValue;
+            Bitmap bitmap = CreateModeBitmap(syncMode);
+            BoardViewport bitmapViewport = ResolveViewport(new BoardFrame
+            {
+                SyncMode = syncMode,
+                BoardSize = new BoardDimensions(5, 5),
+                Image = bitmap
+            });
+            BoardViewport pixelBufferViewport = ResolveViewport(new BoardFrame
+            {
+                SyncMode = syncMode,
+                BoardSize = new BoardDimensions(5, 5),
+                PixelBuffer = PixelBufferConverter.FromBitmap(bitmap)
+            });
+
+            Assert.Equal(x, bitmapViewport.SourceBounds.X);
+            Assert.Equal(y, bitmapViewport.SourceBounds.Y);
+            Assert.Equal(width, bitmapViewport.SourceBounds.Width);
+            Assert.Equal(height, bitmapViewport.SourceBounds.Height);
+            Assert.Equal(bitmapViewport.SourceBounds.X, pixelBufferViewport.SourceBounds.X);
+            Assert.Equal(bitmapViewport.SourceBounds.Y, pixelBufferViewport.SourceBounds.Y);
+            Assert.Equal(bitmapViewport.SourceBounds.Width, pixelBufferViewport.SourceBounds.Width);
+            Assert.Equal(bitmapViewport.SourceBounds.Height, pixelBufferViewport.SourceBounds.Height);
+        }
+
+        [Fact]
+        public void Recognize_ReusedNativeSyncViewportPreservesLocatedBoardBounds()
+        {
+            LegacyBoardRecognitionService service = new LegacyBoardRecognitionService();
+            BoardFrame firstFrame = CreateFullWindowSeedFrame(SyncMode.Fox);
+            BoardFrame secondFrame = CreateFullWindowSeedFrame(SyncMode.Fox);
+
+            BoardRecognitionResult first = service.Recognize(new BoardRecognitionRequest
+            {
+                Frame = firstFrame,
+                InferLastMove = false
+            });
+            BoardRecognitionResult second = service.Recognize(new BoardRecognitionRequest
+            {
+                Frame = secondFrame,
+                InferLastMove = false
+            });
+
+            Assert.True(first.Success, first.FailureReason);
+            Assert.True(second.Success, second.FailureReason);
+            Assert.True(second.UsedCachedSnapshot);
+            Assert.Equal(2, second.Viewport.SourceBounds.X);
+            Assert.Equal(3, second.Viewport.SourceBounds.Y);
+            Assert.Equal(12, second.Viewport.SourceBounds.Width);
+            Assert.Equal(12, second.Viewport.SourceBounds.Height);
+        }
+
+        private static BoardViewport ResolveViewport(BoardFrame frame)
+        {
+            BoardRecognitionRequest request = new BoardRecognitionRequest
+            {
+                Frame = frame,
+                InferLastMove = false
+            };
+
+            BoardRecognitionFailureKind failureKind;
+            string failureReason;
+            LegacyPixelMap pixels;
+            bool created = LegacyPixelMap.TryCreate(frame, out pixels, out failureKind, out failureReason);
+            bool resolved = LegacyBoardLocator.TryResolveViewport(request, pixels, out BoardViewport viewport, out string locatorFailure);
+
+            Assert.True(created, failureReason);
+            Assert.True(resolved, locatorFailure);
+            return viewport;
+        }
+
+        private static BoardFrame CreateFullWindowSeedFrame(SyncMode syncMode)
+        {
+            Bitmap bitmap = CreateModeBitmap(syncMode);
+            return new BoardFrame
+            {
+                SyncMode = syncMode,
+                BoardSize = new BoardDimensions(5, 5),
+                Image = bitmap,
+                PixelBuffer = PixelBufferConverter.FromBitmap(bitmap),
+                Viewport = new BoardViewport
+                {
+                    SourceBounds = new PixelRect(0, 0, bitmap.Width, bitmap.Height),
+                    ScreenBounds = new PixelRect(10, 20, bitmap.Width, bitmap.Height),
+                    CellWidth = bitmap.Width / 5d,
+                    CellHeight = bitmap.Height / 5d
+                }
+            };
+        }
+
         private static Bitmap CreateModeBitmap(SyncMode syncMode)
         {
             Bitmap bitmap = CreateBlankBitmap();

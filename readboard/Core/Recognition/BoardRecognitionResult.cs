@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace readboard
@@ -51,7 +50,7 @@ namespace readboard
         {
             failureReason = null;
             PixelRect sourceBounds = GetExistingBounds(request.Frame.Viewport, pixels);
-            if (sourceBounds == null)
+            if (ShouldAutoResolveBounds(request.Frame.SyncMode, sourceBounds, pixels))
             {
                 if (!TryResolveBounds(request.Frame.SyncMode, pixels, out sourceBounds))
                 {
@@ -71,6 +70,27 @@ namespace readboard
 
             viewport = CreateViewport(request.Frame.Viewport, sourceBounds, boardSize);
             return true;
+        }
+
+        private static bool ShouldAutoResolveBounds(SyncMode syncMode, PixelRect sourceBounds, LegacyPixelMap pixels)
+        {
+            if (sourceBounds == null)
+                return true;
+            if (!UsesAutoDetectedBounds(syncMode))
+                return false;
+
+            return sourceBounds.X == 0
+                && sourceBounds.Y == 0
+                && sourceBounds.Width == pixels.Width
+                && sourceBounds.Height == pixels.Height;
+        }
+
+        private static bool UsesAutoDetectedBounds(SyncMode syncMode)
+        {
+            return syncMode == SyncMode.Fox
+                || syncMode == SyncMode.FoxBackgroundPlace
+                || syncMode == SyncMode.Tygem
+                || syncMode == SyncMode.Sina;
         }
 
         private static PixelRect GetExistingBounds(BoardViewport viewport, LegacyPixelMap pixels)
@@ -393,9 +413,9 @@ namespace readboard
         {
             int sourceIndex = (y * Stride) + (x * 3);
             return new LegacyRgbInfo(
-                pixels[sourceIndex + 2],
+                pixels[sourceIndex],
                 pixels[sourceIndex + 1],
-                pixels[sourceIndex]);
+                pixels[sourceIndex + 2]);
         }
 
         private static bool TryCreateFromPixelBuffer(PixelBuffer buffer, out LegacyPixelMap pixelMap)
@@ -426,19 +446,9 @@ namespace readboard
             try
             {
                 source = ConvertTo24BppIfNeeded(image);
-                Rectangle rect = new Rectangle(0, 0, source.Width, source.Height);
-                BitmapData data = source.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
-                try
-                {
-                    byte[] copiedPixels = new byte[data.Stride * data.Height];
-                    Marshal.Copy(data.Scan0, copiedPixels, 0, copiedPixels.Length);
-                    pixelMap = new LegacyPixelMap(data.Width, data.Height, data.Stride, copiedPixels);
-                    return true;
-                }
-                finally
-                {
-                    source.UnlockBits(data);
-                }
+                PixelBuffer buffer = PixelBufferConverter.FromBitmap(source);
+                pixelMap = new LegacyPixelMap(buffer.Width, buffer.Height, buffer.Stride, buffer.Pixels);
+                return true;
             }
             catch (Exception ex)
             {

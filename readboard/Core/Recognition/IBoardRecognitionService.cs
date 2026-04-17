@@ -68,7 +68,7 @@ namespace readboard
 
             BoardSnapshot snapshot = CloneCachedSnapshot(cache.Snapshot, true);
             snapshot.NeedsPrintWindowFallback = ShouldRequestPrintWindowFallback(request.Frame, snapshot);
-            return CreateSuccessResult(snapshot, MergeViewport(cache.Viewport, request.Frame.Viewport), true);
+            return CreateSuccessResult(snapshot, ReuseCachedViewport(cache.Viewport, request.Frame.Viewport), true);
         }
 
         private void ReuseSnapshotBackingIfUnchanged(BoardSnapshot snapshot)
@@ -146,24 +146,15 @@ namespace readboard
             };
         }
 
-        private static BoardViewport MergeViewport(BoardViewport cachedViewport, BoardViewport currentViewport)
+        private static BoardViewport ReuseCachedViewport(BoardViewport cachedViewport, BoardViewport currentViewport)
         {
             if (cachedViewport == null && currentViewport == null)
                 return null;
 
-            BoardViewport merged = CloneViewport(cachedViewport) ?? new BoardViewport();
-            PixelRect currentSourceBounds = GetSourceBounds(currentViewport);
-            if (currentSourceBounds != null)
-                merged.SourceBounds = currentSourceBounds;
-            if (currentViewport != null)
-                merged.ScreenBounds = CloneRect(currentViewport.ScreenBounds);
-            if (merged.ScreenBounds == null && cachedViewport != null)
-                merged.ScreenBounds = CloneRect(cachedViewport.ScreenBounds);
-            if (currentViewport != null && currentViewport.CellWidth > 0d)
-                merged.CellWidth = currentViewport.CellWidth;
-            if (currentViewport != null && currentViewport.CellHeight > 0d)
-                merged.CellHeight = currentViewport.CellHeight;
-            return merged;
+            BoardViewport viewport = CloneViewport(cachedViewport) ?? new BoardViewport();
+            if (viewport.ScreenBounds == null && currentViewport != null)
+                viewport.ScreenBounds = CloneRect(currentViewport.ScreenBounds);
+            return viewport;
         }
 
         private static BoardViewport CloneViewport(BoardViewport viewport)
