@@ -89,6 +89,11 @@ namespace readboard
             return IsFoxSyncType(syncType) || syncType == TYPE_TYGEM || syncType == TYPE_SINA;
         }
 
+        private bool SupportsShowInBoard()
+        {
+            return !UsesManualSelectionType(CurrentSyncType);
+        }
+
         private int CurrentSyncType
         {
             get { return currentSyncType; }
@@ -545,6 +550,15 @@ namespace readboard
             if (!manualSelectionMode && rdoOtherBoard.Checked)
                 rdo19x19.Checked = true;
             rdoOtherBoard.Enabled = manualSelectionMode;
+            ApplyShowInBoardControlState();
+        }
+
+        private void ApplyShowInBoardControlState()
+        {
+            bool supportsShowInBoard = SupportsShowInBoard();
+            chkShowInBoard.Enabled = supportsShowInBoard;
+            if (!supportsShowInBoard && chkShowInBoard.Checked)
+                chkShowInBoard.Checked = false;
         }
 
         private void SetSyncConfigurationControlsEnabled(bool enabled)
@@ -932,7 +946,7 @@ namespace readboard
             // Console.Out.WriteLine(e.KeyValue);
             if (e.KeyValue == 162 || e.KeyValue == 163)
                 isCtrlDown = true;
-            if (isCtrlDown && e.KeyValue == 88)
+            if (isCtrlDown && e.KeyValue == 88 && SupportsShowInBoard())
                 chkShowInBoard.Checked = !chkShowInBoard.Checked;
         }
 
@@ -1849,6 +1863,11 @@ namespace readboard
 
         private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)
         {
+            if (chkShowInBoard.Checked && UsesManualSelectionType(CurrentSyncType))
+            {
+                chkShowInBoard.Checked = false;
+                return;
+            }
             Program.showInBoard = chkShowInBoard.Checked;
             if (isInitializingProtocolState)
                 return;

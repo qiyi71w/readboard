@@ -55,6 +55,36 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void ApplyLoadedConfiguration_ReappliesShowInBoardConstraintsAfterRestoringConfig()
+        {
+            string source = LoadSource("readboard", "MainForm.Configuration.cs");
+
+            int restoreIndex = IndexOfRequired(source, "chkShowInBoard.Checked = Program.showInBoard;");
+            int normalizeIndex = source.LastIndexOf("ApplySyncModeControlState();", StringComparison.Ordinal);
+
+            Assert.True(normalizeIndex > restoreIndex, "Loaded show-in-board state must be normalized after restoring the saved checkbox value.");
+        }
+
+        [Fact]
+        public void ShowInBoardToggle_RejectsManualSelectionSyncModes()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)");
+
+            Assert.Contains("UsesManualSelectionType(CurrentSyncType)", methodSlice);
+            Assert.Contains("chkShowInBoard.Checked = false;", methodSlice);
+        }
+
+        [Fact]
+        public void ShowInBoardHotkey_OnlyTogglesWhenCurrentModeSupportsIt()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void HookListener_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)");
+
+            Assert.Contains("SupportsShowInBoard()", methodSlice);
+        }
+
+        [Fact]
         public void ReplayStartupProtocolState_SkipsBlankNumericOverrides()
         {
             string source = LoadSource("readboard", "MainForm.Protocol.cs");

@@ -24,6 +24,7 @@ namespace readboard
             }
             chkShowInBoard.Checked = Program.showInBoard;
             Program.showInBoard = chkShowInBoard.Checked;
+            ApplySyncModeControlState();
         }
 
         public void PersistConfiguration()
