@@ -6,7 +6,6 @@ namespace readboard
     internal sealed partial class SyncSessionCoordinator
     {
         private const int ContinuousSyncPollIntervalMs = 100;
-        private const int ShutdownWorkerJoinTimeoutMs = 500;
 
         private readonly object workerLock = new object();
         private readonly ManualResetEventSlim keepSyncStopRequestedEvent = new ManualResetEventSlim(true);
@@ -86,17 +85,18 @@ namespace readboard
 
         public void StopSyncSession()
         {
-            StopSyncSessionCore(false);
+            StopSyncSessionCore(true);
         }
 
-        private void StopSyncSessionCore(bool allowTimedWorkerJoin)
+        private void StopSyncSessionCore(bool waitForWorkers)
         {
             EndContinuousSync();
             EndKeepSync();
             keepSyncStopRequestedEvent.Set();
-            JoinWorker(keepSyncThread, allowTimedWorkerJoin);
-            JoinWorker(continuousSyncThread, allowTimedWorkerJoin);
-            CompleteStopCleanup();
+            CompleteWorkerStop(keepSyncThread, waitForWorkers);
+            CompleteWorkerStop(continuousSyncThread, waitForWorkers);
+            if (waitForWorkers)
+                CompleteStopCleanup();
         }
 
         public void HandlePlaceRequest(MoveRequest request)
@@ -557,19 +557,11 @@ namespace readboard
                 ReleasePlacementBinding(runtimeDependencies.Host);
         }
 
-        private void JoinWorker(Thread worker, bool allowTimedJoin)
+        private static void CompleteWorkerStop(Thread worker, bool waitForWorker)
         {
             if (worker == null || worker == Thread.CurrentThread)
                 return;
-            if (!allowTimedJoin)
-            {
-                worker.Join();
-                return;
-            }
-
-            if (worker.Join(ShutdownWorkerJoinTimeoutMs))
-                return;
-            SendError("Timed out waiting for sync worker to stop during shutdown: " + worker.Name);
+            worker.Join(waitForWorker ? Timeout.Infinite : 0);
         }
 
         private bool WaitForNextSample(int sampleIntervalMs)

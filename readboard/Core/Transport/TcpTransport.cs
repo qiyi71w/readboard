@@ -9,7 +9,6 @@ namespace readboard
     internal sealed class TcpTransport : IReadBoardTransport
     {
         private const int ReaderBufferSize = 4096;
-        private const int ReadThreadJoinTimeoutMs = 2000;
 
         private readonly int port;
         private readonly object syncRoot = new object();
@@ -77,7 +76,7 @@ namespace readboard
                 currentStream.Dispose();
             if (currentClient != null)
                 currentClient.Close();
-            JoinReadThread(currentThread);
+            TryJoinReadThread(currentThread);
         }
 
         public void Send(string line)
@@ -154,11 +153,11 @@ namespace readboard
             }
         }
 
-        private static void JoinReadThread(Thread thread)
+        private static void TryJoinReadThread(Thread thread)
         {
             if (thread == null || Thread.CurrentThread == thread)
                 return;
-            thread.Join(ReadThreadJoinTimeoutMs);
+            thread.Join(0);
         }
     }
 }

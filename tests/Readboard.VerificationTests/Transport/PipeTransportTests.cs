@@ -1,8 +1,10 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using Xunit;
 using readboard;
+using Readboard.VerificationTests.Support;
 
 namespace Readboard.VerificationTests.Transport
 {
@@ -43,11 +45,34 @@ namespace Readboard.VerificationTests.Transport
             Assert.Equal("place 3 4", received);
         }
 
+        [Fact]
+        public void Stop_DoesNotBlockOnReadThreadJoinDuringShutdown()
+        {
+            using PipeTransport transport = new PipeTransport();
+            using BlockingBackgroundThreadHarness harness = BlockingBackgroundThreadHarness.Start("PipeTransportReadThread");
+            SetPrivateField(transport, "readThread", harness.Thread);
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            transport.Stop();
+            stopwatch.Stop();
+
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromMilliseconds(250),
+                "Pipe transport shutdown should not wait for the read thread to finish.");
+        }
+
         private static void InvokeRaiseMessageReceived(PipeTransport transport, string line)
         {
             MethodInfo method = typeof(PipeTransport).GetMethod("RaiseMessageReceived", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(method);
             method.Invoke(transport, new object[] { line });
+        }
+
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(field);
+            field.SetValue(target, value);
         }
 
         private sealed class ConsoleRedirect : IDisposable

@@ -224,6 +224,39 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void MainForm_SnapshotCaptureCancellationAlsoCoversStoppedSyncState()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string cancelSlice = GetMethodSlice(source, "private bool IsSnapshotCaptureCancelled()");
+            string stateSlice = GetMethodSlice(source, "private bool HasActiveSyncOperation()");
+
+            Assert.Contains("return isShuttingDown || !HasActiveSyncOperation();", cancelSlice);
+            Assert.Contains("return sessionCoordinator.StartedSync || sessionCoordinator.IsContinuousSyncing;", stateSlice);
+        }
+
+        [Fact]
+        public void MainForm_InvokeUiHostAction_SkipsWhenShutdownOrHandleIsGone()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void InvokeUiHostAction(Action action)");
+
+            Assert.Contains("if (isShuttingDown || IsDisposed || Disposing || !IsHandleCreated)", methodSlice);
+            Assert.Contains("BeginInvoke(action);", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_ShutdownUiCallbacks_UseUiOnlyInvoker()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+
+            Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.OnKeepSyncStopped(bool continuousSyncActive)"));
+            Assert.Contains("InvokeUiHostAction(ApplyContinuousSyncStoppedUi);", GetMethodSlice(source, "void ISyncCoordinatorHost.OnContinuousSyncStopped()"));
+            Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.ShowMissingSyncSourceMessage()"));
+            Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.ShowRecognitionFailureMessage()"));
+            Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.MinimizeWindow()"));
+        }
+
+        [Fact]
         public void SelectionMagnifier_DoesNotUseSelectionOverlayAsShowOwner()
         {
             string source = LoadSource("readboard", "Form2.cs");

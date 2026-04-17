@@ -1,12 +1,15 @@
 using System;
+using System.Diagnostics;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Reflection;
 using System.Threading.Tasks;
 using Xunit;
 using readboard;
+using Readboard.VerificationTests.Support;
 
 namespace Readboard.VerificationTests.Transport
 {
@@ -41,6 +44,29 @@ namespace Readboard.VerificationTests.Transport
 
             Assert.False(transport.IsConnected);
             Assert.Equal(new[] { "place 3 4" }, messages);
+        }
+
+        [Fact]
+        public void Stop_DoesNotBlockOnReadThreadJoinDuringShutdown()
+        {
+            using TcpTransport transport = new TcpTransport(9527);
+            using BlockingBackgroundThreadHarness harness = BlockingBackgroundThreadHarness.Start("TcpTransportReadThread");
+            SetPrivateField(transport, "readThread", harness.Thread);
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            transport.Stop();
+            stopwatch.Stop();
+
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromMilliseconds(250),
+                "TCP transport shutdown should not wait for the read thread to finish.");
+        }
+
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(field);
+            field.SetValue(target, value);
         }
 
         private sealed class LoopbackServer : IDisposable

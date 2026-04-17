@@ -10,7 +10,6 @@ namespace readboard
     {
         private const uint DuplicateSameAccess = 2;
         private const int ReaderBufferSize = 1024;
-        private const int ReadThreadJoinTimeoutMs = 2000;
 
         private readonly object syncRoot = new object();
         private StreamReader inputReader;
@@ -57,7 +56,7 @@ namespace readboard
             CancelPendingRead(currentReadThreadHandle);
             if (currentReader != null)
                 currentReader.Dispose();
-            JoinReadThread(currentThread);
+            TryJoinReadThread(currentThread);
             CloseThreadHandle(currentReadThreadHandle);
         }
 
@@ -135,11 +134,11 @@ namespace readboard
                 handler(this, line);
         }
 
-        private static void JoinReadThread(Thread thread)
+        private static void TryJoinReadThread(Thread thread)
         {
             if (thread == null || Thread.CurrentThread == thread)
                 return;
-            thread.Join(ReadThreadJoinTimeoutMs);
+            thread.Join(0);
         }
 
         private bool TryRegisterReadThreadHandle(IntPtr handle)

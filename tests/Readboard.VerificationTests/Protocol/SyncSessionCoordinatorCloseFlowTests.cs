@@ -40,6 +40,25 @@ namespace Readboard.VerificationTests.Protocol
             Assert.False(result);
         }
 
+        [Fact]
+        public void Stop_DropsQueuedInboundProtocolCommands()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            DeferredDispatchHost host = new DeferredDispatchHost();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.AttachHost(host);
+
+            coordinator.Start();
+            transport.Emit("quit");
+
+            Assert.NotNull(host.PendingCommand);
+
+            coordinator.Stop();
+            host.RunPendingCommand();
+
+            Assert.Equal(0, host.QuitCount);
+        }
+
         private sealed class RecordingTransport : IReadBoardTransport
         {
             public event EventHandler<string> MessageReceived;
@@ -81,6 +100,46 @@ namespace Readboard.VerificationTests.Protocol
             public void DispatchProtocolCommand(Action command)
             {
                 command();
+            }
+
+            public void HandleLossFocus()
+            {
+            }
+
+            public void HandlePlaceRequest(MoveRequest request)
+            {
+            }
+
+            public void HandleQuitRequest()
+            {
+                QuitCount++;
+            }
+
+            public void HandleStopInBoardRequest()
+            {
+            }
+
+            public void HandleVersionRequest()
+            {
+            }
+        }
+
+        private sealed class DeferredDispatchHost : IProtocolCommandHost
+        {
+            public Action PendingCommand { get; private set; }
+            public int QuitCount { get; private set; }
+
+            public void RunPendingCommand()
+            {
+                Action command = PendingCommand;
+                PendingCommand = null;
+                if (command != null)
+                    command();
+            }
+
+            public void DispatchProtocolCommand(Action command)
+            {
+                PendingCommand = command;
             }
 
             public void HandleLossFocus()

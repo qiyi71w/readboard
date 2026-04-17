@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using readboard;
+using Readboard.VerificationTests.Support;
 
 namespace Readboard.VerificationTests.Protocol
 {
@@ -245,6 +247,25 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public void Stop_DoesNotWaitForBlockedWorkerThreadsDuringShutdown()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            using BlockingBackgroundThreadHarness keepSyncWorker = BlockingBackgroundThreadHarness.Start("ReadboardKeepSyncWorker");
+            using BlockingBackgroundThreadHarness continuousSyncWorker = BlockingBackgroundThreadHarness.Start("ReadboardContinuousSyncWorker");
+            SetField(coordinator, "keepSyncThread", keepSyncWorker.Thread);
+            SetField(coordinator, "continuousSyncThread", continuousSyncWorker.Thread);
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            coordinator.Stop();
+            stopwatch.Stop();
+
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromMilliseconds(250),
+                "Application shutdown should not wait for background sync workers to finish.");
+        }
+
+        [Fact]
         public void TryCaptureSnapshot_ReturnsFalseWhenHostCancelsSnapshotCapture()
         {
             RecordingTransport transport = new RecordingTransport();
@@ -372,6 +393,13 @@ namespace Readboard.VerificationTests.Protocol
             PropertyInfo property = target.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             Assert.True(property != null, "Missing property: " + propertyName);
             property.SetValue(target, value, null);
+        }
+
+        private static void SetField(object target, string fieldName, object value)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.True(field != null, "Missing field: " + fieldName);
+            field.SetValue(target, value);
         }
 
         private static Thread WaitForWorkerThread(object target, string fieldName)

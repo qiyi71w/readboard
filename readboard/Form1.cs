@@ -821,6 +821,20 @@ namespace readboard
             action();
         }
 
+        private void InvokeUiHostAction(Action action)
+        {
+            if (action == null)
+                throw new ArgumentNullException("action");
+            if (isShuttingDown || IsDisposed || Disposing || !IsHandleCreated)
+                return;
+            if (InvokeRequired)
+            {
+                BeginInvoke(action);
+                return;
+            }
+            action();
+        }
+
         SyncCoordinatorHostSnapshot ISyncCoordinatorHost.CaptureSnapshot()
         {
             return uiThreadInvoker.ExecuteOrCancel(
@@ -856,7 +870,12 @@ namespace readboard
 
         private bool IsSnapshotCaptureCancelled()
         {
-            return isShuttingDown;
+            return isShuttingDown || !HasActiveSyncOperation();
+        }
+
+        private bool HasActiveSyncOperation()
+        {
+            return sessionCoordinator.StartedSync || sessionCoordinator.IsContinuousSyncing;
         }
 
         void ISyncCoordinatorHost.UpdateSelectedWindowHandle(IntPtr handle)
@@ -869,12 +888,12 @@ namespace readboard
 
         void ISyncCoordinatorHost.OnKeepSyncStarted()
         {
-            InvokeHostAction(ApplyKeepSyncStartedUi);
+            InvokeUiHostAction(ApplyKeepSyncStartedUi);
         }
 
         void ISyncCoordinatorHost.OnKeepSyncStopped(bool continuousSyncActive)
         {
-            InvokeHostAction(delegate
+            InvokeUiHostAction(delegate
             {
                 ApplyKeepSyncStoppedUi(continuousSyncActive);
             });
@@ -882,17 +901,17 @@ namespace readboard
 
         void ISyncCoordinatorHost.OnContinuousSyncStarted()
         {
-            InvokeHostAction(ApplyContinuousSyncStartedUi);
+            InvokeUiHostAction(ApplyContinuousSyncStartedUi);
         }
 
         void ISyncCoordinatorHost.OnContinuousSyncStopped()
         {
-            InvokeHostAction(ApplyContinuousSyncStoppedUi);
+            InvokeUiHostAction(ApplyContinuousSyncStoppedUi);
         }
 
         void ISyncCoordinatorHost.ShowMissingSyncSourceMessage()
         {
-            InvokeHostAction(delegate
+            InvokeUiHostAction(delegate
             {
                 MessageBox.Show(getLangStr("noSelectedBoardAndFailed"));
             });
@@ -900,7 +919,7 @@ namespace readboard
 
         void ISyncCoordinatorHost.ShowRecognitionFailureMessage()
         {
-            InvokeHostAction(delegate
+            InvokeUiHostAction(delegate
             {
                 MessageBox.Show(getLangStr("recgnizeFaild"));
             });
@@ -908,7 +927,7 @@ namespace readboard
 
         void ISyncCoordinatorHost.MinimizeWindow()
         {
-            InvokeHostAction(delegate
+            InvokeUiHostAction(delegate
             {
                 if (WindowState != FormWindowState.Minimized)
                     WindowState = FormWindowState.Minimized;

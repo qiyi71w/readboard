@@ -15,6 +15,7 @@ namespace readboard
         private readonly AutoResetEvent pendingMoveEvent = new AutoResetEvent(false);
         private readonly ManualResetEventSlim continuousSyncStoppedEvent = new ManualResetEventSlim(true);
         private readonly ManualResetEventSlim syncIdleEvent = new ManualResetEventSlim(true);
+        private volatile bool acceptingInboundProtocolMessages;
         private SessionState sessionState;
         private IProtocolCommandHost host;
 
@@ -88,13 +89,15 @@ namespace readboard
 
         public void Start()
         {
+            acceptingInboundProtocolMessages = true;
             transport.MessageReceived += OnMessageReceived;
             transport.Start();
         }
 
         public void Stop()
         {
-            StopSyncSessionCore(true);
+            acceptingInboundProtocolMessages = false;
+            StopSyncSessionCore(false);
             transport.MessageReceived -= OnMessageReceived;
             CancelPendingMove();
             continuousSyncStoppedEvent.Set();
@@ -468,12 +471,19 @@ namespace readboard
 
         private void OnMessageReceived(object sender, string rawLine)
         {
+            if (!acceptingInboundProtocolMessages)
+                return;
             ProtocolMessage message = protocolAdapter.ParseInbound(rawLine);
             IProtocolCommandHost currentHost = host;
             Action command = CreateDispatchCommand(currentHost, message);
             if (command == null || currentHost == null)
                 return;
-            currentHost.DispatchProtocolCommand(command);
+            currentHost.DispatchProtocolCommand(delegate
+            {
+                if (!acceptingInboundProtocolMessages)
+                    return;
+                command();
+            });
         }
 
         private Action CreateDispatchCommand(IProtocolCommandHost currentHost, ProtocolMessage message)
