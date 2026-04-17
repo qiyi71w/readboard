@@ -80,6 +80,43 @@ namespace Readboard.VerificationTests.Placement
             Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(expectedLParam, message.LParam));
         }
 
+        [Fact]
+        public void Place_BackgroundRecognizedSelection_PrefersScreenBoundsOverNormalizedSourceBounds()
+        {
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
+            LegacyMovePlacementService service = new LegacyMovePlacementService(
+                nativeMethods,
+                new RecordingLightweightFactory());
+
+            MovePlacementResult result = service.Place(new MovePlacementRequest
+            {
+                Frame = new BoardFrame
+                {
+                    SyncMode = SyncMode.Background,
+                    BoardSize = new BoardDimensions(5, 5),
+                    Viewport = new BoardViewport
+                    {
+                        SourceBounds = new PixelRect(0, 0, 50, 50),
+                        ScreenBounds = new PixelRect(320, 240, 50, 50)
+                    },
+                    Window = new WindowDescriptor
+                    {
+                        Handle = new IntPtr(2002),
+                        Bounds = new PixelRect(300, 200, 100, 100),
+                        IsDpiAware = true,
+                        DpiScale = 1d
+                    }
+                },
+                Move = new MoveRequest { X = 1, Y = 1 }
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(PlacementPathKind.BackgroundPost, result.PlacementPath);
+            Assert.Equal(2, nativeMethods.PostedMessages.Count);
+            int expectedLParam = BuildMouseLParam(35, 55);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(expectedLParam, message.LParam));
+        }
+
         private static int BuildMouseLParam(int x, int y)
         {
             return (x & 0xFFFF) | ((y & 0xFFFF) << 16);

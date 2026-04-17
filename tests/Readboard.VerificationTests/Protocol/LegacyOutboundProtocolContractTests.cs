@@ -104,6 +104,35 @@ namespace Readboard.VerificationTests.Protocol
             return update.ProtocolLine;
         }
 
+        [Fact]
+        public void BuildUpdate_BackgroundSelection_UsesScreenBoundsWhenRecognitionNormalizesSourceBounds()
+        {
+            LegacyOverlayService overlayService = new LegacyOverlayService();
+
+            OverlayUpdateResult update = overlayService.BuildUpdate(new OverlayUpdateRequest
+            {
+                Visibility = OverlayVisibility.Visible,
+                LegacyTypeToken = "3",
+                Frame = new BoardFrame
+                {
+                    SyncMode = SyncMode.Background,
+                    Window = new WindowDescriptor
+                    {
+                        Bounds = new PixelRect(300, 200, 100, 100),
+                        IsDpiAware = true,
+                        DpiScale = 1d
+                    },
+                    Viewport = new BoardViewport
+                    {
+                        SourceBounds = new PixelRect(0, 0, 50, 50),
+                        ScreenBounds = new PixelRect(320, 240, 50, 50)
+                    }
+                }
+            });
+
+            Assert.Equal("inboard 320 240 50 50 3", update.ProtocolLine);
+        }
+
         private sealed class RecordingTransport : IReadBoardTransport
         {
             public event System.EventHandler<string> MessageReceived;

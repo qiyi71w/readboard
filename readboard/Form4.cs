@@ -37,6 +37,7 @@ namespace readboard
             this.btnConfirm.Text = getLangStr("SettingsForm_btnConfirm");
             this.btnCancel.Text = getLangStr("SettingsForm_btnCancel");
             this.chkEnhanceScreen.Text = getLangStr("SettingsForm_chkEnhanceScreen");
+            this.chkDisableShowInBoardShortcut.Text = getLangStr("SettingsForm_chkDisableShowInBoardShortcut");
 
            // this.Size= new Size((int)(461 *Program.factor), (int)(270 * Program.factor));
            
@@ -76,7 +77,7 @@ namespace readboard
 
         private void ApplySettingsTheme()
         {
-            foreach (CheckBox checkBox in new[] { chkAutoMin, chkPonder, chkMag, chkEnhanceScreen, chkVerifyMove })
+            foreach (CheckBox checkBox in new[] { chkAutoMin, chkPonder, chkMag, chkEnhanceScreen, chkVerifyMove, chkDisableShowInBoardShortcut })
                 UiTheme.StyleOption(checkBox);
 
             foreach (TextBox textBox in new[] { txtSyncInterval, txtGrayOffsets, txtBlackOffsets, txtBlackPercents, txtWhiteOffsets, txtWhitePercents })
@@ -118,7 +119,9 @@ namespace readboard
             chkMag.Location = new Point(left, top + 30);
             chkEnhanceScreen.Location = new Point(170, top + 30);
             chkVerifyMove.Location = new Point(left, top + 60);
-            chkVerifyMove.Size = new Size(240, 20);
+            chkVerifyMove.Size = new Size(170, 20);
+            chkDisableShowInBoardShortcut.Location = new Point(170, top + 60);
+            chkDisableShowInBoardShortcut.Size = new Size(170, 20);
             int fieldsTop = LayoutWrappedLabel(lblBackForeOnly, left, 110, contentWidth, true) + 20;
             LayoutSettingsField(lblSyncInterval, txtSyncInterval, left, fieldsTop);
             LayoutSettingsField(lblGrayOffsets, txtGrayOffsets, right, fieldsTop);
@@ -160,7 +163,7 @@ namespace readboard
             ForeColor = SystemColors.ControlText;
             Font = Control.DefaultFont;
 
-            foreach (CheckBox checkBox in new[] { chkAutoMin, chkPonder, chkMag, chkEnhanceScreen, chkVerifyMove })
+            foreach (CheckBox checkBox in new[] { chkAutoMin, chkPonder, chkMag, chkEnhanceScreen, chkVerifyMove, chkDisableShowInBoardShortcut })
             {
                 checkBox.BackColor = SystemColors.Control;
                 checkBox.ForeColor = SystemColors.ControlText;
@@ -220,6 +223,7 @@ namespace readboard
             Program.CurrentContext.Config = updatedConfig;
             MainForm mainForm = GetHost();
             mainForm.PersistConfiguration();
+            mainForm.RefreshShowInBoardShortcutToolTip();
             mainForm.resetBtnKeepSyncName();
             mainForm.sendPonderStatus();
             Close();
@@ -250,6 +254,7 @@ namespace readboard
             chkAutoMin.Checked = config.AutoMinimize;
             txtSyncInterval.Text = config.SyncIntervalMs.ToString();
             chkEnhanceScreen.Checked = config.UseEnhanceScreen;
+            chkDisableShowInBoardShortcut.Checked = config.DisableShowInBoardShortcut;
             txtGrayOffsets.Text = config.GrayOffset.ToString();
             chkPonder.Checked = config.PlayPonder;
         }
@@ -285,6 +290,7 @@ namespace readboard
             updatedConfig.AutoMinimize = chkAutoMin.Checked;
             updatedConfig.UseEnhanceScreen = chkEnhanceScreen.Checked;
             updatedConfig.PlayPonder = chkPonder.Checked;
+            updatedConfig.DisableShowInBoardShortcut = chkDisableShowInBoardShortcut.Checked;
             if (IsOffsetOrPercentOutOfRange(updatedConfig))
             {
                 MessageBox.Show(getLangStr("SettingsForm_outOfRange"));

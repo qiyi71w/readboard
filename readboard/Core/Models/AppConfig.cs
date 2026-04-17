@@ -21,6 +21,7 @@ namespace readboard
         public int GrayOffset { get; set; }
         public bool UseEnhanceScreen { get; set; }
         public bool PlayPonder { get; set; }
+        public bool DisableShowInBoardShortcut { get; set; }
         public int UiThemeMode { get; set; }
         public SyncMode SyncMode { get; set; }
         public bool SyncBoth { get; set; }
@@ -51,6 +52,7 @@ namespace readboard
                 GrayOffset = 50,
                 UseEnhanceScreen = false,
                 PlayPonder = true,
+                DisableShowInBoardShortcut = false,
                 UiThemeMode = OptimizedUiThemeMode,
                 SyncMode = SyncMode.Fox,
                 SyncBoth = false,

@@ -17,6 +17,7 @@ namespace Readboard.VerificationTests
             Assert.Equal(200, config.SyncIntervalMs);
             Assert.True(config.PlayPonder);
             Assert.True(config.UseMagnifier);
+            Assert.False(config.DisableShowInBoardShortcut);
             Assert.Equal(SyncMode.Fox, config.SyncMode);
             Assert.Equal(1, config.UiThemeMode);
             Assert.Equal(-1, config.WindowPosX);

@@ -60,6 +60,7 @@ namespace readboard
         private readonly ISyncSessionCoordinator sessionCoordinator;
         private readonly ILegacySelectionCalibrationService selectionCalibrationService;
         private readonly GitHubUpdateChecker updateChecker = new GitHubUpdateChecker();
+        private readonly ToolTip showInBoardShortcutToolTip = new ToolTip();
 
         int posX = -1;
         int posY = -1;
@@ -91,7 +92,7 @@ namespace readboard
 
         private bool SupportsShowInBoard()
         {
-            return !UsesManualSelectionType(CurrentSyncType);
+            return CurrentSyncType != TYPE_FOREGROUND;
         }
 
         private int CurrentSyncType
@@ -131,6 +132,11 @@ namespace readboard
                 return;
 
             Location = ClampToScreenWorkingArea(new System.Drawing.Point(posX, posY), Size);
+        }
+
+        internal void RefreshShowInBoardShortcutToolTip()
+        {
+            showInBoardShortcutToolTip.SetToolTip(this.chkShowInBoard, Program.disableShowInBoardShortcut ? string.Empty : "Ctrl+X");
         }
 
         private bool IsOptimizedTheme()
@@ -946,7 +952,7 @@ namespace readboard
             // Console.Out.WriteLine(e.KeyValue);
             if (e.KeyValue == 162 || e.KeyValue == 163)
                 isCtrlDown = true;
-            if (isCtrlDown && e.KeyValue == 88 && SupportsShowInBoard())
+            if (isCtrlDown && e.KeyValue == 88 && SupportsShowInBoard() && !Program.disableShowInBoardShortcut)
                 chkShowInBoard.Checked = !chkShowInBoard.Checked;
         }
 
@@ -1081,8 +1087,7 @@ namespace readboard
             this.btnClearBoard.Text = getLangStr("MainForm_btnClearBoard");
             this.Text = getLangStr("MainForm_title");
             ApplyMainFormUi();
-            var toolTip1 = new ToolTip();
-            toolTip1.SetToolTip(this.chkShowInBoard, "Ctrl+X");
+            RefreshShowInBoardShortcutToolTip();
             isInitializingProtocolState = false;
         }
 
@@ -1863,7 +1868,7 @@ namespace readboard
 
         private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)
         {
-            if (chkShowInBoard.Checked && UsesManualSelectionType(CurrentSyncType))
+            if (chkShowInBoard.Checked && CurrentSyncType == TYPE_FOREGROUND)
             {
                 chkShowInBoard.Checked = false;
                 return;

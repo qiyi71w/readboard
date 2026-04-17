@@ -152,10 +152,25 @@ namespace readboard
 
         private static bool TryResolveClientBounds(BoardFrame frame, out PixelRect bounds)
         {
+            if (ShouldPreferScreenBoundsForBackground(frame) && TryResolveClientBoundsFromScreen(frame, out bounds))
+                return true;
+
             bounds = frame.Viewport.SourceBounds;
             if (IsUsable(bounds))
                 return true;
-            if (!IsUsable(frame.Viewport.ScreenBounds) || !IsUsable(frame.Window == null ? null : frame.Window.Bounds))
+            return TryResolveClientBoundsFromScreen(frame, out bounds);
+        }
+
+        private static bool ShouldPreferScreenBoundsForBackground(BoardFrame frame)
+        {
+            return frame != null && frame.SyncMode == SyncMode.Background;
+        }
+
+        private static bool TryResolveClientBoundsFromScreen(BoardFrame frame, out PixelRect bounds)
+        {
+            bounds = null;
+            if (!IsUsable(frame == null || frame.Viewport == null ? null : frame.Viewport.ScreenBounds)
+                || !IsUsable(frame == null || frame.Window == null ? null : frame.Window.Bounds))
                 return false;
 
             PixelRect screenBounds = frame.Viewport.ScreenBounds;

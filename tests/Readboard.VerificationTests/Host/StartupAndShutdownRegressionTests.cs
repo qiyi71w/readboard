@@ -66,12 +66,15 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void ShowInBoardToggle_RejectsManualSelectionSyncModes()
+        public void ShowInBoardToggle_RejectsOnlyForegroundSyncMode()
         {
             string source = LoadSource("readboard", "Form1.cs");
+            string supportSlice = GetMethodSlice(source, "private bool SupportsShowInBoard()");
             string methodSlice = GetMethodSlice(source, "private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)");
 
-            Assert.Contains("UsesManualSelectionType(CurrentSyncType)", methodSlice);
+            Assert.Contains("CurrentSyncType != TYPE_FOREGROUND", supportSlice);
+            Assert.DoesNotContain("UsesManualSelectionType(CurrentSyncType)", supportSlice);
+            Assert.Contains("CurrentSyncType == TYPE_FOREGROUND", methodSlice);
             Assert.Contains("chkShowInBoard.Checked = false;", methodSlice);
         }
 
@@ -82,6 +85,44 @@ namespace Readboard.VerificationTests.Host
             string methodSlice = GetMethodSlice(source, "private void HookListener_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)");
 
             Assert.Contains("SupportsShowInBoard()", methodSlice);
+            Assert.Contains("!Program.disableShowInBoardShortcut", methodSlice);
+        }
+
+        [Fact]
+        public void ShowInBoardTooltip_ClearsCtrlXHintWhenShortcutIsDisabled()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+
+            Assert.Contains("showInBoardShortcutToolTip.SetToolTip(this.chkShowInBoard, Program.disableShowInBoardShortcut ? string.Empty : \"Ctrl+X\");", source);
+        }
+
+        [Fact]
+        public void SettingsForm_LoadsAndPersistsShowInBoardShortcutToggle()
+        {
+            string source = LoadSource("readboard", "Form4.cs");
+
+            Assert.Contains("chkDisableShowInBoardShortcut.Checked = config.DisableShowInBoardShortcut;", source);
+            Assert.Contains("updatedConfig.DisableShowInBoardShortcut = chkDisableShowInBoardShortcut.Checked;", source);
+        }
+
+        [Fact]
+        public void SettingsForm_RefreshesMainFormShortcutTooltipAfterSaving()
+        {
+            string source = LoadSource("readboard", "Form4.cs");
+            string methodSlice = GetMethodSlice(source, "private void button1_Click(object sender, EventArgs e)");
+
+            Assert.Contains("mainForm.RefreshShowInBoardShortcutToolTip();", methodSlice);
+        }
+
+        [Fact]
+        public void SettingsForm_ArrangesShortcutToggleAlignedWithVerifyMove()
+        {
+            string source = LoadSource("readboard", "Form4.cs");
+            string layoutSlice = GetMethodSlice(source, "private void ArrangeSettingsLayout()");
+
+            Assert.Contains("chkVerifyMove.Location = new Point(left, top + 60);", layoutSlice);
+            Assert.Contains("chkDisableShowInBoardShortcut.Location = new Point(170, top + 60);", layoutSlice);
+            Assert.Contains("chkDisableShowInBoardShortcut.Size = new Size(170, 20);", layoutSlice);
         }
 
         [Fact]

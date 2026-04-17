@@ -122,6 +122,10 @@ namespace readboard
             if (frame == null || frame.Viewport == null)
                 return false;
 
+            if (frame.SyncMode == SyncMode.Background)
+                return TryBuildBoundsFromScreen(frame, out bounds)
+                    || TryBuildBoundsFromWindow(frame, out bounds);
+
             return TryBuildBoundsFromWindow(frame, out bounds)
                 || TryBuildBoundsFromScreen(frame, out bounds);
         }

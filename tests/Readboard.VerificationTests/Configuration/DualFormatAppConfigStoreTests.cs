@@ -39,6 +39,7 @@ namespace Readboard.VerificationTests
                 config.SyncBoth = true;
                 config.UseEnhanceScreen = true;
                 config.PlayPonder = false;
+                config.DisableShowInBoardShortcut = true;
                 config.UiThemeMode = 7;
 
                 store.Save(config);
@@ -50,7 +51,7 @@ namespace Readboard.VerificationTests
                 Assert.Contains("\"ProtocolVersion\":\"220430\"", json);
                 Assert.Contains("\"MachineKey\":\"SECONDARY-HOST\"", json);
                 Assert.Equal("96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5", legacyMain);
-                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_7", legacyOther);
+                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7", legacyOther);
             }
         }
 
@@ -64,7 +65,7 @@ namespace Readboard.VerificationTests
                     "101_42_77_18_1_0_1_0_1_1_SOME-OTHER-MACHINE_4");
                 File.WriteAllText(
                     workspace.PathFor("config_readboard_others.txt"),
-                    "220430_13_13_15_16_150_1_61_320_240_1_0_1");
+                    "220430_13_13_15_16_150_1_61_320_240_1_0_1_1");
                 DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
 
                 AppConfigLoadResult result = store.Load();
@@ -95,6 +96,7 @@ namespace Readboard.VerificationTests
             Assert.Equal(240, config.WindowPosY);
             Assert.True(config.UseEnhanceScreen);
             Assert.False(config.PlayPonder);
+            Assert.False(config.DisableShowInBoardShortcut);
             Assert.Equal(1, config.UiThemeMode);
             Assert.Equal(ProtocolVersion, config.ProtocolVersion);
             Assert.Equal(FixtureMachineKey, config.MachineKey);
@@ -110,6 +112,7 @@ namespace Readboard.VerificationTests
             Assert.Contains("\"BoardWidth\":13", json);
             Assert.Contains("\"SyncBoth\":true", json);
             Assert.Contains("\"PlayPonder\":false", json);
+            Assert.Contains("\"DisableShowInBoardShortcut\":false", json);
         }
 
         private static void AssertDefaultConfig(AppConfig config)
@@ -132,6 +135,7 @@ namespace Readboard.VerificationTests
             Assert.Equal(-1, config.WindowPosY);
             Assert.False(config.UseEnhanceScreen);
             Assert.True(config.PlayPonder);
+            Assert.False(config.DisableShowInBoardShortcut);
             Assert.Equal(1, config.UiThemeMode);
             Assert.Equal(ProtocolVersion, config.ProtocolVersion);
             Assert.Equal(FixtureMachineKey, config.MachineKey);

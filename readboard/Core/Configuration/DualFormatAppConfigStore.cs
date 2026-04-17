@@ -116,8 +116,15 @@ namespace readboard
             config.WindowPosY = ReadInt(parts[9], config.WindowPosY);
             config.UseEnhanceScreen = ReadBool(parts[10], config.UseEnhanceScreen);
             config.PlayPonder = ReadBool(parts[11], config.PlayPonder);
-            if (parts.Length >= 13)
+            if (parts.Length >= 14)
+            {
+                config.DisableShowInBoardShortcut = ReadBool(parts[12], config.DisableShowInBoardShortcut);
+                config.UiThemeMode = ReadInt(parts[13], config.UiThemeMode);
+            }
+            else if (parts.Length >= 13)
+            {
                 config.UiThemeMode = ReadInt(parts[12], config.UiThemeMode);
+            }
             return true;
         }
 
@@ -174,6 +181,7 @@ namespace readboard
             builder.Append('_').Append(config.WindowPosY);
             builder.Append('_').Append(ToLegacyBool(config.UseEnhanceScreen));
             builder.Append('_').Append(ToLegacyBool(config.PlayPonder));
+            builder.Append('_').Append(ToLegacyBool(config.DisableShowInBoardShortcut));
             builder.Append('_').Append(config.UiThemeMode);
             File.WriteAllText(GetPath(LegacyOtherFileName), builder.ToString(), Encoding.UTF8);
         }
