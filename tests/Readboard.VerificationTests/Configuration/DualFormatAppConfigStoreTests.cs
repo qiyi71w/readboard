@@ -76,6 +76,44 @@ namespace Readboard.VerificationTests
             }
         }
 
+        [Fact]
+        public void Load_RecoversFromCorruptJsonByBackingItUpAndImportingLegacyConfig()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                workspace.CopyLegacyFixtures();
+                File.WriteAllText(workspace.PathFor("config.readboard.json"), "{broken json");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.True(result.HasExistingConfig);
+                AssertImportedFixtureConfig(result.Config);
+                Assert.Single(Directory.GetFiles(workspace.RootPath, "config.readboard.json.corrupt.*"));
+                AssertJsonMirror(workspace.PathFor("config.readboard.json"));
+            }
+        }
+
+        [Fact]
+        public void Load_IgnoresJsonConfigWhenItBelongsToDifferentMachine()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config.readboard.json"),
+                    "{\"ProtocolVersion\":\"220430\",\"MachineKey\":\"OTHER-MACHINE\",\"BoardWidth\":9,\"BoardHeight\":9,\"SyncMode\":5,\"BlackOffset\":123}");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.False(result.HasExistingConfig);
+                AssertDefaultConfig(result.Config);
+                Assert.Equal(
+                    "{\"ProtocolVersion\":\"220430\",\"MachineKey\":\"OTHER-MACHINE\",\"BoardWidth\":9,\"BoardHeight\":9,\"SyncMode\":5,\"BlackOffset\":123}",
+                    File.ReadAllText(workspace.PathFor("config.readboard.json")));
+            }
+        }
+
         private static void AssertImportedFixtureConfig(AppConfig config)
         {
             Assert.Equal(101, config.BlackOffset);

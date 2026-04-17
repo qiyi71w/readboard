@@ -7,6 +7,18 @@ namespace readboard
 {
     internal sealed class DualFormatAppConfigStore : IAppConfigStore
     {
+        private sealed class JsonConfigReadResult
+        {
+            public JsonConfigReadResult(AppConfig config, bool shouldPersistFallback)
+            {
+                Config = config;
+                ShouldPersistFallback = shouldPersistFallback;
+            }
+
+            public AppConfig Config { get; private set; }
+            public bool ShouldPersistFallback { get; private set; }
+        }
+
         private enum LegacyMainConfigStatus
         {
             MissingOrInvalid = 0,
@@ -17,6 +29,8 @@ namespace readboard
         private const string JsonFileName = "config.readboard.json";
         private const string LegacyMainFileName = "config_readboard.txt";
         private const string LegacyOtherFileName = "config_readboard_others.txt";
+        private const string JsonCorruptSuffix = ".corrupt.";
+        private const string JsonTempSuffix = ".tmp";
 
         private readonly string baseDirectory;
         private readonly string machineKey;
@@ -32,13 +46,14 @@ namespace readboard
 
         public AppConfigLoadResult Load()
         {
-            AppConfig config = ReadJsonConfig();
+            JsonConfigReadResult jsonResult = ReadJsonConfig();
+            AppConfig config = jsonResult.Config;
             bool hasExistingConfig = config != null;
             if (config == null)
             {
                 config = AppConfig.CreateDefault(protocolVersion, machineKey);
                 hasExistingConfig = ImportLegacyConfig(config);
-                if (hasExistingConfig)
+                if (hasExistingConfig || jsonResult.ShouldPersistFallback)
                     Save(config);
             }
             EnsureConfigMetadata(config);
@@ -56,15 +71,28 @@ namespace readboard
             WriteLegacyOtherConfig(config);
         }
 
-        private AppConfig ReadJsonConfig()
+        private JsonConfigReadResult ReadJsonConfig()
         {
             string path = GetPath(JsonFileName);
             if (!File.Exists(path))
-                return null;
+                return new JsonConfigReadResult(null, false);
             string content = File.ReadAllText(path, Encoding.UTF8);
             if (string.IsNullOrWhiteSpace(content))
-                return null;
-            return serializer.Deserialize<AppConfig>(content);
+                return RecoverFromInvalidJson(path);
+
+            try
+            {
+                AppConfig config = serializer.Deserialize<AppConfig>(content);
+                if (!IsOwnedByCurrentMachine(config))
+                    return new JsonConfigReadResult(null, false);
+                return new JsonConfigReadResult(config, false);
+            }
+            catch (Exception ex)
+            {
+                if (!IsInvalidJsonException(ex))
+                    throw;
+                return RecoverFromInvalidJson(path);
+            }
         }
 
         private bool ImportLegacyConfig(AppConfig config)
@@ -144,8 +172,19 @@ namespace readboard
 
         private void WriteJsonConfig(AppConfig config)
         {
+            string path = GetPath(JsonFileName);
+            string tempPath = path + JsonTempSuffix;
             string content = serializer.Serialize(config);
-            File.WriteAllText(GetPath(JsonFileName), content, Encoding.UTF8);
+            File.WriteAllText(tempPath, content, Encoding.UTF8);
+            try
+            {
+                ReplaceJsonFile(tempPath, path);
+            }
+            finally
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
         }
 
         private void WriteLegacyMainConfig(AppConfig config)
@@ -192,9 +231,45 @@ namespace readboard
             config.MachineKey = machineKey;
         }
 
+        private JsonConfigReadResult RecoverFromInvalidJson(string path)
+        {
+            QuarantineInvalidJson(path);
+            return new JsonConfigReadResult(null, true);
+        }
+
+        private void QuarantineInvalidJson(string path)
+        {
+            string corruptPath = path + JsonCorruptSuffix + Guid.NewGuid().ToString("N");
+            File.Move(path, corruptPath);
+        }
+
         private string GetPath(string fileName)
         {
             return Path.Combine(baseDirectory, fileName);
+        }
+
+        private static void ReplaceJsonFile(string tempPath, string destinationPath)
+        {
+            if (File.Exists(destinationPath))
+            {
+                File.Replace(tempPath, destinationPath, null);
+                return;
+            }
+            File.Move(tempPath, destinationPath);
+        }
+
+        private bool IsOwnedByCurrentMachine(AppConfig config)
+        {
+            return config != null
+                && !string.IsNullOrWhiteSpace(config.MachineKey)
+                && string.Equals(config.MachineKey, machineKey, StringComparison.Ordinal);
+        }
+
+        private static bool IsInvalidJsonException(Exception ex)
+        {
+            return ex is InvalidOperationException
+                || ex is ArgumentException
+                || string.Equals(ex.GetType().FullName, "System.Text.Json.JsonException", StringComparison.Ordinal);
         }
 
         private static int ReadInt(string value, int fallback)

@@ -58,6 +58,7 @@ namespace readboard
         private readonly LaunchOptions launchOptions;
         private readonly ISyncSessionCoordinator sessionCoordinator;
         private readonly ILegacySelectionCalibrationService selectionCalibrationService;
+        private readonly UiThreadInvoker uiThreadInvoker;
         private readonly GitHubUpdateChecker updateChecker = new GitHubUpdateChecker();
         private readonly ToolTip showInBoardShortcutToolTip = new ToolTip();
 
@@ -822,7 +823,14 @@ namespace readboard
 
         SyncCoordinatorHostSnapshot ISyncCoordinatorHost.CaptureSnapshot()
         {
-            return new SyncCoordinatorHostSnapshot
+            return uiThreadInvoker.ExecuteOrCancel(
+                CaptureSnapshotCore,
+                IsSnapshotCaptureCancelled);
+        }
+
+        private SyncCoordinatorHostSnapshot CaptureSnapshotCore()
+        {
+            SyncCoordinatorHostSnapshot snapshot = new SyncCoordinatorHostSnapshot
             {
                 SyncMode = GetCurrentSyncMode(),
                 BoardWidth = boardW,
@@ -842,6 +850,13 @@ namespace readboard
                 PlayoutsValue = GetProtocolNumericValue(textBox2),
                 FirstPolicyValue = GetProtocolNumericValue(textBox3)
             };
+
+            return snapshot;
+        }
+
+        private bool IsSnapshotCaptureCancelled()
+        {
+            return isShuttingDown;
         }
 
         void ISyncCoordinatorHost.UpdateSelectedWindowHandle(IntPtr handle)
@@ -981,6 +996,7 @@ namespace readboard
             this.launchOptions = launchOptions;
             this.sessionCoordinator = sessionCoordinator;
             this.selectionCalibrationService = selectionCalibrationService;
+            this.uiThreadInvoker = new UiThreadInvoker(this);
             InitializeComponent();
             GlobalHooker hooker = new GlobalHooker();
             hookListener = new KeyboardHookListener(hooker);

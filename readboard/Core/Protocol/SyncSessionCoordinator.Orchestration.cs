@@ -38,7 +38,9 @@ namespace readboard
         public bool TryRunOneTimeSync()
         {
             SyncSessionRuntimeDependencies runtime = GetRuntimeDependencies();
-            SyncCoordinatorHostSnapshot snapshot = CaptureSnapshot(runtime);
+            SyncCoordinatorHostSnapshot snapshot;
+            if (!TryCaptureSnapshot(runtime, out snapshot))
+                return false;
             runtimeState.SelectedWindowHandle = snapshot.SelectedWindowHandle;
             runtimeState.ResetProbeState();
             if (!EnsureSyncSourceSelected(runtime, snapshot, true))
@@ -61,7 +63,9 @@ namespace readboard
             if (StartedSync || IsContinuousSyncing)
                 return false;
 
-            SyncCoordinatorHostSnapshot snapshot = CaptureSnapshot(runtime);
+            SyncCoordinatorHostSnapshot snapshot;
+            if (!TryCaptureSnapshot(runtime, out snapshot))
+                return false;
             runtimeState.SelectedWindowHandle = snapshot.SelectedWindowHandle;
             return TryStartKeepSyncSession(runtime, snapshot, true);
         }
@@ -100,7 +104,10 @@ namespace readboard
             if (request == null)
                 return;
 
-            int boardWidth = CaptureSnapshot(GetRuntimeDependencies()).BoardWidth;
+            SyncCoordinatorHostSnapshot snapshot;
+            if (!TryCaptureSnapshot(GetRuntimeDependencies(), out snapshot))
+                return;
+            int boardWidth = snapshot.BoardWidth;
             if (!TryQueuePendingMove(request, runtimeState.CurrentBoardPixelWidth, boardWidth))
                 return;
             SendPlacementResult(WaitForPendingMoveResult());
@@ -116,7 +123,9 @@ namespace readboard
                     if (!WaitForSyncIdle(ContinuousSyncPollIntervalMs))
                         continue;
 
-                    SyncCoordinatorHostSnapshot snapshot = CaptureSnapshot(runtime);
+                    SyncCoordinatorHostSnapshot snapshot;
+                    if (!TryCaptureSnapshot(runtime, out snapshot))
+                        return;
                     if (snapshot.ShowInBoard)
                         SendNoInBoard();
                     TryStartDiscoveredKeepSync(runtime, snapshot);
@@ -144,7 +153,10 @@ namespace readboard
 
             runtimeState.SelectedWindowHandle = handle;
             runtime.Host.UpdateSelectedWindowHandle(handle);
-            TryStartKeepSyncSession(runtime, CaptureSnapshot(runtime), false);
+            SyncCoordinatorHostSnapshot refreshedSnapshot;
+            if (!TryCaptureSnapshot(runtime, out refreshedSnapshot))
+                return;
+            TryStartKeepSyncSession(runtime, refreshedSnapshot, false);
         }
 
         private bool TryStartKeepSyncSession(
@@ -193,7 +205,9 @@ namespace readboard
                 SendSync();
                 while (KeepSync)
                 {
-                    SyncCoordinatorHostSnapshot snapshot = CaptureSnapshot(runtime);
+                    SyncCoordinatorHostSnapshot snapshot;
+                    if (!TryCaptureSnapshot(runtime, out snapshot))
+                        return;
                     runtimeState.SelectedWindowHandle = ResolveSelectedWindowHandle(snapshot);
                     if (!EnsureSyncSourceSelected(runtime, snapshot, false))
                         return;
@@ -602,6 +616,20 @@ namespace readboard
             if (snapshot == null)
                 throw new InvalidOperationException("Sync coordinator host returned no snapshot.");
             return snapshot;
+        }
+
+        private bool TryCaptureSnapshot(SyncSessionRuntimeDependencies runtime, out SyncCoordinatorHostSnapshot snapshot)
+        {
+            try
+            {
+                snapshot = CaptureSnapshot(runtime);
+                return true;
+            }
+            catch (SnapshotCaptureCancelledException)
+            {
+                snapshot = null;
+                return false;
+            }
         }
 
         private SyncSessionRuntimeDependencies GetRuntimeDependencies()

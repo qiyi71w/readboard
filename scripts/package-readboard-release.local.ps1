@@ -7,7 +7,8 @@ param(
     [string]$ReleaseRoot,
     [string]$BuildOutputDir,
     [string]$MSBuildPath = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe',
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$SkipZip
 )
 
 Set-StrictMode -Version Latest
@@ -186,6 +187,7 @@ $versionInfo = Get-ReleaseVersion -Path $assemblyInfoPath
 $releaseDirectoryName = "readboard-github-release-$($versionInfo.TagVersion)"
 $releaseDirectory = Join-Path $ReleaseRoot $releaseDirectoryName
 $releaseZipPath = Join-Path $ReleaseRoot ($releaseDirectoryName + '.zip')
+$resolvedReleaseZipPath = $releaseZipPath
 
 Assert-ExecutablePath -Path $MSBuildPath -Label 'MSBuild.exe'
 if (-not $SkipBuild) {
@@ -203,7 +205,15 @@ New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
 Copy-MatchingFiles -SourceDir $BuildOutputDir -Patterns $buildPatterns -DestinationDir $releaseDirectory
 Copy-MatchingFiles -SourceDir $projectRoot -Patterns $staticPatterns -DestinationDir $releaseDirectory
 Copy-RelativeFiles -SourceDir $BuildOutputDir -RelativePaths $nativeRuntimeFiles -DestinationDir $releaseDirectory
-New-ReleaseArchive -SourceDirectory $releaseDirectory -DestinationZipPath $releaseZipPath
+if ($SkipZip) {
+    if (Test-Path -LiteralPath $resolvedReleaseZipPath) {
+        Remove-Item -LiteralPath $resolvedReleaseZipPath -Force
+    }
+    $releaseZipPath = [string]::Empty
+}
+if (-not $SkipZip) {
+    New-ReleaseArchive -SourceDirectory $releaseDirectory -DestinationZipPath $resolvedReleaseZipPath
+}
 
 Write-Host "PackageDir=$releaseDirectory"
 Write-Host "PackageZip=$releaseZipPath"

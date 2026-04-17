@@ -244,6 +244,38 @@ namespace Readboard.VerificationTests.Protocol
             Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
         }
 
+        [Fact]
+        public void TryCaptureSnapshot_ReturnsFalseWhenHostCancelsSnapshotCapture()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            object host = CreateProxy(hostInterfaceType, (method, args) =>
+            {
+                if (method.Name == "CaptureSnapshot")
+                    throw new SnapshotCaptureCancelledException();
+                return GetDefault(method.ReturnType);
+            });
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=foreground")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            MethodInfo methodInfo = coordinator.GetType().GetMethod("TryCaptureSnapshot", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.True(methodInfo != null, "Missing coordinator method: TryCaptureSnapshot");
+            object[] methodArgs = new object[] { runtime, null };
+
+            bool captured = (bool)methodInfo.Invoke(coordinator, methodArgs);
+
+            Assert.False(captured);
+            Assert.Null(methodArgs[1]);
+        }
+
         private static object CreateProxy(Type interfaceType, Func<MethodInfo, object[], object> handler)
         {
             MethodInfo createMethod = null;

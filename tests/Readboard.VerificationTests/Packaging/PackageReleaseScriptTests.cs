@@ -39,6 +39,25 @@ namespace Readboard.VerificationTests
             }
         }
 
+        [Fact]
+        public void SkipBuild_SkipZip_ProducesReleaseDirectoryWithoutZipArtifact()
+        {
+            using (PackagingWorkspace workspace = PackagingWorkspace.Create())
+            {
+                workspace.CreateManagedBuildOutputs();
+                workspace.CreateNativeBuildOutputs();
+                File.WriteAllText(Path.Combine(workspace.ReleaseRoot, workspace.ExpectedZipFileName), "stale zip");
+
+                PackagingResult result = workspace.RunPackagingScript(skipZip: true);
+
+                Assert.Equal(0, result.ExitCode);
+                string releaseDirectory = Assert.Single(Directory.GetDirectories(workspace.ReleaseRoot));
+                Assert.True(File.Exists(Path.Combine(releaseDirectory, "readboard.exe")));
+                Assert.DoesNotContain(".zip", result.Output, StringComparison.OrdinalIgnoreCase);
+                Assert.Empty(Directory.GetFiles(workspace.ReleaseRoot, "*.zip"));
+            }
+        }
+
         private sealed class PackagingWorkspace : IDisposable
         {
             private PackagingWorkspace(string rootPath)
@@ -53,6 +72,26 @@ namespace Readboard.VerificationTests
             public string RootPath { get; private set; }
             public string BuildOutputDir { get; private set; }
             public string ReleaseRoot { get; private set; }
+            public string ExpectedZipFileName
+            {
+                get
+                {
+                    string assemblyInfoPath = Path.Combine(
+                        VerificationFixtureLocator.RepositoryRoot(),
+                        "readboard",
+                        "Properties",
+                        "AssemblyInfo.cs");
+                    string content = File.ReadAllText(assemblyInfoPath);
+                    string token = "AssemblyInformationalVersion(\"";
+                    int startIndex = content.IndexOf(token, StringComparison.Ordinal);
+                    Assert.True(startIndex >= 0, "Expected AssemblyInformationalVersion in AssemblyInfo.cs.");
+                    startIndex += token.Length;
+                    int endIndex = content.IndexOf('"', startIndex);
+                    Assert.True(endIndex > startIndex, "Expected closing quote for AssemblyInformationalVersion.");
+                    string version = content.Substring(startIndex, endIndex - startIndex);
+                    return "readboard-github-release-" + version + ".zip";
+                }
+            }
 
             public static PackagingWorkspace Create()
             {
@@ -76,7 +115,7 @@ namespace Readboard.VerificationTests
                 WriteFile(Path.Combine("dll", "x86", "opencv_ffmpeg400.dll"));
             }
 
-            public PackagingResult RunPackagingScript()
+            public PackagingResult RunPackagingScript(bool skipZip = false)
             {
                 string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
                 string scriptPath = Path.Combine(repositoryRoot, "scripts", "package-readboard-release.local.ps1");
@@ -99,6 +138,8 @@ namespace Readboard.VerificationTests
                 startInfo.ArgumentList.Add(ReleaseRoot);
                 startInfo.ArgumentList.Add("-MSBuildPath");
                 startInfo.ArgumentList.Add(Environment.GetEnvironmentVariable("ComSpec") ?? "C:\\Windows\\System32\\cmd.exe");
+                if (skipZip)
+                    startInfo.ArgumentList.Add("-SkipZip");
 
                 using (Process process = Process.Start(startInfo))
                 {
