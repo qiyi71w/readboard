@@ -144,6 +144,31 @@ namespace Readboard.VerificationTests.Recognition
             Assert.Equal(12, second.Viewport.SourceBounds.Height);
         }
 
+        [Fact]
+        public void TryResolveViewport_NormalizesProjectedBackgroundSelectionToFullCapturedImage()
+        {
+            BoardViewport viewport = ResolveViewport(new BoardFrame
+            {
+                SyncMode = SyncMode.Background,
+                BoardSize = new BoardDimensions(5, 5),
+                Image = CreateBlankBitmap(),
+                Viewport = new BoardViewport
+                {
+                    SourceBounds = new PixelRect(5, 4, 20, 20),
+                    ScreenBounds = new PixelRect(120, 230, 20, 20),
+                    CellWidth = 4d,
+                    CellHeight = 4d
+                }
+            });
+
+            Assert.Equal(0, viewport.SourceBounds.X);
+            Assert.Equal(0, viewport.SourceBounds.Y);
+            Assert.Equal(20, viewport.SourceBounds.Width);
+            Assert.Equal(20, viewport.SourceBounds.Height);
+            Assert.Equal(120, viewport.ScreenBounds.X);
+            Assert.Equal(230, viewport.ScreenBounds.Y);
+        }
+
         private static BoardViewport ResolveViewport(BoardFrame frame)
         {
             BoardRecognitionRequest request = new BoardRecognitionRequest

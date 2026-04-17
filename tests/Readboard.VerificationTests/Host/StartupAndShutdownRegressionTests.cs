@@ -143,6 +143,15 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void SelectionMagnifier_DoesNotUseSelectionOverlayAsShowOwner()
+        {
+            string source = LoadSource("readboard", "Form2.cs");
+
+            Assert.Contains("form5.Show();", source);
+            Assert.DoesNotContain("form5.Show(this);", source);
+        }
+
+        [Fact]
         public void Program_StopsStartupHandshakeAfterShutdownRequest()
         {
             string source = LoadSource("readboard", "Program.cs");

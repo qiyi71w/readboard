@@ -36,7 +36,7 @@ namespace readboard
                 form5.StartPosition = FormStartPosition.Manual;
                 int iActulaHeight = Screen.PrimaryScreen.Bounds.Height;
                 form5.Location = new Point(0, iActulaHeight - 200);
-                form5.Show(this);
+                form5.Show();
             }
             //   x1 = Form1.ox1;
             //  y1 = Form1.oy1;

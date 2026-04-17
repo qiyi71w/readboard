@@ -98,7 +98,21 @@ namespace readboard
             if (viewport == null || viewport.SourceBounds == null)
                 return null;
 
-            return ClipBounds(viewport.SourceBounds, pixels.Width, pixels.Height);
+            PixelRect sourceBounds = viewport.SourceBounds;
+            if (IsProjectedSelectionBounds(sourceBounds, pixels))
+                return new PixelRect(0, 0, pixels.Width, pixels.Height);
+
+            return ClipBounds(sourceBounds, pixels.Width, pixels.Height);
+        }
+
+        private static bool IsProjectedSelectionBounds(PixelRect sourceBounds, LegacyPixelMap pixels)
+        {
+            if (sourceBounds == null || pixels == null)
+                return false;
+
+            return (sourceBounds.X != 0 || sourceBounds.Y != 0)
+                && sourceBounds.Width == pixels.Width
+                && sourceBounds.Height == pixels.Height;
         }
 
         private static BoardViewport CreateViewport(BoardViewport existing, PixelRect sourceBounds, BoardDimensions boardSize)
