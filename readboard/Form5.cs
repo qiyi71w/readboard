@@ -20,11 +20,12 @@ namespace readboard
         private Graphics captureGraphics;
         private Graphics zoomGraphics;
         private Pen crosshairPen;
+        private readonly MainForm host;
 
-        public MagnifierForm()
+        internal MagnifierForm(MainForm host)
         {
             InitializeComponent();
-            CheckForIllegalCrossThreadCalls = false;
+            this.host = RequireHost(host);
             this.Text = getLangStr("MagnifierForm_title");
             InitializeMagnifierBuffers();
         }
@@ -34,11 +35,11 @@ namespace readboard
             String result = "";
             try
             {
-                result = Program.langItems[itemName].ToString();
+                result = Program.CurrentContext.LanguageItems[itemName].ToString();
             }
             catch (Exception e)
             {
-                MainForm.pcurrentWin.SendError(e.ToString());
+                GetHost().SendError(e.ToString());
             }
             return result;
         }
@@ -125,6 +126,20 @@ namespace readboard
                 crosshairPen.Dispose();
                 crosshairPen = null;
             }
+        }
+
+        private MainForm GetHost()
+        {
+            if (host.IsDisposed)
+                throw new InvalidOperationException("MainForm host is unavailable.");
+            return host;
+        }
+
+        private static MainForm RequireHost(MainForm host)
+        {
+            if (host == null || host.IsDisposed)
+                throw new InvalidOperationException("MainForm host is unavailable.");
+            return host;
         }
     }
 }

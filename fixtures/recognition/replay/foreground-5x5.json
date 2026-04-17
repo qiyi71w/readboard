@@ -1,0 +1,21 @@
+{
+  "name": "foreground-5x5",
+  "boardWidth": 5,
+  "boardHeight": 5,
+  "baseImage": "recognition/replay/foreground-5x5-base.ppm",
+  "changedImage": "recognition/replay/foreground-5x5-changed.ppm",
+  "baseRows": [
+    "0,0,0,0,0",
+    "0,1,0,2,0",
+    "0,0,1,0,0",
+    "0,2,0,0,0",
+    "0,0,0,0,0"
+  ],
+  "changedRows": [
+    "0,0,0,0,0",
+    "0,1,0,2,0",
+    "0,0,1,0,0",
+    "0,2,0,2,0",
+    "0,0,0,0,0"
+  ]
+}

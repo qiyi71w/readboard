@@ -10,21 +10,13 @@ namespace readboard
     {
         private const int FieldLabelWidth = 110;
         private const int FieldInputWidth = 88;
+        private readonly MainForm host;
 
-        public SettingsForm()
+        internal SettingsForm(MainForm host)
         {
             InitializeComponent();
-            this.txtBlackOffsets.Text = Program.blackPC.ToString();
-            this.txtBlackPercents.Text = Program.blackZB.ToString();
-            this.txtWhiteOffsets.Text = Program.whitePC.ToString();
-            this.txtWhitePercents.Text = Program.whiteZB.ToString();
-            this.chkMag.Checked = Program.useMag;
-            this.chkVerifyMove.Checked = Program.verifyMove;
-            this.chkAutoMin.Checked = Program.autoMin;
-            this.txtSyncInterval.Text = Program.timeinterval.ToString();
-            this.chkEnhanceScreen.Checked = Program.useEnhanceScreen;
-            txtGrayOffsets.Text = Program.grayOffset.ToString();
-            this.chkPonder.Checked = Program.playPonder;
+            this.host = RequireHost(host);
+            LoadConfigValues(Program.CurrentConfig);
 
             this.Text = getLangStr("SettingsForm_title");
             this.chkPonder.Text = getLangStr("SettingsForm_chkPonder");
@@ -68,7 +60,7 @@ namespace readboard
             MaximizeBox = false;
             MinimizeBox = false;
             label5.Visible = false;
-            if (Program.uiThemeMode == Program.UiThemeOptimized)
+            if (Program.CurrentConfig.UiThemeMode == Program.UiThemeOptimized)
             {
                 UiTheme.ApplyWindow(this);
                 ApplySettingsTheme();
@@ -210,66 +202,27 @@ namespace readboard
             String result = "";
             try
             {
-                result = Program.langItems[itemName].ToString();
+                result = Program.CurrentContext.LanguageItems[itemName].ToString();
             }
             catch (Exception e)
-            {                
-                MainForm.pcurrentWin.SendError(e.ToString());
+            {
+                GetHost().SendError(e.ToString());
             }
             return result;
         }
 
         private void button1_Click(object sender, EventArgs e)
         {
-            int Bpc=Program.blackPC;
-            int Bzb = Program.blackZB;
-            int Wpc = Program.whitePC;
-            int Wzb = Program.whiteZB;
-            Boolean useMag = chkMag.Checked;
-            Boolean enableVerifyMove = chkVerifyMove.Checked;
-            Boolean chkAuto = chkAutoMin.Checked;
-            int syncInterval=Program.timeinterval;
-            try
-            {
-                Bpc=Convert.ToInt32(this.txtBlackOffsets.Text);
-                Bzb = Convert.ToInt32(this.txtBlackPercents.Text);
-                Wpc = Convert.ToInt32(this.txtWhiteOffsets.Text);
-                Wzb = Convert.ToInt32(this.txtWhitePercents.Text);
-                syncInterval = Convert.ToInt32(this.txtSyncInterval.Text);
-                Program.grayOffset = Convert.ToInt32(this.txtGrayOffsets.Text);
-            }
-            catch (Exception)
-            {
-                MessageBox.Show(getLangStr("SettingsForm_mustBeInteger"));
+            AppConfig updatedConfig;
+            if (!TryBuildUpdatedConfig(out updatedConfig))
                 return;
-            }
-            if (Bpc > 255 || Bpc < 0 || Bzb > 100 || Bzb < 0 || Wpc > 255 || Wpc < 0 || Wzb > 100 || Wzb < 0)
-            {
-                MessageBox.Show(getLangStr("SettingsForm_outOfRange"));
-                return;
-            }
-            Program.blackPC = Bpc;
-            Program.whitePC = Wpc;
-            Program.blackZB = Bzb;
-            Program.whiteZB = Wzb;
-            Program.useMag = useMag;
-            Program.verifyMove = enableVerifyMove;
-            Program.autoMin = chkAuto;
-         //   Program.isAdvScale = rdoAdvanceScale.Checked;
-            string result1 = "config_readboard.txt";
-            FileStream fs = new FileStream(result1, FileMode.Create);
-            StreamWriter wr = null;
-            wr = new StreamWriter(fs);
-            wr.WriteLine(Bpc.ToString()+"_"+Bzb.ToString()+"_"+Wpc.ToString()+"_"+Wzb.ToString()+"_"+ (useMag ? "1":"0")+"_"+ (enableVerifyMove ? "1" : "0")+"_"+(Program.showScaleHint?"1":"0") + "_" + (Program.showInBoard ? "1" : "0") + "_" + (Program.showInBoardHint ? "1" : "0") + "_" + (chkAuto ? "1" : "0") + "_" + Environment.GetEnvironmentVariable("computername").Replace("_", "") + "_" + MainForm.type);
-            wr.Close();
-            this.Close();
-            Program.timeinterval = syncInterval;
-            Program.timename = syncInterval.ToString();
-            Program.useEnhanceScreen = chkEnhanceScreen.Checked;
-            Program.playPonder = this.chkPonder.Checked;
-            MainForm.pcurrentWin.resetBtnKeepSyncName();
-            MainForm.pcurrentWin.saveOtherConfig();
-            MainForm.pcurrentWin.sendPonderStatus();
+
+            Program.CurrentContext.Config = updatedConfig;
+            MainForm mainForm = GetHost();
+            mainForm.PersistConfiguration();
+            mainForm.resetBtnKeepSyncName();
+            mainForm.sendPonderStatus();
+            Close();
         }
 
         private void button2_Click(object sender, EventArgs e)
@@ -279,13 +232,87 @@ namespace readboard
 
         private void button4_Click(object sender, EventArgs e)
         {
-            if (File.Exists("config_readboard_others.txt"))
-                File.Delete("config_readboard_others.txt");
-            if (File.Exists("config_readboard.txt"))
-                File.Delete("config_readboard.txt");
+            AppConfig currentConfig = Program.CurrentConfig;
+            AppConfig defaultConfig = AppConfig.CreateDefault(currentConfig.ProtocolVersion, currentConfig.MachineKey);
+            Program.SaveAppConfig(defaultConfig);
             MessageBox.Show(getLangStr("SettingsForm_resetDefaultTip"));// Program.isChn ? "已恢复默认设置,请重新打开": "Reset successfully,please restart.");
-            System.Diagnostics.Process.GetCurrentProcess().Kill();
-            Application.Exit();
+            GetHost().shutdown(false);
+        }
+
+        private void LoadConfigValues(AppConfig config)
+        {
+            txtBlackOffsets.Text = config.BlackOffset.ToString();
+            txtBlackPercents.Text = config.BlackPercent.ToString();
+            txtWhiteOffsets.Text = config.WhiteOffset.ToString();
+            txtWhitePercents.Text = config.WhitePercent.ToString();
+            chkMag.Checked = config.UseMagnifier;
+            chkVerifyMove.Checked = config.VerifyMove;
+            chkAutoMin.Checked = config.AutoMinimize;
+            txtSyncInterval.Text = config.SyncIntervalMs.ToString();
+            chkEnhanceScreen.Checked = config.UseEnhanceScreen;
+            txtGrayOffsets.Text = config.GrayOffset.ToString();
+            chkPonder.Checked = config.PlayPonder;
+        }
+
+        private bool TryBuildUpdatedConfig(out AppConfig updatedConfig)
+        {
+            updatedConfig = Program.CurrentConfig.Clone();
+            int blackOffset;
+            int blackPercent;
+            int whiteOffset;
+            int whitePercent;
+            int syncInterval;
+            int grayOffset;
+            if (!int.TryParse(txtBlackOffsets.Text, out blackOffset)
+                || !int.TryParse(txtBlackPercents.Text, out blackPercent)
+                || !int.TryParse(txtWhiteOffsets.Text, out whiteOffset)
+                || !int.TryParse(txtWhitePercents.Text, out whitePercent)
+                || !int.TryParse(txtSyncInterval.Text, out syncInterval)
+                || !int.TryParse(txtGrayOffsets.Text, out grayOffset))
+            {
+                MessageBox.Show(getLangStr("SettingsForm_mustBeInteger"));
+                return false;
+            }
+
+            updatedConfig.BlackOffset = blackOffset;
+            updatedConfig.BlackPercent = blackPercent;
+            updatedConfig.WhiteOffset = whiteOffset;
+            updatedConfig.WhitePercent = whitePercent;
+            updatedConfig.SyncIntervalMs = syncInterval;
+            updatedConfig.GrayOffset = grayOffset;
+            updatedConfig.UseMagnifier = chkMag.Checked;
+            updatedConfig.VerifyMove = chkVerifyMove.Checked;
+            updatedConfig.AutoMinimize = chkAutoMin.Checked;
+            updatedConfig.UseEnhanceScreen = chkEnhanceScreen.Checked;
+            updatedConfig.PlayPonder = chkPonder.Checked;
+            if (IsOffsetOrPercentOutOfRange(updatedConfig))
+            {
+                MessageBox.Show(getLangStr("SettingsForm_outOfRange"));
+                return false;
+            }
+            return true;
+        }
+
+        private static bool IsOffsetOrPercentOutOfRange(AppConfig config)
+        {
+            return config.BlackOffset > 255 || config.BlackOffset < 0
+                || config.BlackPercent > 100 || config.BlackPercent < 0
+                || config.WhiteOffset > 255 || config.WhiteOffset < 0
+                || config.WhitePercent > 100 || config.WhitePercent < 0;
+        }
+
+        private MainForm GetHost()
+        {
+            if (host.IsDisposed)
+                throw new InvalidOperationException("MainForm host is unavailable.");
+            return host;
+        }
+
+        private static MainForm RequireHost(MainForm host)
+        {
+            if (host == null || host.IsDisposed)
+                throw new InvalidOperationException("MainForm host is unavailable.");
+            return host;
         }
     }
 }

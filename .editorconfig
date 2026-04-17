@@ -1,0 +1,11 @@
+root = true
+
+[*]
+insert_final_newline = true
+end_of_line = lf
+
+[*.{sln,cs,csproj,config,resx,settings,manifest,user,props,targets,ruleset,ps1,bat,cmd,txt,rtf}]
+end_of_line = crlf
+
+[*.md]
+trim_trailing_whitespace = false

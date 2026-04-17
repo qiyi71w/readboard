@@ -1,0 +1,94 @@
+using System.IO;
+using Xunit;
+using readboard;
+
+namespace Readboard.VerificationTests
+{
+    public sealed class DualFormatAppConfigStoreTests
+    {
+        private const string ProtocolVersion = "220430";
+        private const string FixtureMachineKey = "MACHINE-001";
+        private const string SaveMachineKey = "SECONDARY-HOST";
+
+        [Fact]
+        public void Load_ImportsLegacyFixturesAndWritesJsonMirror()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                workspace.CopyLegacyFixtures();
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.True(result.HasExistingConfig);
+                AssertImportedFixtureConfig(result.Config);
+                AssertJsonMirror(workspace.PathFor("config.readboard.json"));
+            }
+        }
+
+        [Fact]
+        public void Save_WritesJsonAndLegacyMirrorWithUpdatedMetadata()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, SaveMachineKey, ProtocolVersion);
+                AppConfig config = AppConfig.CreateDefault("legacy", "legacy-host");
+                config.BoardWidth = 9;
+                config.BoardHeight = 9;
+                config.SyncMode = SyncMode.Foreground;
+                config.SyncBoth = true;
+                config.UseEnhanceScreen = true;
+                config.PlayPonder = false;
+                config.UiThemeMode = 7;
+
+                store.Save(config);
+
+                string json = File.ReadAllText(workspace.PathFor("config.readboard.json"));
+                string legacyMain = File.ReadAllText(workspace.PathFor("config_readboard.txt"));
+                string legacyOther = File.ReadAllText(workspace.PathFor("config_readboard_others.txt"));
+
+                Assert.Contains("\"ProtocolVersion\":\"220430\"", json);
+                Assert.Contains("\"MachineKey\":\"SECONDARY-HOST\"", json);
+                Assert.Equal("96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5", legacyMain);
+                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_7", legacyOther);
+            }
+        }
+
+        private static void AssertImportedFixtureConfig(AppConfig config)
+        {
+            Assert.Equal(101, config.BlackOffset);
+            Assert.Equal(42, config.BlackPercent);
+            Assert.Equal(77, config.WhiteOffset);
+            Assert.Equal(18, config.WhitePercent);
+            Assert.True(config.UseMagnifier);
+            Assert.False(config.VerifyMove);
+            Assert.Equal(SyncMode.FoxBackgroundPlace, config.SyncMode);
+            Assert.Equal(13, config.BoardWidth);
+            Assert.Equal(13, config.BoardHeight);
+            Assert.Equal(15, config.CustomBoardWidth);
+            Assert.Equal(16, config.CustomBoardHeight);
+            Assert.Equal(150, config.SyncIntervalMs);
+            Assert.True(config.SyncBoth);
+            Assert.Equal(61, config.GrayOffset);
+            Assert.Equal(320, config.WindowPosX);
+            Assert.Equal(240, config.WindowPosY);
+            Assert.True(config.UseEnhanceScreen);
+            Assert.False(config.PlayPonder);
+            Assert.Equal(1, config.UiThemeMode);
+            Assert.Equal(ProtocolVersion, config.ProtocolVersion);
+            Assert.Equal(FixtureMachineKey, config.MachineKey);
+        }
+
+        private static void AssertJsonMirror(string jsonPath)
+        {
+            Assert.True(File.Exists(jsonPath));
+
+            string json = File.ReadAllText(jsonPath);
+            Assert.Contains("\"ProtocolVersion\":\"220430\"", json);
+            Assert.Contains("\"MachineKey\":\"MACHINE-001\"", json);
+            Assert.Contains("\"BoardWidth\":13", json);
+            Assert.Contains("\"SyncBoth\":true", json);
+            Assert.Contains("\"PlayPonder\":false", json);
+        }
+    }
+}

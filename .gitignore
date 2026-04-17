@@ -9,3 +9,17 @@ temp-merge-build/
 temp-package-build/
 temp-ui-build/
 temp-theme-build/
+
+# Local verification and review noise
+tests/**/TestResults/
+readboard/Core/Placement/*.exe
+readboard/Core/Protocol/*.exe
+readboard/Core/Protocol/*.locked
+_dotnet_version.log
+_matrix_red.log
+_review_msbuild.out
+host-boundary-red.log
+msbuild-48.out
+msbuild.log
+msbuild.out
+nul

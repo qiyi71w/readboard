@@ -1,0 +1,14 @@
+# scenario|rawLine
+start|start 19 19
+start-with-hwnd|start 19 19 424242
+board-replay|re=00000
+board-replay|re=00120
+clear|clear
+session-control-order|start 19 19
+session-control-order|bothSync
+session-control-order|placeComplete
+session-control-order|stopsync
+session-control-order|nobothSync
+session-control-order|endsync
+overlay-visible|inboard 10 20 30 40 5
+overlay-hidden|notinboard

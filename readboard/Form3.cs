@@ -10,7 +10,6 @@ namespace readboard
         {
             InitializeComponent();
             this.ShowInTaskbar = false;
-            CheckForIllegalCrossThreadCalls = false;
         }
         public IntPtr setPic() {
           //  System.IO.FileStream pFileStream = new System.IO.FileStream("screen.bmp", System.IO.FileMode.Open);

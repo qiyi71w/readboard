@@ -1,0 +1,145 @@
+using System.Collections.Generic;
+using System.Linq;
+using Xunit;
+using readboard;
+
+namespace Readboard.VerificationTests.Protocol
+{
+    public sealed class LegacyOutboundProtocolContractTests
+    {
+        [Fact]
+        public void SerializeOutbound_PreservesLegacyControlLinesFromFixtureCatalog()
+        {
+            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
+
+            foreach (ProtocolOutboundFixtureCase fixtureCase in ProtocolFixtureCatalog.LoadOutboundCases())
+            {
+                string serialized = adapter.Serialize(ProtocolMessage.CreateLegacyLine(fixtureCase.RawLine));
+
+                Assert.Equal(fixtureCase.RawLine, serialized);
+            }
+        }
+
+        [Fact]
+        public void SendLine_PreservesLegacySessionControlOrder()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            string[] expectedLines = ProtocolFixtureCatalog.LoadOutboundLines("session-control-order").ToArray();
+
+            foreach (string line in expectedLines)
+                coordinator.SendLine(line);
+
+            Assert.Equal(expectedLines, transport.SentLines);
+        }
+
+        [Fact]
+        public void SendClear_ResetsReplayAndOverlayCaches()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            LegacyOverlayService overlayService = new LegacyOverlayService();
+            string startLine = ProtocolFixtureCatalog.LoadOutboundLines("start").Single();
+            string clearLine = ProtocolFixtureCatalog.LoadOutboundLines("clear").Single();
+            string expectedVisibleLine = ProtocolFixtureCatalog.LoadOutboundLines("overlay-visible").Single();
+            string hiddenLine = ProtocolFixtureCatalog.LoadOutboundLines("overlay-hidden").Single();
+            string[] replayLines = ProtocolFixtureCatalog.LoadOutboundLines("board-replay").ToArray();
+            string visibleLine = BuildVisibleOverlayLine(overlayService);
+            BoardSnapshot snapshot = new BoardSnapshot
+            {
+                Payload = "fixture-board",
+                ProtocolLines = replayLines
+            };
+
+            Assert.Equal(expectedVisibleLine, visibleLine);
+            coordinator.SendLine(startLine);
+            coordinator.SendOverlayLine(visibleLine);
+            coordinator.SendBoardSnapshot(snapshot);
+            coordinator.SendOverlayLine(visibleLine);
+            coordinator.SendBoardSnapshot(snapshot);
+            coordinator.SendClear();
+            coordinator.SendOverlayLine(hiddenLine);
+            coordinator.SendOverlayLine(visibleLine);
+            coordinator.SendBoardSnapshot(snapshot);
+
+            Assert.Equal(
+                new[]
+                {
+                    startLine,
+                    visibleLine,
+                    replayLines[0],
+                    replayLines[1],
+                    "end",
+                    clearLine,
+                    hiddenLine,
+                    visibleLine,
+                    replayLines[0],
+                    replayLines[1],
+                    "end"
+                },
+                transport.SentLines);
+        }
+
+        private static string BuildVisibleOverlayLine(LegacyOverlayService overlayService)
+        {
+            OverlayUpdateResult update = overlayService.BuildUpdate(new OverlayUpdateRequest
+            {
+                Visibility = OverlayVisibility.Visible,
+                LegacyTypeToken = "5",
+                Frame = new BoardFrame
+                {
+                    Window = new WindowDescriptor
+                    {
+                        Bounds = new PixelRect(0, 0, 100, 100),
+                        IsDpiAware = true,
+                        DpiScale = 1d
+                    },
+                    Viewport = new BoardViewport
+                    {
+                        SourceBounds = new PixelRect(10, 20, 30, 40)
+                    }
+                }
+            });
+
+            return update.ProtocolLine;
+        }
+
+        private sealed class RecordingTransport : IReadBoardTransport
+        {
+            public event System.EventHandler<string> MessageReceived;
+
+            public List<string> SentLines { get; } = new List<string>();
+
+            public bool IsConnected
+            {
+                get { return true; }
+            }
+
+            public void Dispose()
+            {
+            }
+
+            public void Send(string line)
+            {
+                SentLines.Add(line);
+            }
+
+            public void Emit(string line)
+            {
+                MessageReceived?.Invoke(this, line);
+            }
+
+            public void SendError(string message)
+            {
+            }
+
+            public void Start()
+            {
+            }
+
+            public void Stop()
+            {
+            }
+        }
+    }
+}
