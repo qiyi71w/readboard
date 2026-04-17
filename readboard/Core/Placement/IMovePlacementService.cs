@@ -124,14 +124,24 @@ namespace readboard
 
         private static bool TryResolveScreenBounds(BoardFrame frame, out PixelRect bounds)
         {
-            bounds = frame.Viewport.ScreenBounds;
-            if (IsUsable(bounds))
+            if (TryProjectScreenBounds(frame, out bounds))
                 return true;
-            if (!IsUsable(frame.Viewport.SourceBounds) || !IsUsable(frame.Window == null ? null : frame.Window.Bounds))
+
+            bounds = frame.Viewport.ScreenBounds;
+            return IsUsable(bounds);
+        }
+
+        private static bool TryProjectScreenBounds(BoardFrame frame, out PixelRect bounds)
+        {
+            bounds = null;
+            if (frame == null || frame.Viewport == null)
                 return false;
 
             PixelRect sourceBounds = frame.Viewport.SourceBounds;
-            PixelRect windowBounds = frame.Window.Bounds;
+            PixelRect windowBounds = frame.Window == null ? null : frame.Window.Bounds;
+            if (!IsUsable(sourceBounds) || !IsUsable(windowBounds))
+                return false;
+
             bounds = new PixelRect(
                 windowBounds.X + sourceBounds.X,
                 windowBounds.Y + sourceBounds.Y,

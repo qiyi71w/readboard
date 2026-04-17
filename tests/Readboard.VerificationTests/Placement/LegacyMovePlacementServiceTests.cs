@@ -27,6 +27,39 @@ namespace Readboard.VerificationTests.Placement
         }
 
         [Fact]
+        public void Place_FoxForegroundFrame_ProjectsDetectedBoardBoundsWithinWindow()
+        {
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
+            LegacyMovePlacementService service = new LegacyMovePlacementService(
+                nativeMethods,
+                new RecordingLightweightFactory());
+
+            MovePlacementResult result = service.Place(new MovePlacementRequest
+            {
+                Frame = new BoardFrame
+                {
+                    SyncMode = SyncMode.Fox,
+                    BoardSize = new BoardDimensions(5, 5),
+                    Viewport = new BoardViewport
+                    {
+                        SourceBounds = new PixelRect(20, 30, 50, 50),
+                        ScreenBounds = new PixelRect(100, 200, 150, 150)
+                    },
+                    Window = new WindowDescriptor
+                    {
+                        Handle = new IntPtr(3003),
+                        Bounds = new PixelRect(100, 200, 150, 150)
+                    }
+                },
+                Move = new MoveRequest { X = 1, Y = 2 }
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(PlacementPathKind.Foreground, result.PlacementPath);
+            Assert.Equal(new PlacementClick(135, 255, true), nativeMethods.ForegroundClick);
+        }
+
+        [Fact]
         public void Place_BackgroundFrame_PostsClientCoordinateUsingWindowScale()
         {
             RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
