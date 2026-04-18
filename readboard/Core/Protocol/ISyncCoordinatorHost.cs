@@ -14,5 +14,6 @@ namespace readboard
         void ShowRecognitionFailureMessage();
         void MinimizeWindow();
         void ReleasePlacementBinding(IntPtr handle);
+        bool TrySendPlaceProtocolError(string message);
     }
 }

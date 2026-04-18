@@ -157,6 +157,80 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void MainForm_HandlePlaceRequest_UsesSerializedPlaceQueue()
+        {
+            string source = LoadSource("readboard", "MainForm.Protocol.cs");
+            string methodSlice = GetMethodSlice(source, "void IProtocolCommandHost.HandlePlaceRequest(MoveRequest request)");
+
+            Assert.Contains("EnqueuePlaceRequest(protocolMove);", methodSlice);
+            Assert.DoesNotContain("ThreadPool.QueueUserWorkItem", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_PlaceMove_UsesSerializedPlaceQueue()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "public void placeMove(int x, int y)");
+
+            Assert.Contains("EnqueuePlaceRequest(new MoveRequest", methodSlice);
+            Assert.DoesNotContain("sessionCoordinator.HandlePlaceRequest(", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_Shutdown_StopsPlaceQueueBeforeSendingShutdownProtocol()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "public void shutdown(bool persistConfiguration)");
+            int stopQueueIndex = IndexOfRequired(methodSlice, "placeRequestQueue.Stop();");
+            int sendShutdownIndex = IndexOfRequired(methodSlice, "SendShutdownProtocol();");
+
+            Assert.True(stopQueueIndex < sendShutdownIndex, "Queued place requests must be stopped before shutdown protocol lines are sent.");
+            Assert.Contains("lock (placeProtocolSyncRoot)", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_ExecutePlaceRequest_UsesShutdownGuardedPlaceResultSender()
+        {
+            string source = LoadSource("readboard", "MainForm.Protocol.cs");
+            string methodSlice = GetMethodSlice(source, "private void ExecutePlaceRequest(MoveRequest request)");
+
+            Assert.Contains("if (!result.ShouldSendResponse)", methodSlice);
+            Assert.Contains("TrySendPlaceProtocolResult(result.Success);", methodSlice);
+            Assert.DoesNotContain("SendPlacementResultCommand(result.Success);", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_ExecutePlaceRequest_UsesShutdownGuardedPlaceErrorSender()
+        {
+            string source = LoadSource("readboard", "MainForm.Protocol.cs");
+            string methodSlice = GetMethodSlice(source, "private void ExecutePlaceRequest(MoveRequest request)");
+
+            Assert.Contains("TrySendPlaceProtocolError(ex.ToString());", methodSlice);
+            Assert.DoesNotContain("sessionCoordinator.SendError(ex.ToString());", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_PlaceProtocolGate_ChecksShutdownWhileHoldingSharedLock()
+        {
+            string source = LoadSource("readboard", "MainForm.Protocol.cs");
+            string methodSlice = GetMethodSlice(source, "private bool TrySendPlaceProtocolMessage(Action sendAction)");
+
+            Assert.Contains("lock (placeProtocolSyncRoot)", methodSlice);
+            Assert.Contains("if (isShuttingDown)", methodSlice);
+            Assert.Contains("sendAction();", methodSlice);
+        }
+
+        [Fact]
+        public void Coordinator_PlacePendingMove_ReportsFailuresThroughHostPlaceGate()
+        {
+            string source = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
+            string methodSlice = GetMethodSlice(source, "private bool PlacePendingMove(");
+
+            Assert.Contains("runtime.Host.TrySendPlaceProtocolError(", methodSlice);
+            Assert.DoesNotContain("SendError(result == null ? \"Move placement returned no result.\" : result.FailureReason);", methodSlice);
+        }
+
+        [Fact]
         public void SettingsReset_UsesShutdownWithoutPersistingCurrentWindowState()
         {
             string source = LoadSource("readboard", "Form4.cs");

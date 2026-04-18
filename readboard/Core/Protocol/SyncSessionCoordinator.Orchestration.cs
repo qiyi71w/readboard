@@ -99,18 +99,18 @@ namespace readboard
                 CompleteStopCleanup();
         }
 
-        public void HandlePlaceRequest(MoveRequest request)
+        public PlaceRequestExecutionResult HandlePlaceRequest(MoveRequest request)
         {
             if (request == null)
-                return;
+                return PlaceRequestExecutionResult.NoResponse;
 
             SyncCoordinatorHostSnapshot snapshot;
             if (!TryCaptureSnapshot(GetRuntimeDependencies(), out snapshot))
-                return;
+                return PlaceRequestExecutionResult.NoResponse;
             int boardWidth = snapshot.BoardWidth;
             if (!TryQueuePendingMove(request, runtimeState.CurrentBoardPixelWidth, boardWidth))
-                return;
-            SendPlacementResult(WaitForPendingMoveResult());
+                return PlaceRequestExecutionResult.NoResponse;
+            return PlaceRequestExecutionResult.CreateResponse(WaitForPendingMoveResult());
         }
 
         private void RunContinuousSyncLoop()
@@ -517,7 +517,7 @@ namespace readboard
                 runtimeState.ReleasePlacementBindingRequired = result.PlacementPath == PlacementPathKind.LightweightInterop;
                 return true;
             }
-            SendError(result == null ? "Move placement returned no result." : result.FailureReason);
+            runtime.Host.TrySendPlaceProtocolError(result == null ? "Move placement returned no result." : result.FailureReason);
             return false;
         }
 

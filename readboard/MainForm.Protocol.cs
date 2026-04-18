@@ -37,19 +37,77 @@ namespace readboard
         {
             if (request == null)
                 return;
+            MoveRequest protocolMove = new MoveRequest
+            {
+                X = request.X,
+                Y = request.Y,
+                VerifyMove = Program.verifyMove
+            };
+            EnqueuePlaceRequest(protocolMove);
+        }
+
+        private void EnqueuePlaceRequest(MoveRequest request)
+        {
+            if (request == null)
+                return;
+            placeRequestQueue.TryEnqueue(delegate
+            {
+                ExecutePlaceRequest(request);
+            });
+        }
+
+        private void ExecutePlaceRequest(MoveRequest request)
+        {
             try
             {
-                sessionCoordinator.HandlePlaceRequest(new MoveRequest
-                {
-                    X = request.X,
-                    Y = request.Y,
-                    VerifyMove = Program.verifyMove
-                });
+                PlaceRequestExecutionResult result = sessionCoordinator.HandlePlaceRequest(request);
+                if (!result.ShouldSendResponse)
+                    return;
+                TrySendPlaceProtocolResult(result.Success);
             }
             catch (Exception ex)
             {
-                sessionCoordinator.SendError(ex.ToString());
+                try
+                {
+                    TrySendPlaceProtocolError(ex.ToString());
+                }
+                catch (Exception sendErrorException)
+                {
+                    System.Diagnostics.Trace.TraceError(ex.ToString());
+                    System.Diagnostics.Trace.TraceError(sendErrorException.ToString());
+                }
             }
+        }
+
+        private bool TrySendPlaceProtocolMessage(Action sendAction)
+        {
+            if (sendAction == null)
+                throw new ArgumentNullException("sendAction");
+
+            lock (placeProtocolSyncRoot)
+            {
+                if (isShuttingDown)
+                    return false;
+
+                sendAction();
+                return true;
+            }
+        }
+
+        private bool TrySendPlaceProtocolResult(bool success)
+        {
+            return TrySendPlaceProtocolMessage(delegate
+            {
+                SendPlacementResultCommand(success);
+            });
+        }
+
+        private bool TrySendPlaceProtocolError(string message)
+        {
+            return TrySendPlaceProtocolMessage(delegate
+            {
+                sessionCoordinator.SendError(message);
+            });
         }
 
         void IProtocolCommandHost.HandleLossFocus()

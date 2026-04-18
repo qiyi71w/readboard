@@ -162,6 +162,8 @@
     <Compile Include="Core\Protocol\MainFormRuntimeComposer.cs" />
     <Compile Include="Core\Protocol\LegacyProtocolAdapter.cs" />
     <Compile Include="Core\Protocol\LegacyWindowDescriptorFactory.cs" />
+    <Compile Include="Core\Protocol\PlaceRequestExecutionResult.cs" />
+    <Compile Include="Core\Protocol\SerialBackgroundWorkQueue.cs" />
     <Compile Include="Core\Protocol\SyncCoordinatorHostSnapshot.cs" />
     <Compile Include="Core\Protocol\SyncSessionCoordinator.cs" />
     <Compile Include="Core\Protocol\SyncSessionCoordinator.Orchestration.cs" />

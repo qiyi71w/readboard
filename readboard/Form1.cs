@@ -53,6 +53,8 @@ namespace readboard
         private readonly ISyncSessionCoordinator sessionCoordinator;
         private readonly ILegacySelectionCalibrationService selectionCalibrationService;
         private readonly UiThreadInvoker uiThreadInvoker;
+        private readonly SerialBackgroundWorkQueue placeRequestQueue;
+        private readonly object placeProtocolSyncRoot = new object();
         private readonly GitHubUpdateChecker updateChecker = new GitHubUpdateChecker();
         private readonly ToolTip showInBoardShortcutToolTip = new ToolTip();
 
@@ -936,6 +938,11 @@ namespace readboard
             });
         }
 
+        bool ISyncCoordinatorHost.TrySendPlaceProtocolError(string message)
+        {
+            return TrySendPlaceProtocolError(message);
+        }
+
         private void ApplyKeepSyncStartedUi()
         {
             btnKeepSync.Text = getLangStr("stopSync");
@@ -1010,6 +1017,7 @@ namespace readboard
             this.sessionCoordinator = sessionCoordinator;
             this.selectionCalibrationService = selectionCalibrationService;
             this.uiThreadInvoker = new UiThreadInvoker(this);
+            this.placeRequestQueue = new SerialBackgroundWorkQueue("ReadboardPlaceRequestQueue");
             InitializeComponent();
             GlobalHooker hooker = new GlobalHooker();
             hookListener = new KeyboardHookListener(hooker);
@@ -1505,10 +1513,14 @@ namespace readboard
 
         public void shutdown(bool persistConfiguration)
         {
-            if (isShuttingDown)
-                return;
+            lock (placeProtocolSyncRoot)
+            {
+                if (isShuttingDown)
+                    return;
 
-            isShuttingDown = true;
+                isShuttingDown = true;
+                placeRequestQueue.Stop();
+            }
             if (persistConfiguration)
                 PersistConfiguration();
             DisposeInputHooks();
@@ -1636,7 +1648,7 @@ namespace readboard
 
         public void placeMove(int x, int y)
         {
-            sessionCoordinator.HandlePlaceRequest(new MoveRequest
+            EnqueuePlaceRequest(new MoveRequest
             {
                 X = x,
                 Y = y,

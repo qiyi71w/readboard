@@ -58,6 +58,8 @@
     <Compile Include="..\..\readboard\Core\Protocol\LegacySyncWindowLocator.cs" Link="Production\Core\Protocol\LegacySyncWindowLocator.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\LegacyProtocolAdapter.cs" Link="Production\Core\Protocol\LegacyProtocolAdapter.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\LegacyWindowDescriptorFactory.cs" Link="Production\Core\Protocol\LegacyWindowDescriptorFactory.cs" />
+    <Compile Include="..\..\readboard\Core\Protocol\PlaceRequestExecutionResult.cs" Link="Production\Core\Protocol\PlaceRequestExecutionResult.cs" />
+    <Compile Include="..\..\readboard\Core\Protocol\SerialBackgroundWorkQueue.cs" Link="Production\Core\Protocol\SerialBackgroundWorkQueue.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\SyncCoordinatorHostSnapshot.cs" Link="Production\Core\Protocol\SyncCoordinatorHostSnapshot.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\SyncSessionCoordinator.cs" Link="Production\Core\Protocol\SyncSessionCoordinator.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\SyncSessionCoordinator.Orchestration.cs" Link="Production\Core\Protocol\SyncSessionCoordinator.Orchestration.cs" />
