@@ -8,12 +8,9 @@ namespace readboard
         {
             if (command == null)
                 throw new ArgumentNullException("command");
-            if (IsHandleCreated && InvokeRequired)
-            {
-                BeginInvoke(command);
+            if (TryDispatchProtocolCommand(command))
                 return;
-            }
-            command();
+            EnqueuePendingProtocolCommand(command);
         }
 
         public void NotifyProtocolReady()

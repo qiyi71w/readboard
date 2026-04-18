@@ -16,6 +16,7 @@ namespace readboard
         ProtocolMessage CreateEndSyncMessage();
         ProtocolMessage CreateBothSyncMessage(bool enabled);
         ProtocolMessage CreateForegroundFoxInBoardMessage(bool enabled);
+        ProtocolMessage CreateFoxMoveNumberMessage(int moveNumber);
         ProtocolMessage CreateStartMessage(int boardWidth, int boardHeight, IntPtr windowHandle, bool includeWindowHandle);
         ProtocolMessage CreatePlayMessage(string color, string time, string playouts, string firstPolicy);
         ProtocolMessage CreateNoInBoardMessage();

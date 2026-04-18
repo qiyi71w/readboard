@@ -55,8 +55,11 @@ namespace readboard
         private readonly UiThreadInvoker uiThreadInvoker;
         private readonly SerialBackgroundWorkQueue placeRequestQueue;
         private readonly object placeProtocolSyncRoot = new object();
+        private readonly object protocolCommandSyncRoot = new object();
         private readonly GitHubUpdateChecker updateChecker = new GitHubUpdateChecker();
         private readonly ToolTip showInBoardShortcutToolTip = new ToolTip();
+        private static readonly IWindowDescriptorFactory FoxWindowDescriptorFactory = new LegacyWindowDescriptorFactory();
+        private readonly Queue<Action> pendingProtocolCommands = new Queue<Action>();
 
         int posX = -1;
         int posY = -1;
@@ -817,6 +820,63 @@ namespace readboard
             action();
         }
 
+        private bool TryDispatchProtocolCommand(Action command)
+        {
+            if (command == null)
+                throw new ArgumentNullException("command");
+            if (isShuttingDown || IsDisposed || Disposing)
+                return true;
+            if (!IsHandleCreated)
+                return false;
+            if (InvokeRequired)
+            {
+                BeginInvoke(command);
+                return true;
+            }
+            command();
+            return true;
+        }
+
+        private void EnqueuePendingProtocolCommand(Action command)
+        {
+            bool shouldFlush = false;
+
+            lock (protocolCommandSyncRoot)
+            {
+                if (isShuttingDown || IsDisposed || Disposing)
+                    return;
+
+                pendingProtocolCommands.Enqueue(command);
+                shouldFlush = IsHandleCreated;
+            }
+
+            if (shouldFlush)
+                FlushPendingProtocolCommands();
+        }
+
+        private void FlushPendingProtocolCommands()
+        {
+            Action[] pendingCommands;
+
+            lock (protocolCommandSyncRoot)
+            {
+                if (isShuttingDown || pendingProtocolCommands.Count == 0)
+                    return;
+
+                pendingCommands = pendingProtocolCommands.ToArray();
+                pendingProtocolCommands.Clear();
+            }
+
+            for (int i = 0; i < pendingCommands.Length; i++)
+                TryDispatchProtocolCommand(pendingCommands[i]);
+        }
+
+        private void ClearPendingProtocolCommands()
+        {
+            lock (protocolCommandSyncRoot)
+                pendingProtocolCommands.Clear();
+        }
+
         private void InvokeUiHostAction(Action action)
         {
             if (action == null)
@@ -855,13 +915,32 @@ namespace readboard
                 AutoMinimize = Program.autoMin,
                 SampleIntervalMs = Program.timeinterval,
                 UseEnhancedCapture = Program.useEnhanceScreen,
+                FoxMoveNumber = ResolveFoxMoveNumber(),
                 PlayColor = GetSelectedPlayColor(),
                 AiTimeValue = GetProtocolNumericValue(textBox1),
                 PlayoutsValue = GetProtocolNumericValue(textBox2),
                 FirstPolicyValue = GetProtocolNumericValue(textBox3)
             };
 
+            UpdateCapturedFoxMoveNumber(snapshot.FoxMoveNumber);
             return snapshot;
+        }
+
+        private int? ResolveFoxMoveNumber()
+        {
+            if (!IsFoxSyncType(CurrentSyncType) || hwnd == IntPtr.Zero)
+                return null;
+
+            WindowDescriptor descriptor;
+            if (!FoxWindowDescriptorFactory.TryCreate(hwnd, factor, out descriptor))
+                return null;
+
+            return FoxMoveNumberParser.Parse(descriptor.Title);
+        }
+
+        private void UpdateCapturedFoxMoveNumber(int? foxMoveNumber)
+        {
+            sessionCoordinator.SetCapturedFoxMoveNumber(foxMoveNumber);
         }
 
         private bool IsSnapshotCaptureCancelled()
@@ -1520,6 +1599,7 @@ namespace readboard
 
                 isShuttingDown = true;
                 placeRequestQueue.Stop();
+                ClearPendingProtocolCommands();
             }
             if (persistConfiguration)
                 PersistConfiguration();
@@ -1538,6 +1618,7 @@ namespace readboard
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
+            FlushPendingProtocolCommands();
             if (!closeRequestedBeforeHandle || IsDisposed)
                 return;
             BeginInvoke((Action)Close);

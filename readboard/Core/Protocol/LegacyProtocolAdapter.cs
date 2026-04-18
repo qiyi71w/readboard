@@ -78,6 +78,11 @@ namespace readboard
             return CreateLegacyMessage(enabled ? "foreFoxWithInBoard" : "notForeFoxWithInBoard");
         }
 
+        public ProtocolMessage CreateFoxMoveNumberMessage(int moveNumber)
+        {
+            return CreateLegacyMessage("foxMoveNumber " + moveNumber);
+        }
+
         public ProtocolMessage CreateStartMessage(int boardWidth, int boardHeight, IntPtr windowHandle, bool includeWindowHandle)
         {
             string line = "start " + boardWidth + " " + boardHeight;

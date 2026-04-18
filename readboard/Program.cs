@@ -232,7 +232,8 @@ namespace readboard
             {
                 sessionCoordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
                 MainForm mainForm = CreateMainForm(options, sessionCoordinator);
-                TryStartSession(mainForm);
+                if (!TryStartSession(mainForm))
+                    return;
                 if (mainForm.IsShutdownRequested)
                     return;
                 mainForm.NotifyProtocolReady();
@@ -286,15 +287,17 @@ namespace readboard
             LoadLanguageItems(baseDirectory, options.Language);
         }
 
-        private static void TryStartSession(IWin32Window owner)
+        private static bool TryStartSession(IWin32Window owner)
         {
             try
             {
                 sessionCoordinator.Start();
+                return true;
             }
             catch
             {
                 MessageBox.Show(owner, GetLangText("connectLizzieFailed"));
+                return false;
             }
         }
 

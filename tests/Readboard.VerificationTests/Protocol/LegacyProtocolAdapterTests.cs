@@ -32,6 +32,16 @@ namespace Readboard.VerificationTests
             Assert.Equal("ready", line);
         }
 
+        [Fact]
+        public void CreateFoxMoveNumberMessage_SerializesLegacyRawText()
+        {
+            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
+
+            string line = adapter.Serialize(adapter.CreateFoxMoveNumberMessage(57));
+
+            Assert.Equal("foxMoveNumber 57", line);
+        }
+
         private static void AssertMove(MoveRequest moveRequest, int? expectedX, int? expectedY)
         {
             if (!expectedX.HasValue || !expectedY.HasValue)

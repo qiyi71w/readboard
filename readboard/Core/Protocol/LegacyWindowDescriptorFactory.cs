@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace readboard
 {
@@ -50,11 +51,13 @@ namespace readboard
             {
                 int processId;
                 GetWindowThreadProcessId(handle, out processId);
-                Process process = Process.GetProcessById(processId);
-                PROCESS_DPI_AWARENESS awareness;
-                if (GetProcessDpiAwareness(process.Handle, out awareness) != 0)
-                    return false;
-                return awareness != PROCESS_DPI_AWARENESS.PROCESS_DPI_UNAWARE;
+                using (Process process = Process.GetProcessById(processId))
+                {
+                    PROCESS_DPI_AWARENESS awareness;
+                    if (GetProcessDpiAwareness(process.Handle, out awareness) != 0)
+                        return false;
+                    return awareness != PROCESS_DPI_AWARENESS.PROCESS_DPI_UNAWARE;
+                }
             }
             catch (Exception)
             {
@@ -91,6 +94,27 @@ namespace readboard
             PROCESS_DPI_UNAWARE = 0,
             PROCESS_SYSTEM_DPI_AWARE = 1,
             PROCESS_PER_MONITOR_DPI_AWARE = 2
+        }
+    }
+
+    internal static class FoxMoveNumberParser
+    {
+        private static readonly Regex MoveNumberPattern = new Regex(@"第\s*(\d+)\s*手", RegexOptions.Compiled);
+
+        public static int? Parse(string title)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+                return null;
+
+            Match match = MoveNumberPattern.Match(title);
+            if (!match.Success)
+                return null;
+
+            int moveNumber;
+            if (!int.TryParse(match.Groups[1].Value, out moveNumber))
+                return null;
+
+            return moveNumber;
         }
     }
 }

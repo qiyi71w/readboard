@@ -51,20 +51,130 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
-        public void SendBoardSnapshot_SendsProtocolLinesOncePerDistinctPayload()
+        public void SendBoardSnapshot_DeduplicatesWhenPayloadAndFoxMoveNumberStayTheSame()
         {
             FakeTransport transport = new FakeTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
-            BoardSnapshot snapshot = new BoardSnapshot
+            BoardSnapshot firstSnapshot = new BoardSnapshot
             {
                 Payload = "payload-1",
+                FoxMoveNumber = 57,
+                ProtocolLines = new[] { "re=000", "re=111" }
+            };
+            BoardSnapshot secondSnapshot = new BoardSnapshot
+            {
+                Payload = "payload-1",
+                FoxMoveNumber = 57,
                 ProtocolLines = new[] { "re=000", "re=111" }
             };
 
-            coordinator.SendBoardSnapshot(snapshot);
+            coordinator.SendBoardSnapshot(firstSnapshot);
+            coordinator.SendBoardSnapshot(secondSnapshot);
+
+            Assert.Equal(new[] { "foxMoveNumber 57", "re=000", "re=111", "end" }, transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_ResendsFullFrameWhenFoxMoveNumberChangesWithoutPayloadChange()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            BoardSnapshot firstSnapshot = CreateSnapshot("payload-1", 57);
+            BoardSnapshot secondSnapshot = CreateSnapshot("payload-1", 58);
+
+            coordinator.SendBoardSnapshot(firstSnapshot);
+            coordinator.SendBoardSnapshot(secondSnapshot);
+
+            Assert.Equal(
+                new[]
+                {
+                    "foxMoveNumber 57", "re=000", "re=111", "end",
+                    "foxMoveNumber 58", "re=000", "re=111", "end"
+                },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_UsesCapturedFoxMoveNumberWhenSnapshotDoesNotProvideOne()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            BoardSnapshot snapshot = CreateSnapshot("payload-1", null);
+
+            coordinator.SetCapturedFoxMoveNumber(57);
             coordinator.SendBoardSnapshot(snapshot);
 
-            Assert.Equal(new[] { "re=000", "re=111", "end" }, transport.SentLines);
+            Assert.Equal(new[] { "foxMoveNumber 57", "re=000", "re=111", "end" }, transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_DeduplicatesWhenPayloadAndCapturedFoxMoveNumberFallbackStayTheSame()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            BoardSnapshot firstSnapshot = CreateSnapshot("payload-1", null);
+            BoardSnapshot secondSnapshot = CreateSnapshot("payload-1", null);
+
+            coordinator.SetCapturedFoxMoveNumber(57);
+            coordinator.SendBoardSnapshot(firstSnapshot);
+            coordinator.SetCapturedFoxMoveNumber(57);
+            coordinator.SendBoardSnapshot(secondSnapshot);
+
+            Assert.Equal(new[] { "foxMoveNumber 57", "re=000", "re=111", "end" }, transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_ResendsFullFrameWhenCapturedFoxMoveNumberFallbackChangesWithoutPayloadChange()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            BoardSnapshot firstSnapshot = CreateSnapshot("payload-1", null);
+            BoardSnapshot secondSnapshot = CreateSnapshot("payload-1", null);
+
+            coordinator.SetCapturedFoxMoveNumber(57);
+            coordinator.SendBoardSnapshot(firstSnapshot);
+            coordinator.SetCapturedFoxMoveNumber(58);
+            coordinator.SendBoardSnapshot(secondSnapshot);
+
+            Assert.Equal(
+                new[]
+                {
+                    "foxMoveNumber 57", "re=000", "re=111", "end",
+                    "foxMoveNumber 58", "re=000", "re=111", "end"
+                },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_ResendsFullFrameWhenCapturedFoxMoveNumberFallbackChangesForTheSameSnapshotInstance()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            BoardSnapshot snapshot = CreateSnapshot("payload-1", null);
+
+            coordinator.SetCapturedFoxMoveNumber(57);
+            coordinator.SendBoardSnapshot(snapshot);
+            coordinator.SetCapturedFoxMoveNumber(58);
+            coordinator.SendBoardSnapshot(snapshot);
+
+            Assert.Null(snapshot.FoxMoveNumber);
+            Assert.Equal(
+                new[]
+                {
+                    "foxMoveNumber 57", "re=000", "re=111", "end",
+                    "foxMoveNumber 58", "re=000", "re=111", "end"
+                },
+                transport.SentLines);
+        }
+
+        private static BoardSnapshot CreateSnapshot(string payload, int? foxMoveNumber)
+        {
+            return new BoardSnapshot
+            {
+                Payload = payload,
+                FoxMoveNumber = foxMoveNumber,
+                ProtocolLines = new[] { "re=000", "re=111" }
+            };
         }
 
         private sealed class FakeTransport : IReadBoardTransport

@@ -12,10 +12,14 @@ namespace readboard
         private readonly IReadBoardTransport transport;
         private readonly IReadBoardProtocolAdapter protocolAdapter;
         private readonly object stateLock = new object();
+        private readonly object outboundProtocolSyncRoot = new object();
         private readonly AutoResetEvent pendingMoveEvent = new AutoResetEvent(false);
         private readonly ManualResetEventSlim continuousSyncStoppedEvent = new ManualResetEventSlim(true);
         private readonly ManualResetEventSlim syncIdleEvent = new ManualResetEventSlim(true);
         private volatile bool acceptingInboundProtocolMessages;
+        private volatile bool outboundProtocolClosed;
+        private int? lastCapturedFoxMoveNumber;
+        private int? lastSentBoardFoxMoveNumber;
         private SessionState sessionState;
         private IProtocolCommandHost host;
 
@@ -87,8 +91,17 @@ namespace readboard
             UpdateSyncIdleEvent();
         }
 
+        public void SetCapturedFoxMoveNumber(int? foxMoveNumber)
+        {
+            lock (stateLock)
+            {
+                lastCapturedFoxMoveNumber = foxMoveNumber;
+            }
+        }
+
         public void Start()
         {
+            outboundProtocolClosed = false;
             acceptingInboundProtocolMessages = true;
             transport.MessageReceived += OnMessageReceived;
             transport.Start();
@@ -96,6 +109,7 @@ namespace readboard
 
         public void Stop()
         {
+            CloseOutboundProtocol();
             acceptingInboundProtocolMessages = false;
             StopSyncSessionCore(false);
             transport.MessageReceived -= OnMessageReceived;
@@ -344,13 +358,17 @@ namespace readboard
             if (protocolLines == null || protocolLines.Count == 0)
                 return;
 
+            int? effectiveFoxMoveNumber = ResolveEffectiveFoxMoveNumber(snapshot.FoxMoveNumber);
             lock (stateLock)
             {
-                if (string.Equals(sessionState.LastBoardPayload, snapshot.Payload, StringComparison.Ordinal))
+                if (string.Equals(sessionState.LastBoardPayload, snapshot.Payload, StringComparison.Ordinal)
+                    && lastSentBoardFoxMoveNumber == effectiveFoxMoveNumber)
                     return;
                 sessionState.LastBoardPayload = snapshot.Payload;
+                lastSentBoardFoxMoveNumber = effectiveFoxMoveNumber;
             }
 
+            SendFoxMoveNumber(effectiveFoxMoveNumber);
             for (int i = 0; i < protocolLines.Count; i++)
                 SendProtocolLine(protocolLines[i]);
             SendProtocolMessage(protocolAdapter.CreateBoardEndMessage());
@@ -454,9 +472,16 @@ namespace readboard
 
         public void SendShutdownProtocol()
         {
-            SendStopSync();
-            SendBothSync(false);
-            SendEndSync();
+            lock (outboundProtocolSyncRoot)
+            {
+                if (outboundProtocolClosed)
+                    return;
+
+                SendProtocolMessageCore(protocolAdapter.CreateStopSyncMessage());
+                SendProtocolMessageCore(protocolAdapter.CreateBothSyncMessage(false));
+                SendProtocolMessageCore(protocolAdapter.CreateEndSyncMessage());
+                outboundProtocolClosed = true;
+            }
         }
 
         public void SendLine(string line)
@@ -466,7 +491,13 @@ namespace readboard
 
         public void SendError(string message)
         {
-            transport.SendError(message);
+            lock (outboundProtocolSyncRoot)
+            {
+                if (outboundProtocolClosed)
+                    return;
+
+                transport.SendError(message);
+            }
         }
 
         private void OnMessageReceived(object sender, string rawLine)
@@ -521,10 +552,30 @@ namespace readboard
                 && snapshot.BoardState[index] != BoardCellState.Empty;
         }
 
+        private int? ResolveEffectiveFoxMoveNumber(int? foxMoveNumber)
+        {
+            if (foxMoveNumber.HasValue)
+                return foxMoveNumber;
+
+            lock (stateLock)
+            {
+                return lastCapturedFoxMoveNumber;
+            }
+        }
+
+        private void SendFoxMoveNumber(int? foxMoveNumber)
+        {
+            if (!foxMoveNumber.HasValue)
+                return;
+
+            SendProtocolMessage(protocolAdapter.CreateFoxMoveNumberMessage(foxMoveNumber.Value));
+        }
+
         private void ResetSyncCachesCore()
         {
             sessionState.LastBoardPayload = null;
             sessionState.LastOverlayProtocolLine = null;
+            lastSentBoardFoxMoveNumber = null;
         }
 
         private bool TryCompletePendingMove(bool success)
@@ -582,9 +633,27 @@ namespace readboard
 
         private void SendProtocolMessage(ProtocolMessage message)
         {
+            lock (outboundProtocolSyncRoot)
+            {
+                if (outboundProtocolClosed)
+                    return;
+
+                SendProtocolMessageCore(message);
+            }
+        }
+
+        private void CloseOutboundProtocol()
+        {
+            lock (outboundProtocolSyncRoot)
+                outboundProtocolClosed = true;
+        }
+
+        private void SendProtocolMessageCore(ProtocolMessage message)
+        {
             string line = protocolAdapter.Serialize(message);
             if (string.IsNullOrWhiteSpace(line))
                 return;
+
             transport.Send(line);
         }
     }

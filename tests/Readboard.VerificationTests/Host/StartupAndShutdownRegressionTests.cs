@@ -89,6 +89,15 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void ResolveFoxMoveNumber_SupportsAllFoxSyncModes()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private int? ResolveFoxMoveNumber()");
+
+            Assert.Contains("IsFoxSyncType(CurrentSyncType)", methodSlice);
+        }
+
+        [Fact]
         public void ShowInBoardToggle_ReplaysForegroundFoxProtocolStateImmediately()
         {
             string source = LoadSource("readboard", "Form1.cs");
@@ -359,6 +368,49 @@ namespace Readboard.VerificationTests.Host
             string source = LoadSource("readboard", "Program.cs");
 
             Assert.Equal(3, CountOccurrences(source, "if (mainForm.IsShutdownRequested)"));
+        }
+
+        [Fact]
+        public void Program_Main_StopsStartupHandshakeWhenSessionStartFails()
+        {
+            string source = LoadSource("readboard", "Program.cs");
+            int startCheckIndex = IndexOfRequired(source, "if (!TryStartSession(mainForm))");
+            int readyIndex = IndexOfRequired(source, "mainForm.NotifyProtocolReady();");
+            int runIndex = IndexOfRequired(source, "Application.Run(mainForm);");
+
+            Assert.True(startCheckIndex < readyIndex, "Startup failure must short-circuit the ready handshake.");
+            Assert.True(startCheckIndex < runIndex, "Startup failure must short-circuit the run loop.");
+        }
+
+        [Fact]
+        public void Program_TryStartSession_ReturnsFailureStateToCaller()
+        {
+            string source = LoadSource("readboard", "Program.cs");
+            string methodSlice = GetMethodSlice(source, "private static bool TryStartSession(IWin32Window owner)");
+
+            Assert.Contains("return true;", methodSlice);
+            Assert.Contains("return false;", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_DispatchProtocolCommand_QueuesInboundCommandsUntilHandleExists()
+        {
+            string source = LoadSource("readboard", "MainForm.Protocol.cs");
+            string methodSlice = GetMethodSlice(source, "void IProtocolCommandHost.DispatchProtocolCommand(Action command)");
+
+            Assert.Contains("if (TryDispatchProtocolCommand(command))", methodSlice);
+            Assert.Contains("EnqueuePendingProtocolCommand(command);", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_OnHandleCreated_FlushesQueuedProtocolCommandsBeforePendingClose()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "protected override void OnHandleCreated(EventArgs e)");
+            int flushIndex = IndexOfRequired(methodSlice, "FlushPendingProtocolCommands();");
+            int closeIndex = IndexOfRequired(methodSlice, "if (!closeRequestedBeforeHandle || IsDisposed)");
+
+            Assert.True(flushIndex < closeIndex, "Queued inbound protocol commands must re-enter on UI after handle creation.");
         }
 
         private static string LoadSource(params string[] segments)

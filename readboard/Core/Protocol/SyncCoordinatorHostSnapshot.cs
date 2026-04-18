@@ -64,6 +64,7 @@ namespace readboard
         public int BoardHeight { get; set; }
         public PixelRect SelectionBounds { get; set; }
         public IntPtr SelectedWindowHandle { get; set; }
+        public int? FoxMoveNumber { get; set; }
         public float DpiScale { get; set; }
         public string LegacyTypeToken { get; set; }
         public bool ShowInBoard { get; set; }

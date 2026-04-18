@@ -21,6 +21,17 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void MainForm_ReportsCapturedFoxMoveNumberThroughCoordinatorInterface()
+        {
+            string formSource = LoadSource("readboard", "Form1.cs");
+            string coordinatorSource = LoadSource("readboard", "Core", "Protocol", "ISyncSessionCoordinator.cs");
+
+            Assert.Contains("void SetCapturedFoxMoveNumber(int? foxMoveNumber);", coordinatorSource);
+            Assert.Contains("sessionCoordinator.SetCapturedFoxMoveNumber(foxMoveNumber);", formSource);
+            Assert.DoesNotContain("((SyncSessionCoordinator)sessionCoordinator)", formSource);
+        }
+
+        [Fact]
         public void Program_DefersMainFormRuntimeCompositionToDedicatedComposer()
         {
             string source = LoadSource("readboard", "Program.cs");

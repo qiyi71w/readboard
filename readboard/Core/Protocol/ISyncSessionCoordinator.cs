@@ -14,6 +14,7 @@ namespace readboard
         bool IsContinuousSyncing { get; }
         bool SyncBoth { get; }
         void SetSyncBoth(bool enabled);
+        void SetCapturedFoxMoveNumber(int? foxMoveNumber);
         void BeginContinuousSync();
         void EndContinuousSync();
         void BeginKeepSync();

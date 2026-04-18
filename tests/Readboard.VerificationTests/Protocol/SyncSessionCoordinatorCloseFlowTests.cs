@@ -59,11 +59,51 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal(0, host.QuitCount);
         }
 
+        [Fact]
+        public void SendShutdownProtocol_ClosesOutboundProtocolAfterShutdownSequence()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SendLine("re=123");
+            coordinator.SendShutdownProtocol();
+            coordinator.SendLine("tail-after-shutdown");
+            coordinator.Stop();
+            coordinator.SendLine("tail-after-stop");
+
+            Assert.Equal(
+                new[]
+                {
+                    "re=123",
+                    "stopsync",
+                    "nobothSync",
+                    "endsync"
+                },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void SendShutdownProtocol_AndStop_CloseErrorChannel()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SendError("before-shutdown");
+            coordinator.SendShutdownProtocol();
+            coordinator.SendError("after-shutdown");
+            coordinator.Stop();
+            coordinator.SendError("after-stop");
+
+            Assert.Equal(new[] { "before-shutdown" }, transport.ErrorMessages);
+        }
+
         private sealed class RecordingTransport : IReadBoardTransport
         {
             public event EventHandler<string> MessageReceived;
 
             public bool IsConnected { get; private set; }
+            public List<string> SentLines { get; } = new List<string>();
+            public List<string> ErrorMessages { get; } = new List<string>();
 
             public void Dispose()
             {
@@ -76,10 +116,12 @@ namespace Readboard.VerificationTests.Protocol
 
             public void Send(string line)
             {
+                SentLines.Add(line);
             }
 
             public void SendError(string message)
             {
+                ErrorMessages.Add(message);
             }
 
             public void Start()
