@@ -30,6 +30,7 @@ namespace readboard
         public bool Completed { get; set; }
         public bool Succeeded { get; set; }
         public bool VerifyMove { get; set; }
+        public bool PlacementInProgress { get; set; }
 
         public void Reset()
         {
@@ -40,6 +41,7 @@ namespace readboard
             Completed = false;
             Succeeded = false;
             VerifyMove = false;
+            PlacementInProgress = false;
         }
     }
 }

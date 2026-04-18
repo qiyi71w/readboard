@@ -145,6 +145,33 @@ namespace Readboard.VerificationTests.Recognition
         }
 
         [Fact]
+        public void Recognize_ReusedNativeSyncViewportRefreshesCurrentScreenBounds()
+        {
+            LegacyBoardRecognitionService service = new LegacyBoardRecognitionService();
+            BoardFrame firstFrame = CreateFullWindowSeedFrame(SyncMode.Fox, screenX: 10, screenY: 20);
+            BoardFrame secondFrame = CreateFullWindowSeedFrame(SyncMode.Fox, screenX: 120, screenY: 230);
+
+            BoardRecognitionResult first = service.Recognize(new BoardRecognitionRequest
+            {
+                Frame = firstFrame,
+                InferLastMove = false
+            });
+            BoardRecognitionResult second = service.Recognize(new BoardRecognitionRequest
+            {
+                Frame = secondFrame,
+                InferLastMove = false
+            });
+
+            Assert.True(first.Success, first.FailureReason);
+            Assert.True(second.Success, second.FailureReason);
+            Assert.True(second.UsedCachedSnapshot);
+            Assert.Equal(120, second.Viewport.ScreenBounds.X);
+            Assert.Equal(230, second.Viewport.ScreenBounds.Y);
+            Assert.Equal(secondFrame.Viewport.ScreenBounds.Width, second.Viewport.ScreenBounds.Width);
+            Assert.Equal(secondFrame.Viewport.ScreenBounds.Height, second.Viewport.ScreenBounds.Height);
+        }
+
+        [Fact]
         public void TryResolveViewport_NormalizesProjectedBackgroundSelectionToFullCapturedImage()
         {
             BoardViewport viewport = ResolveViewport(new BoardFrame
@@ -188,7 +215,7 @@ namespace Readboard.VerificationTests.Recognition
             return viewport;
         }
 
-        private static BoardFrame CreateFullWindowSeedFrame(SyncMode syncMode)
+        private static BoardFrame CreateFullWindowSeedFrame(SyncMode syncMode, int screenX = 10, int screenY = 20)
         {
             Bitmap bitmap = CreateModeBitmap(syncMode);
             return new BoardFrame
@@ -200,7 +227,7 @@ namespace Readboard.VerificationTests.Recognition
                 Viewport = new BoardViewport
                 {
                     SourceBounds = new PixelRect(0, 0, bitmap.Width, bitmap.Height),
-                    ScreenBounds = new PixelRect(10, 20, bitmap.Width, bitmap.Height),
+                    ScreenBounds = new PixelRect(screenX, screenY, bitmap.Width, bitmap.Height),
                     CellWidth = bitmap.Width / 5d,
                     CellHeight = bitmap.Height / 5d
                 }

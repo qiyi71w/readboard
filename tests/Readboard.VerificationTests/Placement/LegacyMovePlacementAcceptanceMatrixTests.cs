@@ -14,6 +14,14 @@ namespace Readboard.VerificationTests.Placement
             yield return new object[] { (int)SyncMode.FoxBackgroundPlace, (int)PlacementPathKind.BackgroundSend };
         }
 
+        public static IEnumerable<object[]> CancellationCases()
+        {
+            yield return new object[] { (int)SyncMode.Foreground, false };
+            yield return new object[] { (int)SyncMode.Background, false };
+            yield return new object[] { (int)SyncMode.FoxBackgroundPlace, false };
+            yield return new object[] { (int)SyncMode.Fox, true };
+        }
+
         [Fact]
         public void Place_FoxLightweightInteropUsesLwWhenDllIsAvailable()
         {
@@ -69,6 +77,32 @@ namespace Readboard.VerificationTests.Placement
             Assert.Equal(expectedPath, result.PlacementPath);
             Assert.Empty(nativeMethods.ForegroundClicks);
             AssertPlacementMessages(expectedPath, nativeMethods);
+        }
+
+        [Theory]
+        [MemberData(nameof(CancellationCases))]
+        public void Place_CancelledRequest_SkipsPlacementSideEffects(
+            int syncModeValue,
+            bool useLightweightInterop)
+        {
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
+            RecordingLightweightClient client = new RecordingLightweightClient();
+            LegacyMovePlacementService service = new LegacyMovePlacementService(
+                nativeMethods,
+                new RecordingLightweightFactory(client));
+            MovePlacementRequest request = CreateRequest((SyncMode)syncModeValue, useLightweightInterop);
+            request.ShouldCancel = delegate { return true; };
+
+            MovePlacementResult result = service.Place(request);
+
+            Assert.False(result.Success);
+            Assert.Equal(MovePlacementFailureKind.PlacementFailed, result.FailureKind);
+            Assert.Equal("Placement cancelled.", result.FailureReason);
+            Assert.Empty(nativeMethods.ForegroundClicks);
+            Assert.Empty(nativeMethods.PostedMessages);
+            Assert.Empty(nativeMethods.SentMessages);
+            Assert.Equal(IntPtr.Zero, client.BoundHandle);
+            Assert.False(client.LeftClicked);
         }
 
         private static void AssertPlacementMessages(

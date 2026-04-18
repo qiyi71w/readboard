@@ -152,7 +152,7 @@ namespace readboard
                 return null;
 
             BoardViewport viewport = CloneViewport(cachedViewport) ?? new BoardViewport();
-            if (viewport.ScreenBounds == null && currentViewport != null)
+            if (currentViewport != null && currentViewport.ScreenBounds != null)
                 viewport.ScreenBounds = CloneRect(currentViewport.ScreenBounds);
             return viewport;
         }

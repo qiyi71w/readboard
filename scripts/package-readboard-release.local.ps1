@@ -17,6 +17,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectRoot = Join-Path $repoRoot 'readboard'
+$solutionFile = Join-Path $repoRoot 'readboard.sln'
+$nugetConfigPath = Join-Path $repoRoot 'NuGet.Config'
 $projectFile = Join-Path $projectRoot 'readboard.csproj'
 $assemblyInfoPath = Join-Path $projectRoot 'Properties\AssemblyInfo.cs'
 
@@ -33,15 +35,24 @@ $buildPatterns = @(
     'readboard.exe.config',
     'readboard.pdb',
     'MouseKeyboardActivityMonitor.dll',
-    'OpenCvSharp*.dll',
     'OpenCvSharp*.pdb',
     'OpenCvSharp*.xml'
 )
 
-$staticPatterns = @(
+$optionalStaticPatterns = @(
     'language_*.txt',
-    'readme*.rtf',
+    'readme*.rtf'
+)
+
+$requiredStaticFiles = @(
     'lw.dll'
+)
+
+$managedRuntimeFiles = @(
+    'OpenCvSharp.dll',
+    'OpenCvSharp.Blob.dll',
+    'OpenCvSharp.Extensions.dll',
+    'OpenCvSharp.UserInterface.dll'
 )
 
 $nativeRuntimeFiles = @(
@@ -52,10 +63,8 @@ $nativeRuntimeFiles = @(
 $requiredBuildFiles = @(
     'readboard.exe',
     'readboard.exe.config',
-    'MouseKeyboardActivityMonitor.dll',
-    'dll\x86\OpenCvSharpExtern.dll',
-    'dll\x86\opencv_ffmpeg400.dll'
-)
+    'MouseKeyboardActivityMonitor.dll'
+) + $managedRuntimeFiles + $nativeRuntimeFiles
 
 function Get-ReleaseVersion {
     param([string]$Path)
@@ -89,12 +98,44 @@ function Get-ReleaseVersion {
     }
 }
 
-function Assert-ExecutablePath {
+function Assert-PathExists {
     param([string]$Path, [string]$Label)
 
     if (-not (Test-Path -LiteralPath $Path)) {
         throw "未找到${Label}: $Path"
     }
+}
+
+function Invoke-MSBuildProcess {
+    param(
+        [string]$ResolvedMSBuildPath,
+        [string[]]$Arguments,
+        [string]$OperationName
+    )
+
+    $process = Start-Process -FilePath $ResolvedMSBuildPath -ArgumentList $arguments -NoNewWindow -Wait -PassThru
+    if ($process.ExitCode -ne 0) {
+        throw "$OperationName 失败，MSBuild 退出码: $($process.ExitCode)"
+    }
+}
+
+function Invoke-LegacyPackageRestore {
+    param(
+        [string]$ResolvedMSBuildPath,
+        [string]$ResolvedSolutionFile,
+        [string]$ResolvedNuGetConfigPath
+    )
+
+    $arguments = @(
+        $ResolvedSolutionFile,
+        '/t:Restore',
+        '/p:RestorePackagesConfig=true',
+        "/p:RestoreConfigFile=$ResolvedNuGetConfigPath",
+        '/nologo',
+        '/v:m'
+    )
+
+    Invoke-MSBuildProcess -ResolvedMSBuildPath $ResolvedMSBuildPath -Arguments $arguments -OperationName '依赖还原'
 }
 
 function Invoke-ProjectBuild {
@@ -105,7 +146,7 @@ function Invoke-ProjectBuild {
 
     $arguments = @(
         $ResolvedProjectFile,
-        '/t:Rebuild',
+        '/t:Build',
         "/p:Configuration=$Configuration",
         "/p:Platform=$Platform",
         '/p:TargetFrameworkVersion=v4.8',
@@ -113,10 +154,7 @@ function Invoke-ProjectBuild {
         '/v:m'
     )
 
-    $process = Start-Process -FilePath $ResolvedMSBuildPath -ArgumentList $arguments -NoNewWindow -Wait -PassThru
-    if ($process.ExitCode -ne 0) {
-        throw "构建失败，MSBuild 退出码: $($process.ExitCode)"
-    }
+    Invoke-MSBuildProcess -ResolvedMSBuildPath $ResolvedMSBuildPath -Arguments $arguments -OperationName '构建'
 }
 
 function Assert-RequiredFiles {
@@ -170,6 +208,19 @@ function Copy-RelativeFiles {
     }
 }
 
+function Update-ReleaseArtifactTimestamps {
+    param(
+        [string]$ReleaseDirectory,
+        [DateTime]$TimestampUtc
+    )
+
+    foreach ($file in Get-ChildItem -LiteralPath $ReleaseDirectory -Recurse -File) {
+        $file.LastWriteTimeUtc = $TimestampUtc
+    }
+
+    (Get-Item -LiteralPath $ReleaseDirectory).LastWriteTimeUtc = $TimestampUtc
+}
+
 function New-ReleaseArchive {
     param(
         [string]$SourceDirectory,
@@ -189,8 +240,14 @@ $releaseDirectory = Join-Path $ReleaseRoot $releaseDirectoryName
 $releaseZipPath = Join-Path $ReleaseRoot ($releaseDirectoryName + '.zip')
 $resolvedReleaseZipPath = $releaseZipPath
 
-Assert-ExecutablePath -Path $MSBuildPath -Label 'MSBuild.exe'
+Assert-PathExists -Path $MSBuildPath -Label 'MSBuild.exe'
 if (-not $SkipBuild) {
+    Assert-PathExists -Path $solutionFile -Label 'readboard.sln'
+    Assert-PathExists -Path $nugetConfigPath -Label 'NuGet.Config'
+
+    Write-Host "Restoring legacy packages with $MSBuildPath"
+    Invoke-LegacyPackageRestore -ResolvedMSBuildPath $MSBuildPath -ResolvedSolutionFile $solutionFile -ResolvedNuGetConfigPath $nugetConfigPath
+
     Write-Host "Building $($versionInfo.TagVersion) with $MSBuildPath"
     Invoke-ProjectBuild -ResolvedMSBuildPath $MSBuildPath -ResolvedProjectFile $projectFile
 }
@@ -203,8 +260,12 @@ if (Test-Path -LiteralPath $releaseDirectory) {
 
 New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
 Copy-MatchingFiles -SourceDir $BuildOutputDir -Patterns $buildPatterns -DestinationDir $releaseDirectory
-Copy-MatchingFiles -SourceDir $projectRoot -Patterns $staticPatterns -DestinationDir $releaseDirectory
+Copy-MatchingFiles -SourceDir $projectRoot -Patterns $optionalStaticPatterns -DestinationDir $releaseDirectory
+Copy-RelativeFiles -SourceDir $projectRoot -RelativePaths $requiredStaticFiles -DestinationDir $releaseDirectory
+Copy-RelativeFiles -SourceDir $BuildOutputDir -RelativePaths $managedRuntimeFiles -DestinationDir $releaseDirectory
 Copy-RelativeFiles -SourceDir $BuildOutputDir -RelativePaths $nativeRuntimeFiles -DestinationDir $releaseDirectory
+$packageTimestampUtc = [DateTime]::UtcNow
+Update-ReleaseArtifactTimestamps -ReleaseDirectory $releaseDirectory -TimestampUtc $packageTimestampUtc
 if ($SkipZip) {
     if (Test-Path -LiteralPath $resolvedReleaseZipPath) {
         Remove-Item -LiteralPath $resolvedReleaseZipPath -Force

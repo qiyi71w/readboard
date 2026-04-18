@@ -17,11 +17,6 @@ namespace readboard
             ApplyBoardSelection(config);
             ApplySyncModeSelection();
             ApplySyncModeControlState();
-            if (posX != -1 && posY != -1)
-            {
-                Point desiredLocation = new Point(posX, posY);
-                Location = ClampToScreenWorkingArea(desiredLocation, Size);
-            }
             chkShowInBoard.Checked = Program.showInBoard;
             Program.showInBoard = chkShowInBoard.Checked;
             ApplySyncModeControlState();

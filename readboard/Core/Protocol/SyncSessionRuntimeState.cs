@@ -12,7 +12,6 @@ namespace readboard
         public IntPtr SelectedWindowHandle { get; set; }
         public int CurrentBoardPixelWidth { get; set; }
         public int CurrentBoardPixelHeight { get; set; }
-        public bool ReleasePlacementBindingRequired { get; set; }
         public BoardFrame CurrentBoardFrame { get; set; }
         public bool PreferPrintWindow { get; set; }
         public bool InitialProbePending { get; set; }

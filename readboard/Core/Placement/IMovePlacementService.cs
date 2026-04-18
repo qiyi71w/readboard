@@ -223,6 +223,9 @@ namespace readboard
             PlacementPathKind path,
             PlacementPoint point)
         {
+            MovePlacementResult cancellationFailure = FailIfCancellationRequested(request, path);
+            if (cancellationFailure != null)
+                return cancellationFailure;
             if (path == PlacementPathKind.Foreground)
                 return PlaceForeground(request, point);
             if (path == PlacementPathKind.BackgroundPost)
@@ -234,7 +237,13 @@ namespace readboard
 
         private MovePlacementResult PlaceForeground(MovePlacementRequest request, PlacementPoint point)
         {
+            MovePlacementResult cancellationFailure = FailIfCancellationRequested(request, PlacementPathKind.Foreground);
+            if (cancellationFailure != null)
+                return cancellationFailure;
             ActivateTargetWindowIfNeeded(request);
+            cancellationFailure = FailIfCancellationRequested(request, PlacementPathKind.Foreground);
+            if (cancellationFailure != null)
+                return cancellationFailure;
             bool holdButtonBeforeRelease = request.Frame.SyncMode == SyncMode.Fox;
             if (!nativeMethods.TryForegroundLeftClick(point.X, point.Y, holdButtonBeforeRelease))
                 return Failure(request, PlacementPathKind.Foreground, MovePlacementFailureKind.PlacementFailed, "Foreground click failed.");
@@ -274,6 +283,9 @@ namespace readboard
 
         private MovePlacementResult PlaceBackgroundPost(MovePlacementRequest request, PlacementPoint point)
         {
+            MovePlacementResult cancellationFailure = FailIfCancellationRequested(request, PlacementPathKind.BackgroundPost);
+            if (cancellationFailure != null)
+                return cancellationFailure;
             IntPtr handle = ResolveTargetHandle(request);
             int lParam = BuildMouseLParam(point.X, point.Y);
             bool downPosted = nativeMethods.TryPostMouseMessage(handle, NativePlacementConstants.WmLButtonDown, 0, lParam);
@@ -285,6 +297,9 @@ namespace readboard
 
         private MovePlacementResult PlaceBackgroundSend(MovePlacementRequest request, PlacementPoint point)
         {
+            MovePlacementResult cancellationFailure = FailIfCancellationRequested(request, PlacementPathKind.BackgroundSend);
+            if (cancellationFailure != null)
+                return cancellationFailure;
             IntPtr handle = ResolveTargetHandle(request);
             int lParam = BuildMouseLParam(point.X, point.Y);
             nativeMethods.SendMouseMessage(handle, NativePlacementConstants.WmMouseMove, 0, lParam);
@@ -295,11 +310,17 @@ namespace readboard
 
         private MovePlacementResult PlaceLightweight(MovePlacementRequest request, PlacementPoint point)
         {
+            MovePlacementResult cancellationFailure = FailIfCancellationRequested(request, PlacementPathKind.LightweightInterop);
+            if (cancellationFailure != null)
+                return cancellationFailure;
             IntPtr handle = ResolveTargetHandle(request);
             using (IPlacementLightweightInteropClient client = lightweightInteropFactory.Create())
             {
                 if (!client.BindWindow(handle))
                     return Failure(request, PlacementPathKind.LightweightInterop, MovePlacementFailureKind.PlacementFailed, "lw BindWindow failed.");
+                cancellationFailure = FailIfCancellationRequested(request, PlacementPathKind.LightweightInterop);
+                if (cancellationFailure != null)
+                    return cancellationFailure;
                 client.MoveTo(point.X, point.Y);
                 client.LeftClick();
             }
@@ -321,6 +342,15 @@ namespace readboard
         private static bool IsUsable(PixelRect bounds)
         {
             return bounds != null && !bounds.IsEmpty;
+        }
+
+        private static MovePlacementResult FailIfCancellationRequested(
+            MovePlacementRequest request,
+            PlacementPathKind path)
+        {
+            if (request == null || request.ShouldCancel == null || !request.ShouldCancel())
+                return null;
+            return Failure(request, path, MovePlacementFailureKind.PlacementFailed, "Placement cancelled.");
         }
 
         private static MovePlacementResult Success(MovePlacementRequest request, PlacementPathKind path)

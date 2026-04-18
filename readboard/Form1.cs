@@ -9,6 +9,7 @@ using System.Threading;
 using MouseKeyboardActivityMonitor;
 using MouseKeyboardActivityMonitor.WinApi;
 using System.Runtime.InteropServices;
+using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.ComponentModel;
@@ -60,6 +61,8 @@ namespace readboard
         private readonly ToolTip showInBoardShortcutToolTip = new ToolTip();
         private static readonly IWindowDescriptorFactory FoxWindowDescriptorFactory = new LegacyWindowDescriptorFactory();
         private readonly Queue<Action> pendingProtocolCommands = new Queue<Action>();
+        private readonly BackgroundSelectionWindowBindingCoordinator backgroundSelectionWindowBindingCoordinator =
+            new BackgroundSelectionWindowBindingCoordinator();
 
         int posX = -1;
         int posY = -1;
@@ -266,9 +269,9 @@ namespace readboard
             ArrangeMainBoardSection();
             ArrangeMainSyncSection();
             ArrangeMainActions();
-            RestoreSavedWindowLocation();
             ResumeLayout(false);
             PerformLayout();
+            RestoreSavedWindowLocation();
         }
 
         private void ApplyMainFormTypography()
@@ -858,17 +861,42 @@ namespace readboard
         {
             Action[] pendingCommands;
 
-            lock (protocolCommandSyncRoot)
-            {
-                if (isShuttingDown || pendingProtocolCommands.Count == 0)
-                    return;
-
-                pendingCommands = pendingProtocolCommands.ToArray();
-                pendingProtocolCommands.Clear();
-            }
+            if (!TryTakePendingProtocolCommands(out pendingCommands))
+                return;
 
             for (int i = 0; i < pendingCommands.Length; i++)
                 TryDispatchProtocolCommand(pendingCommands[i]);
+        }
+
+        internal void DrainStartupProtocolCommands()
+        {
+            Action[] pendingCommands;
+
+            while (TryTakePendingProtocolCommands(out pendingCommands))
+            {
+                for (int i = 0; i < pendingCommands.Length; i++)
+                {
+                    if (isShuttingDown)
+                        return;
+                    pendingCommands[i]();
+                }
+            }
+        }
+
+        private bool TryTakePendingProtocolCommands(out Action[] pendingCommands)
+        {
+            lock (protocolCommandSyncRoot)
+            {
+                if (isShuttingDown || pendingProtocolCommands.Count == 0)
+                {
+                    pendingCommands = null;
+                    return false;
+                }
+
+                pendingCommands = pendingProtocolCommands.ToArray();
+                pendingProtocolCommands.Clear();
+                return true;
+            }
         }
 
         private void ClearPendingProtocolCommands()
@@ -1033,8 +1061,9 @@ namespace readboard
         private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)
         {
             btnKeepSync.Text = getLangStr("keepSync") + "(" + Program.timename + "ms)";
-            if (!continuousSyncActive)
-                btnFastSync.Text = getLangStr("fastSync");
+            if (!SyncToolbarTextResolver.ShouldRestoreIdleUiAfterKeepSyncStop(continuousSyncActive))
+                return;
+            btnFastSync.Text = getLangStr("fastSync");
             btnKeepSync.Enabled = true;
             SetSyncConfigurationControlsEnabled(true);
             RestoreBoardSelectionControls();
@@ -1050,11 +1079,14 @@ namespace readboard
 
         private void ApplyContinuousSyncStoppedUi()
         {
-            if (sessionCoordinator.StartedSync)
-            {
-                btnFastSync.Text = getLangStr("fastSync");
+            bool keepSyncActive = sessionCoordinator.StartedSync;
+            btnFastSync.Text = SyncToolbarTextResolver.ResolveFastSyncTextAfterContinuousStop(
+                keepSyncActive,
+                getLangStr("stopSync"),
+                getLangStr("fastSync"));
+
+            if (keepSyncActive)
                 return;
-            }
             ApplyKeepSyncStoppedUi(false);
         }
 
@@ -1396,10 +1428,14 @@ namespace readboard
                 Math.Max(x1, x2),
                 Math.Max(y1, y2));
             if (!TryFinalizeSelectionBounds())
+            {
                 MessageBox.Show(getLangStr("recgnizeFaild"));// Program.isChn ? "不能识别棋盘,请调整被同步棋盘大小后重新选择或尝试[框选1路线]" : "Can not detect board,Please zoom the board and try again or use [CircleRow1]");
+                RestoreMainWindowAfterSelection();
+            }
             else if (CurrentSyncType == TYPE_BACKGROUND)
                 BeginResolveBackgroundSelectionWindowAsync();
-            this.WindowState = FormWindowState.Normal;
+            else
+                RestoreMainWindowAfterSelection();
             //mh.Enabled = false;
         }
 
@@ -1437,25 +1473,30 @@ namespace readboard
             return true;
         }
 
-        private async void BeginResolveBackgroundSelectionWindowAsync()
+        private void BeginResolveBackgroundSelectionWindowAsync()
         {
-            System.Drawing.Point originalCursorPosition = Control.MousePosition;
             System.Drawing.Point selectionCenter = new System.Drawing.Point((selectionX1 + ox2) / 2, (selectionY1 + oy2) / 2);
-            try
-            {
-                SetCursorPos(selectionCenter.X, selectionCenter.Y);
-                // Let the transparent selection overlay fully disappear before hit-testing the target window.
-                await Task.Delay(40);
-                hwnd = getMousePointHwnd();
-            }
-            catch (Exception ex)
-            {
-                SendError(ex.ToString());
-            }
-            finally
-            {
-                SetCursorPos(originalCursorPosition.X, originalCursorPosition.Y);
-            }
+            backgroundSelectionWindowBindingCoordinator.Start(
+                selectionCenter,
+                WindowFromPoint,
+                delegate(IntPtr handle)
+                {
+                    hwnd = handle;
+                },
+                delegate
+                {
+                    RestoreMainWindowAfterSelection();
+                },
+                delegate(Exception ex)
+                {
+                    SendError(ex.ToString());
+                });
+        }
+
+        private void RestoreMainWindowAfterSelection()
+        {
+            Show();
+            WindowState = FormWindowState.Normal;
         }
 
         void mh_MouseMoveEvent(object sender, MouseEventArgs e)
@@ -1592,27 +1633,35 @@ namespace readboard
 
         public void shutdown(bool persistConfiguration)
         {
+            List<Exception> shutdownExceptions = new List<Exception>();
+
             lock (placeProtocolSyncRoot)
             {
                 if (isShuttingDown)
                     return;
 
                 isShuttingDown = true;
-                placeRequestQueue.Stop();
-                ClearPendingProtocolCommands();
+                RunShutdownStep(shutdownExceptions, delegate { placeRequestQueue.Stop(); });
+                RunShutdownStep(shutdownExceptions, delegate { ClearPendingProtocolCommands(); });
             }
             if (persistConfiguration)
-                PersistConfiguration();
-            DisposeInputHooks();
-            SendShutdownProtocol();
-            Program.DisposeBitmap();
-            sessionCoordinator.Stop();
-            if (!IsHandleCreated)
+                RunShutdownStep(shutdownExceptions, delegate { PersistConfiguration(); });
+            RunShutdownStep(shutdownExceptions, delegate { DisposeInputHooks(); });
+            RunShutdownStep(shutdownExceptions, delegate { SendShutdownProtocol(); });
+            RunShutdownStep(shutdownExceptions, delegate { Program.DisposeBitmap(); });
+            RunShutdownStep(shutdownExceptions, delegate { sessionCoordinator.Stop(); });
+            RunShutdownStep(shutdownExceptions, delegate
             {
-                closeRequestedBeforeHandle = true;
-                return;
-            }
-            BeginInvoke((Action)Close);
+                if (!IsHandleCreated)
+                {
+                    closeRequestedBeforeHandle = true;
+                    return;
+                }
+                if (IsDisposed || Disposing)
+                    return;
+                BeginInvoke((Action)Close);
+            });
+            ThrowShutdownExceptions(shutdownExceptions);
         }
 
         protected override void OnHandleCreated(EventArgs e)
@@ -1642,6 +1691,27 @@ namespace readboard
             mh.Stop();
             mh.Dispose();
             mh = null;
+        }
+
+        private static void RunShutdownStep(List<Exception> shutdownExceptions, Action shutdownStep)
+        {
+            try
+            {
+                shutdownStep();
+            }
+            catch (Exception ex)
+            {
+                shutdownExceptions.Add(ex);
+            }
+        }
+
+        private static void ThrowShutdownExceptions(List<Exception> shutdownExceptions)
+        {
+            if (shutdownExceptions.Count == 0)
+                return;
+            if (shutdownExceptions.Count == 1)
+                ExceptionDispatchInfo.Capture(shutdownExceptions[0]).Throw();
+            throw new AggregateException("MainForm shutdown failed.", shutdownExceptions);
         }
 
         private void form_closing(object sender, FormClosingEventArgs e)
@@ -1782,8 +1852,6 @@ namespace readboard
             Wheel = 0x0800,
             Absolute = 0x8000
         }
-        [DllImport("user32.dll")]
-        private static extern int SetCursorPos(int x, int y);
         [DllImport("User32")]
         public extern static void mouse_event(int dwFlags, int dx, int dy, int dwData, IntPtr dwExtraInfo);
 
@@ -2057,7 +2125,7 @@ namespace readboard
             mh.Enabled = true;
             this.WindowState = FormWindowState.Minimized;
             form2 = new Form2(this, isMannulCircle);
-            form2.ShowDialog();
+            form2.ShowDialog(this);
         }
 
     }

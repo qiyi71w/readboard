@@ -54,6 +54,7 @@
     <Compile Include="..\..\readboard\Core\Protocol\ISyncCoordinatorHost.cs" Link="Production\Core\Protocol\ISyncCoordinatorHost.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\ISyncSessionCoordinator.cs" Link="Production\Core\Protocol\ISyncSessionCoordinator.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\ISyncWindowLocator.cs" Link="Production\Core\Protocol\ISyncWindowLocator.cs" />
+    <Compile Include="..\..\readboard\Core\Protocol\BackgroundSelectionWindowBindingCoordinator.cs" Link="Production\Core\Protocol\BackgroundSelectionWindowBindingCoordinator.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\IWindowDescriptorFactory.cs" Link="Production\Core\Protocol\IWindowDescriptorFactory.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\LegacySyncWindowLocator.cs" Link="Production\Core\Protocol\LegacySyncWindowLocator.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\LegacyProtocolAdapter.cs" Link="Production\Core\Protocol\LegacyProtocolAdapter.cs" />
@@ -61,6 +62,7 @@
     <Compile Include="..\..\readboard\Core\Protocol\PlaceRequestExecutionResult.cs" Link="Production\Core\Protocol\PlaceRequestExecutionResult.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\SerialBackgroundWorkQueue.cs" Link="Production\Core\Protocol\SerialBackgroundWorkQueue.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\SyncCoordinatorHostSnapshot.cs" Link="Production\Core\Protocol\SyncCoordinatorHostSnapshot.cs" />
+    <Compile Include="..\..\readboard\Core\Protocol\SyncToolbarTextResolver.cs" Link="Production\Core\Protocol\SyncToolbarTextResolver.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\SyncSessionCoordinator.cs" Link="Production\Core\Protocol\SyncSessionCoordinator.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\SyncSessionCoordinator.Orchestration.cs" Link="Production\Core\Protocol\SyncSessionCoordinator.Orchestration.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\SyncSessionRuntimeDependencies.cs" Link="Production\Core\Protocol\SyncSessionRuntimeDependencies.cs" />

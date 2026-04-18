@@ -57,6 +57,25 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("new LegacyOverlayService()", source);
         }
 
+        [Fact]
+        public void MainForm_SelectBoard_ShowsSelectionOverlayWithMainFormOwner()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+
+            Assert.Contains("form2.ShowDialog(this);", source);
+            Assert.DoesNotContain("form2.ShowDialog();", source);
+        }
+
+        [Fact]
+        public void Form2_MouseUp_ClosesSafelyWhenMainFormHostHasBeenDisposed()
+        {
+            string source = LoadSource("readboard", "Form2.cs");
+
+            Assert.Contains("MainForm mainForm = TryGetHost();", source);
+            Assert.Contains("if (mainForm == null)", source);
+            Assert.DoesNotContain("MainForm mainForm = GetHost();", source);
+        }
+
         private static string LoadSource(params string[] segments)
         {
             string path = Path.Combine(VerificationFixtureLocator.RepositoryRoot(), Path.Combine(segments));

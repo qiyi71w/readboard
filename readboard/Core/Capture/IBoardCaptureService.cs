@@ -192,10 +192,11 @@ namespace readboard
                 return true;
 
             int bottom = screenBounds.Y + screenBounds.Height;
+            int right = screenBounds.X + screenBounds.Width;
             if (IsPositiveRect(request.SelectionBounds))
-                return screenBounds.X < 0 || screenBounds.X > screen.Width || bottom > screen.Height;
+                return screenBounds.X < 0 || right > screen.Width || bottom > screen.Height;
 
-            return screenBounds.X < 0 || screenBounds.X > screen.Width || window.Bounds.Y < 0 || bottom > screen.Height;
+            return screenBounds.X < 0 || right > screen.Width || window.Bounds.Y < 0 || bottom > screen.Height;
         }
 
         private Bitmap CaptureWindowBitmap(BoardCapturePlan plan)
@@ -483,21 +484,40 @@ namespace readboard
             if (width <= 0 || height <= 0)
                 return null;
 
+            return CapturePrintWindowBitmap(handle, width, height, PrintWindow);
+        }
+
+        internal static Bitmap CapturePrintWindowBitmap(
+            IntPtr handle,
+            int width,
+            int height,
+            PrintWindowInvoker printWindow)
+        {
+            if (width <= 0 || height <= 0 || printWindow == null)
+                return null;
+
             Bitmap bitmap = new Bitmap(width, height);
             try
             {
+                bool captured;
                 using (Graphics graphics = Graphics.FromImage(bitmap))
                 {
                     IntPtr dc = graphics.GetHdc();
                     try
                     {
-                        PrintWindow(handle, dc, 0u);
+                        captured = printWindow(handle, dc, 0u);
                     }
                     finally
                     {
                         graphics.ReleaseHdc(dc);
                     }
                 }
+                if (!captured)
+                {
+                    bitmap.Dispose();
+                    return null;
+                }
+
                 return bitmap;
             }
             catch
@@ -656,6 +676,8 @@ namespace readboard
             PROCESS_SYSTEM_DPI_AWARE = 1,
             PROCESS_PER_MONITOR_DPI_AWARE = 2
         }
+
+        internal delegate bool PrintWindowInvoker(IntPtr hwnd, IntPtr hdcBlt, uint nFlags);
     }
 
     internal static class BitmapProjection

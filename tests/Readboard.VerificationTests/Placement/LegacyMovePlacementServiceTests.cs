@@ -117,6 +117,30 @@ namespace Readboard.VerificationTests.Placement
             Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(expectedLParam, message.LParam));
         }
 
+        [Fact]
+        public void Place_ForegroundCancellationRequestedAfterActivation_DoesNotClick()
+        {
+            bool cancelRequested = false;
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
+            nativeMethods.OnSwitchToWindow = delegate { cancelRequested = true; };
+            LegacyMovePlacementService service = new LegacyMovePlacementService(
+                nativeMethods,
+                new RecordingLightweightFactory());
+
+            MovePlacementResult result = service.Place(new MovePlacementRequest
+            {
+                Frame = CreateForegroundFrame(),
+                Move = new MoveRequest { X = 2, Y = 3 },
+                BringTargetToFront = true,
+                ShouldCancel = delegate { return cancelRequested; }
+            });
+
+            Assert.False(result.Success);
+            Assert.Equal(MovePlacementFailureKind.PlacementFailed, result.FailureKind);
+            Assert.Equal("Placement cancelled.", result.FailureReason);
+            Assert.Equal(0, nativeMethods.ForegroundClickCount);
+        }
+
         private static int BuildMouseLParam(int x, int y)
         {
             return (x & 0xFFFF) | ((y & 0xFFFF) << 16);
@@ -164,6 +188,8 @@ namespace Readboard.VerificationTests.Placement
         {
             public PlacementClick ForegroundClick { get; private set; }
             public List<PostedMouseMessage> PostedMessages { get; } = new List<PostedMouseMessage>();
+            public int ForegroundClickCount { get; private set; }
+            public Action OnSwitchToWindow { get; set; }
 
             public IntPtr FindWindowByClass(string className)
             {
@@ -172,10 +198,13 @@ namespace Readboard.VerificationTests.Placement
 
             public void SwitchToWindow(IntPtr handle)
             {
+                if (OnSwitchToWindow != null)
+                    OnSwitchToWindow();
             }
 
             public bool TryForegroundLeftClick(int x, int y, bool addFoxDelay)
             {
+                ForegroundClickCount++;
                 ForegroundClick = new PlacementClick(x, y, addFoxDelay);
                 return true;
             }

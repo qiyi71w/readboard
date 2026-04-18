@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Web.Script.Serialization;
@@ -82,7 +83,7 @@ namespace readboard
 
             try
             {
-                AppConfig config = serializer.Deserialize<AppConfig>(content);
+                AppConfig config = DeserializePartialJsonConfig(content);
                 if (!IsOwnedByCurrentMachine(config))
                     return new JsonConfigReadResult(null, false);
                 return new JsonConfigReadResult(config, false);
@@ -95,6 +96,17 @@ namespace readboard
             }
         }
 
+        private AppConfig DeserializePartialJsonConfig(string content)
+        {
+            IDictionary<string, object> values = serializer.Deserialize<Dictionary<string, object>>(content);
+            if (values == null)
+                return null;
+
+            AppConfig config = AppConfig.CreateDefault(protocolVersion, machineKey);
+            ApplyJsonOverrides(config, values);
+            return config;
+        }
+
         private bool ImportLegacyConfig(AppConfig config)
         {
             LegacyMainConfigStatus legacyMainStatus = ApplyLegacyMainConfig(config);
@@ -103,6 +115,36 @@ namespace readboard
 
             bool hasLegacyOther = ApplyLegacyOtherConfig(config);
             return legacyMainStatus == LegacyMainConfigStatus.Imported || hasLegacyOther;
+        }
+
+        private void ApplyJsonOverrides(AppConfig config, IDictionary<string, object> values)
+        {
+            config.ProtocolVersion = ReadStringValue(values, "ProtocolVersion", config.ProtocolVersion);
+            config.MachineKey = ReadStringValue(values, "MachineKey", config.MachineKey);
+            config.BlackOffset = ReadIntValue(values, "BlackOffset", config.BlackOffset);
+            config.WhiteOffset = ReadIntValue(values, "WhiteOffset", config.WhiteOffset);
+            config.BlackPercent = ReadIntValue(values, "BlackPercent", config.BlackPercent);
+            config.WhitePercent = ReadIntValue(values, "WhitePercent", config.WhitePercent);
+            config.UseMagnifier = ReadBoolValue(values, "UseMagnifier", config.UseMagnifier);
+            config.VerifyMove = ReadBoolValue(values, "VerifyMove", config.VerifyMove);
+            config.ShowScaleHint = ReadBoolValue(values, "ShowScaleHint", config.ShowScaleHint);
+            config.ShowInBoard = ReadBoolValue(values, "ShowInBoard", config.ShowInBoard);
+            config.ShowInBoardHint = ReadBoolValue(values, "ShowInBoardHint", config.ShowInBoardHint);
+            config.AutoMinimize = ReadBoolValue(values, "AutoMinimize", config.AutoMinimize);
+            config.SyncIntervalMs = ReadIntValue(values, "SyncIntervalMs", config.SyncIntervalMs);
+            config.GrayOffset = ReadIntValue(values, "GrayOffset", config.GrayOffset);
+            config.UseEnhanceScreen = ReadBoolValue(values, "UseEnhanceScreen", config.UseEnhanceScreen);
+            config.PlayPonder = ReadBoolValue(values, "PlayPonder", config.PlayPonder);
+            config.DisableShowInBoardShortcut = ReadBoolValue(values, "DisableShowInBoardShortcut", config.DisableShowInBoardShortcut);
+            config.UiThemeMode = ReadIntValue(values, "UiThemeMode", config.UiThemeMode);
+            config.SyncMode = (SyncMode)ReadIntValue(values, "SyncMode", (int)config.SyncMode);
+            config.SyncBoth = ReadBoolValue(values, "SyncBoth", config.SyncBoth);
+            config.BoardWidth = ReadIntValue(values, "BoardWidth", config.BoardWidth);
+            config.BoardHeight = ReadIntValue(values, "BoardHeight", config.BoardHeight);
+            config.CustomBoardWidth = ReadIntValue(values, "CustomBoardWidth", config.CustomBoardWidth);
+            config.CustomBoardHeight = ReadIntValue(values, "CustomBoardHeight", config.CustomBoardHeight);
+            config.WindowPosX = ReadIntValue(values, "WindowPosX", config.WindowPosX);
+            config.WindowPosY = ReadIntValue(values, "WindowPosY", config.WindowPosY);
         }
 
         private LegacyMainConfigStatus ApplyLegacyMainConfig(AppConfig config)
@@ -278,10 +320,47 @@ namespace readboard
             return int.TryParse(value, out parsed) ? parsed : fallback;
         }
 
+        private static int ReadIntValue(IDictionary<string, object> values, string key, int fallback)
+        {
+            object value = ReadJsonValue(values, key);
+            if (value == null)
+                return fallback;
+
+            return ReadInt(value.ToString(), fallback);
+        }
+
         private static bool ReadBool(string value, bool fallback)
         {
+            bool parsedBool;
             int parsed;
+            if (bool.TryParse(value, out parsedBool))
+                return parsedBool;
             return int.TryParse(value, out parsed) ? parsed == 1 : fallback;
+        }
+
+        private static bool ReadBoolValue(IDictionary<string, object> values, string key, bool fallback)
+        {
+            object value = ReadJsonValue(values, key);
+            if (value == null)
+                return fallback;
+
+            return ReadBool(value.ToString(), fallback);
+        }
+
+        private static string ReadStringValue(IDictionary<string, object> values, string key, string fallback)
+        {
+            object value = ReadJsonValue(values, key);
+            if (value == null)
+                return fallback;
+
+            string text = value.ToString();
+            return string.IsNullOrWhiteSpace(text) ? fallback : text;
+        }
+
+        private static object ReadJsonValue(IDictionary<string, object> values, string key)
+        {
+            object value;
+            return values != null && values.TryGetValue(key, out value) ? value : null;
         }
 
         private static string ToLegacyBool(bool value)

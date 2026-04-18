@@ -38,6 +38,22 @@ namespace Readboard.VerificationTests.Capture
         }
 
         [Fact]
+        public void Capture_EnhancedRightEdgeOverflowUsesPrintWindow()
+        {
+            PixelRect partiallyOffscreenWindow = new PixelRect(1918, 100, 6, 6);
+            RecordingCapturePlatform platform = new RecordingCapturePlatform(CreateBoardBitmap(), CreateWindow(partiallyOffscreenWindow));
+            LegacyBoardCaptureService service = new LegacyBoardCaptureService(platform);
+
+            BoardCaptureResult result = service.Capture(
+                CreateWindowRequest(preferPrintWindow: true, useEnhancedCapture: true, isInitialProbe: false, windowBounds: partiallyOffscreenWindow));
+
+            Assert.True(result.Success);
+            Assert.True(result.Frame.UsedPrintWindow);
+            Assert.Equal(1, platform.PrintWindowCalls);
+            Assert.Equal(0, platform.WindowCalls);
+        }
+
+        [Fact]
         public void Recognize_UnenhancedOffscreenCaptureRequestsPrintWindowFallback()
         {
             RecordingCapturePlatform platform = new RecordingCapturePlatform(CreateAllBlackBoardBitmap(), CreateOffscreenWindow());
@@ -59,17 +75,46 @@ namespace Readboard.VerificationTests.Capture
             Assert.Equal(0, platform.PrintWindowCalls);
         }
 
+        [Fact]
+        public void Capture_PrintWindowFailureReturnsCaptureFailed()
+        {
+            RecordingCapturePlatform platform = new RecordingCapturePlatform(CreateBoardBitmap(), CreateOffscreenWindow(), failPrintWindow: true);
+            LegacyBoardCaptureService service = new LegacyBoardCaptureService(platform);
+
+            BoardCaptureResult result = service.Capture(CreateWindowRequest(preferPrintWindow: true, useEnhancedCapture: true, isInitialProbe: false));
+
+            Assert.False(result.Success);
+            Assert.Null(result.Frame);
+            Assert.Equal(BoardCaptureFailureKind.CaptureFailed, result.FailureKind);
+            Assert.Equal(1, platform.PrintWindowCalls);
+            Assert.Equal(0, platform.WindowCalls);
+        }
+
+        [Fact]
+        public void CapturePrintWindowBitmap_ReturnsNullWhenNativePrintWindowFails()
+        {
+            Bitmap bitmap = Win32BoardCapturePlatform.CapturePrintWindowBitmap(
+                new IntPtr(4004),
+                width: 6,
+                height: 6,
+                printWindow: (handle, dc, flags) => false);
+
+            Assert.Null(bitmap);
+        }
+
         private static BoardCaptureRequest CreateWindowRequest(
             bool preferPrintWindow,
             bool useEnhancedCapture,
-            bool isInitialProbe)
+            bool isInitialProbe,
+            PixelRect windowBounds = null)
         {
+            PixelRect bounds = CloneRect(windowBounds) ?? CreateOffscreenBounds();
             return new BoardCaptureRequest
             {
                 Window = new WindowDescriptor
                 {
                     Handle = new IntPtr(4004),
-                    Bounds = new PixelRect(2050, 100, 6, 6),
+                    Bounds = bounds,
                     IsDpiAware = true,
                     DpiScale = 1d
                 },
@@ -83,13 +128,28 @@ namespace Readboard.VerificationTests.Capture
 
         private static WindowDescriptor CreateOffscreenWindow()
         {
+            return CreateWindow(CreateOffscreenBounds());
+        }
+
+        private static WindowDescriptor CreateWindow(PixelRect bounds)
+        {
             return new WindowDescriptor
             {
                 Handle = new IntPtr(4004),
-                Bounds = new PixelRect(2050, 100, 6, 6),
+                Bounds = CloneRect(bounds),
                 IsDpiAware = true,
                 DpiScale = 1d
             };
+        }
+
+        private static PixelRect CreateOffscreenBounds()
+        {
+            return new PixelRect(2050, 100, 6, 6);
+        }
+
+        private static PixelRect CloneRect(PixelRect rect)
+        {
+            return rect == null ? null : new PixelRect(rect.X, rect.Y, rect.Width, rect.Height);
         }
 
         private static Bitmap CreateBoardBitmap()
@@ -119,11 +179,13 @@ namespace Readboard.VerificationTests.Capture
         {
             private readonly Bitmap sourceBitmap;
             private readonly WindowDescriptor descriptor;
+            private readonly bool failPrintWindow;
 
-            public RecordingCapturePlatform(Bitmap sourceBitmap, WindowDescriptor descriptor)
+            public RecordingCapturePlatform(Bitmap sourceBitmap, WindowDescriptor descriptor, bool failPrintWindow = false)
             {
                 this.sourceBitmap = sourceBitmap;
                 this.descriptor = descriptor;
+                this.failPrintWindow = failPrintWindow;
             }
 
             public int WindowCalls { get; private set; }
@@ -161,6 +223,8 @@ namespace Readboard.VerificationTests.Capture
             public Bitmap CapturePrintWindow(IntPtr handle)
             {
                 PrintWindowCalls++;
+                if (failPrintWindow)
+                    return null;
                 return CloneBitmap();
             }
 

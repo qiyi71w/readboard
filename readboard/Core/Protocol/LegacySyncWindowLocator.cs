@@ -113,11 +113,13 @@ namespace readboard
             {
                 int processId;
                 GetWindowThreadProcessId(rootHandle, out processId);
-                Process process = Process.GetProcessById(processId);
-                if (!process.ProcessName.Contains(processName))
-                    return;
-                AppendHandleMatches(rootHandle, classNameLike, matches);
-                AppendChildMatches(rootHandle, classNameLike, matches);
+                using (Process process = Process.GetProcessById(processId))
+                {
+                    if (!process.ProcessName.Contains(processName))
+                        return;
+                    AppendHandleMatches(rootHandle, classNameLike, matches);
+                    AppendChildMatches(rootHandle, classNameLike, matches);
+                }
             }
             catch (Exception)
             {

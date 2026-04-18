@@ -160,7 +160,7 @@ namespace readboard
             bool shouldSignal = false;
             lock (stateLock)
             {
-                shouldSignal = TryCompletePendingMove(false);
+                shouldSignal = TryFailPendingMoveOnKeepSyncStop();
                 sessionState.StartedSync = false;
                 sessionState.KeepSync = false;
                 ResetSyncCachesCore();
@@ -191,6 +191,9 @@ namespace readboard
                     return false;
 
                 PendingMoveState pendingMove = sessionState.PendingMove;
+                if (pendingMove.Active || pendingMove.Completed)
+                    return false;
+
                 pendingMove.Reset();
                 pendingMove.X = request.X;
                 pendingMove.Y = request.Y;
@@ -211,6 +214,8 @@ namespace readboard
                 PendingMoveState pendingMove = sessionState.PendingMove;
                 if (pendingMove == null || !pendingMove.Active || pendingMove.Completed)
                     return false;
+                if (pendingMove.PlacementInProgress)
+                    return false;
 
                 if (pendingMove.AttemptsRemaining <= 0)
                 {
@@ -219,6 +224,7 @@ namespace readboard
                 else
                 {
                     pendingMove.AttemptsRemaining--;
+                    pendingMove.PlacementInProgress = true;
                     request = new MoveRequest
                     {
                         X = pendingMove.X,
@@ -243,7 +249,8 @@ namespace readboard
                 if (pendingMove == null || !pendingMove.Active || pendingMove.Completed)
                     return;
 
-                if (pendingMove.VerifyMove && success)
+                pendingMove.PlacementInProgress = false;
+                if (pendingMove.VerifyMove && success && sessionState.KeepSync)
                     return;
 
                 shouldSignal = TryCompletePendingMove(success);
@@ -266,7 +273,7 @@ namespace readboard
                         pendingMove.Reset();
                         return result;
                     }
-                    if (!sessionState.KeepSync)
+                    if (!sessionState.KeepSync && !IsPendingMoveAwaitingPlacementResult(pendingMove))
                     {
                         if (pendingMove != null)
                             pendingMove.Reset();
@@ -311,9 +318,7 @@ namespace readboard
 
             lock (stateLock)
             {
-                shouldSignal = TryCompletePendingMove(false);
-                if (!shouldSignal && sessionState.PendingMove != null)
-                    sessionState.PendingMove.Reset();
+                shouldSignal = TryCancelPendingMove();
             }
 
             if (shouldSignal)
@@ -584,10 +589,40 @@ namespace readboard
             if (pendingMove == null || pendingMove.Completed || !pendingMove.Active)
                 return false;
 
+            pendingMove.PlacementInProgress = false;
             pendingMove.Active = false;
             pendingMove.Completed = true;
             pendingMove.Succeeded = success;
             return true;
+        }
+
+        private bool TryFailPendingMoveOnKeepSyncStop()
+        {
+            PendingMoveState pendingMove = sessionState.PendingMove;
+            if (pendingMove == null || pendingMove.PlacementInProgress)
+                return false;
+
+            return TryCompletePendingMove(false);
+        }
+
+        private bool TryCancelPendingMove()
+        {
+            PendingMoveState pendingMove = sessionState.PendingMove;
+            if (pendingMove == null || pendingMove.PlacementInProgress || pendingMove.Completed)
+                return false;
+
+            if (TryCompletePendingMove(false))
+                return true;
+
+            pendingMove.Reset();
+            return false;
+        }
+
+        private static bool IsPendingMoveAwaitingPlacementResult(PendingMoveState pendingMove)
+        {
+            return pendingMove != null
+                && pendingMove.Active
+                && pendingMove.PlacementInProgress;
         }
 
         private void UpdateSyncIdleEvent()

@@ -41,6 +41,8 @@ namespace Readboard.VerificationTests.Protocol
                     return observer.BuildReport(transport.GetSentLinesSnapshot(), transport.ErrorCount, host, locator.CallCount, false);
                 coordinator.StopSyncSession();
                 started = false;
+                if (!WaitForStopCompletion(transport, host, CompletionTimeout))
+                    return observer.BuildReport(transport.GetSentLinesSnapshot(), transport.ErrorCount, host, locator.CallCount, true);
                 return observer.BuildReport(transport.GetSentLinesSnapshot(), transport.ErrorCount, host, locator.CallCount, true);
             }
             finally
@@ -64,6 +66,25 @@ namespace Readboard.VerificationTests.Protocol
         {
             for (int index = 0; index < count; index++)
                 sequence.Add(variant);
+        }
+
+        private static bool WaitForStopCompletion(
+            RecordingTransport transport,
+            RuntimeHost host,
+            TimeSpan timeout)
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            if (!host.WaitForKeepSyncStopped(Remaining(timeout, stopwatch)))
+                return false;
+            if (!host.WaitForContinuousSyncStopped(Remaining(timeout, stopwatch)))
+                return false;
+            return transport.WaitForLine("stopsync", Remaining(timeout, stopwatch));
+        }
+
+        private static TimeSpan Remaining(TimeSpan timeout, Stopwatch stopwatch)
+        {
+            TimeSpan remaining = timeout - stopwatch.Elapsed;
+            return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
         }
 
         private static SyncCoordinatorHostSnapshot CreateSnapshot(ReplayFixture fixture)
@@ -176,6 +197,33 @@ namespace Readboard.VerificationTests.Protocol
                     return true;
                 }
             }
+
+            public bool WaitForLine(string expectedLine, TimeSpan timeout)
+            {
+                Stopwatch stopwatch = Stopwatch.StartNew();
+                lock (gate)
+                {
+                    while (!ContainsLine(expectedLine))
+                    {
+                        TimeSpan remaining = timeout - stopwatch.Elapsed;
+                        if (remaining <= TimeSpan.Zero)
+                            return ContainsLine(expectedLine);
+                        if (!System.Threading.Monitor.Wait(gate, remaining))
+                            return ContainsLine(expectedLine);
+                    }
+                    return true;
+                }
+            }
+
+            private bool ContainsLine(string expectedLine)
+            {
+                for (int index = 0; index < sentLines.Count; index++)
+                {
+                    if (string.Equals(sentLines[index], expectedLine, StringComparison.Ordinal))
+                        return true;
+                }
+                return false;
+            }
         }
 
         internal sealed class RuntimeHost : ISyncCoordinatorHost
@@ -192,6 +240,8 @@ namespace Readboard.VerificationTests.Protocol
             public bool KeepSyncStoppedObserved { get; private set; }
             public bool ContinuousSyncStartedObserved { get; private set; }
             public bool ContinuousSyncStoppedObserved { get; private set; }
+            private readonly ManualResetEventSlim keepSyncStopped = new ManualResetEventSlim(false);
+            private readonly ManualResetEventSlim continuousSyncStopped = new ManualResetEventSlim(false);
 
             public SyncCoordinatorHostSnapshot CaptureSnapshot()
             {
@@ -212,6 +262,7 @@ namespace Readboard.VerificationTests.Protocol
             public void OnKeepSyncStopped(bool continuousSyncActive)
             {
                 KeepSyncStoppedObserved = true;
+                keepSyncStopped.Set();
             }
 
             public void OnContinuousSyncStarted()
@@ -222,6 +273,17 @@ namespace Readboard.VerificationTests.Protocol
             public void OnContinuousSyncStopped()
             {
                 ContinuousSyncStoppedObserved = true;
+                continuousSyncStopped.Set();
+            }
+
+            public bool WaitForKeepSyncStopped(TimeSpan timeout)
+            {
+                return keepSyncStopped.Wait(timeout);
+            }
+
+            public bool WaitForContinuousSyncStopped(TimeSpan timeout)
+            {
+                return continuousSyncStopped.Wait(timeout);
             }
 
             public void ShowMissingSyncSourceMessage()

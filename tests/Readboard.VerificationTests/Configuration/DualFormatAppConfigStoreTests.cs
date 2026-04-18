@@ -114,6 +114,33 @@ namespace Readboard.VerificationTests
             }
         }
 
+        [Fact]
+        public void Load_AppliesPartialJsonAsDefaultOverride()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config.readboard.json"),
+                    "{\"MachineKey\":\"MACHINE-001\",\"BoardWidth\":9,\"VerifyMove\":false,\"SyncMode\":4}");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.True(result.HasExistingConfig);
+                Assert.Equal(ProtocolVersion, result.Config.ProtocolVersion);
+                Assert.Equal(FixtureMachineKey, result.Config.MachineKey);
+                Assert.Equal(9, result.Config.BoardWidth);
+                Assert.Equal(19, result.Config.BoardHeight);
+                Assert.False(result.Config.VerifyMove);
+                Assert.Equal(SyncMode.FoxBackgroundPlace, result.Config.SyncMode);
+                Assert.Equal(200, result.Config.SyncIntervalMs);
+                Assert.True(result.Config.PlayPonder);
+                Assert.True(result.Config.UseMagnifier);
+                Assert.Equal(-1, result.Config.WindowPosX);
+                Assert.Equal(-1, result.Config.WindowPosY);
+            }
+        }
+
         private static void AssertImportedFixtureConfig(AppConfig config)
         {
             Assert.Equal(101, config.BlackOffset);

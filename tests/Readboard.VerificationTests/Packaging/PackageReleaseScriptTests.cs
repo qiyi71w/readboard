@@ -8,12 +8,21 @@ namespace Readboard.VerificationTests
 {
     public sealed class PackageReleaseScriptTests
     {
+        private static readonly string[] ManagedOpenCvSharpDlls =
+        {
+            "OpenCvSharp.dll",
+            "OpenCvSharp.Blob.dll",
+            "OpenCvSharp.Extensions.dll",
+            "OpenCvSharp.UserInterface.dll"
+        };
+
         [Fact]
         public void SkipBuild_FailsWhenNativeRuntimeFilesAreMissing()
         {
             using (PackagingWorkspace workspace = PackagingWorkspace.Create())
             {
                 workspace.CreateManagedBuildOutputs();
+                workspace.CreateManagedOpenCvSharpBuildOutputs();
 
                 PackagingResult result = workspace.RunPackagingScript();
 
@@ -28,14 +37,16 @@ namespace Readboard.VerificationTests
             using (PackagingWorkspace workspace = PackagingWorkspace.Create())
             {
                 workspace.CreateManagedBuildOutputs();
+                workspace.CreateManagedOpenCvSharpBuildOutputs();
                 workspace.CreateNativeBuildOutputs();
 
                 PackagingResult result = workspace.RunPackagingScript();
 
-                Assert.Equal(0, result.ExitCode);
+                Assert.True(result.ExitCode == 0, result.Output);
                 string releaseDirectory = Assert.Single(Directory.GetDirectories(workspace.ReleaseRoot));
                 Assert.False(File.Exists(Path.Combine(releaseDirectory, "config_readboard_others.txt")));
                 Assert.Single(Directory.GetFiles(workspace.ReleaseRoot, "*.zip"));
+                AssertManagedOpenCvSharpFiles(releaseDirectory);
             }
         }
 
@@ -45,17 +56,63 @@ namespace Readboard.VerificationTests
             using (PackagingWorkspace workspace = PackagingWorkspace.Create())
             {
                 workspace.CreateManagedBuildOutputs();
+                workspace.CreateManagedOpenCvSharpBuildOutputs();
                 workspace.CreateNativeBuildOutputs();
                 File.WriteAllText(Path.Combine(workspace.ReleaseRoot, workspace.ExpectedZipFileName), "stale zip");
 
                 PackagingResult result = workspace.RunPackagingScript(skipZip: true);
 
-                Assert.Equal(0, result.ExitCode);
+                Assert.True(result.ExitCode == 0, result.Output);
                 string releaseDirectory = Assert.Single(Directory.GetDirectories(workspace.ReleaseRoot));
                 Assert.True(File.Exists(Path.Combine(releaseDirectory, "readboard.exe")));
                 Assert.DoesNotContain(".zip", result.Output, StringComparison.OrdinalIgnoreCase);
                 Assert.Empty(Directory.GetFiles(workspace.ReleaseRoot, "*.zip"));
             }
+        }
+
+        [Fact]
+        public void SkipBuild_SkipZip_RefreshesReleaseExeTimestampWithinPackagingWindow()
+        {
+            using (PackagingWorkspace workspace = PackagingWorkspace.Create())
+            {
+                workspace.CreateManagedBuildOutputs();
+                workspace.CreateManagedOpenCvSharpBuildOutputs();
+                workspace.CreateNativeBuildOutputs();
+                workspace.SetBuildOutputTimestamp("readboard.exe", new DateTime(2001, 2, 3, 4, 5, 6, DateTimeKind.Utc));
+
+                PackagingResult result = workspace.RunPackagingScript(skipZip: true);
+
+                Assert.True(result.ExitCode == 0, result.Output);
+                string releaseDirectory = Assert.Single(Directory.GetDirectories(workspace.ReleaseRoot));
+                string releaseExePath = Path.Combine(releaseDirectory, "readboard.exe");
+                DateTime releaseExeTimestampUtc = File.GetLastWriteTimeUtc(releaseExePath);
+                Assert.InRange(
+                    releaseExeTimestampUtc,
+                    result.StartedAtUtc,
+                    result.FinishedAtUtc);
+            }
+        }
+
+        [Fact]
+        public void SkipBuild_FailsWhenManagedOpenCvSharpDllIsMissing()
+        {
+            using (PackagingWorkspace workspace = PackagingWorkspace.Create())
+            {
+                workspace.CreateManagedBuildOutputs();
+                workspace.CreateManagedOpenCvSharpBuildOutputs("OpenCvSharp.UserInterface.dll");
+                workspace.CreateNativeBuildOutputs();
+
+                PackagingResult result = workspace.RunPackagingScript();
+
+                Assert.NotEqual(0, result.ExitCode);
+                Assert.Contains("OpenCvSharp.UserInterface.dll", result.Output);
+            }
+        }
+
+        private static void AssertManagedOpenCvSharpFiles(string releaseDirectory)
+        {
+            foreach (string fileName in ManagedOpenCvSharpDlls)
+                Assert.True(File.Exists(Path.Combine(releaseDirectory, fileName)), "Expected managed runtime file in release: " + fileName);
         }
 
         private sealed class PackagingWorkspace : IDisposable
@@ -109,10 +166,23 @@ namespace Readboard.VerificationTests
                 WriteFile("MouseKeyboardActivityMonitor.dll");
             }
 
+            public void CreateManagedOpenCvSharpBuildOutputs(string missingFileName = null)
+            {
+                foreach (string fileName in ManagedOpenCvSharpDlls.Where(name => !string.Equals(name, missingFileName, StringComparison.Ordinal)))
+                    WriteFile(fileName);
+            }
+
             public void CreateNativeBuildOutputs()
             {
                 WriteFile(Path.Combine("dll", "x86", "OpenCvSharpExtern.dll"));
                 WriteFile(Path.Combine("dll", "x86", "opencv_ffmpeg400.dll"));
+            }
+
+            public void SetBuildOutputTimestamp(string relativePath, DateTime timestampUtc)
+            {
+                string path = Path.Combine(BuildOutputDir, relativePath);
+                Assert.True(File.Exists(path), "Expected build output file before setting timestamp: " + relativePath);
+                File.SetLastWriteTimeUtc(path, timestampUtc);
             }
 
             public PackagingResult RunPackagingScript(bool skipZip = false)
@@ -143,9 +213,10 @@ namespace Readboard.VerificationTests
 
                 using (Process process = Process.Start(startInfo))
                 {
+                    DateTime startedAtUtc = DateTime.UtcNow;
                     string output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
                     process.WaitForExit();
-                    return new PackagingResult(process.ExitCode, output);
+                    return new PackagingResult(process.ExitCode, output, startedAtUtc, DateTime.UtcNow);
                 }
             }
 
@@ -167,14 +238,18 @@ namespace Readboard.VerificationTests
 
         private sealed class PackagingResult
         {
-            public PackagingResult(int exitCode, string output)
+            public PackagingResult(int exitCode, string output, DateTime startedAtUtc, DateTime finishedAtUtc)
             {
                 ExitCode = exitCode;
                 Output = output ?? string.Empty;
+                StartedAtUtc = startedAtUtc;
+                FinishedAtUtc = finishedAtUtc;
             }
 
             public int ExitCode { get; private set; }
             public string Output { get; private set; }
+            public DateTime StartedAtUtc { get; private set; }
+            public DateTime FinishedAtUtc { get; private set; }
         }
     }
 }

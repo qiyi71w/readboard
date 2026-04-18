@@ -71,9 +71,10 @@ namespace readboard
             this.Hide();
             this.Close();
 
-            MainForm mainForm = GetHost();
+            MainForm mainForm = TryGetHost();
+            if (mainForm == null)
+                return;
             mainForm.Snap(x1, y1, x2, y2);
-            mainForm.Show();
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -149,10 +150,10 @@ namespace readboard
             form5 = null;
         }
 
-        private MainForm GetHost()
+        private MainForm TryGetHost()
         {
             if (host.IsDisposed)
-                throw new InvalidOperationException("MainForm host is unavailable.");
+                return null;
             return host;
         }
 

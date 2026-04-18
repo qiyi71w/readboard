@@ -234,12 +234,15 @@ namespace readboard
                 MainForm mainForm = CreateMainForm(options, sessionCoordinator);
                 if (!TryStartSession(mainForm))
                     return;
+                mainForm.DrainStartupProtocolCommands();
                 if (mainForm.IsShutdownRequested)
                     return;
                 mainForm.NotifyProtocolReady();
+                mainForm.DrainStartupProtocolCommands();
                 if (mainForm.IsShutdownRequested)
                     return;
                 mainForm.ReplayStartupProtocolState();
+                mainForm.DrainStartupProtocolCommands();
                 if (mainForm.IsShutdownRequested)
                     return;
                 Application.Run(mainForm);
