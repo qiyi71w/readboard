@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using readboard;
@@ -106,7 +105,7 @@ namespace Readboard.VerificationTests.Host
                     throw ex;
                 });
 
-            delayQueue.WaitUntilPendingCount(2);
+            await delayQueue.WaitUntilPendingCountAsync(2);
             delayQueue.ReleaseNext();
             delayQueue.ReleaseNext();
 
@@ -131,14 +130,20 @@ namespace Readboard.VerificationTests.Host
         private sealed class DelayQueue
         {
             private readonly Queue<TaskCompletionSource<bool>> pendingSignals = new Queue<TaskCompletionSource<bool>>();
+            private readonly List<PendingCountWaiter> pendingCountWaiters = new List<PendingCountWaiter>();
 
             public Task DelayAsync(TimeSpan delay)
             {
                 TaskCompletionSource<bool> signal = CreateSignal();
+                TaskCompletionSource<bool>[] completedSignals;
+
                 lock (pendingSignals)
                 {
                     pendingSignals.Enqueue(signal);
+                    completedSignals = CompleteSatisfiedWaitersUnsafe();
                 }
+
+                CompleteSignals(completedSignals);
                 return signal.Task;
             }
 
@@ -153,23 +158,52 @@ namespace Readboard.VerificationTests.Host
                 signal.TrySetResult(true);
             }
 
-            public void WaitUntilPendingCount(int expectedCount)
+            public Task WaitUntilPendingCountAsync(int expectedCount)
             {
-                DateTime deadlineUtc = DateTime.UtcNow.AddSeconds(1);
-                SpinWait spinWait = new SpinWait();
-
-                while (DateTime.UtcNow <= deadlineUtc)
+                lock (pendingSignals)
                 {
-                    lock (pendingSignals)
-                    {
-                        if (pendingSignals.Count >= expectedCount)
-                            return;
-                    }
+                    if (pendingSignals.Count >= expectedCount)
+                        return Task.CompletedTask;
 
-                    spinWait.SpinOnce();
+                    TaskCompletionSource<bool> signal = CreateSignal();
+                    pendingCountWaiters.Add(new PendingCountWaiter(expectedCount, signal));
+                    return signal.Task;
+                }
+            }
+
+            private TaskCompletionSource<bool>[] CompleteSatisfiedWaitersUnsafe()
+            {
+                List<TaskCompletionSource<bool>> completedSignals = new List<TaskCompletionSource<bool>>();
+
+                for (int index = pendingCountWaiters.Count - 1; index >= 0; index--)
+                {
+                    PendingCountWaiter waiter = pendingCountWaiters[index];
+                    if (pendingSignals.Count < waiter.ExpectedCount)
+                        continue;
+
+                    completedSignals.Add(waiter.Signal);
+                    pendingCountWaiters.RemoveAt(index);
                 }
 
-                throw new TimeoutException("Delay queue did not reach the expected pending count.");
+                return completedSignals.ToArray();
+            }
+
+            private static void CompleteSignals(TaskCompletionSource<bool>[] completedSignals)
+            {
+                foreach (TaskCompletionSource<bool> signal in completedSignals)
+                    signal.TrySetResult(true);
+            }
+
+            private readonly struct PendingCountWaiter
+            {
+                public PendingCountWaiter(int expectedCount, TaskCompletionSource<bool> signal)
+                {
+                    ExpectedCount = expectedCount;
+                    Signal = signal;
+                }
+
+                public int ExpectedCount { get; }
+                public TaskCompletionSource<bool> Signal { get; }
             }
         }
     }
