@@ -1,0 +1,37 @@
+* text=auto
+
+*.sln text eol=crlf
+*.cs text eol=crlf
+*.csproj text eol=crlf
+*.config text eol=crlf
+*.resx text eol=crlf
+*.settings text eol=crlf
+*.manifest text eol=crlf
+*.user text eol=crlf
+*.props text eol=crlf
+*.targets text eol=crlf
+*.ruleset text eol=crlf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.txt text eol=crlf
+*.rtf text eol=crlf
+
+*.md text eol=lf
+*.sh text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.csv text eol=lf
+
+*.dll binary
+*.exe binary
+*.pdb binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.zip binary
+*.pdf binary
+*.ppm binary

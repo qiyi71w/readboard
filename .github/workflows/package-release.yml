@@ -1,0 +1,90 @@
+name: Package Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore legacy readboard packages
+        shell: pwsh
+        run: msbuild.exe 'readboard.sln' /t:Restore /p:RestorePackagesConfig=true /p:RestoreConfigFile='NuGet.Config' /nologo /v:m
+
+      - name: Validate tag matches assembly version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $assemblyInfoPath = 'readboard/Properties/AssemblyInfo.cs'
+          $content = Get-Content -LiteralPath $assemblyInfoPath -Raw
+          if ($content -notmatch '\[assembly:\s*AssemblyInformationalVersion\("([^"]+)"\)\]') {
+              throw "Cannot read AssemblyInformationalVersion from $assemblyInfoPath"
+          }
+
+          $version = $Matches[1]
+          if (-not $version.StartsWith('v', [System.StringComparison]::OrdinalIgnoreCase)) {
+              $version = "v$version"
+          }
+
+          if ($env:GITHUB_REF_NAME -ne $version) {
+              throw "Tag $env:GITHUB_REF_NAME does not match assembly version $version"
+          }
+
+      - name: Restore verification project
+        shell: pwsh
+        run: dotnet restore 'tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj' --configfile 'NuGet.Config'
+
+      - name: Run verification tests
+        shell: pwsh
+        run: dotnet test 'tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj' --no-restore
+
+      - name: Run benchmark acceptance
+        shell: pwsh
+        run: dotnet run --project 'benchmarks/Readboard.ProtocolConfigBenchmarks/Readboard.ProtocolConfigBenchmarks.csproj'
+
+      - name: Resolve MSBuild path
+        id: msbuild
+        shell: pwsh
+        run: |
+          $path = (Get-Command msbuild.exe).Source
+          if ([string]::IsNullOrWhiteSpace($path)) {
+              throw 'MSBuild.exe not found on PATH'
+          }
+          "path=$path" >> $env:GITHUB_OUTPUT
+
+      - name: Package release zip
+        shell: pwsh
+        run: |
+          ./scripts/package-readboard-release.local.ps1 -MSBuildPath '${{ steps.msbuild.outputs.path }}'
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: readboard-package
+          path: release/readboard-github-release-v*.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/readboard-github-release-v*.zip
+          generate_release_notes: true

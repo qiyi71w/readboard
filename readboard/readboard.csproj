@@ -10,7 +10,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>readboard</RootNamespace>
     <AssemblyName>readboard</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion Condition=" '$(TargetFrameworkVersion)' == '' ">v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
@@ -25,7 +25,7 @@
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
     <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>1.2.0.%2a</ApplicationVersion>
+    <ApplicationVersion>2.0.0.%2a</ApplicationVersion>
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
@@ -88,9 +88,6 @@
   <PropertyGroup>
     <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
   </PropertyGroup>
-  <PropertyGroup>
-    <LwInteropAssembly>$(MSBuildProjectDirectory)\Interop.lw.dll</LwInteropAssembly>
-  </PropertyGroup>
   <ItemGroup>
     <Reference Include="MouseKeyboardActivityMonitor, Version=4.0.5474.21294, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
@@ -128,10 +125,72 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AppReleaseVersion.cs" />
+    <Compile Include="Core\Configuration\AppConfigLoadResult.cs" />
+    <Compile Include="Core\Configuration\DualFormatAppConfigStore.cs" />
+    <Compile Include="Core\Configuration\IAppConfigStore.cs" />
+    <Compile Include="Core\Contracts\BoardCellState.cs" />
+    <Compile Include="Core\Contracts\BoardCoordinate.cs" />
+    <Compile Include="Core\Contracts\BoardDimensions.cs" />
+    <Compile Include="Core\Contracts\BoardViewport.cs" />
+    <Compile Include="Core\Contracts\PixelBuffer.cs" />
+    <Compile Include="Core\Contracts\PixelRect.cs" />
+    <Compile Include="Core\Contracts\WindowDescriptor.cs" />
+    <Compile Include="Core\Capture\BoardCaptureRequest.cs" />
+    <Compile Include="Core\Capture\BoardCaptureResult.cs" />
+    <Compile Include="Core\Capture\IBoardCaptureService.cs" />
+    <Compile Include="Core\Models\AppConfig.cs" />
+    <Compile Include="Core\Models\BoardFrame.cs" />
+    <Compile Include="Core\Models\BoardSnapshot.cs" />
+    <Compile Include="Core\Models\LaunchOptions.cs" />
+    <Compile Include="Core\Models\MoveRequest.cs" />
+    <Compile Include="Core\Models\ProtocolMessage.cs" />
+    <Compile Include="Core\Models\RuntimeContext.cs" />
+    <Compile Include="Core\Models\SessionState.cs" />
+    <Compile Include="Core\Models\SyncMode.cs" />
+    <Compile Include="Core\Models\TransportKind.cs" />
+    <Compile Include="Core\Protocol\IWindowDescriptorFactory.cs" />
+    <Compile Include="Core\Protocol\ISyncCoordinatorHost.cs" />
+    <Compile Include="Core\Protocol\IProtocolCommandHost.cs" />
+    <Compile Include="Core\Protocol\IReadBoardProtocolAdapter.cs" />
+    <Compile Include="Core\Protocol\IReadBoardTransport.cs" />
+    <Compile Include="Core\Protocol\ISyncSessionCoordinator.cs" />
+    <Compile Include="Core\Protocol\ISyncWindowLocator.cs" />
+    <Compile Include="Core\Protocol\BackgroundSelectionWindowBindingCoordinator.cs" />
+    <Compile Include="Core\Protocol\LegacySyncWindowLocator.cs" />
+    <Compile Include="Core\Protocol\MainFormRuntimeComposer.cs" />
+    <Compile Include="Core\Protocol\LegacyProtocolAdapter.cs" />
+    <Compile Include="Core\Protocol\LegacyWindowDescriptorFactory.cs" />
+    <Compile Include="Core\Protocol\PlaceRequestExecutionResult.cs" />
+    <Compile Include="Core\Protocol\SerialBackgroundWorkQueue.cs" />
+    <Compile Include="Core\Protocol\SyncCoordinatorHostSnapshot.cs" />
+    <Compile Include="Core\Protocol\SyncToolbarTextResolver.cs" />
+    <Compile Include="Core\Protocol\SyncSessionCoordinator.cs" />
+    <Compile Include="Core\Protocol\SyncSessionCoordinator.Orchestration.cs" />
+    <Compile Include="Core\Protocol\SyncSessionRuntimeDependencies.cs" />
+    <Compile Include="Core\Protocol\SyncSessionRuntimeState.cs" />
+    <Compile Include="Core\Overlay\IOverlayService.cs" />
+    <Compile Include="Core\Overlay\OverlayUpdateRequest.cs" />
+    <Compile Include="Core\Overlay\OverlayUpdateResult.cs" />
+    <Compile Include="Core\Placement\IMovePlacementService.cs" />
+    <Compile Include="Core\Placement\MovePlacementRequest.cs" />
+    <Compile Include="Core\Placement\MovePlacementResult.cs" />
+    <Compile Include="Core\Recognition\BoardRecognitionRequest.cs" />
+    <Compile Include="Core\Recognition\BoardRecognitionResult.cs" />
+    <Compile Include="Core\Recognition\IBoardRecognitionService.cs" />
+    <Compile Include="Core\Recognition\LegacySelectionCalibrationService.cs" />
+    <Compile Include="Core\Recognition\RecognitionThresholds.cs" />
+    <Compile Include="Core\Transport\PipeTransport.cs" />
+    <Compile Include="Core\Transport\TcpTransport.cs" />
     <Compile Include="Form1.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Form1.Designer.cs">
+      <DependentUpon>Form1.cs</DependentUpon>
+    </Compile>
+    <Compile Include="MainForm.Configuration.cs">
+      <DependentUpon>Form1.cs</DependentUpon>
+    </Compile>
+    <Compile Include="MainForm.Protocol.cs">
       <DependentUpon>Form1.cs</DependentUpon>
     </Compile>
     <Compile Include="Form2.cs">
@@ -201,6 +260,7 @@
       <DesignTime>True</DesignTime>
     </Compile>
     <None Include="packages.config" />
+    <None Include="Interop.lw.dll" />
     <None Include="Properties\app.manifest">
       <SubType>Designer</SubType>
     </None>
@@ -213,7 +273,6 @@
       <DependentUpon>Settings.settings</DependentUpon>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
-    <None Include="generate_lw_interop.ps1" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config">
@@ -224,8 +283,30 @@
     <Folder Include="Resources\" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="lizziey.ico" />
-    <Content Include="lw.dll" />
+    <Content Include="language_cn.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="language_en.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="language_jp.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="language_kr.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="readme.rtf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="readme_en.rtf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="readme_jp.rtf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lizziey.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <WCFMetadata Include="Connected Services\" />
@@ -243,12 +324,6 @@
       <ErrorText>这台计算机上缺少此项目引用的 NuGet 程序包。使用“NuGet 程序包还原”可下载这些程序包。有关更多信息，请参见 http://go.microsoft.com/fwlink/?LinkID=322105。缺少的文件是 {0}。</ErrorText>
     </PropertyGroup>
     <Error Condition="!Exists('..\packages\OpenCvSharp3-AnyCPU.4.0.0.20181129\build\OpenCvSharp3-AnyCPU.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\OpenCvSharp3-AnyCPU.4.0.0.20181129\build\OpenCvSharp3-AnyCPU.props'))" />
-  </Target>
-  <Target Name="GenerateLwInterop"
-          BeforeTargets="ResolveAssemblyReferences"
-          Inputs="$(MSBuildProjectDirectory)\lw.dll;$(MSBuildProjectDirectory)\generate_lw_interop.ps1"
-          Outputs="$(LwInteropAssembly)">
-    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\generate_lw_interop.ps1&quot; -Source &quot;$(MSBuildProjectDirectory)\lw.dll&quot; -Output &quot;$(LwInteropAssembly)&quot;" />
   </Target>
   <Target Name="RemoveUnusedOpenCvSharpX64Runtime"
           BeforeTargets="GetCopyToOutputDirectoryItems"

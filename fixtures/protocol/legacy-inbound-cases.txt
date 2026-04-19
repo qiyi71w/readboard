@@ -1,0 +1,7 @@
+# raw|kind|x|y
+place 3 4|PlaceMove|3|4
+loss|LossFocus||
+notinboard|StopInBoard||
+version|VersionRequest||
+quit|Quit||
+ready|LegacyLine||

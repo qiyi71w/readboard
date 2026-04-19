@@ -54,6 +54,7 @@
             this.txtGrayOffsets = new System.Windows.Forms.TextBox();
             this.chkEnhanceScreen = new System.Windows.Forms.CheckBox();
             this.chkPonder = new System.Windows.Forms.CheckBox();
+            this.chkDisableShowInBoardShortcut = new System.Windows.Forms.CheckBox();
             this.SuspendLayout();
             // 
             // lblBlackOffsets
@@ -278,11 +279,22 @@
             this.chkPonder.Text = "后台思考";
             this.chkPonder.UseVisualStyleBackColor = true;
             // 
+            // chkDisableShowInBoardShortcut
+            // 
+            this.chkDisableShowInBoardShortcut.AutoSize = true;
+            this.chkDisableShowInBoardShortcut.Location = new System.Drawing.Point(356, 12);
+            this.chkDisableShowInBoardShortcut.Name = "chkDisableShowInBoardShortcut";
+            this.chkDisableShowInBoardShortcut.Size = new System.Drawing.Size(120, 16);
+            this.chkDisableShowInBoardShortcut.TabIndex = 29;
+            this.chkDisableShowInBoardShortcut.Text = "关闭显示选点快捷键";
+            this.chkDisableShowInBoardShortcut.UseVisualStyleBackColor = true;
+            // 
             // SettingsForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(424, 231);
+            this.Controls.Add(this.chkDisableShowInBoardShortcut);
             this.Controls.Add(this.chkPonder);
             this.Controls.Add(this.chkEnhanceScreen);
             this.Controls.Add(this.txtGrayOffsets);
@@ -344,5 +356,6 @@
         private System.Windows.Forms.TextBox txtGrayOffsets;
         private System.Windows.Forms.CheckBox chkEnhanceScreen;
         private System.Windows.Forms.CheckBox chkPonder;
+        private System.Windows.Forms.CheckBox chkDisableShowInBoardShortcut;
     }
 }

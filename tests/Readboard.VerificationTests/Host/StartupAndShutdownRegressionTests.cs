@@ -1,0 +1,563 @@
+using System;
+using System.IO;
+using Xunit;
+
+namespace Readboard.VerificationTests.Host
+{
+    public sealed class StartupAndShutdownRegressionTests
+    {
+        [Fact]
+        public void MainFormRuntimeComposer_BindsSessionStateBeforeCreatingMainForm()
+        {
+            string source = LoadSource("readboard", "Core", "Protocol", "MainFormRuntimeComposer.cs");
+
+            int bindIndex = IndexOfRequired(source, "coordinator.BindSessionState(sessionState);");
+            int createHostIndex = IndexOfRequired(source, "MainForm host = new MainForm(");
+
+            Assert.True(bindIndex < createHostIndex, "SessionState must be bound before MainForm applies loaded configuration.");
+        }
+
+        [Fact]
+        public void Program_ReplaysStartupProtocolStateAfterReadyHandshake()
+        {
+            string source = LoadSource("readboard", "Program.cs");
+
+            int readyIndex = IndexOfRequired(source, "mainForm.NotifyProtocolReady();");
+            int replayIndex = IndexOfRequired(source, "mainForm.ReplayStartupProtocolState();");
+
+            Assert.True(replayIndex > readyIndex, "Startup protocol replay should happen after the ready/playponder handshake.");
+        }
+
+        [Theory]
+        [InlineData("private void textbox1_TextChanged(object sender, EventArgs e)")]
+        [InlineData("private void textBox2_TextChanged(object sender, EventArgs e)")]
+        [InlineData("private void textBox3_TextChanged(object sender, EventArgs e)")]
+        [InlineData("private void checkBox1_CheckedChanged_1(object sender, EventArgs e)")]
+        public void InitializationSensitiveHandlers_GuardProtocolSideEffects(string methodSignature)
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, methodSignature);
+
+            Assert.Contains("if (isInitializingProtocolState)", methodSlice);
+        }
+
+        [Theory]
+        [InlineData("private void radioButton5_CheckedChanged(object sender, EventArgs e)")]
+        [InlineData("private void radioButton6_CheckedChanged(object sender, EventArgs e)")]
+        [InlineData("private void radioButton7_CheckedChanged(object sender, EventArgs e)")]
+        [InlineData("private void radioButton8_CheckedChanged(object sender, EventArgs e)")]
+        public void StartupBoardSelectionHandlers_GuardPersistenceDuringInitialization(string methodSignature)
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, methodSignature);
+
+            Assert.Contains("if (isInitializingProtocolState)", methodSlice);
+        }
+
+        [Fact]
+        public void ApplyLoadedConfiguration_ReappliesShowInBoardConstraintsAfterRestoringConfig()
+        {
+            string source = LoadSource("readboard", "MainForm.Configuration.cs");
+
+            int restoreIndex = IndexOfRequired(source, "chkShowInBoard.Checked = Program.showInBoard;");
+            int normalizeIndex = source.LastIndexOf("ApplySyncModeControlState();", StringComparison.Ordinal);
+
+            Assert.True(normalizeIndex > restoreIndex, "Loaded show-in-board state must be normalized after restoring the saved checkbox value.");
+        }
+
+        [Fact]
+        public void ApplyLoadedConfiguration_DefersWindowClampUntilFinalUiLayout()
+        {
+            string source = LoadSource("readboard", "MainForm.Configuration.cs");
+            string methodSlice = GetMethodSlice(source, "private void ApplyLoadedConfiguration()");
+
+            Assert.DoesNotContain("Location = ClampToScreenWorkingArea", methodSlice);
+        }
+
+        [Fact]
+        public void ApplyMainFormUi_ClampsSavedWindowLocationAfterLayoutStabilizes()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void ApplyMainFormUi()");
+            int layoutIndex = IndexOfRequired(methodSlice, "PerformLayout();");
+            int restoreIndex = IndexOfRequired(methodSlice, "RestoreSavedWindowLocation();");
+
+            Assert.True(restoreIndex > layoutIndex, "Saved window coordinates must clamp after final layout has established the runtime size.");
+        }
+
+        [Fact]
+        public void ShowInBoardToggle_RejectsOnlyForegroundSyncMode()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string supportSlice = GetMethodSlice(source, "private bool SupportsShowInBoard()");
+            string methodSlice = GetMethodSlice(source, "private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)");
+
+            Assert.Contains("CurrentSyncType != TYPE_FOREGROUND", supportSlice);
+            Assert.DoesNotContain("UsesManualSelectionType(CurrentSyncType)", supportSlice);
+            Assert.Contains("CurrentSyncType == TYPE_FOREGROUND", methodSlice);
+            Assert.Contains("chkShowInBoard.Checked = false;", methodSlice);
+        }
+
+        [Fact]
+        public void ShowInBoardHotkey_OnlyTogglesWhenCurrentModeSupportsIt()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void HookListener_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)");
+
+            Assert.Contains("SupportsShowInBoard()", methodSlice);
+            Assert.Contains("!Program.disableShowInBoardShortcut", methodSlice);
+        }
+
+        [Fact]
+        public void ResolveFoxMoveNumber_SupportsAllFoxSyncModes()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private int? ResolveFoxMoveNumber()");
+
+            Assert.Contains("IsFoxSyncType(CurrentSyncType)", methodSlice);
+        }
+
+        [Fact]
+        public void ShowInBoardToggle_ReplaysForegroundFoxProtocolStateImmediately()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)");
+
+            Assert.Contains("CanUseForegroundFoxInBoardProtocol()", methodSlice);
+            Assert.Contains("SendForegroundFoxInBoardCommand(chkShowInBoard.Checked && sessionCoordinator.SyncBoth);", methodSlice);
+        }
+
+        [Fact]
+        public void ShowInBoardTooltip_ClearsCtrlXHintWhenShortcutIsDisabled()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+
+            Assert.Contains("showInBoardShortcutToolTip.SetToolTip(this.chkShowInBoard, Program.disableShowInBoardShortcut ? string.Empty : \"Ctrl+X\");", source);
+        }
+
+        [Fact]
+        public void SettingsForm_LoadsAndPersistsShowInBoardShortcutToggle()
+        {
+            string source = LoadSource("readboard", "Form4.cs");
+
+            Assert.Contains("chkDisableShowInBoardShortcut.Checked = config.DisableShowInBoardShortcut;", source);
+            Assert.Contains("updatedConfig.DisableShowInBoardShortcut = chkDisableShowInBoardShortcut.Checked;", source);
+        }
+
+        [Fact]
+        public void SettingsForm_RefreshesMainFormShortcutTooltipAfterSaving()
+        {
+            string source = LoadSource("readboard", "Form4.cs");
+            string methodSlice = GetMethodSlice(source, "private void button1_Click(object sender, EventArgs e)");
+
+            Assert.Contains("mainForm.RefreshShowInBoardShortcutToolTip();", methodSlice);
+        }
+
+        [Fact]
+        public void SettingsForm_ArrangesShortcutToggleAlignedWithVerifyMove()
+        {
+            string source = LoadSource("readboard", "Form4.cs");
+            string layoutSlice = GetMethodSlice(source, "private void ArrangeSettingsLayout()");
+
+            Assert.Contains("chkVerifyMove.Location = new Point(left, top + 60);", layoutSlice);
+            Assert.Contains("chkDisableShowInBoardShortcut.Location = new Point(170, top + 60);", layoutSlice);
+            Assert.Contains("chkDisableShowInBoardShortcut.Size = new Size(170, 20);", layoutSlice);
+        }
+
+        [Fact]
+        public void ReplayStartupProtocolState_SkipsBlankNumericOverrides()
+        {
+            string source = LoadSource("readboard", "MainForm.Protocol.cs");
+            string methodSlice = GetMethodSlice(source, "public void ReplayStartupProtocolState()");
+
+            Assert.Contains("if (!string.IsNullOrWhiteSpace(textBox1.Text))", methodSlice);
+            Assert.Contains("if (!string.IsNullOrWhiteSpace(textBox2.Text))", methodSlice);
+            Assert.Contains("if (!string.IsNullOrWhiteSpace(textBox3.Text))", methodSlice);
+        }
+
+        [Fact]
+        public void ReplayStartupProtocolState_ReusesSyncBothAwareInBoardStateChange()
+        {
+            string source = LoadSource("readboard", "MainForm.Protocol.cs");
+            string methodSlice = GetMethodSlice(source, "public void ReplayStartupProtocolState()");
+
+            Assert.Contains("SendBothSyncStateChange();", methodSlice);
+            Assert.DoesNotContain("SendCurrentForegroundFoxInBoardCommand();", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_HandlePlaceRequest_UsesSerializedPlaceQueue()
+        {
+            string source = LoadSource("readboard", "MainForm.Protocol.cs");
+            string methodSlice = GetMethodSlice(source, "void IProtocolCommandHost.HandlePlaceRequest(MoveRequest request)");
+
+            Assert.Contains("EnqueuePlaceRequest(protocolMove);", methodSlice);
+            Assert.DoesNotContain("ThreadPool.QueueUserWorkItem", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_PlaceMove_UsesSerializedPlaceQueue()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "public void placeMove(int x, int y)");
+
+            Assert.Contains("EnqueuePlaceRequest(new MoveRequest", methodSlice);
+            Assert.DoesNotContain("sessionCoordinator.HandlePlaceRequest(", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_Shutdown_StopsPlaceQueueBeforeSendingShutdownProtocol()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "public void shutdown(bool persistConfiguration)");
+            int stopQueueIndex = IndexOfRequired(methodSlice, "placeRequestQueue.Stop();");
+            int sendShutdownIndex = IndexOfRequired(methodSlice, "SendShutdownProtocol();");
+
+            Assert.True(stopQueueIndex < sendShutdownIndex, "Queued place requests must be stopped before shutdown protocol lines are sent.");
+            Assert.Contains("lock (placeProtocolSyncRoot)", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_ExecutePlaceRequest_UsesShutdownGuardedPlaceResultSender()
+        {
+            string source = LoadSource("readboard", "MainForm.Protocol.cs");
+            string methodSlice = GetMethodSlice(source, "private void ExecutePlaceRequest(MoveRequest request)");
+
+            Assert.Contains("if (!result.ShouldSendResponse)", methodSlice);
+            Assert.Contains("TrySendPlaceProtocolResult(result.Success);", methodSlice);
+            Assert.DoesNotContain("SendPlacementResultCommand(result.Success);", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_ExecutePlaceRequest_UsesShutdownGuardedPlaceErrorSender()
+        {
+            string source = LoadSource("readboard", "MainForm.Protocol.cs");
+            string methodSlice = GetMethodSlice(source, "private void ExecutePlaceRequest(MoveRequest request)");
+
+            Assert.Contains("TrySendPlaceProtocolError(ex.ToString());", methodSlice);
+            Assert.DoesNotContain("sessionCoordinator.SendError(ex.ToString());", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_PlaceProtocolGate_ChecksShutdownWhileHoldingSharedLock()
+        {
+            string source = LoadSource("readboard", "MainForm.Protocol.cs");
+            string methodSlice = GetMethodSlice(source, "private bool TrySendPlaceProtocolMessage(Action sendAction)");
+
+            Assert.Contains("lock (placeProtocolSyncRoot)", methodSlice);
+            Assert.Contains("if (isShuttingDown)", methodSlice);
+            Assert.Contains("sendAction();", methodSlice);
+        }
+
+        [Fact]
+        public void Coordinator_PlacePendingMove_ReportsFailuresThroughHostPlaceGate()
+        {
+            string source = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
+            string methodSlice = GetMethodSlice(source, "private bool PlacePendingMove(");
+
+            Assert.Contains("runtime.Host.TrySendPlaceProtocolError(", methodSlice);
+            Assert.DoesNotContain("SendError(result == null ? \"Move placement returned no result.\" : result.FailureReason);", methodSlice);
+        }
+
+        [Fact]
+        public void SettingsReset_UsesShutdownWithoutPersistingCurrentWindowState()
+        {
+            string source = LoadSource("readboard", "Form4.cs");
+
+            Assert.Contains("GetHost().shutdown(false);", source);
+            Assert.DoesNotContain("GetHost().shutdown();", source);
+        }
+
+        [Fact]
+        public void MainForm_ShutdownSupportsSkippingPersistence()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "public void shutdown(bool persistConfiguration)");
+
+            Assert.Contains("if (persistConfiguration)", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_ShutdownContinuesCleanupAfterSaveFailure()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "public void shutdown(bool persistConfiguration)");
+            int stopQueueIndex = IndexOfRequired(methodSlice, "placeRequestQueue.Stop();");
+            int clearPendingIndex = IndexOfRequired(methodSlice, "ClearPendingProtocolCommands();");
+            int persistIndex = IndexOfRequired(methodSlice, "PersistConfiguration();");
+            int disposeHooksIndex = IndexOfRequired(methodSlice, "DisposeInputHooks();");
+            int sendShutdownIndex = IndexOfRequired(methodSlice, "SendShutdownProtocol();");
+            int disposeBitmapIndex = IndexOfRequired(methodSlice, "Program.DisposeBitmap();");
+            int stopCoordinatorIndex = IndexOfRequired(methodSlice, "sessionCoordinator.Stop();");
+            int requestCloseIndex = IndexOfRequired(methodSlice, "if (!IsHandleCreated)");
+            int throwIndex = IndexOfRequired(methodSlice, "ThrowShutdownExceptions(shutdownExceptions);");
+
+            Assert.True(stopQueueIndex < clearPendingIndex, "Shutdown must still stop the place queue before clearing pending protocol commands.");
+            Assert.True(clearPendingIndex < persistIndex, "Queued startup commands must be cleared before persistence and protocol teardown.");
+            Assert.True(persistIndex < disposeHooksIndex, "Cleanup must continue after a persistence failure.");
+            Assert.True(disposeHooksIndex < sendShutdownIndex, "Input hooks must release before outbound shutdown protocol is sent.");
+            Assert.True(sendShutdownIndex < disposeBitmapIndex, "Bitmap disposal belongs after shutdown protocol delivery.");
+            Assert.True(disposeBitmapIndex < stopCoordinatorIndex, "Coordinator stop should happen after bitmap release.");
+            Assert.True(stopCoordinatorIndex < requestCloseIndex, "Close request belongs after runtime teardown.");
+            Assert.True(requestCloseIndex < throwIndex, "Shutdown must surface accumulated failures after requesting close.");
+        }
+
+        [Fact]
+        public void MainForm_ShutdownRethrowsCapturedFailures()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string helperSlice = GetMethodSlice(source, "private static void ThrowShutdownExceptions(List<Exception> shutdownExceptions)");
+
+            Assert.Contains("ExceptionDispatchInfo.Capture(shutdownExceptions[0]).Throw();", helperSlice);
+            Assert.Contains("throw new AggregateException(\"MainForm shutdown failed.\", shutdownExceptions);", helperSlice);
+        }
+
+        [Fact]
+        public void MainForm_ShutdownDefersCloseUntilHandleExists()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "public void shutdown(bool persistConfiguration)");
+
+            Assert.Contains("if (!IsHandleCreated)", methodSlice);
+            Assert.Contains("closeRequestedBeforeHandle = true;", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_OnHandleCreated_ClosesPendingStartupShutdown()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "protected override void OnHandleCreated(EventArgs e)");
+
+            Assert.Contains("if (!closeRequestedBeforeHandle || IsDisposed)", methodSlice);
+            Assert.Contains("BeginInvoke((Action)Close);", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_ShutdownStopsAndDisposesGlobalHooks()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string shutdownSlice = GetMethodSlice(source, "public void shutdown(bool persistConfiguration)");
+            string helperSlice = GetMethodSlice(source, "private void DisposeInputHooks()");
+
+            Assert.Contains("DisposeInputHooks();", shutdownSlice);
+            Assert.Contains("hookListener.KeyDown -= HookListener_KeyDown;", helperSlice);
+            Assert.Contains("hookListener.KeyUp -= HookListener_KeyUp;", helperSlice);
+            Assert.Contains("hookListener.Stop();", helperSlice);
+            Assert.Contains("hookListener.Dispose();", helperSlice);
+            Assert.Contains("mh.MouseMove -= mh_MouseMoveEvent;", helperSlice);
+            Assert.Contains("mh.MouseClick -= mh_MouseMoveEvent2;", helperSlice);
+            Assert.Contains("mh.Enabled = false;", helperSlice);
+            Assert.Contains("mh.Stop();", helperSlice);
+            Assert.Contains("mh.Dispose();", helperSlice);
+        }
+
+        [Fact]
+        public void MainForm_ShutdownUsesCoordinatorStopInsteadOfBlockingStopSyncSession()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string shutdownSlice = GetMethodSlice(source, "public void shutdown(bool persistConfiguration)");
+
+            Assert.DoesNotContain("sessionCoordinator.StopSyncSession();", shutdownSlice);
+            Assert.Contains("sessionCoordinator.Stop();", shutdownSlice);
+        }
+
+        [Fact]
+        public void MainForm_SnapshotCaptureCancellationAlsoCoversStoppedSyncState()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string cancelSlice = GetMethodSlice(source, "private bool IsSnapshotCaptureCancelled()");
+            string stateSlice = GetMethodSlice(source, "private bool HasActiveSyncOperation()");
+
+            Assert.Contains("return isShuttingDown || !HasActiveSyncOperation();", cancelSlice);
+            Assert.Contains("return sessionCoordinator.StartedSync || sessionCoordinator.IsContinuousSyncing;", stateSlice);
+        }
+
+        [Fact]
+        public void MainForm_InvokeUiHostAction_SkipsWhenShutdownOrHandleIsGone()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void InvokeUiHostAction(Action action)");
+
+            Assert.Contains("if (isShuttingDown || IsDisposed || Disposing || !IsHandleCreated)", methodSlice);
+            Assert.Contains("BeginInvoke(action);", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_ShutdownUiCallbacks_UseUiOnlyInvoker()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+
+            Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.OnKeepSyncStopped(bool continuousSyncActive)"));
+            Assert.Contains("InvokeUiHostAction(ApplyContinuousSyncStoppedUi);", GetMethodSlice(source, "void ISyncCoordinatorHost.OnContinuousSyncStopped()"));
+            Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.ShowMissingSyncSourceMessage()"));
+            Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.ShowRecognitionFailureMessage()"));
+            Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.MinimizeWindow()"));
+        }
+
+        [Fact]
+        public void MainForm_KeepSyncStopUi_PreservesContinuousSyncLockout()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)");
+
+            Assert.Contains(
+                "if (!SyncToolbarTextResolver.ShouldRestoreIdleUiAfterKeepSyncStop(continuousSyncActive))",
+                methodSlice);
+        }
+
+        [Fact]
+        public void SelectionMagnifier_DoesNotUseSelectionOverlayAsShowOwner()
+        {
+            string source = LoadSource("readboard", "Form2.cs");
+
+            Assert.Contains("form5.Show();", source);
+            Assert.DoesNotContain("form5.Show(this);", source);
+        }
+
+        [Fact]
+        public void BackgroundSelectionWindowBinding_ResolvesBothCircleModesFromSelectionCenter()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string snapSlice = GetMethodSlice(source, "public void Snap(int x1, int y1, int x2, int y2)");
+            string moveSlice = GetMethodSlice(source, "void mh_MouseMoveEvent(object sender, MouseEventArgs e)");
+            string clickSlice = GetMethodSlice(source, "void mh_MouseMoveEvent2(object sender, MouseEventArgs e)");
+
+            Assert.Contains("if (CurrentSyncType == TYPE_BACKGROUND)", snapSlice);
+            Assert.Contains("BeginResolveBackgroundSelectionWindowAsync();", snapSlice);
+            Assert.DoesNotContain("CurrentSyncType == TYPE_BACKGROUND && !isMannulCircle", moveSlice);
+            Assert.DoesNotContain("CurrentSyncType == TYPE_BACKGROUND && !isMannulCircle", clickSlice);
+        }
+
+        [Fact]
+        public void BackgroundSelectionWindowBinding_DefersMainFormRestoreUntilAsyncBindingCompletes()
+        {
+            string form1Source = LoadSource("readboard", "Form1.cs");
+            string form2Source = LoadSource("readboard", "Form2.cs");
+            string snapSlice = GetMethodSlice(form1Source, "public void Snap(int x1, int y1, int x2, int y2)");
+            string asyncSlice = GetMethodSlice(form1Source, "private void BeginResolveBackgroundSelectionWindowAsync()");
+            string mouseUpSlice = GetMethodSlice(form2Source, "private void Form2_MouseUp(object sender, MouseEventArgs e)");
+
+            Assert.Contains("BeginResolveBackgroundSelectionWindowAsync();", snapSlice);
+            Assert.Contains("RestoreMainWindowAfterSelection();", asyncSlice);
+            Assert.DoesNotContain("mainForm.Show();", mouseUpSlice);
+        }
+
+        [Fact]
+        public void Program_StopsStartupHandshakeAfterShutdownRequest()
+        {
+            string source = LoadSource("readboard", "Program.cs");
+
+            Assert.Equal(3, CountOccurrences(source, "if (mainForm.IsShutdownRequested)"));
+        }
+
+        [Fact]
+        public void Program_DrainsStartupProtocolCommandsBeforeEachStartupHandshakeGate()
+        {
+            string source = LoadSource("readboard", "Program.cs");
+            int firstDrainIndex = IndexOfRequired(source, "mainForm.DrainStartupProtocolCommands();");
+            int firstShutdownCheckIndex = IndexOfRequired(source, "if (mainForm.IsShutdownRequested)");
+            int readyIndex = IndexOfRequired(source, "mainForm.NotifyProtocolReady();");
+            int secondDrainIndex = IndexOfRequired(source, "mainForm.DrainStartupProtocolCommands();", firstDrainIndex + 1);
+            int replayIndex = IndexOfRequired(source, "mainForm.ReplayStartupProtocolState();");
+            int thirdDrainIndex = IndexOfRequired(source, "mainForm.DrainStartupProtocolCommands();", secondDrainIndex + 1);
+
+            Assert.True(firstDrainIndex < firstShutdownCheckIndex, "Early queued quit requests must drain before the first shutdown gate.");
+            Assert.True(readyIndex < secondDrainIndex, "Ready handshake must be followed by a startup command drain.");
+            Assert.True(replayIndex < thirdDrainIndex, "Startup protocol replay must be followed by a startup command drain.");
+            Assert.Equal(3, CountOccurrences(source, "mainForm.DrainStartupProtocolCommands();"));
+        }
+
+        [Fact]
+        public void Program_Main_StopsStartupHandshakeWhenSessionStartFails()
+        {
+            string source = LoadSource("readboard", "Program.cs");
+            int startCheckIndex = IndexOfRequired(source, "if (!TryStartSession(mainForm))");
+            int readyIndex = IndexOfRequired(source, "mainForm.NotifyProtocolReady();");
+            int runIndex = IndexOfRequired(source, "Application.Run(mainForm);");
+
+            Assert.True(startCheckIndex < readyIndex, "Startup failure must short-circuit the ready handshake.");
+            Assert.True(startCheckIndex < runIndex, "Startup failure must short-circuit the run loop.");
+        }
+
+        [Fact]
+        public void Program_TryStartSession_ReturnsFailureStateToCaller()
+        {
+            string source = LoadSource("readboard", "Program.cs");
+            string methodSlice = GetMethodSlice(source, "private static bool TryStartSession(IWin32Window owner)");
+
+            Assert.Contains("return true;", methodSlice);
+            Assert.Contains("return false;", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_DispatchProtocolCommand_QueuesInboundCommandsUntilHandleExists()
+        {
+            string source = LoadSource("readboard", "MainForm.Protocol.cs");
+            string methodSlice = GetMethodSlice(source, "void IProtocolCommandHost.DispatchProtocolCommand(Action command)");
+
+            Assert.Contains("if (TryDispatchProtocolCommand(command))", methodSlice);
+            Assert.Contains("EnqueuePendingProtocolCommand(command);", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_OnHandleCreated_FlushesQueuedProtocolCommandsBeforePendingClose()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "protected override void OnHandleCreated(EventArgs e)");
+            int flushIndex = IndexOfRequired(methodSlice, "FlushPendingProtocolCommands();");
+            int closeIndex = IndexOfRequired(methodSlice, "if (!closeRequestedBeforeHandle || IsDisposed)");
+
+            Assert.True(flushIndex < closeIndex, "Queued inbound protocol commands must re-enter on UI after handle creation.");
+        }
+
+        private static string LoadSource(params string[] segments)
+        {
+            string path = Path.Combine(VerificationFixtureLocator.RepositoryRoot(), Path.Combine(segments));
+            return File.ReadAllText(path);
+        }
+
+        private static int IndexOfRequired(string source, string value)
+        {
+            int index = source.IndexOf(value, StringComparison.Ordinal);
+            Assert.True(index >= 0, "Expected to find source fragment: " + value);
+            return index;
+        }
+
+        private static int IndexOfRequired(string source, string value, int startIndex)
+        {
+            int index = source.IndexOf(value, startIndex, StringComparison.Ordinal);
+            Assert.True(index >= 0, "Expected to find source fragment after index " + startIndex + ": " + value);
+            return index;
+        }
+
+        private static string GetMethodSlice(string source, string methodSignature)
+        {
+            int startIndex = IndexOfRequired(source, methodSignature);
+            int nextMethodIndex = source.IndexOf("\n        private ", startIndex + methodSignature.Length, StringComparison.Ordinal);
+            int publicMethodIndex = source.IndexOf("\n        public ", startIndex + methodSignature.Length, StringComparison.Ordinal);
+            int defaultMethodIndex = source.IndexOf("\n        void ", startIndex + methodSignature.Length, StringComparison.Ordinal);
+            int internalMethodIndex = source.IndexOf("\n        internal ", startIndex + methodSignature.Length, StringComparison.Ordinal);
+            if (publicMethodIndex >= 0 && (nextMethodIndex < 0 || publicMethodIndex < nextMethodIndex))
+                nextMethodIndex = publicMethodIndex;
+            if (defaultMethodIndex >= 0 && (nextMethodIndex < 0 || defaultMethodIndex < nextMethodIndex))
+                nextMethodIndex = defaultMethodIndex;
+            if (internalMethodIndex >= 0 && (nextMethodIndex < 0 || internalMethodIndex < nextMethodIndex))
+                nextMethodIndex = internalMethodIndex;
+            if (nextMethodIndex < 0)
+                nextMethodIndex = source.Length;
+            return source.Substring(startIndex, nextMethodIndex - startIndex);
+        }
+
+        private static int CountOccurrences(string source, string value)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = source.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += value.Length;
+            }
+            return count;
+        }
+    }
+}

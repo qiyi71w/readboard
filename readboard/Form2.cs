@@ -15,12 +15,13 @@ namespace readboard
         private bool isMouthDown = false;
         private Rectangle selectionBoundsScreen = Rectangle.Empty;
         private MagnifierForm form5;
+        private readonly MainForm host;
         private readonly bool needMag;
 
-
-        public Form2(Boolean needMag)
+        internal Form2(MainForm host, Boolean needMag)
         {
             InitializeComponent();
+            this.host = RequireHost(host);
           //  int SH = Screen.PrimaryScreen.Bounds.Height;
          //   int SW = Screen.PrimaryScreen.Bounds.Width;
           //  this.Size = new Size(SW+160,SH+160);
@@ -29,9 +30,9 @@ namespace readboard
             this.needMag = needMag;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
             UpdateStyles();
-            if (Program.useMag && needMag)
+            if (Program.CurrentConfig.UseMagnifier && needMag)
             {
-                form5 = new MagnifierForm();
+                form5 = new MagnifierForm(this.host);
                 form5.StartPosition = FormStartPosition.Manual;
                 int iActulaHeight = Screen.PrimaryScreen.Bounds.Height;
                 form5.Location = new Point(0, iActulaHeight - 200);
@@ -55,7 +56,7 @@ namespace readboard
             {
                 UpdateSelectionBounds(MousePosition);
             }
-            if (Program.useMag && needMag && form5 != null && !form5.IsDisposed)
+            if (Program.CurrentConfig.UseMagnifier && needMag && form5 != null && !form5.IsDisposed)
             {
                 Point mousePosition = MousePosition;
                 form5.setPic(mousePosition.X, mousePosition.Y);
@@ -70,9 +71,10 @@ namespace readboard
             this.Hide();
             this.Close();
 
-            //formMain.pcurrentWin.Snap(x < nowX ? x : nowX, y < nowY ? y : nowY, Math.Abs(nowX - x), Math.Abs(nowY - y));
-            MainForm.pcurrentWin.Snap(x1, y1, x2, y2);
-            MainForm.pcurrentWin.Show();
+            MainForm mainForm = TryGetHost();
+            if (mainForm == null)
+                return;
+            mainForm.Snap(x1, y1, x2, y2);
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -146,6 +148,20 @@ namespace readboard
             }
 
             form5 = null;
+        }
+
+        private MainForm TryGetHost()
+        {
+            if (host.IsDisposed)
+                return null;
+            return host;
+        }
+
+        private static MainForm RequireHost(MainForm host)
+        {
+            if (host == null || host.IsDisposed)
+                throw new InvalidOperationException("MainForm host is unavailable.");
+            return host;
         }
 
     }

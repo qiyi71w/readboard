@@ -7,9 +7,10 @@ namespace readboard
 {
     public partial class TipsForm : Form
     {
-        public TipsForm()
+        internal TipsForm(MainForm host)
         {
             InitializeComponent();
+            this.host = RequireHost(host);
             this.Text = getLangStr("TipsForm_title");
             this.lblTips.Text = getLangStr("TipsForm_lblTips");
             this.lblTips1.Text = getLangStr("TipsForm_lblTips1");
@@ -17,6 +18,8 @@ namespace readboard
             this.btnNotAskAgain.Text = getLangStr("TipsForm_btnNotAskAgain");
             ApplyTipsFormUi();
         }
+
+        private readonly MainForm host;
 
         private void ApplyTipsFormUi()
         {
@@ -31,7 +34,7 @@ namespace readboard
             MinimizeBox = false;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.CenterParent;
-            if (Program.uiThemeMode == Program.UiThemeOptimized)
+            if (Program.CurrentConfig.UiThemeMode == Program.UiThemeOptimized)
             {
                 UiTheme.ApplyWindow(this);
                 UiTheme.StyleNoticeLabel(lblTips);
@@ -105,30 +108,41 @@ namespace readboard
             String result = "";
             try
             {
-                result = Program.langItems[itemName].ToString();
+                result = Program.CurrentContext.LanguageItems[itemName].ToString();
             }
             catch (Exception e)
             {
-                MainForm.pcurrentWin.SendError(e.ToString());
+                GetHost().SendError(e.ToString());
             }
             return result;
         }
 
         private void button2_Click(object sender, EventArgs e)
         {
-            Program.showInBoardHint = false;
-            string result1 = "config_readboard.txt";
-            FileStream fs = new FileStream(result1, FileMode.Create);
-            StreamWriter wr = null;
-            wr = new StreamWriter(fs);
-            wr.WriteLine(Program.blackPC.ToString() + "_" + Program.blackZB.ToString() + "_" + Program.whitePC.ToString() + "_" + Program.whiteZB.ToString() + "_" + (Program.useMag ? "1" : "0") + "_" + (Program.verifyMove ? "1" : "0") + "_" + (Program.showScaleHint ? "1" : "0") + "_" + (Program.showInBoard ? "1" : "0") + "_" + (Program.showInBoardHint ? "1" : "0") + "_" + (Program.autoMin ? "1" : "0") + "_" + Environment.GetEnvironmentVariable("computername").Replace("_", "")+"_" + MainForm.type);
-            wr.Close();
-            this.Close();
+            AppConfig updatedConfig = Program.CurrentConfig.Clone();
+            updatedConfig.ShowInBoardHint = false;
+            Program.CurrentContext.Config = updatedConfig;
+            GetHost().PersistConfiguration();
+            Close();
         }
 
         private void button1_Click(object sender, EventArgs e)
         {
-            this.Close();
+            Close();
+        }
+
+        private MainForm GetHost()
+        {
+            if (host.IsDisposed)
+                throw new InvalidOperationException("MainForm host is unavailable.");
+            return host;
+        }
+
+        private static MainForm RequireHost(MainForm host)
+        {
+            if (host == null || host.IsDisposed)
+                throw new InvalidOperationException("MainForm host is unavailable.");
+            return host;
         }
     }
 }
