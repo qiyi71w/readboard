@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
@@ -48,6 +50,19 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
+        public void PackagingWorkflow_RunsForMainAndRefactorFixPushes()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string workflowContent = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "package-release.yml"));
+            string[] branches = ReadWorkflowSequence(workflowContent, "on", "push", "branches");
+            string[] tags = ReadWorkflowSequence(workflowContent, "on", "push", "tags");
+
+            Assert.Contains("main", branches);
+            Assert.Contains("refactor-fix", branches);
+            Assert.Contains("v*", tags);
+        }
+
+        [Fact]
         public void PackagingScriptAndWorkflow_RestoreLegacyPackagesConfigBeforeBuild()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
@@ -93,6 +108,107 @@ namespace Readboard.VerificationTests
             Assert.DoesNotContain("<Content Include=\"lw.dll\">", projectContent);
             Assert.DoesNotContain("GenerateLwInterop", projectContent);
             Assert.DoesNotContain("generate_lw_interop.ps1", projectContent);
+        }
+
+        [Fact]
+        public void ProtocolConfigBenchmarks_Project_IncludesPlaceRequestExecutionResult()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string projectPath = Path.Combine(
+                repositoryRoot,
+                "benchmarks",
+                "Readboard.ProtocolConfigBenchmarks",
+                "Readboard.ProtocolConfigBenchmarks.csproj");
+            XDocument projectDocument = XDocument.Load(projectPath);
+
+            Assert.Contains(
+                projectDocument.Descendants("Compile"),
+                element => string.Equals(
+                    (string)element.Attribute("Include"),
+                    @"..\..\readboard\Core\Protocol\PlaceRequestExecutionResult.cs",
+                    StringComparison.Ordinal));
+        }
+
+        private static string[] ReadWorkflowSequence(string workflowContent, string rootKey, string parentKey, string sequenceKey)
+        {
+            string[] lines = workflowContent.Replace("\r\n", "\n").Split('\n');
+            int rootIndex = FindTopLevelMapping(lines, rootKey);
+            MappingNode parentNode = FindChildMapping(lines, rootIndex, 0, parentKey);
+            MappingNode sequenceNode = FindChildMapping(lines, parentNode.Index, parentNode.Indent, sequenceKey);
+            return ReadSequenceItems(lines, sequenceNode.Index, sequenceNode.Indent);
+        }
+
+        private static int FindTopLevelMapping(string[] lines, string key)
+        {
+            for (int index = 0; index < lines.Length; index++)
+            {
+                string line = lines[index];
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                if (GetIndent(line) == 0 && string.Equals(line.Trim(), key + ":", StringComparison.Ordinal))
+                    return index;
+            }
+
+            throw new InvalidDataException("Missing top-level YAML key: " + key);
+        }
+
+        private static MappingNode FindChildMapping(string[] lines, int startIndex, int parentIndent, string key)
+        {
+            for (int index = startIndex + 1; index < lines.Length; index++)
+            {
+                string line = lines[index];
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                int indent = GetIndent(line);
+                if (indent <= parentIndent)
+                    break;
+
+                if (string.Equals(line.Trim(), key + ":", StringComparison.Ordinal))
+                    return new MappingNode(index, indent);
+            }
+
+            throw new InvalidDataException("Missing child YAML key: " + key);
+        }
+
+        private static string[] ReadSequenceItems(string[] lines, int startIndex, int parentIndent)
+        {
+            List<string> items = new List<string>();
+
+            for (int index = startIndex + 1; index < lines.Length; index++)
+            {
+                string line = lines[index];
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                int indent = GetIndent(line);
+                if (indent <= parentIndent)
+                    break;
+
+                string trimmed = line.Trim();
+                if (trimmed.StartsWith("- ", StringComparison.Ordinal))
+                    items.Add(trimmed.Substring(2).Trim().Trim('\'', '"'));
+            }
+
+            return items.ToArray();
+        }
+
+        private static int GetIndent(string line)
+        {
+            return line.Length - line.TrimStart().Length;
+        }
+
+        private readonly struct MappingNode
+        {
+            public MappingNode(int index, int indent)
+            {
+                Index = index;
+                Indent = indent;
+            }
+
+            public int Index { get; }
+            public int Indent { get; }
         }
     }
 }

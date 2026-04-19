@@ -1,7 +1,6 @@
 /.project
 packages/
 readboard/obj/
-readboard/Interop.lw.dll
 .codex/
 release/
 temp-build/
