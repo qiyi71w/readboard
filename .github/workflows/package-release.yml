@@ -3,6 +3,9 @@ name: Package Release
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
+      - refactor-fix
     tags:
       - 'v*'
 

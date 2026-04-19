@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using readboard;
@@ -65,6 +66,7 @@ namespace Readboard.VerificationTests.Host
             int restoredCount = 0;
             IntPtr appliedHandle = IntPtr.Zero;
             TaskCompletionSource<bool> secondApplied = CreateSignal();
+            TaskCompletionSource<bool> secondRestored = CreateSignal();
             Point firstCenter = new Point(100, 100);
             Point secondCenter = new Point(200, 200);
 
@@ -97,16 +99,19 @@ namespace Readboard.VerificationTests.Host
                 delegate
                 {
                     restoredCount++;
+                    secondRestored.TrySetResult(true);
                 },
                 delegate(Exception ex)
                 {
                     throw ex;
                 });
 
+            delayQueue.WaitUntilPendingCount(2);
             delayQueue.ReleaseNext();
             delayQueue.ReleaseNext();
 
             await secondApplied.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            await secondRestored.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
             Assert.Equal(1, appliedCount);
             Assert.Equal(1, restoredCount);
@@ -146,6 +151,25 @@ namespace Readboard.VerificationTests.Host
                 }
 
                 signal.TrySetResult(true);
+            }
+
+            public void WaitUntilPendingCount(int expectedCount)
+            {
+                DateTime deadlineUtc = DateTime.UtcNow.AddSeconds(1);
+                SpinWait spinWait = new SpinWait();
+
+                while (DateTime.UtcNow <= deadlineUtc)
+                {
+                    lock (pendingSignals)
+                    {
+                        if (pendingSignals.Count >= expectedCount)
+                            return;
+                    }
+
+                    spinWait.SpinOnce();
+                }
+
+                throw new TimeoutException("Delay queue did not reach the expected pending count.");
             }
         }
     }

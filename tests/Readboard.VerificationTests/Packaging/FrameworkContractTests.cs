@@ -48,6 +48,19 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
+        public void PackagingWorkflow_RunsForMainAndRefactorFixPushes()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string workflowContent = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "package-release.yml"));
+
+            Assert.Contains("branches:", workflowContent);
+            Assert.Contains("- main", workflowContent);
+            Assert.Contains("- refactor-fix", workflowContent);
+            Assert.Contains("tags:", workflowContent);
+            Assert.Contains("- 'v*'", workflowContent);
+        }
+
+        [Fact]
         public void PackagingScriptAndWorkflow_RestoreLegacyPackagesConfigBeforeBuild()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
@@ -93,6 +106,19 @@ namespace Readboard.VerificationTests
             Assert.DoesNotContain("<Content Include=\"lw.dll\">", projectContent);
             Assert.DoesNotContain("GenerateLwInterop", projectContent);
             Assert.DoesNotContain("generate_lw_interop.ps1", projectContent);
+        }
+
+        [Fact]
+        public void ProtocolConfigBenchmarks_Project_IncludesPlaceRequestExecutionResult()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string projectContent = File.ReadAllText(Path.Combine(
+                repositoryRoot,
+                "benchmarks",
+                "Readboard.ProtocolConfigBenchmarks",
+                "Readboard.ProtocolConfigBenchmarks.csproj"));
+
+            Assert.Contains(@"..\..\readboard\Core\Protocol\PlaceRequestExecutionResult.cs", projectContent);
         }
     }
 }
