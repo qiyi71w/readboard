@@ -13,6 +13,8 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Contains("DpiAwareness\" value=\"PerMonitorV2\"", content);
             Assert.Contains("EnableWindowsFormsHighDpiAutoResizing\" value=\"true\"", content);
+            Assert.DoesNotContain("<configSections>", content);
+            Assert.DoesNotContain("name=\"System.Windows.Forms.ApplicationConfigurationSection\"", content);
         }
 
         [Fact]
