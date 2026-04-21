@@ -303,6 +303,42 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public async Task Dispose_WaitsForBlockedKeepSyncWorkerBeforeReleasingWaitHandles()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            BlockingCaptureService captureService = new BlockingCaptureService(CreateFrame());
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Foreground, IntPtr.Zero);
+            SetProperty(snapshot, "SampleIntervalMs", 0);
+            HostRecorder hostRecorder = new HostRecorder(snapshot);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", captureService);
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=foreground")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            Invoke(coordinator, "AttachRuntime", runtime);
+            Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
+
+            Task disposeTask = Task.Run(() => coordinator.Dispose());
+            Task completedTask = await Task.WhenAny(disposeTask, Task.Delay(TimeSpan.FromMilliseconds(250)));
+
+            Assert.NotSame(disposeTask, completedTask);
+            Assert.False(hostRecorder.KeepStopped.IsSet);
+
+            captureService.Release();
+
+            await disposeTask.WaitAsync(TimeSpan.FromSeconds(1));
+            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+        }
+
+        [Fact]
         public async Task StopSyncSession_ReturnsBeforeBlockedKeepSyncWorkerFinishesCleanup()
         {
             RecordingTransport transport = new RecordingTransport();

@@ -113,9 +113,14 @@ namespace readboard
 
         public void Stop()
         {
+            StopCore(false);
+        }
+
+        private void StopCore(bool waitForWorkers)
+        {
             CloseOutboundProtocol();
             acceptingInboundProtocolMessages = false;
-            StopSyncSessionCore(false);
+            StopSyncSessionCore(waitForWorkers);
             transport.MessageReceived -= OnMessageReceived;
             CancelPendingMove();
             continuousSyncStoppedEvent.Set();
@@ -130,7 +135,7 @@ namespace readboard
 
             try
             {
-                Stop();
+                StopCore(true);
             }
             finally
             {
@@ -649,11 +654,6 @@ namespace readboard
             return false;
         }
 
-        internal bool WaitForPendingMoveAvailability(TimeSpan timeout)
-        {
-            return pendingMoveAvailableEvent.Wait(timeout);
-        }
-
         private void UpdatePendingMoveAvailableEventUnsafe()
         {
             // Callers recalculate availability while holding the coordinator state lock.
@@ -677,6 +677,7 @@ namespace readboard
             pendingMoveAvailableEvent.Dispose();
             continuousSyncStoppedEvent.Dispose();
             syncIdleEvent.Dispose();
+            keepSyncStopRequestedEvent.Dispose();
         }
 
         private static bool IsPendingMoveAwaitingPlacementResult(PendingMoveState pendingMove)
