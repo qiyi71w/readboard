@@ -1498,11 +1498,7 @@ namespace readboard
             if (!IsFoxSyncType(CurrentSyncType) || hwnd == IntPtr.Zero)
                 return FoxWindowContext.Unknown();
 
-            WindowDescriptor descriptor;
-            if (!FoxWindowDescriptorFactory.TryCreate(hwnd, out descriptor))
-                return FoxWindowContext.Unknown();
-
-            return FoxWindowContextParser.Parse(descriptor.Title);
+            return FoxWindowContextResolver.Resolve(hwnd, FoxWindowDescriptorFactory, GetParent);
         }
 
         private void UpdateMainWindowTitle(FoxWindowContext foxWindowContext)

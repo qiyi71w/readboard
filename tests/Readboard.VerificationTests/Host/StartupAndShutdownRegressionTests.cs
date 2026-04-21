@@ -203,14 +203,13 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void ResolveFoxWindowContext_ParsesOnlyFoxWindowTitlesWithSelectedHandle()
+        public void ResolveFoxWindowContext_ResolvesFoxTitlesFromSelectedHandleOrAncestors()
         {
             string source = LoadSource("readboard", "Form1.cs");
             string methodSlice = GetMethodSlice(source, "private FoxWindowContext ResolveFoxWindowContext()");
 
             Assert.Contains("if (!IsFoxSyncType(CurrentSyncType) || hwnd == IntPtr.Zero)", methodSlice);
-            Assert.Contains("if (!FoxWindowDescriptorFactory.TryCreate(hwnd, out descriptor))", methodSlice);
-            Assert.Contains("return FoxWindowContextParser.Parse(descriptor.Title);", methodSlice);
+            Assert.Contains("return FoxWindowContextResolver.Resolve(hwnd, FoxWindowDescriptorFactory, GetParent);", methodSlice);
         }
 
         [Fact]

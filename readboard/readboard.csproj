@@ -159,6 +159,7 @@
     <Compile Include="Core\Protocol\BackgroundSelectionWindowBindingCoordinator.cs" />
     <Compile Include="Core\Protocol\FoxWindowContext.cs" />
     <Compile Include="Core\Protocol\FoxWindowContextParser.cs" />
+    <Compile Include="Core\Protocol\FoxWindowContextResolver.cs" />
     <Compile Include="Core\Protocol\LegacySyncWindowLocator.cs" />
     <Compile Include="Core\Protocol\MainFormRuntimeComposer.cs" />
     <Compile Include="Core\Protocol\LegacyProtocolAdapter.cs" />
