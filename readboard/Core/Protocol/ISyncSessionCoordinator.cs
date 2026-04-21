@@ -2,7 +2,7 @@ using System;
 
 namespace readboard
 {
-    internal interface ISyncSessionCoordinator
+    internal interface ISyncSessionCoordinator : IDisposable
     {
         void AttachHost(IProtocolCommandHost host);
         void AttachRuntime(SyncSessionRuntimeDependencies runtimeDependencies);

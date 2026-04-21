@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 
 namespace readboard
@@ -8,6 +9,7 @@ namespace readboard
     {
         private const int MoveVerifyMaxAttempts = 10;
         private const int PendingMoveWaitTimeoutMs = 250;
+        private const int DisposeStateDisposed = 1;
 
         private readonly IReadBoardTransport transport;
         private readonly IReadBoardProtocolAdapter protocolAdapter;
@@ -17,6 +19,7 @@ namespace readboard
         private readonly ManualResetEventSlim pendingMoveAvailableEvent = new ManualResetEventSlim(false);
         private readonly ManualResetEventSlim continuousSyncStoppedEvent = new ManualResetEventSlim(true);
         private readonly ManualResetEventSlim syncIdleEvent = new ManualResetEventSlim(true);
+        private int disposeState;
         private volatile bool acceptingInboundProtocolMessages;
         private volatile bool outboundProtocolClosed;
         private int? lastCapturedFoxMoveNumber;
@@ -118,6 +121,21 @@ namespace readboard
             continuousSyncStoppedEvent.Set();
             syncIdleEvent.Set();
             transport.Stop();
+        }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref disposeState, DisposeStateDisposed) == DisposeStateDisposed)
+                return;
+
+            try
+            {
+                Stop();
+            }
+            finally
+            {
+                DisposeWaitHandles();
+            }
         }
 
         public void SetSyncBoth(bool enabled)
@@ -233,9 +251,8 @@ namespace readboard
                         Y = pendingMove.Y,
                         VerifyMove = pendingMove.VerifyMove
                     };
+                    UpdatePendingMoveAvailableEventUnsafe();
                 }
-
-                UpdatePendingMoveAvailableEventUnsafe();
             }
 
             if (shouldSignal)
@@ -261,7 +278,6 @@ namespace readboard
                 }
 
                 shouldSignal = TryCompletePendingMove(success);
-                UpdatePendingMoveAvailableEventUnsafe();
             }
 
             if (shouldSignal)
@@ -317,7 +333,8 @@ namespace readboard
                     shouldSignal = TryCompletePendingMove(false);
                 }
 
-                UpdatePendingMoveAvailableEventUnsafe();
+                if (!pendingMove.Completed)
+                    UpdatePendingMoveAvailableEventUnsafe();
             }
 
             if (shouldSignal)
@@ -632,8 +649,15 @@ namespace readboard
             return false;
         }
 
+        internal bool WaitForPendingMoveAvailability(TimeSpan timeout)
+        {
+            return pendingMoveAvailableEvent.Wait(timeout);
+        }
+
         private void UpdatePendingMoveAvailableEventUnsafe()
         {
+            // Callers recalculate availability while holding the coordinator state lock.
+            Debug.Assert(Monitor.IsEntered(stateLock), "stateLock must be held when updating pending move availability.");
             PendingMoveState pendingMove = sessionState.PendingMove;
             if (pendingMove != null
                 && pendingMove.Active
@@ -645,6 +669,14 @@ namespace readboard
             }
 
             pendingMoveAvailableEvent.Reset();
+        }
+
+        private void DisposeWaitHandles()
+        {
+            pendingMoveEvent.Dispose();
+            pendingMoveAvailableEvent.Dispose();
+            continuousSyncStoppedEvent.Dispose();
+            syncIdleEvent.Dispose();
         }
 
         private static bool IsPendingMoveAwaitingPlacementResult(PendingMoveState pendingMove)

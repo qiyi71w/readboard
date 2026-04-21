@@ -44,6 +44,18 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void Program_DisposesCoordinatorThroughInterfaceContract()
+        {
+            string programSource = LoadSource("readboard", "Program.cs");
+            string coordinatorSource = LoadSource("readboard", "Core", "Protocol", "ISyncSessionCoordinator.cs");
+
+            Assert.Contains("internal interface ISyncSessionCoordinator : IDisposable", coordinatorSource);
+            Assert.Contains("using (ISyncSessionCoordinator activeSessionCoordinator = new SyncSessionCoordinator", programSource);
+            Assert.DoesNotContain("activeSessionCoordinator.Stop();", programSource);
+            Assert.Contains("sessionCoordinator = null;", programSource);
+        }
+
+        [Fact]
         public void MainFormRuntimeComposer_OwnsCoordinatorRuntimeBinding()
         {
             string source = LoadSource("readboard", "Core", "Protocol", "MainFormRuntimeComposer.cs");

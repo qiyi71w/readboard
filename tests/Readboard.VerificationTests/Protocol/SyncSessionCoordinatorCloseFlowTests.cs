@@ -97,6 +97,19 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal(new[] { "before-shutdown" }, transport.ErrorMessages);
         }
 
+        [Fact]
+        public void Dispose_IsIdempotentAndStopsTransportOnce()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.Start();
+            coordinator.Dispose();
+            coordinator.Dispose();
+
+            Assert.Equal(1, transport.StopCount);
+        }
+
         private sealed class RecordingTransport : IReadBoardTransport
         {
             public event EventHandler<string> MessageReceived;
@@ -104,6 +117,7 @@ namespace Readboard.VerificationTests.Protocol
             public bool IsConnected { get; private set; }
             public List<string> SentLines { get; } = new List<string>();
             public List<string> ErrorMessages { get; } = new List<string>();
+            public int StopCount { get; private set; }
 
             public void Dispose()
             {
@@ -131,6 +145,7 @@ namespace Readboard.VerificationTests.Protocol
 
             public void Stop()
             {
+                StopCount++;
                 IsConnected = false;
             }
         }
