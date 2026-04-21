@@ -197,6 +197,7 @@
     <Compile Include="MainForm.Protocol.cs">
       <DependentUpon>Form1.cs</DependentUpon>
     </Compile>
+    <Compile Include="MainWindowTitleFormatter.cs" />
     <Compile Include="Form2.cs">
       <SubType>Form</SubType>
     </Compile>

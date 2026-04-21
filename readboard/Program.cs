@@ -370,6 +370,14 @@ namespace readboard
             langItems["MainForm_btnForceRebuild"] = "强制重建";
             langItems["MainForm_btnClearBoard"] = "清空棋盘";
             langItems["MainForm_title"] = "棋盘同步工具";
+            langItems["MainForm_titleTagFox"] = "野狐";
+            langItems["MainForm_titleTagRoom"] = "房间";
+            langItems["MainForm_titleTagRecord"] = "棋谱";
+            langItems["MainForm_titleTagSyncing"] = "同步中";
+            langItems["MainForm_titleTagTitleMissing"] = "未抓到标题信息";
+            langItems["MainForm_titleTagRecordEnd"] = "末手";
+            langItems["MainForm_titleMoveFormatSingle"] = "第{0}手";
+            langItems["MainForm_titleMoveFormatRecord"] = "第{0}/{1}手";
             langItems["MainForm_rdoCustomBoard"] = "自定义";
             langItems["MainForm_groupPlatform"] = "平台类型";
             langItems["MainForm_groupBoard"] = "棋盘规格";

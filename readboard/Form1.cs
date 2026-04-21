@@ -65,6 +65,8 @@ namespace readboard
             new BackgroundSelectionWindowBindingCoordinator();
         private const int MainFormMinimumLogicalWidth = 360;
         private const int MainFormScreenLogicalPadding = 40;
+        private FoxWindowContext lastFoxWindowContext = FoxWindowContext.Unknown();
+        private bool hasRetainedFoxTitleSnapshot = false;
 
         int posX = -1;
         int posY = -1;
@@ -1083,6 +1085,7 @@ namespace readboard
                 rdo19x19.Checked = true;
             rdoOtherBoard.Enabled = manualSelectionMode;
             ApplyShowInBoardControlState();
+            ResetMainWindowTitle();
         }
 
         private void ApplyShowInBoardControlState()
@@ -1455,6 +1458,7 @@ namespace readboard
             string syncPlatform = ResolveSyncPlatform();
             FoxWindowContext foxWindowContext = ResolveFoxWindowContext();
             int? foxMoveNumber = foxWindowContext.ResolveDisplayedMoveNumber();
+            UpdateMainWindowTitle(foxWindowContext);
 
             SyncCoordinatorHostSnapshot snapshot = new SyncCoordinatorHostSnapshot
             {
@@ -1501,6 +1505,52 @@ namespace readboard
             return FoxWindowContextParser.Parse(descriptor.Title);
         }
 
+        private void UpdateMainWindowTitle(FoxWindowContext foxWindowContext)
+        {
+            lastFoxWindowContext = FoxWindowContext.CopyOf(foxWindowContext);
+            ApplyMainWindowTitle();
+        }
+
+        private void RefreshMainWindowTitleFromCurrentWindow()
+        {
+            UpdateMainWindowTitle(ResolveFoxWindowContext());
+        }
+
+        private void ResetMainWindowTitle()
+        {
+            hasRetainedFoxTitleSnapshot = false;
+            lastFoxWindowContext = FoxWindowContext.Unknown();
+            ApplyMainWindowTitle();
+        }
+
+        private MainWindowTitleDisplayMode ResolveMainWindowTitleDisplayMode()
+        {
+            if (isShuttingDown || !IsFoxSyncType(CurrentSyncType))
+                return MainWindowTitleDisplayMode.Hidden;
+            if (HasActiveSyncOperation())
+                return MainWindowTitleDisplayMode.Syncing;
+            if (hasRetainedFoxTitleSnapshot)
+                return MainWindowTitleDisplayMode.RetainedSnapshot;
+            return MainWindowTitleDisplayMode.Hidden;
+        }
+
+        private void ApplyMainWindowTitle()
+        {
+            this.Text = MainWindowTitleFormatter.Format(
+                getLangStr("MainForm_title"),
+                ResolveMainWindowTitleDisplayMode(),
+                hwnd != IntPtr.Zero,
+                lastFoxWindowContext,
+                getLangStr("MainForm_titleTagFox"),
+                getLangStr("MainForm_titleTagRoom"),
+                getLangStr("MainForm_titleTagRecord"),
+                getLangStr("MainForm_titleTagSyncing"),
+                getLangStr("MainForm_titleTagTitleMissing"),
+                getLangStr("MainForm_titleTagRecordEnd"),
+                getLangStr("MainForm_titleMoveFormatSingle"),
+                getLangStr("MainForm_titleMoveFormatRecord"));
+        }
+
         private void UpdateCapturedFoxMoveNumber(int? foxMoveNumber)
         {
             sessionCoordinator.SetCapturedFoxMoveNumber(foxMoveNumber);
@@ -1521,6 +1571,14 @@ namespace readboard
             InvokeHostAction(delegate
             {
                 hwnd = handle;
+                hasRetainedFoxTitleSnapshot = false;
+                lastFoxWindowContext = FoxWindowContext.Unknown();
+                if (HasActiveSyncOperation())
+                {
+                    RefreshMainWindowTitleFromCurrentWindow();
+                    return;
+                }
+                ApplyMainWindowTitle();
             });
         }
 
@@ -1591,17 +1649,23 @@ namespace readboard
             btnFastSync.Text = getLangStr("stopSync");
             SetSyncConfigurationControlsEnabled(false);
             DisableBoardSelectionControls();
+            hasRetainedFoxTitleSnapshot = false;
+            RefreshMainWindowTitleFromCurrentWindow();
         }
 
         private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)
         {
             btnKeepSync.Text = getLangStr("keepSync") + "(" + Program.timename + "ms)";
             if (!SyncToolbarTextResolver.ShouldRestoreIdleUiAfterKeepSyncStop(continuousSyncActive))
+            {
+                ApplyMainWindowTitle();
                 return;
+            }
             btnFastSync.Text = getLangStr("fastSync");
             btnKeepSync.Enabled = true;
             SetSyncConfigurationControlsEnabled(true);
             RestoreBoardSelectionControls();
+            ResetMainWindowTitle();
         }
 
         private void ApplyContinuousSyncStartedUi()
@@ -1610,6 +1674,8 @@ namespace readboard
             btnKeepSync.Enabled = false;
             SetSyncConfigurationControlsEnabled(false);
             DisableBoardSelectionControls();
+            hasRetainedFoxTitleSnapshot = false;
+            RefreshMainWindowTitleFromCurrentWindow();
         }
 
         private void ApplyContinuousSyncStoppedUi()
@@ -1621,7 +1687,10 @@ namespace readboard
                 getLangStr("fastSync"));
 
             if (keepSyncActive)
+            {
+                ApplyMainWindowTitle();
                 return;
+            }
             ApplyKeepSyncStoppedUi(false);
         }
 
@@ -1759,7 +1828,7 @@ namespace readboard
             this.btnExchange.Text = getLangStr("MainForm_btnExchange");
             this.btnForceRebuild.Text = getLangStr("MainForm_btnForceRebuild");
             this.btnClearBoard.Text = getLangStr("MainForm_btnClearBoard");
-            this.Text = getLangStr("MainForm_title");
+            ResetMainWindowTitle();
             ApplyMainFormUi();
             RefreshShowInBoardShortcutToolTip();
             isInitializingProtocolState = false;
@@ -2011,6 +2080,7 @@ namespace readboard
                 delegate(IntPtr handle)
                 {
                     hwnd = handle;
+                    ResetMainWindowTitle();
                 },
                 delegate
                 {
@@ -2044,6 +2114,7 @@ namespace readboard
                 //     mh.Enabled = false;
                 clicked = false;
                 hwnd = getMousePointHwnd();
+                ResetMainWindowTitle();
             }
 
 
@@ -2080,7 +2151,18 @@ namespace readboard
 
         private void oneTimeSync()
         {
-            sessionCoordinator.TryRunOneTimeSync();
+            hasRetainedFoxTitleSnapshot = false;
+            bool oneTimeSyncSucceeded = sessionCoordinator.TryRunOneTimeSync();
+            if (!oneTimeSyncSucceeded)
+            {
+                ResetMainWindowTitle();
+                return;
+            }
+            if (IsFoxSyncType(CurrentSyncType))
+            {
+                hasRetainedFoxTitleSnapshot = true;
+                ApplyMainWindowTitle();
+            }
         }
 
         public void resetBtnKeepSyncName()
@@ -2121,6 +2203,8 @@ namespace readboard
         private void btnForceRebuild_Click(object sender, EventArgs e)
         {
             sessionCoordinator.ArmForceRebuild();
+            if (HasActiveSyncOperation())
+                RefreshMainWindowTitleFromCurrentWindow();
         }
 
         private void radioButton1_CheckedChanged(object sender, EventArgs e)
@@ -2178,6 +2262,7 @@ namespace readboard
                 RunShutdownStep(shutdownExceptions, delegate { placeRequestQueue.Stop(); });
                 RunShutdownStep(shutdownExceptions, delegate { ClearPendingProtocolCommands(); });
             }
+            ResetMainWindowTitle();
             if (persistConfiguration)
                 RunShutdownStep(shutdownExceptions, delegate { PersistConfiguration(); });
             RunShutdownStep(shutdownExceptions, delegate { DisposeInputHooks(); });
