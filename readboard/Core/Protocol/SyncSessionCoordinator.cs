@@ -14,6 +14,7 @@ namespace readboard
         private readonly object stateLock = new object();
         private readonly object outboundProtocolSyncRoot = new object();
         private readonly AutoResetEvent pendingMoveEvent = new AutoResetEvent(false);
+        private readonly ManualResetEventSlim pendingMoveAvailableEvent = new ManualResetEventSlim(false);
         private readonly ManualResetEventSlim continuousSyncStoppedEvent = new ManualResetEventSlim(true);
         private readonly ManualResetEventSlim syncIdleEvent = new ManualResetEventSlim(true);
         private volatile bool acceptingInboundProtocolMessages;
@@ -200,6 +201,7 @@ namespace readboard
                 pendingMove.AttemptsRemaining = request.VerifyMove ? MoveVerifyMaxAttempts : 1;
                 pendingMove.VerifyMove = request.VerifyMove;
                 pendingMove.Active = true;
+                UpdatePendingMoveAvailableEventUnsafe();
                 return true;
             }
         }
@@ -232,6 +234,8 @@ namespace readboard
                         VerifyMove = pendingMove.VerifyMove
                     };
                 }
+
+                UpdatePendingMoveAvailableEventUnsafe();
             }
 
             if (shouldSignal)
@@ -251,9 +255,13 @@ namespace readboard
 
                 pendingMove.PlacementInProgress = false;
                 if (pendingMove.VerifyMove && success && sessionState.KeepSync)
+                {
+                    UpdatePendingMoveAvailableEventUnsafe();
                     return;
+                }
 
                 shouldSignal = TryCompletePendingMove(success);
+                UpdatePendingMoveAvailableEventUnsafe();
             }
 
             if (shouldSignal)
@@ -271,12 +279,14 @@ namespace readboard
                     {
                         bool result = pendingMove.Succeeded;
                         pendingMove.Reset();
+                        UpdatePendingMoveAvailableEventUnsafe();
                         return result;
                     }
                     if (!sessionState.KeepSync && !IsPendingMoveAwaitingPlacementResult(pendingMove))
                     {
                         if (pendingMove != null)
                             pendingMove.Reset();
+                        UpdatePendingMoveAvailableEventUnsafe();
                         return false;
                     }
                 }
@@ -306,6 +316,8 @@ namespace readboard
                 {
                     shouldSignal = TryCompletePendingMove(false);
                 }
+
+                UpdatePendingMoveAvailableEventUnsafe();
             }
 
             if (shouldSignal)
@@ -593,6 +605,7 @@ namespace readboard
             pendingMove.Active = false;
             pendingMove.Completed = true;
             pendingMove.Succeeded = success;
+            UpdatePendingMoveAvailableEventUnsafe();
             return true;
         }
 
@@ -615,7 +628,23 @@ namespace readboard
                 return true;
 
             pendingMove.Reset();
+            UpdatePendingMoveAvailableEventUnsafe();
             return false;
+        }
+
+        private void UpdatePendingMoveAvailableEventUnsafe()
+        {
+            PendingMoveState pendingMove = sessionState.PendingMove;
+            if (pendingMove != null
+                && pendingMove.Active
+                && !pendingMove.Completed
+                && !pendingMove.PlacementInProgress)
+            {
+                pendingMoveAvailableEvent.Set();
+                return;
+            }
+
+            pendingMoveAvailableEvent.Reset();
         }
 
         private static bool IsPendingMoveAwaitingPlacementResult(PendingMoveState pendingMove)

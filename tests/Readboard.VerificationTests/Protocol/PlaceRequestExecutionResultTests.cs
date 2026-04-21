@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using readboard;
@@ -52,7 +53,8 @@ namespace Readboard.VerificationTests.Protocol
                     new MoveRequest { X = 1, Y = 1, VerifyMove = false }
                 }));
 
-            Assert.True(WaitForPendingMove(coordinator, out MoveRequest move));
+            Assert.True(WaitForPendingMoveAvailability(coordinator, TimeSpan.FromSeconds(1)));
+            Assert.True(coordinator.TryTakePendingMove(out MoveRequest move));
             Assert.NotNull(move);
             Assert.Equal(1, move.X);
             Assert.Equal(1, move.Y);
@@ -126,18 +128,21 @@ namespace Readboard.VerificationTests.Protocol
             return method;
         }
 
-        private static bool WaitForPendingMove(SyncSessionCoordinator coordinator, out MoveRequest request)
+        private static bool WaitForPendingMoveAvailability(
+            SyncSessionCoordinator coordinator,
+            TimeSpan timeout)
         {
-            DateTime deadline = DateTime.UtcNow.AddSeconds(1);
-            while (DateTime.UtcNow < deadline)
-            {
-                if (coordinator.TryTakePendingMove(out request))
-                    return true;
-                Task.Delay(10).Wait();
-            }
-
-            request = null;
-            return false;
+            FieldInfo pendingMoveAvailableEventField =
+                typeof(SyncSessionCoordinator).GetField(
+                    "pendingMoveAvailableEvent",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.True(
+                pendingMoveAvailableEventField != null,
+                "Missing coordinator field: pendingMoveAvailableEvent");
+            ManualResetEventSlim pendingMoveAvailableEvent =
+                pendingMoveAvailableEventField.GetValue(coordinator) as ManualResetEventSlim;
+            Assert.NotNull(pendingMoveAvailableEvent);
+            return pendingMoveAvailableEvent.Wait(timeout);
         }
 
         private static void SetRuntimeBoardPixelWidth(SyncSessionCoordinator coordinator, int boardPixelWidth)
