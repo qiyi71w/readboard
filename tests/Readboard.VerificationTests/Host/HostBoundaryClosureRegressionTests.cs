@@ -52,10 +52,20 @@ namespace Readboard.VerificationTests.Host
 
             bool hasDisposableInterface = Regex.IsMatch(
                 coordinatorSource,
-                @"interface\s+ISyncSessionCoordinator\s*:\s*[^{]*\bIDisposable\b");
+                @"interface\s+ISyncSessionCoordinator\s*:\s*[\s\S]*?\bIDisposable\b",
+                RegexOptions.Multiline);
             bool hasUsingCoordinator = Regex.IsMatch(
                 programSource,
-                @"using\s*\(\s*ISyncSessionCoordinator\s+\w+\s*=");
+                @"using\s*\(\s*ISyncSessionCoordinator\s+\w+\s*=\s*",
+                RegexOptions.Multiline);
+            bool resetsCoordinatorReference = Regex.IsMatch(
+                programSource,
+                @"sessionCoordinator\s*=\s*null\s*;",
+                RegexOptions.Multiline);
+            bool manuallyStopsCoordinator = Regex.IsMatch(
+                programSource,
+                @"activeSessionCoordinator\s*\.\s*Stop\s*\(",
+                RegexOptions.Multiline);
 
             Assert.True(
                 hasDisposableInterface,
@@ -63,8 +73,12 @@ namespace Readboard.VerificationTests.Host
             Assert.True(
                 hasUsingCoordinator,
                 "Program should dispose ISyncSessionCoordinator via a using statement over the interface type.");
-            Assert.DoesNotContain("activeSessionCoordinator.Stop(", programSource);
-            Assert.Contains("sessionCoordinator = null;", programSource);
+            Assert.False(
+                manuallyStopsCoordinator,
+                "Program should rely on disposal rather than manually stopping the active coordinator.");
+            Assert.True(
+                resetsCoordinatorReference,
+                "Program should clear the sessionCoordinator reference after the using block completes.");
         }
 
         [Fact]

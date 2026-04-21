@@ -10,19 +10,19 @@ namespace readboard
     {
         private static readonly Regex VersionPattern = new Regex(
             @"^v?(?<core>\d+(?:\.\d+){1,3})(?<suffix>(?:[-+][0-9A-Za-z\.-]+)*)$",
-            RegexOptions.Compiled);
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex MarkdownLinkPattern = new Regex(
             @"\[(?<text>[^\]]+)\]\((?<url>[^)]+)\)",
-            RegexOptions.Compiled);
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex HeadingPattern = new Regex(
             @"^\s{0,3}#{1,6}\s*",
-            RegexOptions.Compiled);
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex BulletPattern = new Regex(
             @"^\s*[*+-]\s+",
-            RegexOptions.Compiled);
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex OrderedListPattern = new Regex(
             @"^\s*\d+\.\s+",
-            RegexOptions.Compiled);
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         public static string FormatVersion(string value)
         {
