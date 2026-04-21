@@ -206,12 +206,12 @@ namespace readboard
 
         private IEnumerable<Button> MainSecondaryButtons()
         {
-            return new[] { btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnCheckUpdate, btnTheme };
+            return new[] { btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnForceRebuild, btnSettings, btnHelp, btnKomi65, btnCheckUpdate, btnTheme };
         }
 
         private IEnumerable<Button> MainTypographyButtons()
         {
-            return new[] { btnFastSync, btnKeepSync, btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnSettings, btnHelp, btnKomi65, btnCheckUpdate, btnClearBoard, btnTheme };
+            return new[] { btnFastSync, btnKeepSync, btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnForceRebuild, btnSettings, btnHelp, btnKomi65, btnCheckUpdate, btnClearBoard, btnTheme };
         }
 
         private void EnsureThemeControls()
@@ -770,7 +770,8 @@ namespace readboard
             btnOneTimeSync.SetBounds(btnKeepSync.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnOneTimeSync, 112), buttonHeight);
             btnTogglePonder.SetBounds(btnOneTimeSync.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnTogglePonder, 112), buttonHeight);
             btnExchange.SetBounds(btnTogglePonder.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnExchange, 104), buttonHeight);
-            btnClearBoard.SetBounds(btnExchange.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnClearBoard, 110), buttonHeight);
+            btnForceRebuild.SetBounds(btnExchange.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnForceRebuild, 118), buttonHeight);
+            btnClearBoard.SetBounds(btnForceRebuild.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnClearBoard, 110), buttonHeight);
             ApplyMainFormClientHeight(Math.Max(chkShowInBoard.Bottom, btnClearBoard.Bottom) + ScaleValue(12));
         }
 
@@ -795,9 +796,10 @@ namespace readboard
                 btnOneTimeSync,
                 btnTogglePonder,
                 btnExchange,
+                btnForceRebuild,
                 btnClearBoard
             };
-            int[] minWidths = new[] { 118, 186, 104, 104, 128, 112, 112, 104, 110 };
+            int[] minWidths = new[] { 118, 186, 104, 104, 128, 112, 112, 104, 118, 110 };
             for (int index = 0; index < actionButtons.Length; index++)
             {
                 Button button = actionButtons[index];
@@ -985,6 +987,8 @@ namespace readboard
                 + MeasureButtonWidth(btnTogglePonder, 112)
                 + buttonGap
                 + MeasureButtonWidth(btnExchange, 104)
+                + buttonGap
+                + MeasureButtonWidth(btnForceRebuild, 118)
                 + buttonGap
                 + MeasureButtonWidth(btnClearBoard, 110);
             return left * 2 + Math.Max(firstRowWidth, secondRowWidth);
@@ -1448,6 +1452,10 @@ namespace readboard
 
         private SyncCoordinatorHostSnapshot CaptureSnapshotCore()
         {
+            string syncPlatform = ResolveSyncPlatform();
+            FoxWindowContext foxWindowContext = ResolveFoxWindowContext();
+            int? foxMoveNumber = foxWindowContext.ResolveDisplayedMoveNumber();
+
             SyncCoordinatorHostSnapshot snapshot = new SyncCoordinatorHostSnapshot
             {
                 SyncMode = GetCurrentSyncMode(),
@@ -1463,27 +1471,34 @@ namespace readboard
                 AutoMinimize = Program.autoMin,
                 SampleIntervalMs = Program.timeinterval,
                 UseEnhancedCapture = Program.useEnhanceScreen,
-                FoxMoveNumber = ResolveFoxMoveNumber(),
+                FoxMoveNumber = foxMoveNumber,
                 PlayColor = GetSelectedPlayColor(),
                 AiTimeValue = GetProtocolNumericValue(textBox1),
                 PlayoutsValue = GetProtocolNumericValue(textBox2),
                 FirstPolicyValue = GetProtocolNumericValue(textBox3)
             };
 
+            sessionCoordinator.SetSyncPlatform(syncPlatform);
+            sessionCoordinator.SetFoxWindowContext(foxWindowContext);
             UpdateCapturedFoxMoveNumber(snapshot.FoxMoveNumber);
             return snapshot;
         }
 
-        private int? ResolveFoxMoveNumber()
+        private string ResolveSyncPlatform()
+        {
+            return IsFoxSyncType(CurrentSyncType) ? "fox" : "generic";
+        }
+
+        private FoxWindowContext ResolveFoxWindowContext()
         {
             if (!IsFoxSyncType(CurrentSyncType) || hwnd == IntPtr.Zero)
-                return null;
+                return FoxWindowContext.Unknown();
 
             WindowDescriptor descriptor;
             if (!FoxWindowDescriptorFactory.TryCreate(hwnd, out descriptor))
-                return null;
+                return FoxWindowContext.Unknown();
 
-            return FoxMoveNumberParser.Parse(descriptor.Title);
+            return FoxWindowContextParser.Parse(descriptor.Title);
         }
 
         private void UpdateCapturedFoxMoveNumber(int? foxMoveNumber)
@@ -1742,6 +1757,7 @@ namespace readboard
             this.btnKeepSync.Text = getLangStr("MainForm_btnKeepSync");
             this.btnOneTimeSync.Text = getLangStr("MainForm_btnOneTimeSync");
             this.btnExchange.Text = getLangStr("MainForm_btnExchange");
+            this.btnForceRebuild.Text = getLangStr("MainForm_btnForceRebuild");
             this.btnClearBoard.Text = getLangStr("MainForm_btnClearBoard");
             this.Text = getLangStr("MainForm_title");
             ApplyMainFormUi();
@@ -2100,6 +2116,11 @@ namespace readboard
         private void button6_Click(object sender, EventArgs e)
         {
             SendClearCommand();
+        }
+
+        private void btnForceRebuild_Click(object sender, EventArgs e)
+        {
+            sessionCoordinator.ArmForceRebuild();
         }
 
         private void radioButton1_CheckedChanged(object sender, EventArgs e)

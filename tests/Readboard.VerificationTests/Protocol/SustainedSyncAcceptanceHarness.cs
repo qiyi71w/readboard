@@ -677,7 +677,7 @@ namespace Readboard.VerificationTests.Protocol
 
             lastPayload = snapshot.Payload;
             PayloadTransitionCount++;
-            dynamicOutboundLineCount += snapshot.ProtocolLines.Count + 1;
+            dynamicOutboundLineCount += snapshot.ProtocolLines.Count + 2;
             if (PayloadTransitionCount == 1)
                 dynamicOutboundLineCount += 2;
         }

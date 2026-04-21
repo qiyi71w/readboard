@@ -367,6 +367,7 @@ namespace readboard
             langItems["MainForm_btnKeepSync"] = "持续同步(200ms)";
             langItems["MainForm_btnOneTimeSync"] = "单次同步";
             langItems["MainForm_btnExchange"] = "交换顺序";
+            langItems["MainForm_btnForceRebuild"] = "强制重建";
             langItems["MainForm_btnClearBoard"] = "清空棋盘";
             langItems["MainForm_title"] = "棋盘同步工具";
             langItems["MainForm_rdoCustomBoard"] = "自定义";

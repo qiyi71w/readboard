@@ -39,6 +39,7 @@ MainForm_chkShowInBoard=原棋盘上显示选点
 MainForm_btnKeepSync=持续同步(200ms)
 MainForm_btnOneTimeSync=单次同步
 MainForm_btnExchange=交换顺序
+MainForm_btnForceRebuild=强制重建
 MainForm_btnClearBoard=清空棋盘
 MainForm_title=棋盘同步工具
 MainForm_rdoCustomBoard=自定义

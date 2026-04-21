@@ -22,8 +22,12 @@ namespace readboard
         private int disposeState;
         private volatile bool acceptingInboundProtocolMessages;
         private volatile bool outboundProtocolClosed;
+        private string syncPlatform = "generic";
+        private FoxWindowContext foxWindowContext = FoxWindowContext.Unknown();
+        private bool forceRebuildArmed;
         private int? lastCapturedFoxMoveNumber;
         private int? lastSentBoardFoxMoveNumber;
+        private string lastSentWindowContextSignature;
         private SessionState sessionState;
         private IProtocolCommandHost host;
 
@@ -100,6 +104,30 @@ namespace readboard
             lock (stateLock)
             {
                 lastCapturedFoxMoveNumber = foxMoveNumber;
+            }
+        }
+
+        public void SetSyncPlatform(string platform)
+        {
+            lock (stateLock)
+            {
+                syncPlatform = NormalizeSyncPlatform(platform);
+            }
+        }
+
+        public void SetFoxWindowContext(FoxWindowContext context)
+        {
+            lock (stateLock)
+            {
+                foxWindowContext = FoxWindowContext.CopyOf(context);
+            }
+        }
+
+        public void ArmForceRebuild()
+        {
+            lock (stateLock)
+            {
+                forceRebuildArmed = true;
             }
         }
 
@@ -401,15 +429,28 @@ namespace readboard
                 return;
 
             int? effectiveFoxMoveNumber = ResolveEffectiveFoxMoveNumber(snapshot.FoxMoveNumber);
+            OutboundWindowContext outboundContext;
             lock (stateLock)
             {
+                outboundContext = BuildOutboundWindowContextUnsafe();
                 if (string.Equals(sessionState.LastBoardPayload, snapshot.Payload, StringComparison.Ordinal)
                     && lastSentBoardFoxMoveNumber == effectiveFoxMoveNumber)
-                    return;
+                {
+                    if (string.Equals(lastSentWindowContextSignature, outboundContext.Signature, StringComparison.Ordinal)
+                        && !outboundContext.ShouldForceRebuild)
+                    {
+                        return;
+                    }
+                }
+
                 sessionState.LastBoardPayload = snapshot.Payload;
                 lastSentBoardFoxMoveNumber = effectiveFoxMoveNumber;
+                lastSentWindowContextSignature = outboundContext.Signature;
+                if (outboundContext.ShouldForceRebuild)
+                    forceRebuildArmed = false;
             }
 
+            SendWindowContext(outboundContext);
             SendFoxMoveNumber(effectiveFoxMoveNumber);
             for (int i = 0; i < protocolLines.Count; i++)
                 SendProtocolLine(protocolLines[i]);
@@ -613,11 +654,28 @@ namespace readboard
             SendProtocolMessage(protocolAdapter.CreateFoxMoveNumberMessage(foxMoveNumber.Value));
         }
 
+        private void SendWindowContext(OutboundWindowContext outboundContext)
+        {
+            if (outboundContext == null)
+                return;
+
+            IList<ProtocolMessage> messages = outboundContext.Messages;
+            if (messages != null)
+            {
+                for (int i = 0; i < messages.Count; i++)
+                    SendProtocolMessage(messages[i]);
+            }
+
+            if (outboundContext.ShouldForceRebuild)
+                SendProtocolMessage(protocolAdapter.CreateForceRebuildMessage());
+        }
+
         private void ResetSyncCachesCore()
         {
             sessionState.LastBoardPayload = null;
             sessionState.LastOverlayProtocolLine = null;
             lastSentBoardFoxMoveNumber = null;
+            lastSentWindowContextSignature = null;
         }
 
         private bool TryCompletePendingMove(bool success)
@@ -755,6 +813,80 @@ namespace readboard
                 return;
 
             transport.Send(line);
+        }
+
+        private OutboundWindowContext BuildOutboundWindowContextUnsafe()
+        {
+            List<ProtocolMessage> messages = new List<ProtocolMessage>();
+            List<string> signatureParts = new List<string>();
+
+            string normalizedPlatform = NormalizeSyncPlatform(syncPlatform);
+            messages.Add(protocolAdapter.CreateSyncPlatformMessage(normalizedPlatform));
+            signatureParts.Add("platform=" + normalizedPlatform);
+
+            FoxWindowContext context = FoxWindowContext.CopyOf(foxWindowContext);
+            signatureParts.Add("kind=" + (int)context.Kind);
+
+            if (context.Kind == FoxWindowKind.LiveRoom)
+            {
+                if (!string.IsNullOrWhiteSpace(context.RoomToken))
+                {
+                    string roomToken = context.RoomToken.Trim();
+                    messages.Add(protocolAdapter.CreateRoomTokenMessage(roomToken));
+                    signatureParts.Add("room=" + roomToken);
+                }
+
+                if (context.LiveTitleMove.HasValue)
+                {
+                    messages.Add(protocolAdapter.CreateLiveTitleMoveMessage(context.LiveTitleMove.Value));
+                    signatureParts.Add("liveMove=" + context.LiveTitleMove.Value);
+                }
+            }
+            else if (context.Kind == FoxWindowKind.RecordView)
+            {
+                if (context.RecordCurrentMove.HasValue)
+                {
+                    messages.Add(protocolAdapter.CreateRecordCurrentMoveMessage(context.RecordCurrentMove.Value));
+                    signatureParts.Add("recordCurrent=" + context.RecordCurrentMove.Value);
+                }
+
+                if (context.RecordTotalMove.HasValue)
+                {
+                    messages.Add(protocolAdapter.CreateRecordTotalMoveMessage(context.RecordTotalMove.Value));
+                    signatureParts.Add("recordTotal=" + context.RecordTotalMove.Value);
+                }
+
+                messages.Add(protocolAdapter.CreateRecordAtEndMessage(context.RecordAtEnd));
+                signatureParts.Add("recordAtEnd=" + (context.RecordAtEnd ? "1" : "0"));
+
+                if (!string.IsNullOrWhiteSpace(context.TitleFingerprint))
+                {
+                    string fingerprint = context.TitleFingerprint.Trim();
+                    messages.Add(protocolAdapter.CreateRecordTitleFingerprintMessage(fingerprint));
+                    signatureParts.Add("fingerprint=" + fingerprint);
+                }
+            }
+
+            return new OutboundWindowContext(messages, string.Join("|", signatureParts), forceRebuildArmed);
+        }
+
+        private static string NormalizeSyncPlatform(string platform)
+        {
+            return string.IsNullOrWhiteSpace(platform) ? "generic" : platform.Trim().ToLowerInvariant();
+        }
+
+        private sealed class OutboundWindowContext
+        {
+            public OutboundWindowContext(IList<ProtocolMessage> messages, string signature, bool shouldForceRebuild)
+            {
+                Messages = messages;
+                Signature = signature;
+                ShouldForceRebuild = shouldForceRebuild;
+            }
+
+            public IList<ProtocolMessage> Messages { get; private set; }
+            public string Signature { get; private set; }
+            public bool ShouldForceRebuild { get; private set; }
         }
     }
 }

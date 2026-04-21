@@ -39,6 +39,7 @@ MainForm_chkShowInBoard=원본바둑판에 표시
 MainForm_btnKeepSync=동기화 시작(200ms)
 MainForm_btnOneTimeSync=한번만 동기화
 MainForm_btnExchange=순서 바꿈(패스)
+MainForm_btnForceRebuild=강제 재구성
 MainForm_btnClearBoard=바둑판초기화
 MainForm_title=바둑판 동기화 도구
 MainForm_rdoCustomBoard=사용자 지정

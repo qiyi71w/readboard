@@ -194,12 +194,23 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void ResolveFoxMoveNumber_SupportsAllFoxSyncModes()
+        public void ResolveSyncPlatform_UsesFoxTokenForAllFoxSyncModes()
         {
             string source = LoadSource("readboard", "Form1.cs");
-            string methodSlice = GetMethodSlice(source, "private int? ResolveFoxMoveNumber()");
+            string methodSlice = GetMethodSlice(source, "private string ResolveSyncPlatform()");
 
-            Assert.Contains("IsFoxSyncType(CurrentSyncType)", methodSlice);
+            Assert.Contains("return IsFoxSyncType(CurrentSyncType) ? \"fox\" : \"generic\";", methodSlice);
+        }
+
+        [Fact]
+        public void ResolveFoxWindowContext_ParsesOnlyFoxWindowTitlesWithSelectedHandle()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private FoxWindowContext ResolveFoxWindowContext()");
+
+            Assert.Contains("if (!IsFoxSyncType(CurrentSyncType) || hwnd == IntPtr.Zero)", methodSlice);
+            Assert.Contains("if (!FoxWindowDescriptorFactory.TryCreate(hwnd, out descriptor))", methodSlice);
+            Assert.Contains("return FoxWindowContextParser.Parse(descriptor.Title);", methodSlice);
         }
 
         [Fact]

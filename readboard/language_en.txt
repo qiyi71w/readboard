@@ -39,6 +39,7 @@ MainForm_chkShowInBoard=DisplayOnOriginal
 MainForm_btnKeepSync=KeepSync(200ms)
 MainForm_btnOneTimeSync=OneTimeSync
 MainForm_btnExchange=Exchange
+MainForm_btnForceRebuild=Force Rebuild
 MainForm_btnClearBoard=ClearBoard
 MainForm_title=Board Synchronization Tool
 MainForm_rdoCustomBoard=Custom

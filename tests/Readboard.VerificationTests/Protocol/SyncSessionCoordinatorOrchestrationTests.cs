@@ -37,7 +37,7 @@ namespace Readboard.VerificationTests.Protocol
             bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
             Assert.True(started);
             Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(transport.WaitForLines(5, TimeSpan.FromSeconds(1)));
+            Assert.True(transport.WaitForLines(6, TimeSpan.FromSeconds(1)));
 
             Invoke(coordinator, "StopSyncSession");
 
@@ -48,10 +48,11 @@ namespace Readboard.VerificationTests.Protocol
                     "notForeFoxWithInBoard",
                     "sync",
                     "start 19 19",
+                    "syncPlatform generic",
                     "re=foreground",
                     "end"
                 },
-                transport.SentLines.GetRange(0, 5));
+                transport.SentLines.GetRange(0, 6));
             Assert.True(hostRecorder.SnapshotRequests >= 2);
         }
 
@@ -88,7 +89,7 @@ namespace Readboard.VerificationTests.Protocol
             bool started = (bool)Invoke(coordinator, "TryStartContinuousSync");
             Assert.True(started);
             Assert.True(hostRecorder.ContinuousStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(transport.WaitForLines(5, TimeSpan.FromSeconds(1)));
+            Assert.True(transport.WaitForLines(6, TimeSpan.FromSeconds(1)));
 
             Invoke(coordinator, "StopSyncSession");
 
@@ -101,10 +102,11 @@ namespace Readboard.VerificationTests.Protocol
                     "notForeFoxWithInBoard",
                     "sync",
                     "start 19 19 4242",
+                    "syncPlatform generic",
                     "re=fox",
                     "end"
                 },
-                transport.SentLines.GetRange(0, 5));
+                transport.SentLines.GetRange(0, 6));
         }
 
         [Fact]
@@ -732,11 +734,13 @@ namespace Readboard.VerificationTests.Protocol
                 {
                     "overlay-visible",
                     "start 19 19",
+                    "syncPlatform generic",
                     "foxMoveNumber 57",
                     "re=background",
                     "end",
                     "overlay-visible",
                     "start 19 19",
+                    "syncPlatform generic",
                     "foxMoveNumber 57",
                     "re=background",
                     "end"

@@ -33,6 +33,7 @@
             this.btnClickBoard = new System.Windows.Forms.Button();
             this.btnOneTimeSync = new System.Windows.Forms.Button();
             this.btnKeepSync = new System.Windows.Forms.Button();
+            this.btnForceRebuild = new System.Windows.Forms.Button();
             this.btnClearBoard = new System.Windows.Forms.Button();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.rdoFoxBack = new System.Windows.Forms.RadioButton();
@@ -128,6 +129,16 @@
             this.btnKeepSync.Text = "持续同步(200ms)";
             this.btnKeepSync.UseVisualStyleBackColor = true;
             this.btnKeepSync.Click += new System.EventHandler(this.button5_Click);
+            // 
+            // btnForceRebuild
+            // 
+            this.btnForceRebuild.Location = new System.Drawing.Point(284, 153);
+            this.btnForceRebuild.Name = "btnForceRebuild";
+            this.btnForceRebuild.Size = new System.Drawing.Size(82, 23);
+            this.btnForceRebuild.TabIndex = 40;
+            this.btnForceRebuild.Text = "强制重建";
+            this.btnForceRebuild.UseVisualStyleBackColor = true;
+            this.btnForceRebuild.Click += new System.EventHandler(this.btnForceRebuild_Click);
             // 
             // btnClearBoard
             // 
@@ -619,6 +630,7 @@
             this.Controls.Add(this.btnHelp);
             this.Controls.Add(this.groupBox2);
             this.Controls.Add(this.groupBox1);
+            this.Controls.Add(this.btnForceRebuild);
             this.Controls.Add(this.btnClearBoard);
             this.Controls.Add(this.btnTogglePonder);
             this.Controls.Add(this.btnKeepSync);
@@ -660,6 +672,7 @@
         private System.Windows.Forms.Button btnClickBoard;
         private System.Windows.Forms.Button btnOneTimeSync;
         private System.Windows.Forms.Button btnKeepSync;
+        private System.Windows.Forms.Button btnForceRebuild;
         private System.Windows.Forms.Button btnClearBoard;
         private System.Windows.Forms.GroupBox groupBox1;
         private System.Windows.Forms.RadioButton rdoFoxBack;

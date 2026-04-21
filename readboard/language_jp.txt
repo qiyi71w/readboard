@@ -39,6 +39,7 @@ MainForm_chkShowInBoard=候補手を表示
 MainForm_btnKeepSync=同期維持（200ミリ秒）
 MainForm_btnOneTimeSync=一度だけ同期
 MainForm_btnExchange=交換
+MainForm_btnForceRebuild=強制再構築
 MainForm_btnClearBoard=碁盤をクリア
 MainForm_title=碁盤同期機能
 MainForm_rdoCustomBoard=カスタム

@@ -14,7 +14,10 @@ namespace readboard
         bool IsContinuousSyncing { get; }
         bool SyncBoth { get; }
         void SetSyncBoth(bool enabled);
+        void SetSyncPlatform(string platform);
         void SetCapturedFoxMoveNumber(int? foxMoveNumber);
+        void SetFoxWindowContext(FoxWindowContext context);
+        void ArmForceRebuild();
         void BeginContinuousSync();
         void EndContinuousSync();
         void BeginKeepSync();

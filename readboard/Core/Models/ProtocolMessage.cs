@@ -7,7 +7,8 @@ namespace readboard
         LossFocus = 2,
         StopInBoard = 3,
         VersionRequest = 4,
-        Quit = 5
+        Quit = 5,
+        ForceRebuild = 6
     }
 
     internal sealed class ProtocolMessage
@@ -19,6 +20,11 @@ namespace readboard
         public static ProtocolMessage CreateLegacyLine(string rawText)
         {
             return new ProtocolMessage { Kind = ProtocolMessageKind.LegacyLine, RawText = rawText };
+        }
+
+        public static ProtocolMessage CreateForceRebuildLine(string rawText)
+        {
+            return new ProtocolMessage { Kind = ProtocolMessageKind.ForceRebuild, RawText = rawText };
         }
     }
 }
