@@ -157,9 +157,12 @@
     <Compile Include="Core\Protocol\ISyncSessionCoordinator.cs" />
     <Compile Include="Core\Protocol\ISyncWindowLocator.cs" />
     <Compile Include="Core\Protocol\BackgroundSelectionWindowBindingCoordinator.cs" />
+    <Compile Include="Core\Protocol\FoxWindowBinding.cs" />
+    <Compile Include="Core\Protocol\FoxWindowBindingResolver.cs" />
     <Compile Include="Core\Protocol\FoxWindowContext.cs" />
     <Compile Include="Core\Protocol\FoxWindowContextParser.cs" />
     <Compile Include="Core\Protocol\FoxWindowContextResolver.cs" />
+    <Compile Include="Core\Protocol\FoxWindowTitleReader.cs" />
     <Compile Include="Core\Protocol\LegacySyncWindowLocator.cs" />
     <Compile Include="Core\Protocol\MainFormRuntimeComposer.cs" />
     <Compile Include="Core\Protocol\LegacyProtocolAdapter.cs" />

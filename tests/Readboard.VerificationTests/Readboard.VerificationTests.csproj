@@ -56,9 +56,12 @@
     <Compile Include="..\..\readboard\Core\Protocol\ISyncSessionCoordinator.cs" Link="Production\Core\Protocol\ISyncSessionCoordinator.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\ISyncWindowLocator.cs" Link="Production\Core\Protocol\ISyncWindowLocator.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\BackgroundSelectionWindowBindingCoordinator.cs" Link="Production\Core\Protocol\BackgroundSelectionWindowBindingCoordinator.cs" />
+    <Compile Include="..\..\readboard\Core\Protocol\FoxWindowBinding.cs" Link="Production\Core\Protocol\FoxWindowBinding.cs" />
+    <Compile Include="..\..\readboard\Core\Protocol\FoxWindowBindingResolver.cs" Link="Production\Core\Protocol\FoxWindowBindingResolver.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\FoxWindowContext.cs" Link="Production\Core\Protocol\FoxWindowContext.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\FoxWindowContextParser.cs" Link="Production\Core\Protocol\FoxWindowContextParser.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\FoxWindowContextResolver.cs" Link="Production\Core\Protocol\FoxWindowContextResolver.cs" />
+    <Compile Include="..\..\readboard\Core\Protocol\FoxWindowTitleReader.cs" Link="Production\Core\Protocol\FoxWindowTitleReader.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\IWindowDescriptorFactory.cs" Link="Production\Core\Protocol\IWindowDescriptorFactory.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\LegacySyncWindowLocator.cs" Link="Production\Core\Protocol\LegacySyncWindowLocator.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\LegacyProtocolAdapter.cs" Link="Production\Core\Protocol\LegacyProtocolAdapter.cs" />

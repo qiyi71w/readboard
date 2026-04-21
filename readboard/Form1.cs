@@ -59,14 +59,15 @@ namespace readboard
         private readonly object protocolCommandSyncRoot = new object();
         private readonly GitHubUpdateChecker updateChecker = new GitHubUpdateChecker();
         private readonly ToolTip showInBoardShortcutToolTip = new ToolTip();
-        private static readonly IWindowDescriptorFactory FoxWindowDescriptorFactory = new LegacyWindowDescriptorFactory();
         private readonly Queue<Action> pendingProtocolCommands = new Queue<Action>();
         private readonly BackgroundSelectionWindowBindingCoordinator backgroundSelectionWindowBindingCoordinator =
             new BackgroundSelectionWindowBindingCoordinator();
         private const int MainFormMinimumLogicalWidth = 360;
         private const int MainFormScreenLogicalPadding = 40;
         private FoxWindowContext lastFoxWindowContext = FoxWindowContext.Unknown();
+        private FoxWindowBinding foxWindowBinding = null;
         private bool hasRetainedFoxTitleSnapshot = false;
+        private string lastAppliedMainWindowTitle = string.Empty;
 
         int posX = -1;
         int posY = -1;
@@ -1496,9 +1497,51 @@ namespace readboard
         private FoxWindowContext ResolveFoxWindowContext()
         {
             if (!IsFoxSyncType(CurrentSyncType) || hwnd == IntPtr.Zero)
+            {
+                InvalidateFoxWindowBinding();
                 return FoxWindowContext.Unknown();
+            }
 
-            return FoxWindowContextResolver.Resolve(hwnd, FoxWindowDescriptorFactory, GetParent);
+            FoxWindowContext foxWindowContext;
+            if (TryRefreshFoxWindowContextFromBinding(out foxWindowContext))
+                return foxWindowContext;
+            if (TryResolveFoxWindowBinding(out foxWindowContext))
+                return foxWindowContext;
+            return FoxWindowContext.Unknown();
+        }
+
+        private bool TryRefreshFoxWindowContextFromBinding(out FoxWindowContext foxWindowContext)
+        {
+            if (FoxWindowTitleReader.TryRead(foxWindowBinding, hwnd, GetParent, out foxWindowContext))
+                return true;
+
+            InvalidateFoxWindowBinding();
+            foxWindowContext = FoxWindowContext.Unknown();
+            return false;
+        }
+
+        private bool TryResolveFoxWindowBinding(out FoxWindowContext foxWindowContext)
+        {
+            FoxWindowBinding binding;
+            if (!FoxWindowBindingResolver.TryResolve(
+                hwnd,
+                FoxWindowTitleReader.ReadWindowTitle,
+                GetParent,
+                out binding,
+                out foxWindowContext))
+            {
+                InvalidateFoxWindowBinding();
+                foxWindowContext = FoxWindowContext.Unknown();
+                return false;
+            }
+
+            foxWindowBinding = binding;
+            return true;
+        }
+
+        private void InvalidateFoxWindowBinding()
+        {
+            foxWindowBinding = null;
         }
 
         private void UpdateMainWindowTitle(FoxWindowContext foxWindowContext)
@@ -1516,6 +1559,7 @@ namespace readboard
         {
             hasRetainedFoxTitleSnapshot = false;
             lastFoxWindowContext = FoxWindowContext.Unknown();
+            InvalidateFoxWindowBinding();
             ApplyMainWindowTitle();
         }
 
@@ -1532,7 +1576,7 @@ namespace readboard
 
         private void ApplyMainWindowTitle()
         {
-            this.Text = MainWindowTitleFormatter.Format(
+            string title = MainWindowTitleFormatter.Format(
                 getLangStr("MainForm_title"),
                 ResolveMainWindowTitleDisplayMode(),
                 hwnd != IntPtr.Zero,
@@ -1545,6 +1589,10 @@ namespace readboard
                 getLangStr("MainForm_titleTagRecordEnd"),
                 getLangStr("MainForm_titleMoveFormatSingle"),
                 getLangStr("MainForm_titleMoveFormatRecord"));
+            if (string.Equals(lastAppliedMainWindowTitle, title, StringComparison.Ordinal))
+                return;
+            this.Text = title;
+            lastAppliedMainWindowTitle = title;
         }
 
         private void UpdateCapturedFoxMoveNumber(int? foxMoveNumber)
@@ -1569,6 +1617,7 @@ namespace readboard
                 hwnd = handle;
                 hasRetainedFoxTitleSnapshot = false;
                 lastFoxWindowContext = FoxWindowContext.Unknown();
+                InvalidateFoxWindowBinding();
                 if (HasActiveSyncOperation())
                 {
                     RefreshMainWindowTitleFromCurrentWindow();
@@ -2200,7 +2249,10 @@ namespace readboard
         {
             sessionCoordinator.ArmForceRebuild();
             if (HasActiveSyncOperation())
+            {
+                InvalidateFoxWindowBinding();
                 RefreshMainWindowTitleFromCurrentWindow();
+            }
         }
 
         private void radioButton1_CheckedChanged(object sender, EventArgs e)

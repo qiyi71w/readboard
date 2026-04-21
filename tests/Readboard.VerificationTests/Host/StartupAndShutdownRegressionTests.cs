@@ -209,7 +209,9 @@ namespace Readboard.VerificationTests.Host
             string methodSlice = GetMethodSlice(source, "private FoxWindowContext ResolveFoxWindowContext()");
 
             Assert.Contains("if (!IsFoxSyncType(CurrentSyncType) || hwnd == IntPtr.Zero)", methodSlice);
-            Assert.Contains("return FoxWindowContextResolver.Resolve(hwnd, FoxWindowDescriptorFactory, GetParent);", methodSlice);
+            Assert.Contains("InvalidateFoxWindowBinding();", methodSlice);
+            Assert.Contains("TryRefreshFoxWindowContextFromBinding(out foxWindowContext)", methodSlice);
+            Assert.Contains("TryResolveFoxWindowBinding(out foxWindowContext)", methodSlice);
         }
 
         [Fact]

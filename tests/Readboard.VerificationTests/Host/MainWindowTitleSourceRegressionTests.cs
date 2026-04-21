@@ -11,6 +11,7 @@ namespace Readboard.VerificationTests.Host
             string source = LoadSource("readboard", "Form1.cs");
 
             Assert.Contains("private FoxWindowContext lastFoxWindowContext = FoxWindowContext.Unknown();", source);
+            Assert.Contains("private FoxWindowBinding foxWindowBinding = null;", source);
             Assert.Contains("private bool hasRetainedFoxTitleSnapshot = false;", source);
             Assert.Contains("private void UpdateMainWindowTitle(FoxWindowContext foxWindowContext)", source);
             Assert.Contains("private void RefreshMainWindowTitleFromCurrentWindow()", source);
@@ -20,6 +21,22 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains(
                 "UpdateMainWindowTitle(foxWindowContext);",
                 GetMethodSlice(source, "private SyncCoordinatorHostSnapshot CaptureSnapshotCore()"));
+        }
+
+        [Fact]
+        public void MainForm_UsesBindingCacheInsteadOfHeavyFoxTitleResolutionInsideSnapshotCapture()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string resolveSlice = GetMethodSlice(source, "private FoxWindowContext ResolveFoxWindowContext()");
+            string applyTitleSlice = GetMethodSlice(source, "private void ApplyMainWindowTitle()");
+
+            Assert.Contains("TryRefreshFoxWindowContextFromBinding(out foxWindowContext)", resolveSlice);
+            Assert.Contains("TryResolveFoxWindowBinding(out foxWindowContext)", resolveSlice);
+            Assert.DoesNotContain("FoxWindowContextResolver.Resolve(", resolveSlice);
+            Assert.DoesNotContain("FoxWindowDescriptorFactory", resolveSlice);
+            Assert.Contains("string title = MainWindowTitleFormatter.Format(", applyTitleSlice);
+            Assert.Contains("if (string.Equals(lastAppliedMainWindowTitle, title, StringComparison.Ordinal))", applyTitleSlice);
+            Assert.Contains("lastAppliedMainWindowTitle = title;", applyTitleSlice);
         }
 
         [Fact]
@@ -36,6 +53,9 @@ namespace Readboard.VerificationTests.Host
                 "lastFoxWindowContext = FoxWindowContext.Unknown();",
                 updateHandleSlice);
             Assert.Contains(
+                "InvalidateFoxWindowBinding();",
+                updateHandleSlice);
+            Assert.Contains(
                 "RefreshMainWindowTitleFromCurrentWindow();",
                 GetMethodSlice(source, "private void ApplyKeepSyncStartedUi()"));
             Assert.Contains(
@@ -43,6 +63,9 @@ namespace Readboard.VerificationTests.Host
                 GetMethodSlice(source, "private void ApplyContinuousSyncStartedUi()"));
             Assert.Contains(
                 "if (HasActiveSyncOperation())",
+                forceRebuildSlice);
+            Assert.Contains(
+                "InvalidateFoxWindowBinding();",
                 forceRebuildSlice);
             Assert.Contains(
                 "RefreshMainWindowTitleFromCurrentWindow();",
