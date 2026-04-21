@@ -230,6 +230,8 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="UpdateCheckResult.cs" />
     <Compile Include="UpdateCheckStatus.cs" />
+    <Compile Include="UpdateDialogFormatter.cs" />
+    <Compile Include="UpdateDialogLayoutMetrics.cs" />
     <Compile Include="UpdateDialogModel.cs" />
     <EmbeddedResource Include="Form1.resx">
       <DependentUpon>Form1.cs</DependentUpon>

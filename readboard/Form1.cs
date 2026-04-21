@@ -1250,13 +1250,6 @@ namespace readboard
                 : getLangStr("MainForm_btnCheckUpdate");
         }
 
-        private static string FormatReleaseDate(DateTime? publishedAt)
-        {
-            return publishedAt.HasValue
-                ? publishedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
-                : string.Empty;
-        }
-
         private void ApplyUpdateDialogLanguage(FormUpdate formUpdate)
         {
             formUpdate.Text = getLangStr("Update_dialogTitle");
@@ -1299,7 +1292,7 @@ namespace readboard
             {
                 CurrentVersion = result.CurrentVersion,
                 LatestVersion = result.LatestVersion,
-                ReleaseDate = FormatReleaseDate(result.PublishedAt),
+                PublishedAt = result.PublishedAt,
                 ReleaseNotes = result.ReleaseNotes,
                 DownloadUrl = result.ReleaseUrl,
                 UnavailableText = getLangStr("Update_notProvided"),
