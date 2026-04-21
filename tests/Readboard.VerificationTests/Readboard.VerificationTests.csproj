@@ -60,6 +60,7 @@
     <Compile Include="..\..\readboard\Core\Protocol\LegacyProtocolAdapter.cs" Link="Production\Core\Protocol\LegacyProtocolAdapter.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\LegacyWindowDescriptorFactory.cs" Link="Production\Core\Protocol\LegacyWindowDescriptorFactory.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\PlaceRequestExecutionResult.cs" Link="Production\Core\Protocol\PlaceRequestExecutionResult.cs" />
+    <Compile Include="..\..\readboard\Core\Protocol\SessionCoordinatorScope.cs" Link="Production\Core\Protocol\SessionCoordinatorScope.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\SerialBackgroundWorkQueue.cs" Link="Production\Core\Protocol\SerialBackgroundWorkQueue.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\SyncCoordinatorHostSnapshot.cs" Link="Production\Core\Protocol\SyncCoordinatorHostSnapshot.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\SyncToolbarTextResolver.cs" Link="Production\Core\Protocol\SyncToolbarTextResolver.cs" />
@@ -76,5 +77,7 @@
     <Compile Include="..\..\readboard\Core\Recognition\RecognitionThresholds.cs" Link="Production\Core\Recognition\RecognitionThresholds.cs" />
     <Compile Include="..\..\readboard\Core\Transport\PipeTransport.cs" Link="Production\Core\Transport\PipeTransport.cs" />
     <Compile Include="..\..\readboard\Core\Transport\TcpTransport.cs" Link="Production\Core\Transport\TcpTransport.cs" />
+    <Compile Include="..\..\readboard\UpdateDialogFormatter.cs" Link="Production\UpdateDialogFormatter.cs" />
+    <Compile Include="..\..\readboard\UpdateDialogLayoutMetrics.cs" Link="Production\UpdateDialogLayoutMetrics.cs" />
   </ItemGroup>
 </Project>

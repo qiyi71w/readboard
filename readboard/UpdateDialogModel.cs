@@ -1,3 +1,5 @@
+using System;
+
 namespace readboard
 {
     public sealed class UpdateDialogModel
@@ -6,7 +8,7 @@ namespace readboard
 
         public string LatestVersion { get; set; }
 
-        public string ReleaseDate { get; set; }
+        public DateTime? PublishedAt { get; set; }
 
         public string ReleaseNotes { get; set; }
 

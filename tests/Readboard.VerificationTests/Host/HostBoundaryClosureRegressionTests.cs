@@ -1,4 +1,8 @@
+using System;
 using System.IO;
+using System.Linq;
+using System.Reflection;
+using readboard;
 using Xunit;
 
 namespace Readboard.VerificationTests.Host
@@ -41,6 +45,32 @@ namespace Readboard.VerificationTests.Host
             Assert.DoesNotContain("CreatePlacementService(", source);
             Assert.DoesNotContain("CreateOverlayService(", source);
             Assert.Contains("MainFormRuntimeComposer", source);
+        }
+
+        [Fact]
+        public void Program_DisposesCoordinatorThroughInterfaceContract()
+        {
+            string programSource = LoadSource("readboard", "Program.cs");
+            MethodInfo runMethod = typeof(SessionCoordinatorScope).GetMethod(
+                "Run",
+                BindingFlags.Static | BindingFlags.NonPublic);
+
+            Assert.True(
+                typeof(ISyncSessionCoordinator).GetInterfaces().Contains(typeof(IDisposable)),
+                "ISyncSessionCoordinator should implement IDisposable through its interface contract.");
+            Assert.NotNull(runMethod);
+            Assert.Equal(typeof(void), runMethod.ReturnType);
+            Assert.Equal(
+                new[]
+                {
+                    typeof(ISyncSessionCoordinator),
+                    typeof(Action<ISyncSessionCoordinator>),
+                    typeof(Action<ISyncSessionCoordinator>)
+                },
+                runMethod.GetParameters().Select(parameter => parameter.ParameterType).ToArray());
+            Assert.True(
+                programSource.Contains("SessionCoordinatorScope.Run("),
+                "Program should route coordinator lifetime through SessionCoordinatorScope.Run.");
         }
 
         [Fact]

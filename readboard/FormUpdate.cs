@@ -33,10 +33,18 @@ namespace readboard
 
         private void ApplyModel()
         {
-            lblCurrentVersionValue.Text = NormalizeValue(model.CurrentVersion, model.UnavailableText);
-            lblLatestVersionValue.Text = NormalizeValue(model.LatestVersion, model.UnavailableText);
-            lblReleaseDateValue.Text = NormalizeValue(model.ReleaseDate, model.UnavailableText);
-            txtReleaseNotes.Text = NormalizeReleaseNotes(model.ReleaseNotes, model.EmptyReleaseNotesText);
+            lblCurrentVersionValue.Text = NormalizeValue(
+                UpdateDialogFormatter.FormatVersion(model.CurrentVersion),
+                model.UnavailableText);
+            lblLatestVersionValue.Text = NormalizeValue(
+                UpdateDialogFormatter.FormatVersion(model.LatestVersion),
+                model.UnavailableText);
+            lblReleaseDateValue.Text = NormalizeValue(
+                UpdateDialogFormatter.FormatReleaseDate(model.PublishedAt),
+                model.UnavailableText);
+            txtReleaseNotes.Text = NormalizeReleaseNotes(
+                UpdateDialogFormatter.FormatReleaseNotes(model.ReleaseNotes),
+                model.EmptyReleaseNotesText);
         }
 
         private static string NormalizeReleaseNotes(string value, string fallbackText)
@@ -87,6 +95,7 @@ namespace readboard
                 ApplyOptimizedUpdateTheme();
             else
                 ApplyClassicUpdateTheme();
+            ApplyInfoPanelLayout();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -144,6 +153,24 @@ namespace readboard
             label.Font = font;
             label.BorderStyle = BorderStyle.None;
             label.Padding = Padding.Empty;
+        }
+
+        private void ApplyInfoPanelLayout()
+        {
+            infoPanel.AutoSize = true;
+            infoPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            UpdateDialogLayoutMetrics.EnsureInfoRowCapacity(infoPanel.RowStyles.Count);
+            ConfigureInfoRow(0, lblCurrentVersion, lblCurrentVersionValue);
+            ConfigureInfoRow(1, lblLatestVersion, lblLatestVersionValue);
+            ConfigureInfoRow(2, lblReleaseDate, lblReleaseDateValue);
+        }
+
+        private void ConfigureInfoRow(int rowIndex, Label label, Label valueLabel)
+        {
+            infoPanel.RowStyles[rowIndex].SizeType = SizeType.Absolute;
+            infoPanel.RowStyles[rowIndex].Height = UpdateDialogLayoutMetrics.CalculateInfoRowHeight(
+                label.PreferredHeight,
+                valueLabel.PreferredHeight);
         }
 
         private static void ResetButtonTheme(Button button)

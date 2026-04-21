@@ -25,7 +25,7 @@
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
     <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>2.0.1.%2a</ApplicationVersion>
+    <ApplicationVersion>2.0.2.%2a</ApplicationVersion>
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
@@ -161,6 +161,7 @@
     <Compile Include="Core\Protocol\LegacyProtocolAdapter.cs" />
     <Compile Include="Core\Protocol\LegacyWindowDescriptorFactory.cs" />
     <Compile Include="Core\Protocol\PlaceRequestExecutionResult.cs" />
+    <Compile Include="Core\Protocol\SessionCoordinatorScope.cs" />
     <Compile Include="Core\Protocol\SerialBackgroundWorkQueue.cs" />
     <Compile Include="Core\Protocol\SyncCoordinatorHostSnapshot.cs" />
     <Compile Include="Core\Protocol\SyncToolbarTextResolver.cs" />
@@ -230,6 +231,8 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="UpdateCheckResult.cs" />
     <Compile Include="UpdateCheckStatus.cs" />
+    <Compile Include="UpdateDialogFormatter.cs" />
+    <Compile Include="UpdateDialogLayoutMetrics.cs" />
     <Compile Include="UpdateDialogModel.cs" />
     <EmbeddedResource Include="Form1.resx">
       <DependentUpon>Form1.cs</DependentUpon>
