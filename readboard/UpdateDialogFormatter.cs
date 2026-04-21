@@ -60,9 +60,9 @@ namespace readboard
                 return null;
             }
 
-            DateTime timestamp = NormalizeTimestamp(publishedAt.Value).ToUniversalTime();
+            DateTime timestamp = NormalizeTimestamp(publishedAt.Value).ToLocalTime();
             return timestamp.ToString(
-                "yyyy-MM-dd HH:mm 'UTC'",
+                "yyyy-MM-dd HH:mm zzz",
                 CultureInfo.InvariantCulture);
         }
 

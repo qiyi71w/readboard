@@ -229,31 +229,28 @@ namespace readboard
             Application.SetCompatibleTextRenderingDefault(false);
 
             using (IReadBoardTransport transport = CreateTransport(options))
-            using (ISyncSessionCoordinator activeSessionCoordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter()))
             {
-                sessionCoordinator = activeSessionCoordinator;
-                try
-                {
-                    MainForm mainForm = CreateMainForm(options, activeSessionCoordinator);
-                    if (!TryStartSession(mainForm))
-                        return;
-                    mainForm.DrainStartupProtocolCommands();
-                    if (mainForm.IsShutdownRequested)
-                        return;
-                    mainForm.NotifyProtocolReady();
-                    mainForm.DrainStartupProtocolCommands();
-                    if (mainForm.IsShutdownRequested)
-                        return;
-                    mainForm.ReplayStartupProtocolState();
-                    mainForm.DrainStartupProtocolCommands();
-                    if (mainForm.IsShutdownRequested)
-                        return;
-                    Application.Run(mainForm);
-                }
-                finally
-                {
-                    sessionCoordinator = null;
-                }
+                SessionCoordinatorScope.Run(
+                    new SyncSessionCoordinator(transport, new LegacyProtocolAdapter()),
+                    coordinator => sessionCoordinator = coordinator,
+                    activeSessionCoordinator =>
+                    {
+                        MainForm mainForm = CreateMainForm(options, activeSessionCoordinator);
+                        if (!TryStartSession(mainForm))
+                            return;
+                        mainForm.DrainStartupProtocolCommands();
+                        if (mainForm.IsShutdownRequested)
+                            return;
+                        mainForm.NotifyProtocolReady();
+                        mainForm.DrainStartupProtocolCommands();
+                        if (mainForm.IsShutdownRequested)
+                            return;
+                        mainForm.ReplayStartupProtocolState();
+                        mainForm.DrainStartupProtocolCommands();
+                        if (mainForm.IsShutdownRequested)
+                            return;
+                        Application.Run(mainForm);
+                    });
             }
         }
 

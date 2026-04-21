@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Xunit;
 using readboard;
 
@@ -17,13 +18,20 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void FormatReleaseDate_UsesUtcTimestampAndLabel()
+        public void FormatReleaseDate_UsesLocalTimeWithOffset()
         {
             DateTime publishedAt = new DateTime(2026, 4, 20, 23, 42, 0, DateTimeKind.Utc);
 
             string formatted = UpdateDialogFormatter.FormatReleaseDate(publishedAt);
 
-            Assert.Equal("2026-04-20 23:42 UTC", formatted);
+            Assert.Matches(@"^\d{4}-\d{2}-\d{2} \d{2}:\d{2} [+-]\d{2}:\d{2}$", formatted);
+
+            DateTimeOffset parsed = DateTimeOffset.ParseExact(
+                formatted,
+                "yyyy-MM-dd HH:mm zzz",
+                CultureInfo.InvariantCulture);
+
+            Assert.Equal(new DateTimeOffset(publishedAt), parsed.ToUniversalTime());
         }
 
         [Fact]

@@ -1,5 +1,8 @@
+using System;
 using System.IO;
-using System.Text.RegularExpressions;
+using System.Linq;
+using System.Reflection;
+using readboard;
 using Xunit;
 
 namespace Readboard.VerificationTests.Host
@@ -48,37 +51,26 @@ namespace Readboard.VerificationTests.Host
         public void Program_DisposesCoordinatorThroughInterfaceContract()
         {
             string programSource = LoadSource("readboard", "Program.cs");
-            string coordinatorSource = LoadSource("readboard", "Core", "Protocol", "ISyncSessionCoordinator.cs");
-
-            bool hasDisposableInterface = Regex.IsMatch(
-                coordinatorSource,
-                @"interface\s+ISyncSessionCoordinator\s*:\s*[\s\S]*?\bIDisposable\b",
-                RegexOptions.Multiline);
-            bool hasUsingCoordinator = Regex.IsMatch(
-                programSource,
-                @"using\s*\(\s*ISyncSessionCoordinator\s+\w+\s*=\s*",
-                RegexOptions.Multiline);
-            bool resetsCoordinatorReference = Regex.IsMatch(
-                programSource,
-                @"sessionCoordinator\s*=\s*null\s*;",
-                RegexOptions.Multiline);
-            bool manuallyStopsCoordinator = Regex.IsMatch(
-                programSource,
-                @"activeSessionCoordinator\s*\.\s*Stop\s*\(",
-                RegexOptions.Multiline);
+            MethodInfo runMethod = typeof(SessionCoordinatorScope).GetMethod(
+                "Run",
+                BindingFlags.Static | BindingFlags.NonPublic);
 
             Assert.True(
-                hasDisposableInterface,
-                "ISyncSessionCoordinator should implement IDisposable through its interface declaration.");
+                typeof(ISyncSessionCoordinator).GetInterfaces().Contains(typeof(IDisposable)),
+                "ISyncSessionCoordinator should implement IDisposable through its interface contract.");
+            Assert.NotNull(runMethod);
+            Assert.Equal(typeof(void), runMethod.ReturnType);
+            Assert.Equal(
+                new[]
+                {
+                    typeof(ISyncSessionCoordinator),
+                    typeof(Action<ISyncSessionCoordinator>),
+                    typeof(Action<ISyncSessionCoordinator>)
+                },
+                runMethod.GetParameters().Select(parameter => parameter.ParameterType).ToArray());
             Assert.True(
-                hasUsingCoordinator,
-                "Program should dispose ISyncSessionCoordinator via a using statement over the interface type.");
-            Assert.False(
-                manuallyStopsCoordinator,
-                "Program should rely on disposal rather than manually stopping the active coordinator.");
-            Assert.True(
-                resetsCoordinatorReference,
-                "Program should clear the sessionCoordinator reference after the using block completes.");
+                programSource.Contains("SessionCoordinatorScope.Run("),
+                "Program should route coordinator lifetime through SessionCoordinatorScope.Run.");
         }
 
         [Fact]

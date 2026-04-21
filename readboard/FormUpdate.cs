@@ -159,6 +159,7 @@ namespace readboard
         {
             infoPanel.AutoSize = true;
             infoPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            UpdateDialogLayoutMetrics.EnsureInfoRowCapacity(infoPanel.RowStyles.Count);
             ConfigureInfoRow(0, lblCurrentVersion, lblCurrentVersionValue);
             ConfigureInfoRow(1, lblLatestVersion, lblLatestVersionValue);
             ConfigureInfoRow(2, lblReleaseDate, lblReleaseDateValue);
