@@ -110,6 +110,19 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal(1, transport.StopCount);
         }
 
+        [Fact]
+        public void Stop_AfterDispose_IsANoOp()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.Start();
+            coordinator.Dispose();
+            coordinator.Stop();
+
+            Assert.Equal(1, transport.StopCount);
+        }
+
         private sealed class RecordingTransport : IReadBoardTransport
         {
             public event EventHandler<string> MessageReceived;

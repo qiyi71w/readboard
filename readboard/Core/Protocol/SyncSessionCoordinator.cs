@@ -113,6 +113,9 @@ namespace readboard
 
         public void Stop()
         {
+            if (Volatile.Read(ref disposeState) == DisposeStateDisposed)
+                return;
+
             StopCore(false);
         }
 

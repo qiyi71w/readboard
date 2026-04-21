@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace Readboard.VerificationTests.Host
@@ -49,9 +50,20 @@ namespace Readboard.VerificationTests.Host
             string programSource = LoadSource("readboard", "Program.cs");
             string coordinatorSource = LoadSource("readboard", "Core", "Protocol", "ISyncSessionCoordinator.cs");
 
-            Assert.Contains("internal interface ISyncSessionCoordinator : IDisposable", coordinatorSource);
-            Assert.Contains("using (ISyncSessionCoordinator activeSessionCoordinator = new SyncSessionCoordinator", programSource);
-            Assert.DoesNotContain("activeSessionCoordinator.Stop();", programSource);
+            bool hasDisposableInterface = Regex.IsMatch(
+                coordinatorSource,
+                @"interface\s+ISyncSessionCoordinator\s*:\s*[^{]*\bIDisposable\b");
+            bool hasUsingCoordinator = Regex.IsMatch(
+                programSource,
+                @"using\s*\(\s*ISyncSessionCoordinator\s+\w+\s*=");
+
+            Assert.True(
+                hasDisposableInterface,
+                "ISyncSessionCoordinator should implement IDisposable through its interface declaration.");
+            Assert.True(
+                hasUsingCoordinator,
+                "Program should dispose ISyncSessionCoordinator via a using statement over the interface type.");
+            Assert.DoesNotContain("activeSessionCoordinator.Stop(", programSource);
             Assert.Contains("sessionCoordinator = null;", programSource);
         }
 

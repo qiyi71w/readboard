@@ -60,9 +60,9 @@ namespace readboard
                 return null;
             }
 
-            DateTime timestamp = NormalizeTimestamp(publishedAt.Value).ToLocalTime();
+            DateTime timestamp = NormalizeTimestamp(publishedAt.Value).ToUniversalTime();
             return timestamp.ToString(
-                "yyyy-MM-dd HH:mm 'UTC'zzz",
+                "yyyy-MM-dd HH:mm 'UTC'",
                 CultureInfo.InvariantCulture);
         }
 
@@ -120,7 +120,11 @@ namespace readboard
                 version = new Version(value);
                 return true;
             }
-            catch (Exception)
+            catch (ArgumentException)
+            {
+                return false;
+            }
+            catch (OverflowException)
             {
                 return false;
             }

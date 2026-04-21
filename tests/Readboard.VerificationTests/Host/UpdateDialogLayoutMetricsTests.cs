@@ -5,9 +5,12 @@ namespace readboard
     public sealed class UpdateDialogLayoutMetricsTests
     {
         [Theory]
+        [InlineData(0, 0, 26)]
+        [InlineData(5, 10, 26)]
         [InlineData(12, 12, 26)]
         [InlineData(12, 15, 29)]
         [InlineData(18, 16, 32)]
+        [InlineData(18, 40, 54)]
         public void CalculateInfoRowHeight_UsesTallestContentHeight(int labelHeight, int valueHeight, int expected)
         {
             int rowHeight = UpdateDialogLayoutMetrics.CalculateInfoRowHeight(labelHeight, valueHeight);

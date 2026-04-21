@@ -17,13 +17,13 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void FormatReleaseDate_IncludesTimezoneOffset()
+        public void FormatReleaseDate_UsesUtcTimestampAndLabel()
         {
             DateTime publishedAt = new DateTime(2026, 4, 20, 23, 42, 0, DateTimeKind.Utc);
 
             string formatted = UpdateDialogFormatter.FormatReleaseDate(publishedAt);
 
-            Assert.Matches(@"^2026-04-20 \d{2}:\d{2} UTC[+-]\d{2}:\d{2}$", formatted);
+            Assert.Equal("2026-04-20 23:42 UTC", formatted);
         }
 
         [Fact]
