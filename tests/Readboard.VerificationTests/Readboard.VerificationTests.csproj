@@ -36,6 +36,7 @@
     <Compile Include="..\..\readboard\Core\Contracts\PixelBuffer.cs" Link="Production\Core\Contracts\PixelBuffer.cs" />
     <Compile Include="..\..\readboard\Core\Contracts\PixelRect.cs" Link="Production\Core\Contracts\PixelRect.cs" />
     <Compile Include="..\..\readboard\Core\Contracts\WindowDescriptor.cs" Link="Production\Core\Contracts\WindowDescriptor.cs" />
+    <Compile Include="..\..\readboard\Core\Display\DisplayScaling.cs" Link="Production\Core\Display\DisplayScaling.cs" />
     <Compile Include="..\..\readboard\Core\Models\AppConfig.cs" Link="Production\Core\Models\AppConfig.cs" />
     <Compile Include="..\..\readboard\Core\Models\BoardFrame.cs" Link="Production\Core\Models\BoardFrame.cs" />
     <Compile Include="..\..\readboard\Core\Models\BoardSnapshot.cs" Link="Production\Core\Models\BoardSnapshot.cs" />

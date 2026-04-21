@@ -40,7 +40,7 @@ namespace Readboard.VerificationTests.Capture
         [Fact]
         public void Capture_EnhancedRightEdgeOverflowUsesPrintWindow()
         {
-            PixelRect partiallyOffscreenWindow = new PixelRect(1918, 100, 6, 6);
+            PixelRect partiallyOffscreenWindow = new PixelRect(3838, 100, 6, 6);
             RecordingCapturePlatform platform = new RecordingCapturePlatform(CreateBoardBitmap(), CreateWindow(partiallyOffscreenWindow));
             LegacyBoardCaptureService service = new LegacyBoardCaptureService(platform);
 
@@ -51,6 +51,53 @@ namespace Readboard.VerificationTests.Capture
             Assert.True(result.Frame.UsedPrintWindow);
             Assert.Equal(1, platform.PrintWindowCalls);
             Assert.Equal(0, platform.WindowCalls);
+        }
+
+        [Fact]
+        public void Capture_EnhancedNegativeYWindowInsideVirtualScreenDoesNotUsePrintWindow()
+        {
+            PixelRect visibleWindow = new PixelRect(120, -200, 6, 6);
+            PixelRect virtualScreen = new PixelRect(0, -1080, 3840, 3240);
+            RecordingCapturePlatform platform = new RecordingCapturePlatform(
+                CreateBoardBitmap(),
+                CreateWindow(visibleWindow),
+                failPrintWindow: false,
+                virtualScreenBounds: virtualScreen);
+            LegacyBoardCaptureService service = new LegacyBoardCaptureService(platform);
+
+            BoardCaptureResult result = service.Capture(
+                CreateWindowRequest(preferPrintWindow: true, useEnhancedCapture: true, isInitialProbe: false, windowBounds: visibleWindow));
+
+            Assert.True(result.Success);
+            Assert.False(result.Frame.UsedPrintWindow);
+            Assert.Equal(0, platform.PrintWindowCalls);
+            Assert.Equal(1, platform.WindowCalls);
+        }
+
+        [Fact]
+        public void Capture_DpiUnawareWindowUsesMonitorScaleForScreenRelativeCrop()
+        {
+            PixelRect windowBounds = new PixelRect(300, 200, 150, 150);
+            RecordingCapturePlatform platform = new RecordingCapturePlatform(
+                CreateBitmap(150, 150),
+                CreateWindow(windowBounds, isDpiAware: false, dpiScale: 1.5d));
+            LegacyBoardCaptureService service = new LegacyBoardCaptureService(platform);
+
+            BoardCaptureResult result = service.Capture(
+                CreateWindowRequest(
+                    preferPrintWindow: false,
+                    useEnhancedCapture: false,
+                    isInitialProbe: false,
+                    windowBounds: windowBounds,
+                    selectionBounds: new PixelRect(320, 240, 50, 50),
+                    isDpiAware: false,
+                    dpiScale: 1.5d));
+
+            Assert.True(result.Success);
+            Assert.Equal(13, result.Frame.Viewport.SourceBounds.X);
+            Assert.Equal(26, result.Frame.Viewport.SourceBounds.Y);
+            Assert.Equal(33, result.Frame.Viewport.SourceBounds.Width);
+            Assert.Equal(33, result.Frame.Viewport.SourceBounds.Height);
         }
 
         [Fact]
@@ -106,7 +153,10 @@ namespace Readboard.VerificationTests.Capture
             bool preferPrintWindow,
             bool useEnhancedCapture,
             bool isInitialProbe,
-            PixelRect windowBounds = null)
+            PixelRect windowBounds = null,
+            PixelRect selectionBounds = null,
+            bool isDpiAware = true,
+            double dpiScale = 1d)
         {
             PixelRect bounds = CloneRect(windowBounds) ?? CreateOffscreenBounds();
             return new BoardCaptureRequest
@@ -115,11 +165,12 @@ namespace Readboard.VerificationTests.Capture
                 {
                     Handle = new IntPtr(4004),
                     Bounds = bounds,
-                    IsDpiAware = true,
-                    DpiScale = 1d
+                    IsDpiAware = isDpiAware,
+                    DpiScale = dpiScale
                 },
                 SyncMode = SyncMode.Background,
                 BoardSize = new BoardDimensions(2, 2),
+                SelectionBounds = CloneRect(selectionBounds),
                 PreferPrintWindow = preferPrintWindow,
                 UseEnhancedCapture = useEnhancedCapture,
                 IsInitialProbe = isInitialProbe
@@ -133,18 +184,23 @@ namespace Readboard.VerificationTests.Capture
 
         private static WindowDescriptor CreateWindow(PixelRect bounds)
         {
+            return CreateWindow(bounds, isDpiAware: true, dpiScale: 1d);
+        }
+
+        private static WindowDescriptor CreateWindow(PixelRect bounds, bool isDpiAware, double dpiScale)
+        {
             return new WindowDescriptor
             {
                 Handle = new IntPtr(4004),
                 Bounds = CloneRect(bounds),
-                IsDpiAware = true,
-                DpiScale = 1d
+                IsDpiAware = isDpiAware,
+                DpiScale = dpiScale
             };
         }
 
         private static PixelRect CreateOffscreenBounds()
         {
-            return new PixelRect(2050, 100, 6, 6);
+            return new PixelRect(4000, 100, 6, 6);
         }
 
         private static PixelRect CloneRect(PixelRect rect)
@@ -167,7 +223,7 @@ namespace Readboard.VerificationTests.Capture
 
         private static Bitmap CreateAllBlackBoardBitmap()
         {
-            Bitmap bitmap = new Bitmap(6, 6, PixelFormat.Format24bppRgb);
+            Bitmap bitmap = CreateBitmap(6, 6);
             using (Graphics graphics = Graphics.FromImage(bitmap))
             {
                 graphics.Clear(Color.Black);
@@ -175,30 +231,41 @@ namespace Readboard.VerificationTests.Capture
             return bitmap;
         }
 
+        private static Bitmap CreateBitmap(int width, int height)
+        {
+            return new Bitmap(width, height, PixelFormat.Format24bppRgb);
+        }
+
         private sealed class RecordingCapturePlatform : IBoardCapturePlatform
         {
             private readonly Bitmap sourceBitmap;
             private readonly WindowDescriptor descriptor;
             private readonly bool failPrintWindow;
+            private readonly PixelRect virtualScreenBounds;
 
-            public RecordingCapturePlatform(Bitmap sourceBitmap, WindowDescriptor descriptor, bool failPrintWindow = false)
+            public RecordingCapturePlatform(
+                Bitmap sourceBitmap,
+                WindowDescriptor descriptor,
+                bool failPrintWindow = false,
+                PixelRect virtualScreenBounds = null)
             {
                 this.sourceBitmap = sourceBitmap;
                 this.descriptor = descriptor;
                 this.failPrintWindow = failPrintWindow;
+                this.virtualScreenBounds = CloneRect(virtualScreenBounds) ?? new PixelRect(0, 0, 3840, 2160);
             }
 
             public int WindowCalls { get; private set; }
             public int PrintWindowCalls { get; private set; }
 
-            public double GetDesktopDpiScale()
+            public double GetScaleForPoint(Point point)
             {
                 return 1d;
             }
 
-            public PixelRect GetPrimaryScreenBounds()
+            public PixelRect GetVirtualScreenBounds()
             {
-                return new PixelRect(0, 0, 1920, 1080);
+                return CloneRect(virtualScreenBounds);
             }
 
             public bool TryDescribeWindow(IntPtr handle, WindowDescriptor seed, out WindowDescriptor resolved)

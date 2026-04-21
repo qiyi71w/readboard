@@ -7,6 +7,7 @@ namespace readboard
     public partial class Form2 : Form
     {
         private const int SelectionInvalidatePadding = 2;
+        private const int MagnifierLogicalMargin = 12;
 
         private int x1;
         private int y1;
@@ -22,24 +23,17 @@ namespace readboard
         {
             InitializeComponent();
             this.host = RequireHost(host);
-          //  int SH = Screen.PrimaryScreen.Bounds.Height;
-         //   int SW = Screen.PrimaryScreen.Bounds.Width;
-          //  this.Size = new Size(SW+160,SH+160);
-          //  this.Location = new Point(-80, -80);
-
             this.needMag = needMag;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
             UpdateStyles();
+            ApplySelectionOverlayBounds();
             if (Program.CurrentConfig.UseMagnifier && needMag)
             {
                 form5 = new MagnifierForm(this.host);
                 form5.StartPosition = FormStartPosition.Manual;
-                int iActulaHeight = Screen.PrimaryScreen.Bounds.Height;
-                form5.Location = new Point(0, iActulaHeight - 200);
+                PositionMagnifier(MousePosition);
                 form5.Show();
             }
-            //   x1 = Form1.ox1;
-            //  y1 = Form1.oy1;
         }
 
         private void Form2_MouseDown(object sender, MouseEventArgs e)
@@ -59,6 +53,7 @@ namespace readboard
             if (Program.CurrentConfig.UseMagnifier && needMag && form5 != null && !form5.IsDisposed)
             {
                 Point mousePosition = MousePosition;
+                PositionMagnifier(mousePosition);
                 form5.setPic(mousePosition.X, mousePosition.Y);
             }
         }
@@ -148,6 +143,39 @@ namespace readboard
             }
 
             form5 = null;
+        }
+
+        private void ApplySelectionOverlayBounds()
+        {
+            PixelRect virtualScreenBounds = DisplayScaling.GetVirtualScreenBounds();
+            Bounds = new Rectangle(
+                virtualScreenBounds.X,
+                virtualScreenBounds.Y,
+                virtualScreenBounds.Width,
+                virtualScreenBounds.Height);
+            WindowState = FormWindowState.Normal;
+        }
+
+        private void PositionMagnifier(Point anchorPoint)
+        {
+            if (form5 == null || form5.IsDisposed)
+                return;
+
+            Rectangle workingArea = Screen.FromPoint(anchorPoint).WorkingArea;
+            int margin = Math.Max(8, (int)Math.Round(DisplayScaling.GetScaleForPoint(anchorPoint) * MagnifierLogicalMargin));
+            Point preferredLocation = new Point(
+                workingArea.Left + margin,
+                workingArea.Bottom - form5.Height - margin);
+            form5.Location = ClampToWorkingArea(preferredLocation, form5.Size, workingArea);
+        }
+
+        private static Point ClampToWorkingArea(Point location, Size windowSize, Rectangle workingArea)
+        {
+            int maxX = Math.Max(workingArea.Left, workingArea.Right - windowSize.Width);
+            int maxY = Math.Max(workingArea.Top, workingArea.Bottom - windowSize.Height);
+            return new Point(
+                Math.Min(Math.Max(location.X, workingArea.Left), maxX),
+                Math.Min(Math.Max(location.Y, workingArea.Top), maxY));
         }
 
         private MainForm TryGetHost()

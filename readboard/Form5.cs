@@ -6,14 +6,11 @@ namespace readboard
 {
     public partial class MagnifierForm : Form
     {
-        private const int CaptureSize = 20;
-        private const int CaptureOffset = CaptureSize / 2;
-        private const int ZoomSize = 120;
-        private const int CrosshairThickness = 5;
-        private const int CrosshairHalfLength = 15;
-
-        private static readonly Size CaptureBitmapSize = new Size(CaptureSize, CaptureSize);
-        private static readonly Rectangle ZoomBounds = new Rectangle(0, 0, ZoomSize, ZoomSize);
+        private const int CaptureLogicalSize = 20;
+        private const int ZoomLogicalSize = 120;
+        private const int CrosshairLogicalThickness = 5;
+        private const int CrosshairLogicalHalfLength = 15;
+        private const int WindowLogicalExtraHeight = 1;
 
         private Bitmap captureBitmap;
         private Bitmap zoomBitmap;
@@ -21,12 +18,18 @@ namespace readboard
         private Graphics zoomGraphics;
         private Pen crosshairPen;
         private readonly MainForm host;
+        private Size captureBitmapSize = new Size(CaptureLogicalSize, CaptureLogicalSize);
+        private Rectangle zoomBounds = new Rectangle(0, 0, ZoomLogicalSize, ZoomLogicalSize);
+        private int captureOffset = CaptureLogicalSize / 2;
+        private int crosshairHalfLength = CrosshairLogicalHalfLength;
+        private bool isApplyingMagnifierLayout;
 
         internal MagnifierForm(MainForm host)
         {
             InitializeComponent();
             this.host = RequireHost(host);
             this.Text = getLangStr("MagnifierForm_title");
+            ApplyMagnifierLayout();
             InitializeMagnifierBuffers();
         }
 
@@ -59,11 +62,12 @@ namespace readboard
 
         private void InitializeMagnifierBuffers()
         {
-            captureBitmap = new Bitmap(CaptureSize, CaptureSize);
+            ReleaseMagnifierBuffers();
+            captureBitmap = new Bitmap(captureBitmapSize.Width, captureBitmapSize.Height);
             captureGraphics = Graphics.FromImage(captureBitmap);
-            zoomBitmap = new Bitmap(ZoomSize, ZoomSize);
+            zoomBitmap = new Bitmap(zoomBounds.Width, zoomBounds.Height);
             zoomGraphics = Graphics.FromImage(zoomBitmap);
-            crosshairPen = new Pen(Color.Red, CrosshairThickness);
+            crosshairPen = new Pen(Color.Red, Math.Max(1, ScaleValue(CrosshairLogicalThickness)));
 
             zoomGraphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
             zoomGraphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
@@ -73,21 +77,28 @@ namespace readboard
 
         private void CaptureScreenArea(int x, int y)
         {
-            captureGraphics.CopyFromScreen(x - CaptureOffset, y - CaptureOffset, 0, 0, CaptureBitmapSize);
+            captureGraphics.CopyFromScreen(x - captureOffset, y - captureOffset, 0, 0, captureBitmapSize);
         }
 
         private void RenderMagnifierFrame()
         {
             zoomGraphics.Clear(Color.Transparent);
-            zoomGraphics.DrawImage(captureBitmap, ZoomBounds, 0, 0, CaptureSize, CaptureSize, GraphicsUnit.Pixel);
+            zoomGraphics.DrawImage(
+                captureBitmap,
+                zoomBounds,
+                0,
+                0,
+                captureBitmapSize.Width,
+                captureBitmapSize.Height,
+                GraphicsUnit.Pixel);
             DrawCrosshair();
         }
 
         private void DrawCrosshair()
         {
-            int center = ZoomSize / 2;
-            zoomGraphics.DrawLine(crosshairPen, center - CrosshairHalfLength, center, center + CrosshairHalfLength, center);
-            zoomGraphics.DrawLine(crosshairPen, center, center - CrosshairHalfLength, center, center + CrosshairHalfLength);
+            int center = zoomBounds.Width / 2;
+            zoomGraphics.DrawLine(crosshairPen, center - crosshairHalfLength, center, center + crosshairHalfLength, center);
+            zoomGraphics.DrawLine(crosshairPen, center, center - crosshairHalfLength, center, center + crosshairHalfLength);
         }
 
         private void ReleaseMagnifierBuffers()
@@ -133,6 +144,63 @@ namespace readboard
             if (host.IsDisposed)
                 throw new InvalidOperationException("MainForm host is unavailable.");
             return host;
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            ApplyMagnifierLayout();
+            InitializeMagnifierBuffers();
+        }
+
+        protected override void OnDpiChanged(DpiChangedEventArgs e)
+        {
+            base.OnDpiChanged(e);
+            ApplyMagnifierLayout();
+            InitializeMagnifierBuffers();
+        }
+
+        private void ApplyMagnifierLayout()
+        {
+            if (isApplyingMagnifierLayout)
+                return;
+
+            isApplyingMagnifierLayout = true;
+            SuspendLayout();
+            try
+            {
+                DoubleBuffered = true;
+                captureBitmapSize = CreateScaledSquare(CaptureLogicalSize);
+                captureOffset = captureBitmapSize.Width / 2;
+                int zoomSize = Math.Max(ScaleValue(ZoomLogicalSize), captureBitmapSize.Width * 2);
+                zoomBounds = new Rectangle(0, 0, zoomSize, zoomSize);
+                crosshairHalfLength = Math.Max(ScaleValue(CrosshairLogicalHalfLength), ScaleValue(8));
+                pictureBox1.Location = Point.Empty;
+                pictureBox1.Size = zoomBounds.Size;
+                ClientSize = new Size(zoomBounds.Width, zoomBounds.Height + ScaleValue(WindowLogicalExtraHeight));
+            }
+            finally
+            {
+                ResumeLayout(false);
+                PerformLayout();
+                isApplyingMagnifierLayout = false;
+            }
+        }
+
+        private Size CreateScaledSquare(int logicalSize)
+        {
+            int size = Math.Max(ScaleValue(logicalSize), 8);
+            if ((size & 1) != 0)
+                size++;
+            return new Size(size, size);
+        }
+
+        private int ScaleValue(int logicalValue)
+        {
+            double scale = IsHandleCreated
+                ? DisplayScaling.GetScaleForWindow(Handle)
+                : DisplayScaling.DefaultScale;
+            return (int)Math.Round(logicalValue * DisplayScaling.NormalizeScale(scale));
         }
 
         private static MainForm RequireHost(MainForm host)

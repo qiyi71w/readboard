@@ -1132,14 +1132,14 @@ namespace Readboard.VerificationTests.Protocol
         {
             public object HandleCall(MethodInfo method, object[] args)
             {
-                args[2] = new WindowDescriptor
+                args[1] = new WindowDescriptor
                 {
                     Handle = (IntPtr)args[0],
                     Bounds = new PixelRect(100, 200, 190, 190),
                     ClassName = "FoxBoard",
                     Title = "Fox",
                     IsDpiAware = true,
-                    DpiScale = (float)args[1]
+                    DpiScale = 1d
                 };
                 return true;
             }

@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Windows.Forms;
 
 namespace readboard
 {
@@ -32,6 +33,7 @@ namespace readboard
             AppConfig config = Program.CurrentContext.Config.Clone();
             int customBoardWidth;
             int customBoardHeight;
+            Point persistedWindowLocation = ResolvePersistableWindowLocation();
             GetCustomBoardDimensions(out customBoardWidth, out customBoardHeight);
             config.BoardWidth = boardW;
             config.BoardHeight = boardH;
@@ -39,9 +41,29 @@ namespace readboard
             config.CustomBoardHeight = customBoardHeight;
             config.SyncBoth = sessionCoordinator.SyncBoth;
             config.SyncMode = (SyncMode)CurrentSyncType;
-            config.WindowPosX = Location.X;
-            config.WindowPosY = Location.Y;
+            config.WindowPosX = persistedWindowLocation.X;
+            config.WindowPosY = persistedWindowLocation.Y;
             return config;
+        }
+
+        private Point ResolvePersistableWindowLocation()
+        {
+            Rectangle boundsToPersist =
+                WindowState == FormWindowState.Normal && Bounds.Width > 0 && Bounds.Height > 0
+                    ? Bounds
+                    : RestoreBounds;
+            Point location = boundsToPersist.Location;
+            Rectangle virtualScreen = SystemInformation.VirtualScreen;
+            if (location.X <= -16000
+                || location.Y <= -16000
+                || boundsToPersist.Width <= 0
+                || boundsToPersist.Height <= 0
+                || virtualScreen.Width <= 0
+                || virtualScreen.Height <= 0)
+                return new Point(-1, -1);
+            if (!virtualScreen.Contains(location))
+                return new Point(-1, -1);
+            return location;
         }
 
         private void ApplyBoardSelection(AppConfig config)

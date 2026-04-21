@@ -50,15 +50,12 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
-        public void PackagingWorkflow_RunsForMainAndRefactorFixPushes()
+        public void PackagingWorkflow_RunsForVersionTags()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string workflowContent = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "package-release.yml"));
-            string[] branches = ReadWorkflowSequence(workflowContent, "on", "push", "branches");
             string[] tags = ReadWorkflowSequence(workflowContent, "on", "push", "tags");
 
-            Assert.Contains("main", branches);
-            Assert.Contains("refactor-fix", branches);
             Assert.Contains("v*", tags);
         }
 
@@ -111,7 +108,7 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
-        public void ProtocolConfigBenchmarks_Project_IncludesPlaceRequestExecutionResult()
+        public void ProtocolConfigBenchmarks_Project_IncludesRequiredProductionSources()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string projectPath = Path.Combine(
@@ -126,6 +123,12 @@ namespace Readboard.VerificationTests
                 element => string.Equals(
                     (string)element.Attribute("Include"),
                     @"..\..\readboard\Core\Protocol\PlaceRequestExecutionResult.cs",
+                    StringComparison.Ordinal));
+            Assert.Contains(
+                projectDocument.Descendants("Compile"),
+                element => string.Equals(
+                    (string)element.Attribute("Include"),
+                    @"..\..\readboard\Core\Display\DisplayScaling.cs",
                     StringComparison.Ordinal));
         }
 

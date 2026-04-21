@@ -63,6 +63,8 @@ namespace readboard
         private readonly Queue<Action> pendingProtocolCommands = new Queue<Action>();
         private readonly BackgroundSelectionWindowBindingCoordinator backgroundSelectionWindowBindingCoordinator =
             new BackgroundSelectionWindowBindingCoordinator();
+        private const int MainFormMinimumLogicalWidth = 360;
+        private const int MainFormScreenLogicalPadding = 40;
 
         int posX = -1;
         int posY = -1;
@@ -73,6 +75,7 @@ namespace readboard
         private ToolStripMenuItem menuThemeOptimized;
         private ToolStripMenuItem menuThemeClassic;
         private bool isMainFormSizeInitialized = false;
+        private bool isApplyingMainFormLayout = false;
         private bool isShuttingDown = false;
         private bool closeRequestedBeforeHandle = false;
         private bool isInitializingProtocolState = true;
@@ -134,6 +137,31 @@ namespace readboard
                 return;
 
             Location = ClampToScreenWorkingArea(new System.Drawing.Point(posX, posY), Size);
+        }
+
+        private void RestoreSavedWindowLocationIfNeeded()
+        {
+            if (isMainFormSizeInitialized)
+                return;
+
+            RestoreSavedWindowLocation();
+        }
+
+        private Point? TryGetStartupReferencePoint()
+        {
+            if (isMainFormSizeInitialized || posX == -1 || posY == -1)
+                return null;
+
+            return new Point(posX, posY);
+        }
+
+        private Point ResolveLayoutReferencePoint()
+        {
+            return DisplayScaling.ResolveReferencePoint(
+                IsHandleCreated,
+                Bounds,
+                Location,
+                TryGetStartupReferencePoint());
         }
 
         internal void RefreshShowInBoardShortcutToolTip()
@@ -248,30 +276,41 @@ namespace readboard
 
         private void ApplyMainFormUi()
         {
+            if (isApplyingMainFormLayout)
+                return;
+
+            isApplyingMainFormLayout = true;
             SuspendLayout();
-            AutoScaleMode = AutoScaleMode.None;
-            DoubleBuffered = true;
-            EnsureThemeControls();
-            if (!isMainFormSizeInitialized)
+            try
             {
-                ClientSize = MainFormDefaultSize;
-                isMainFormSizeInitialized = true;
+                DoubleBuffered = true;
+                AutoScroll = true;
+                EnsureThemeControls();
+                factor = GetCurrentDpiScale();
+                ConstrainMainFormWidth();
+                groupBox1.Text = getLangStr("MainForm_groupPlatform");
+                groupBox2.Text = getLangStr("MainForm_groupBoard");
+                groupBox4.Text = getLangStr("MainForm_groupSync");
+                rdoOtherBoard.Text = getLangStr("MainForm_rdoCustomBoard");
+                label6.Text = "x";
+                ApplyMainFormTypography();
+                ApplyThemeControlTexts();
+                ApplyMainFormTheme();
+                int nextTop = ArrangeMainHeader();
+                nextTop = ArrangeMainBoardSection(nextTop + ScaleValue(12));
+                nextTop = ArrangeMainSyncSection(nextTop + ScaleValue(12));
+                ArrangeMainActions(nextTop + ScaleValue(12));
             }
-            groupBox1.Text = getLangStr("MainForm_groupPlatform");
-            groupBox2.Text = getLangStr("MainForm_groupBoard");
-            groupBox4.Text = getLangStr("MainForm_groupSync");
-            rdoOtherBoard.Text = getLangStr("MainForm_rdoCustomBoard");
-            label6.Text = "x";
-            ApplyMainFormTypography();
-            ApplyThemeControlTexts();
-            ApplyMainFormTheme();
-            ArrangeMainHeader();
-            ArrangeMainBoardSection();
-            ArrangeMainSyncSection();
-            ArrangeMainActions();
-            ResumeLayout(false);
-            PerformLayout();
-            RestoreSavedWindowLocation();
+            finally
+            {
+                ResumeLayout(false);
+                PerformLayout();
+                RestoreSavedWindowLocationIfNeeded();
+                if (IsHandleCreated && !isMainFormSizeInitialized)
+                    isMainFormSizeInitialized = true;
+                factor = GetCurrentDpiScale();
+                isApplyingMainFormLayout = false;
+            }
         }
 
         private void ApplyMainFormTypography()
@@ -405,103 +444,226 @@ namespace readboard
             btnClearBoard.Cursor = Cursors.Default;
         }
 
-        private void ArrangeMainHeader()
+        private int ArrangeMainHeader()
         {
-            const int left = 12;
-            const int top = 12;
-            const int buttonHeight = 32;
-            const int optionLeft = 14;
-            const int optionTop = 31;
-            const int optionGap = 10;
-            const int settingsWidth = 72;
-            const int helpWidth = 68;
-            const int themeWidth = 68;
-            const int utilityGap = 8;
+            if (CanUseLegacyMainDesktopLayout())
+                return ArrangeLegacyMainHeader();
+
+            return ArrangeAdaptiveMainHeader();
+        }
+
+        private int ArrangeLegacyMainHeader()
+        {
+            int left = ScaleValue(12);
+            int top = ScaleValue(12);
+            int buttonHeight = ScaleValue(32);
+            int optionLeft = ScaleValue(14);
+            int optionTop = ScaleValue(31);
+            int optionGap = ScaleValue(10);
+            int utilityGap = ScaleValue(8);
+            int settingsWidth = MeasureButtonWidth(btnSettings, 72);
+            int helpWidth = MeasureButtonWidth(btnHelp, 68);
+            int themeWidth = MeasureButtonWidth(btnTheme, 68);
             int utilityRight = ClientSize.Width - left;
             int themeLeft = utilityRight - themeWidth;
             int helpLeft = themeLeft - utilityGap - helpWidth;
             int settingsLeft = helpLeft - utilityGap - settingsWidth;
 
-            groupBox1.SetBounds(left, top, settingsLeft - left - utilityGap, 72);
-            rdoFox.Location = new System.Drawing.Point(optionLeft, optionTop);
-            rdoFoxBack.Location = new System.Drawing.Point(rdoFox.Right + optionGap, optionTop);
-            rdoTygem.Location = new System.Drawing.Point(rdoFoxBack.Right + optionGap, optionTop);
-            rdoSina.Location = new System.Drawing.Point(rdoTygem.Right + optionGap, optionTop);
-            rdoBack.Location = new System.Drawing.Point(rdoSina.Right + optionGap, optionTop);
-            rdoFore.Location = new System.Drawing.Point(rdoBack.Right + optionGap, optionTop);
+            groupBox1.SetBounds(left, top, settingsLeft - left - utilityGap, ScaleValue(72));
+            rdoFox.Location = new Point(optionLeft, optionTop);
+            rdoFoxBack.Location = new Point(rdoFox.Right + optionGap, optionTop);
+            rdoTygem.Location = new Point(rdoFoxBack.Right + optionGap, optionTop);
+            rdoSina.Location = new Point(rdoTygem.Right + optionGap, optionTop);
+            rdoBack.Location = new Point(rdoSina.Right + optionGap, optionTop);
+            rdoFore.Location = new Point(rdoBack.Right + optionGap, optionTop);
             btnSettings.SetBounds(settingsLeft, top, settingsWidth, buttonHeight);
             btnHelp.SetBounds(helpLeft, top, helpWidth, buttonHeight);
             btnTheme.SetBounds(themeLeft, top, themeWidth, buttonHeight);
             btnKomi65.SetBounds(settingsLeft, top + buttonHeight + utilityGap, utilityRight - settingsLeft, buttonHeight);
             btnCheckUpdate.SetBounds(settingsLeft, btnKomi65.Bottom + utilityGap, utilityRight - settingsLeft, buttonHeight);
+            return Math.Max(groupBox1.Bottom, btnCheckUpdate.Bottom);
         }
 
-        private void ArrangeMainBoardSection()
+        private int ArrangeAdaptiveMainHeader()
         {
-            const int left = 12;
-            const int top = 102;
-            const int optionTop = 29;
-            const int optionGap = 8;
-            const int textBoxWidth = 34;
-            const int inputTop = 27;
-            const int inputHeight = 24;
-            const int customInputGap = 12;
-            const int separatorGap = 4;
+            int left = ScaleValue(12);
+            int top = ScaleValue(12);
+            int contentWidth = ClientSize.Width - left * 2;
+            int buttonHeight = ScaleValue(32);
+            int optionGap = ScaleValue(10);
+            int rowGap = ScaleValue(8);
+            int buttonGap = ScaleValue(8);
+            int optionLeft = ScaleValue(14);
+            int optionTop = ScaleValue(31);
+            int groupPaddingBottom = ScaleValue(16);
+            int settingsWidth = MeasureButtonWidth(btnSettings, 72);
+            int helpWidth = MeasureButtonWidth(btnHelp, 68);
+            int themeWidth = MeasureButtonWidth(btnTheme, 68);
+            int komiWidth = MeasureButtonWidth(btnKomi65, 170);
+            int updateWidth = MeasureButtonWidth(btnCheckUpdate, 170);
+            int utilityRowWidth = settingsWidth + helpWidth + themeWidth + buttonGap * 2;
+            int utilityColumnWidth = Math.Max(utilityRowWidth, Math.Max(komiWidth, updateWidth));
+            int minimumPlatformWidth = Math.Min(contentWidth, MeasureOptionsWidth(new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore }, optionGap) + ScaleValue(28));
+            bool canUseSideBySide = contentWidth >= minimumPlatformWidth + buttonGap + utilityColumnWidth + ScaleValue(24);
 
-            lblBoardSize.SetBounds(16, 30, 52, 20);
+            int groupWidth = canUseSideBySide ? contentWidth - utilityColumnWidth - buttonGap : contentWidth;
+            groupBox1.SetBounds(left, top, groupWidth, 0);
+            int groupBottom = LayoutOptionsRow(new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore }, groupBox1, optionLeft, optionTop, optionGap, rowGap);
+            groupBox1.Height = groupBottom + groupPaddingBottom;
+
+            if (canUseSideBySide)
+            {
+                int utilityLeft = groupBox1.Right + buttonGap;
+                btnSettings.SetBounds(utilityLeft, top, settingsWidth, buttonHeight);
+                btnHelp.SetBounds(btnSettings.Right + buttonGap, top, helpWidth, buttonHeight);
+                btnTheme.SetBounds(btnHelp.Right + buttonGap, top, themeWidth, buttonHeight);
+                btnKomi65.SetBounds(utilityLeft, btnSettings.Bottom + rowGap, utilityColumnWidth, buttonHeight);
+                btnCheckUpdate.SetBounds(utilityLeft, btnKomi65.Bottom + rowGap, utilityColumnWidth, buttonHeight);
+                return Math.Max(groupBox1.Bottom, btnCheckUpdate.Bottom);
+            }
+
+            int utilityTop = groupBox1.Bottom + rowGap;
+            btnSettings.SetBounds(left, utilityTop, settingsWidth, buttonHeight);
+            btnHelp.SetBounds(btnSettings.Right + buttonGap, utilityTop, helpWidth, buttonHeight);
+            btnTheme.SetBounds(btnHelp.Right + buttonGap, utilityTop, themeWidth, buttonHeight);
+            btnKomi65.SetBounds(left, btnSettings.Bottom + rowGap, contentWidth, buttonHeight);
+            btnCheckUpdate.SetBounds(left, btnKomi65.Bottom + rowGap, contentWidth, buttonHeight);
+            return btnCheckUpdate.Bottom;
+        }
+
+        private int ArrangeMainBoardSection(int top)
+        {
+            if (CanUseLegacyMainDesktopLayout())
+                return ArrangeLegacyMainBoardSection(top);
+
+            return ArrangeAdaptiveMainBoardSection(top);
+        }
+
+        private int ArrangeLegacyMainBoardSection(int top)
+        {
+            int left = ScaleValue(12);
+            int optionTop = ScaleValue(29);
+            int optionGap = ScaleValue(8);
+            int textBoxWidth = ScaleValue(34);
+            int inputTop = ScaleValue(27);
+            int inputHeight = ScaleValue(24);
+            int customInputGap = ScaleValue(12);
+            int separatorGap = ScaleValue(4);
+            int sectionPadding = ScaleValue(16);
+
+            lblBoardSize.SetBounds(sectionPadding, ScaleValue(30), Math.Max(lblBoardSize.PreferredSize.Width, ScaleValue(52)), ScaleValue(20));
             lblBoardSize.TextAlign = ContentAlignment.MiddleLeft;
-            rdo19x19.Location = new System.Drawing.Point(lblBoardSize.Right + 6, optionTop);
-            rdo13x13.Location = new System.Drawing.Point(rdo19x19.Right + optionGap, optionTop);
-            rdo9x9.Location = new System.Drawing.Point(rdo13x13.Right + optionGap, optionTop);
-            rdoOtherBoard.Location = new System.Drawing.Point(rdo9x9.Right + optionGap + 4, optionTop);
+            rdo19x19.Location = new Point(lblBoardSize.Right + ScaleValue(6), optionTop);
+            rdo13x13.Location = new Point(rdo19x19.Right + optionGap, optionTop);
+            rdo9x9.Location = new Point(rdo13x13.Right + optionGap, optionTop);
+            rdoOtherBoard.Location = new Point(rdo9x9.Right + optionGap + ScaleValue(4), optionTop);
             txtBoardWidth.AutoSize = false;
             txtBoardHeight.AutoSize = false;
             int customInputLeft = rdoOtherBoard.Right + customInputGap;
             txtBoardWidth.SetBounds(customInputLeft, inputTop, textBoxWidth, inputHeight);
             txtBoardWidth.TextAlign = HorizontalAlignment.Center;
             label6.TextAlign = ContentAlignment.MiddleCenter;
-            label6.SetBounds(txtBoardWidth.Right + separatorGap, 30, 10, 18);
+            label6.SetBounds(txtBoardWidth.Right + separatorGap, ScaleValue(30), ScaleValue(10), ScaleValue(18));
             txtBoardHeight.SetBounds(label6.Right + separatorGap, inputTop, textBoxWidth, inputHeight);
             txtBoardHeight.TextAlign = HorizontalAlignment.Center;
-            groupBox2.SetBounds(left, top, txtBoardHeight.Right + 16, 72);
+            groupBox2.SetBounds(left, top, txtBoardHeight.Right + sectionPadding, ScaleValue(72));
+            return groupBox2.Bottom;
         }
 
-        private void ArrangeMainSyncSection()
+        private int ArrangeAdaptiveMainBoardSection(int top)
         {
-            const int rowHeight = 24;
-            const int timeFieldGap = 8;
-            int groupWidth = ClientSize.Width - 42;
-            int rowWidth = groupWidth - 34;
+            int left = ScaleValue(12);
+            int optionTop = ScaleValue(29);
+            int optionGap = ScaleValue(8);
+            int textBoxWidth = ScaleValue(42);
+            int inputTop = ScaleValue(27);
+            int inputHeight = ScaleValue(26);
+            int customInputGap = ScaleValue(12);
+            int separatorGap = ScaleValue(4);
+            int contentWidth = ClientSize.Width - left * 2;
+            int sectionPadding = ScaleValue(16);
+            int rowGap = ScaleValue(12);
 
-            groupBox4.SetBounds(12, 184, groupWidth, 100);
-            flowLayoutPanel1.SetBounds(16, 28, rowWidth, 30);
-            flowLayoutPanel2.SetBounds(16, 62, rowWidth, 30);
+            groupBox2.SetBounds(left, top, contentWidth, 0);
+            lblBoardSize.SetBounds(sectionPadding, optionTop, Math.Max(lblBoardSize.PreferredSize.Width, ScaleValue(52)), ScaleValue(20));
+            lblBoardSize.TextAlign = ContentAlignment.MiddleLeft;
+            rdo19x19.Location = new System.Drawing.Point(lblBoardSize.Right + ScaleValue(6), optionTop);
+            rdo13x13.Location = new System.Drawing.Point(rdo19x19.Right + optionGap, optionTop);
+            rdo9x9.Location = new System.Drawing.Point(rdo13x13.Right + optionGap, optionTop);
+            rdoOtherBoard.Location = new System.Drawing.Point(rdo9x9.Right + optionGap + ScaleValue(4), optionTop);
+            txtBoardWidth.AutoSize = false;
+            txtBoardHeight.AutoSize = false;
+            int customInputLeft = rdoOtherBoard.Right + customInputGap;
+            txtBoardWidth.SetBounds(customInputLeft, inputTop, textBoxWidth, inputHeight);
+            txtBoardWidth.TextAlign = HorizontalAlignment.Center;
+            label6.TextAlign = ContentAlignment.MiddleCenter;
+            label6.SetBounds(txtBoardWidth.Right + separatorGap, inputTop + ScaleValue(4), ScaleValue(10), ScaleValue(18));
+            txtBoardHeight.SetBounds(label6.Right + separatorGap, inputTop, textBoxWidth, inputHeight);
+            txtBoardHeight.TextAlign = HorizontalAlignment.Center;
+            if (txtBoardHeight.Right + sectionPadding > contentWidth)
+            {
+                int wrappedTop = rdoOtherBoard.Bottom + rowGap;
+                txtBoardWidth.SetBounds(sectionPadding, wrappedTop, textBoxWidth, inputHeight);
+                label6.SetBounds(txtBoardWidth.Right + separatorGap, wrappedTop + ScaleValue(2), ScaleValue(10), ScaleValue(18));
+                txtBoardHeight.SetBounds(label6.Right + separatorGap, wrappedTop, textBoxWidth, inputHeight);
+            }
+
+            int bottom = Math.Max(Math.Max(txtBoardHeight.Bottom, rdoOtherBoard.Bottom), lblBoardSize.Bottom);
+            groupBox2.Height = bottom + ScaleValue(18);
+            return groupBox2.Bottom;
+        }
+
+        private int ArrangeMainSyncSection(int top)
+        {
+            if (CanUseLegacyMainDesktopLayout())
+                return ArrangeLegacyMainSyncSection(top);
+
+            return ArrangeAdaptiveMainSyncSection(top);
+        }
+
+        private int ArrangeLegacyMainSyncSection(int top)
+        {
+            int left = ScaleValue(12);
+            int rowHeight = ScaleValue(24);
+            int timeFieldGap = ScaleValue(8);
+            int groupWidth = ClientSize.Width - ScaleValue(42);
+            int rowWidth = groupWidth - ScaleValue(34);
+            int sharedVisitsLabelWidth = GetSharedMainSyncVisitsLabelWidth();
+            int sharedLegacyVisitsPanelWidth = GetLegacyMainSyncVisitsPanelWidth();
+
+            groupBox4.SetBounds(left, top, groupWidth, ScaleValue(100));
+            flowLayoutPanel1.SetBounds(ScaleValue(16), ScaleValue(28), rowWidth, ScaleValue(30));
+            flowLayoutPanel2.SetBounds(ScaleValue(16), ScaleValue(62), rowWidth, ScaleValue(30));
             flowLayoutPanel1.WrapContents = false;
             flowLayoutPanel2.WrapContents = false;
-            chkBothSync.Margin = new Padding(0, 5, 12, 0);
-            radioBlack.Margin = new Padding(0, 5, 12, 0);
-            chkAutoPlay.Margin = new Padding(0, 5, 12, 0);
-            radioWhite.Margin = new Padding(0, 5, 12, 0);
-            panel1.Margin = new Padding(12, 2, 0, 0);
-            panel2.Margin = new Padding(12, 2, 0, 0);
-            panel3.Margin = new Padding(12, 2, 0, 0);
-            panel4.Margin = new Padding(12, 2, 0, 0);
+            chkBothSync.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            radioBlack.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            chkAutoPlay.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            radioWhite.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            panel1.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
+            panel2.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
+            panel3.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
+            panel4.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel1.AutoSize = false;
             panel2.AutoSize = false;
             panel3.AutoSize = false;
             panel4.AutoSize = false;
-            panel1.Size = new System.Drawing.Size(129 + timeFieldGap, rowHeight);
-            panel2.Size = new System.Drawing.Size(112, rowHeight);
-            panel3.Size = new System.Drawing.Size(61, rowHeight);
-            panel4.Size = new System.Drawing.Size(112, rowHeight);
+            panel1.Size = new Size(
+                Math.Max(ScaleValue(129) + timeFieldGap, lblPlayCondition.PreferredSize.Width + ScaleValue(22) + timeFieldGap),
+                rowHeight);
+            panel2.Size = new Size(sharedLegacyVisitsPanelWidth, rowHeight);
+            panel3.Size = new Size(
+                Math.Max(ScaleValue(61), lblTime.PreferredSize.Width + ScaleValue(8)),
+                rowHeight);
+            panel4.Size = new Size(sharedLegacyVisitsPanelWidth, rowHeight);
             lblPlayCondition.AutoSize = false;
             lblTotalVisits.AutoSize = false;
             lblTime.AutoSize = false;
             lblBestMoveVisits.AutoSize = false;
-            lblPlayCondition.SetBounds(0, 3, 107, 18);
-            lblTotalVisits.SetBounds(0, 3, 101, 18);
-            lblTime.SetBounds(0, 3, 53, 18);
-            lblBestMoveVisits.SetBounds(0, 3, 101, 18);
+            lblPlayCondition.SetBounds(0, ScaleValue(3), lblPlayCondition.PreferredSize.Width, ScaleValue(18));
+            lblTotalVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(18));
+            lblTime.SetBounds(0, ScaleValue(3), lblTime.PreferredSize.Width, ScaleValue(18));
+            lblBestMoveVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(18));
             lblPlayCondition.TextAlign = ContentAlignment.MiddleLeft;
             lblTotalVisits.TextAlign = ContentAlignment.MiddleLeft;
             lblTime.TextAlign = ContentAlignment.MiddleLeft;
@@ -510,30 +672,388 @@ namespace readboard
             textBox2.AutoSize = false;
             textBox3.AutoSize = false;
             textBox1.Margin = new Padding(timeFieldGap, 1, 0, 0);
-            textBox2.Margin = new Padding(8, 1, 0, 0);
-            textBox3.Margin = new Padding(8, 1, 0, 0);
-            textBox1.Size = new System.Drawing.Size(68, rowHeight);
-            textBox2.Size = new System.Drawing.Size(92, rowHeight);
-            textBox3.Size = new System.Drawing.Size(92, rowHeight);
+            textBox2.Margin = new Padding(ScaleValue(8), 1, 0, 0);
+            textBox3.Margin = new Padding(ScaleValue(8), 1, 0, 0);
+            textBox1.Size = new Size(ScaleValue(68), rowHeight);
+            textBox2.Size = new Size(ScaleValue(92), rowHeight);
+            textBox3.Size = new Size(ScaleValue(92), rowHeight);
+            flowLayoutPanel1.Height = ScaleValue(30);
+            flowLayoutPanel2.Height = ScaleValue(30);
+            return groupBox4.Bottom;
         }
 
-        private void ArrangeMainActions()
+        private int ArrangeAdaptiveMainSyncSection(int top)
         {
-            const int firstRowTop = 294;
-            const int secondRowTop = 332;
-            const int buttonHeight = 32;
-            const int buttonGap = 12;
+            int left = ScaleValue(12);
+            int rowHeight = ScaleValue(26);
+            int timeFieldGap = ScaleValue(8);
+            int groupWidth = ClientSize.Width - left * 2;
+            int rowWidth = groupWidth - ScaleValue(34);
+            int sharedVisitsLabelWidth = GetSharedMainSyncVisitsLabelWidth();
+            int sharedAdaptiveVisitsPanelWidth = GetAdaptiveMainSyncVisitsPanelWidth();
 
-            btnFastSync.SetBounds(12, firstRowTop, 118, buttonHeight);
-            btnClickBoard.SetBounds(btnFastSync.Right + buttonGap, firstRowTop, 186, buttonHeight);
-            btnCircleBoard.SetBounds(btnClickBoard.Right + buttonGap, firstRowTop, 104, buttonHeight);
-            btnCircleRow1.SetBounds(btnCircleBoard.Right + buttonGap, firstRowTop, 104, buttonHeight);
-            chkShowInBoard.Location = new System.Drawing.Point(btnCircleRow1.Right + 16, firstRowTop + 8);
-            btnKeepSync.SetBounds(12, secondRowTop, 128, buttonHeight);
-            btnOneTimeSync.SetBounds(btnKeepSync.Right + buttonGap, secondRowTop, 112, buttonHeight);
-            btnTogglePonder.SetBounds(btnOneTimeSync.Right + buttonGap, secondRowTop, 112, buttonHeight);
-            btnExchange.SetBounds(btnTogglePonder.Right + buttonGap, secondRowTop, 104, buttonHeight);
-            btnClearBoard.SetBounds(btnExchange.Right + buttonGap, secondRowTop, 110, buttonHeight);
+            groupBox4.SetBounds(left, top, groupWidth, 0);
+            flowLayoutPanel1.SetBounds(ScaleValue(16), ScaleValue(28), rowWidth, rowHeight);
+            flowLayoutPanel2.SetBounds(ScaleValue(16), flowLayoutPanel1.Bottom + ScaleValue(8), rowWidth, rowHeight);
+            flowLayoutPanel1.WrapContents = true;
+            flowLayoutPanel2.WrapContents = true;
+            chkBothSync.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            radioBlack.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            chkAutoPlay.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            radioWhite.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            panel1.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
+            panel2.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
+            panel3.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
+            panel4.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
+            panel1.AutoSize = false;
+            panel2.AutoSize = false;
+            panel3.AutoSize = false;
+            panel4.AutoSize = false;
+            panel1.Size = new System.Drawing.Size(lblPlayCondition.PreferredSize.Width + ScaleValue(18) + ScaleValue(68) + timeFieldGap, rowHeight);
+            panel2.Size = new System.Drawing.Size(sharedAdaptiveVisitsPanelWidth, rowHeight);
+            panel3.Size = new System.Drawing.Size(lblTime.PreferredSize.Width + ScaleValue(18) + ScaleValue(92), rowHeight);
+            panel4.Size = new System.Drawing.Size(sharedAdaptiveVisitsPanelWidth, rowHeight);
+            lblPlayCondition.AutoSize = false;
+            lblTotalVisits.AutoSize = false;
+            lblTime.AutoSize = false;
+            lblBestMoveVisits.AutoSize = false;
+            lblPlayCondition.SetBounds(0, ScaleValue(3), lblPlayCondition.PreferredSize.Width, ScaleValue(20));
+            lblTotalVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(20));
+            lblTime.SetBounds(0, ScaleValue(3), lblTime.PreferredSize.Width, ScaleValue(20));
+            lblBestMoveVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(20));
+            lblPlayCondition.TextAlign = ContentAlignment.MiddleLeft;
+            lblTotalVisits.TextAlign = ContentAlignment.MiddleLeft;
+            lblTime.TextAlign = ContentAlignment.MiddleLeft;
+            lblBestMoveVisits.TextAlign = ContentAlignment.MiddleLeft;
+            textBox1.AutoSize = false;
+            textBox2.AutoSize = false;
+            textBox3.AutoSize = false;
+            textBox1.Margin = new Padding(timeFieldGap, 1, 0, 0);
+            textBox2.Margin = new Padding(ScaleValue(8), 1, 0, 0);
+            textBox3.Margin = new Padding(ScaleValue(8), 1, 0, 0);
+            textBox1.Size = new System.Drawing.Size(ScaleValue(68), rowHeight);
+            textBox2.Size = new System.Drawing.Size(ScaleValue(92), rowHeight);
+            textBox3.Size = new System.Drawing.Size(ScaleValue(92), rowHeight);
+            flowLayoutPanel1.Height = flowLayoutPanel1.GetPreferredSize(new Size(rowWidth, 0)).Height;
+            flowLayoutPanel2.Top = flowLayoutPanel1.Bottom + ScaleValue(8);
+            flowLayoutPanel2.Height = flowLayoutPanel2.GetPreferredSize(new Size(rowWidth, 0)).Height;
+            groupBox4.Height = flowLayoutPanel2.Bottom + ScaleValue(10);
+            return groupBox4.Bottom;
+        }
+
+        private void ArrangeMainActions(int top)
+        {
+            if (CanUseLegacyMainDesktopLayout())
+            {
+                ArrangeLegacyMainActions(top);
+                return;
+            }
+
+            ArrangeAdaptiveMainActions(top);
+        }
+
+        private void ArrangeLegacyMainActions(int top)
+        {
+            int left = ScaleValue(12);
+            int firstRowTop = top;
+            int secondRowTop = top + ScaleValue(38);
+            int buttonHeight = ScaleValue(32);
+            int buttonGap = ScaleValue(12);
+
+            btnFastSync.SetBounds(left, firstRowTop, MeasureButtonWidth(btnFastSync, 118), buttonHeight);
+            btnClickBoard.SetBounds(btnFastSync.Right + buttonGap, firstRowTop, MeasureButtonWidth(btnClickBoard, 186), buttonHeight);
+            btnCircleBoard.SetBounds(btnClickBoard.Right + buttonGap, firstRowTop, MeasureButtonWidth(btnCircleBoard, 104), buttonHeight);
+            btnCircleRow1.SetBounds(btnCircleBoard.Right + buttonGap, firstRowTop, MeasureButtonWidth(btnCircleRow1, 104), buttonHeight);
+            chkShowInBoard.AutoSize = true;
+            chkShowInBoard.Location = new Point(btnCircleRow1.Right + ScaleValue(16), firstRowTop + ScaleValue(8));
+            btnKeepSync.SetBounds(left, secondRowTop, MeasureButtonWidth(btnKeepSync, 128), buttonHeight);
+            btnOneTimeSync.SetBounds(btnKeepSync.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnOneTimeSync, 112), buttonHeight);
+            btnTogglePonder.SetBounds(btnOneTimeSync.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnTogglePonder, 112), buttonHeight);
+            btnExchange.SetBounds(btnTogglePonder.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnExchange, 104), buttonHeight);
+            btnClearBoard.SetBounds(btnExchange.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnClearBoard, 110), buttonHeight);
+            ApplyMainFormClientHeight(Math.Max(chkShowInBoard.Bottom, btnClearBoard.Bottom) + ScaleValue(12));
+        }
+
+        private void ArrangeAdaptiveMainActions(int top)
+        {
+            int left = ScaleValue(12);
+            int buttonHeight = ScaleValue(32);
+            int buttonGap = ScaleValue(12);
+            int rowGap = ScaleValue(8);
+            int maxRight = ClientSize.Width - left;
+            int currentX = left;
+            int currentY = top;
+            int rowHeight = buttonHeight;
+
+            Button[] actionButtons = new[]
+            {
+                btnFastSync,
+                btnClickBoard,
+                btnCircleBoard,
+                btnCircleRow1,
+                btnKeepSync,
+                btnOneTimeSync,
+                btnTogglePonder,
+                btnExchange,
+                btnClearBoard
+            };
+            int[] minWidths = new[] { 118, 186, 104, 104, 128, 112, 112, 104, 110 };
+            for (int index = 0; index < actionButtons.Length; index++)
+            {
+                Button button = actionButtons[index];
+                int width = MeasureButtonWidth(button, minWidths[index]);
+                if (currentX > left && currentX + width > maxRight)
+                {
+                    currentX = left;
+                    currentY += rowHeight + rowGap;
+                }
+
+                button.SetBounds(currentX, currentY, width, buttonHeight);
+                currentX = button.Right + buttonGap;
+            }
+
+            chkShowInBoard.AutoSize = true;
+            if (currentX + chkShowInBoard.PreferredSize.Width > maxRight)
+            {
+                currentX = left;
+                currentY += rowHeight + rowGap;
+            }
+            chkShowInBoard.Location = new Point(currentX, currentY + ScaleValue(8));
+            ApplyMainFormClientHeight(chkShowInBoard.Bottom + ScaleValue(12));
+        }
+
+        private int LayoutOptionsRow(ButtonBase[] options, GroupBox groupBox, int startX, int startY, int itemGap, int rowGap)
+        {
+            int currentX = startX;
+            int currentY = startY;
+            int availableRight = groupBox.Width - startX;
+            int rowHeight = 0;
+            foreach (ButtonBase option in options)
+            {
+                Size preferredSize = option.PreferredSize;
+                if (currentX > startX && currentX + preferredSize.Width > availableRight)
+                {
+                    currentX = startX;
+                    currentY += rowHeight + rowGap;
+                    rowHeight = 0;
+                }
+
+                option.Location = new Point(currentX, currentY);
+                currentX += preferredSize.Width + itemGap;
+                rowHeight = Math.Max(rowHeight, preferredSize.Height);
+            }
+
+            return currentY + rowHeight;
+        }
+
+        private int MeasureOptionsWidth(ButtonBase[] options, int itemGap)
+        {
+            int width = 0;
+            foreach (ButtonBase option in options)
+                width += option.PreferredSize.Width;
+            return width + itemGap * Math.Max(0, options.Length - 1);
+        }
+
+        private int MeasureButtonWidth(Button button, int minimumLogicalWidth)
+        {
+            int minimumWidth = ScaleValue(minimumLogicalWidth);
+            return Math.Max(minimumWidth, TextRenderer.MeasureText(button.Text, button.Font).Width + ScaleValue(28));
+        }
+
+        private int GetSharedMainSyncVisitsLabelWidth()
+        {
+            return Math.Max(lblTotalVisits.PreferredSize.Width, lblBestMoveVisits.PreferredSize.Width);
+        }
+
+        private int GetLegacyMainSyncVisitsPanelWidth()
+        {
+            return Math.Max(ScaleValue(112), GetSharedMainSyncVisitsLabelWidth() + ScaleValue(11));
+        }
+
+        private int GetAdaptiveMainSyncVisitsPanelWidth()
+        {
+            return GetSharedMainSyncVisitsLabelWidth() + ScaleValue(18) + ScaleValue(92);
+        }
+
+        private bool CanUseLegacyMainDesktopLayout()
+        {
+            return ClientSize.Width >= Math.Max(
+                Math.Max(GetLegacyMainHeaderRequiredWidth(), GetLegacyMainSyncRequiredWidth()),
+                Math.Max(GetLegacyMainBoardRequiredWidth(), GetLegacyMainActionsRequiredWidth()));
+        }
+
+        private int GetLegacyMainHeaderRequiredWidth()
+        {
+            int left = ScaleValue(12);
+            int optionLeft = ScaleValue(14);
+            int optionGap = ScaleValue(10);
+            int utilityGap = ScaleValue(8);
+            int buttonGap = ScaleValue(8);
+            int settingsWidth = MeasureButtonWidth(btnSettings, 72);
+            int helpWidth = MeasureButtonWidth(btnHelp, 68);
+            int themeWidth = MeasureButtonWidth(btnTheme, 68);
+            int utilityColumnWidth = Math.Max(
+                settingsWidth + helpWidth + themeWidth + buttonGap * 2,
+                Math.Max(MeasureButtonWidth(btnKomi65, 170), MeasureButtonWidth(btnCheckUpdate, 170)));
+            int platformWidth = optionLeft + MeasureOptionsWidth(
+                new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore },
+                optionGap) + ScaleValue(20);
+            return left * 2 + platformWidth + utilityGap + utilityColumnWidth;
+        }
+
+        private int GetLegacyMainBoardRequiredWidth()
+        {
+            int left = ScaleValue(12);
+            int sectionPadding = ScaleValue(16);
+            int optionGap = ScaleValue(8);
+            int textBoxWidth = ScaleValue(34);
+            int customInputGap = ScaleValue(12);
+            int separatorGap = ScaleValue(4);
+            int labelWidth = Math.Max(lblBoardSize.PreferredSize.Width, ScaleValue(52));
+            int contentWidth =
+                sectionPadding
+                + labelWidth
+                + ScaleValue(6)
+                + rdo19x19.PreferredSize.Width
+                + optionGap
+                + rdo13x13.PreferredSize.Width
+                + optionGap
+                + rdo9x9.PreferredSize.Width
+                + optionGap
+                + ScaleValue(4)
+                + rdoOtherBoard.PreferredSize.Width
+                + customInputGap
+                + textBoxWidth
+                + separatorGap
+                + ScaleValue(10)
+                + separatorGap
+                + textBoxWidth
+                + sectionPadding;
+            return left * 2 + contentWidth;
+        }
+
+        private int GetLegacyMainSyncRequiredWidth()
+        {
+            int left = ScaleValue(12);
+            int timeFieldGap = ScaleValue(8);
+            int buttonGap = ScaleValue(12);
+            int sharedVisitsPanelWidth = GetLegacyMainSyncVisitsPanelWidth();
+            int row1Width =
+                chkBothSync.PreferredSize.Width
+                + buttonGap
+                + radioBlack.PreferredSize.Width
+                + buttonGap
+                + Math.Max(ScaleValue(129) + timeFieldGap, lblPlayCondition.PreferredSize.Width + ScaleValue(22) + timeFieldGap)
+                + buttonGap
+                + sharedVisitsPanelWidth
+                + ScaleValue(8)
+                + ScaleValue(92);
+            int row2Width =
+                chkAutoPlay.PreferredSize.Width
+                + buttonGap
+                + radioWhite.PreferredSize.Width
+                + buttonGap
+                + Math.Max(ScaleValue(61), lblTime.PreferredSize.Width + ScaleValue(8))
+                + timeFieldGap
+                + ScaleValue(68)
+                + buttonGap
+                + sharedVisitsPanelWidth
+                + ScaleValue(8)
+                + ScaleValue(92);
+            return left * 2 + ScaleValue(34) + Math.Max(row1Width, row2Width);
+        }
+
+        private int GetLegacyMainActionsRequiredWidth()
+        {
+            int left = ScaleValue(12);
+            int buttonGap = ScaleValue(12);
+            int firstRowWidth =
+                MeasureButtonWidth(btnFastSync, 118)
+                + buttonGap
+                + MeasureButtonWidth(btnClickBoard, 186)
+                + buttonGap
+                + MeasureButtonWidth(btnCircleBoard, 104)
+                + buttonGap
+                + MeasureButtonWidth(btnCircleRow1, 104)
+                + ScaleValue(16)
+                + chkShowInBoard.PreferredSize.Width;
+            int secondRowWidth =
+                MeasureButtonWidth(btnKeepSync, 128)
+                + buttonGap
+                + MeasureButtonWidth(btnOneTimeSync, 112)
+                + buttonGap
+                + MeasureButtonWidth(btnTogglePonder, 112)
+                + buttonGap
+                + MeasureButtonWidth(btnExchange, 104)
+                + buttonGap
+                + MeasureButtonWidth(btnClearBoard, 110);
+            return left * 2 + Math.Max(firstRowWidth, secondRowWidth);
+        }
+
+        private void ConstrainMainFormWidth()
+        {
+            Rectangle workingArea = GetCurrentWorkingArea();
+            int maxWidth = Math.Max(ScaleValue(300), workingArea.Width - ScaleValue(MainFormScreenLogicalPadding));
+            int minimumWidth = Math.Min(ScaleValue(MainFormMinimumLogicalWidth), maxWidth);
+            int maxHeight = GetMaxMainFormClientHeight();
+            int targetWidth = isMainFormSizeInitialized
+                ? Math.Min(Math.Max(ClientSize.Width, minimumWidth), maxWidth)
+                : Math.Min(ScaleSize(MainFormDefaultSize).Width, maxWidth);
+            int targetHeight = isMainFormSizeInitialized
+                ? Math.Min(ClientSize.Height, maxHeight)
+                : Math.Min(ScaleSize(MainFormDefaultSize).Height, maxHeight);
+
+            ClientSize = new Size(targetWidth, targetHeight);
+        }
+
+        private int GetMaxMainFormClientHeight()
+        {
+            Rectangle workingArea = GetCurrentWorkingArea();
+            return Math.Max(ScaleValue(280), workingArea.Height - ScaleValue(MainFormScreenLogicalPadding));
+        }
+
+        private void ApplyMainFormClientHeight(int desiredHeight)
+        {
+            int maxHeight = GetMaxMainFormClientHeight();
+            int constrainedHeight = Math.Min(desiredHeight, maxHeight);
+            AutoScrollMinSize = desiredHeight > constrainedHeight
+                ? new Size(0, desiredHeight)
+                : Size.Empty;
+            ClientSize = new Size(ClientSize.Width, constrainedHeight);
+        }
+
+        private Rectangle GetCurrentWorkingArea()
+        {
+            return DisplayScaling.GetScreenWorkingAreaFromPoint(ResolveLayoutReferencePoint());
+        }
+
+        private int ScaleValue(int logicalValue)
+        {
+            return (int)Math.Round(logicalValue * GetCurrentDpiScale());
+        }
+
+        private Size ScaleSize(Size logicalSize)
+        {
+            return new Size(ScaleValue(logicalSize.Width), ScaleValue(logicalSize.Height));
+        }
+
+        private float GetCurrentDpiScale()
+        {
+            try
+            {
+                Point? startupReferencePoint = TryGetStartupReferencePoint();
+                if (startupReferencePoint.HasValue)
+                    return (float)DisplayScaling.NormalizeScale(DisplayScaling.GetScaleForPoint(startupReferencePoint.Value));
+                if (IsHandleCreated)
+                    return (float)DisplayScaling.NormalizeScale(DisplayScaling.GetScaleForWindow(Handle));
+                if (factor > 0f)
+                    return factor;
+                return DeviceDpi > 0 ? DeviceDpi / 96f : 1f;
+            }
+            catch
+            {
+                return factor > 0f ? factor : 1f;
+            }
         }
 
         private void setNativeBoardMode(int syncType)
@@ -960,7 +1480,7 @@ namespace readboard
                 return null;
 
             WindowDescriptor descriptor;
-            if (!FoxWindowDescriptorFactory.TryCreate(hwnd, factor, out descriptor))
+            if (!FoxWindowDescriptorFactory.TryCreate(hwnd, out descriptor))
                 return null;
 
             return FoxMoveNumberParser.Parse(descriptor.Title);
@@ -1660,10 +2180,21 @@ namespace readboard
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
+            if (!isShuttingDown && !IsDisposed && !Disposing)
+                ApplyMainFormUi();
             FlushPendingProtocolCommands();
             if (!closeRequestedBeforeHandle || IsDisposed)
                 return;
             BeginInvoke((Action)Close);
+        }
+
+        protected override void OnDpiChanged(DpiChangedEventArgs e)
+        {
+            base.OnDpiChanged(e);
+            if (isShuttingDown || IsDisposed || Disposing)
+                return;
+            factor = GetCurrentDpiScale();
+            ApplyMainFormUi();
         }
 
         private void DisposeInputHooks()

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Xunit;
 using readboard;
@@ -131,6 +132,36 @@ namespace Readboard.VerificationTests.Protocol
             });
 
             Assert.Equal("inboard 320 240 50 50 3", update.ProtocolLine);
+        }
+
+        [Fact]
+        public void BuildUpdate_DpiUnawareBackgroundSelectionScalesBoundsAndAddsDpiToken()
+        {
+            LegacyOverlayService overlayService = new LegacyOverlayService();
+
+            OverlayUpdateResult update = overlayService.BuildUpdate(new OverlayUpdateRequest
+            {
+                Visibility = OverlayVisibility.Visible,
+                LegacyTypeToken = "3",
+                Frame = new BoardFrame
+                {
+                    SyncMode = SyncMode.Background,
+                    Window = new WindowDescriptor
+                    {
+                        Bounds = new PixelRect(300, 200, 150, 150),
+                        IsDpiAware = false,
+                        DpiScale = 1.5d
+                    },
+                    Viewport = new BoardViewport
+                    {
+                        ScreenBounds = new PixelRect(320, 240, 50, 50)
+                    }
+                }
+            });
+
+            Assert.Equal(
+                string.Format(CultureInfo.CurrentCulture, "inboard 213 160 33 33 99_{0}_3", 1.5d),
+                update.ProtocolLine);
         }
 
         private sealed class RecordingTransport : IReadBoardTransport

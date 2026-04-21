@@ -452,7 +452,7 @@ namespace readboard
 
             WindowDescriptor descriptor;
             IntPtr handle = ResolveSelectedWindowHandle(snapshot);
-            if (handle == IntPtr.Zero || !runtime.WindowDescriptorFactory.TryCreate(handle, snapshot.DpiScale, out descriptor))
+            if (handle == IntPtr.Zero || !runtime.WindowDescriptorFactory.TryCreate(handle, out descriptor))
             {
                 if (showMessages)
                     runtime.Host.ShowMissingSyncSourceMessage();
@@ -596,7 +596,6 @@ namespace readboard
             {
                 runtime.WindowDescriptorFactory.TryCreate(
                     ResolveSelectedWindowHandle(snapshot),
-                    snapshot.DpiScale,
                     out descriptor);
             }
             return new BoardCaptureRequest

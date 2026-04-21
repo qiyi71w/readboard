@@ -328,7 +328,7 @@ namespace Readboard.VerificationTests.Protocol
 
         private sealed class StaticDescriptorFactory : IWindowDescriptorFactory
         {
-            public bool TryCreate(IntPtr handle, float dpiScale, out WindowDescriptor descriptor)
+            public bool TryCreate(IntPtr handle, out WindowDescriptor descriptor)
             {
                 descriptor = new WindowDescriptor
                 {
@@ -337,7 +337,7 @@ namespace Readboard.VerificationTests.Protocol
                     ClassName = "ReplayBoard",
                     Title = "Replay",
                     IsDpiAware = true,
-                    DpiScale = dpiScale <= 0f ? 1f : dpiScale
+                    DpiScale = 1f
                 };
                 return true;
             }

@@ -135,6 +135,7 @@
     <Compile Include="Core\Contracts\PixelBuffer.cs" />
     <Compile Include="Core\Contracts\PixelRect.cs" />
     <Compile Include="Core\Contracts\WindowDescriptor.cs" />
+    <Compile Include="Core\Display\DisplayScaling.cs" />
     <Compile Include="Core\Capture\BoardCaptureRequest.cs" />
     <Compile Include="Core\Capture\BoardCaptureResult.cs" />
     <Compile Include="Core\Capture\IBoardCaptureService.cs" />

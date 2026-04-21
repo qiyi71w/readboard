@@ -15,8 +15,11 @@ namespace readboard
             "Download link must use http or https.";
         private const string DefaultOpenDownloadUrlFailedMessage = "Unable to open the download link.";
         private const string DefaultDialogTitle = "Update";
+        private static readonly Size UpdateDefaultClientSize = new Size(640, 419);
+        private static readonly Size UpdateMinimumClientSize = new Size(560, 420);
 
         private readonly UpdateDialogModel model;
+        private bool isApplyingUpdateLayout;
 
         public FormUpdate(UpdateDialogModel model)
         {
@@ -83,21 +86,32 @@ namespace readboard
 
         private void ApplyUpdateFormUi()
         {
+            if (isApplyingUpdateLayout)
+                return;
+
+            isApplyingUpdateLayout = true;
             SuspendLayout();
-            AutoScaleMode = AutoScaleMode.None;
-            DoubleBuffered = true;
-            AcceptButton = btnDownload;
-            CancelButton = btnClose;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            if (Program.uiThemeMode == Program.UiThemeOptimized)
-                ApplyOptimizedUpdateTheme();
-            else
-                ApplyClassicUpdateTheme();
-            ApplyInfoPanelLayout();
-            ResumeLayout(false);
-            PerformLayout();
+            try
+            {
+                DoubleBuffered = true;
+                AcceptButton = btnDownload;
+                CancelButton = btnClose;
+                FormBorderStyle = FormBorderStyle.FixedDialog;
+                MaximizeBox = false;
+                MinimizeBox = false;
+                ConstrainUpdateDialogSize();
+                if (Program.uiThemeMode == Program.UiThemeOptimized)
+                    ApplyOptimizedUpdateTheme();
+                else
+                    ApplyClassicUpdateTheme();
+                ApplyInfoPanelLayout();
+            }
+            finally
+            {
+                ResumeLayout(false);
+                PerformLayout();
+                isApplyingUpdateLayout = false;
+            }
         }
 
         private void ApplyOptimizedUpdateTheme()
@@ -179,6 +193,54 @@ namespace readboard
             button.UseVisualStyleBackColor = true;
             button.Font = Control.DefaultFont;
             button.Cursor = Cursors.Default;
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            ApplyUpdateFormUi();
+        }
+
+        protected override void OnDpiChanged(DpiChangedEventArgs e)
+        {
+            base.OnDpiChanged(e);
+            ApplyUpdateFormUi();
+        }
+
+        private void ConstrainUpdateDialogSize()
+        {
+            Rectangle workingArea = GetCurrentWorkingArea();
+            Size defaultSize = ScaleSize(UpdateDefaultClientSize);
+            Size minimumSize = ScaleSize(UpdateMinimumClientSize);
+            int availableWidth = Math.Max(ScaleValue(360), workingArea.Width - ScaleValue(48));
+            int availableHeight = Math.Max(ScaleValue(280), workingArea.Height - ScaleValue(64));
+            int minimumWidth = Math.Min(minimumSize.Width, availableWidth);
+            int minimumHeight = Math.Min(minimumSize.Height, availableHeight);
+            ClientSize = new Size(
+                Math.Max(minimumWidth, Math.Min(defaultSize.Width, availableWidth)),
+                Math.Max(minimumHeight, Math.Min(defaultSize.Height, availableHeight)));
+            MinimumSize = new Size(minimumWidth, minimumHeight);
+        }
+
+        private Rectangle GetCurrentWorkingArea()
+        {
+            Point referencePoint = IsHandleCreated
+                ? new Point(Left + Width / 2, Top + Height / 2)
+                : new Point(Location.X, Location.Y);
+            return DisplayScaling.GetScreenWorkingAreaFromPoint(referencePoint);
+        }
+
+        private int ScaleValue(int logicalValue)
+        {
+            double scale = IsHandleCreated
+                ? DisplayScaling.GetScaleForWindow(Handle)
+                : DisplayScaling.DefaultScale;
+            return (int)Math.Round(logicalValue * DisplayScaling.NormalizeScale(scale));
+        }
+
+        private Size ScaleSize(Size logicalSize)
+        {
+            return new Size(ScaleValue(logicalSize.Width), ScaleValue(logicalSize.Height));
         }
 
         private void btnDownload_Click(object sender, EventArgs e)

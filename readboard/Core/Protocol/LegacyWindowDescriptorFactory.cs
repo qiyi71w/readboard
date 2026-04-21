@@ -8,7 +8,7 @@ namespace readboard
 {
     internal sealed class LegacyWindowDescriptorFactory : IWindowDescriptorFactory
     {
-        public bool TryCreate(IntPtr handle, float dpiScale, out WindowDescriptor descriptor)
+        public bool TryCreate(IntPtr handle, out WindowDescriptor descriptor)
         {
             descriptor = null;
             RECT rect;
@@ -18,14 +18,19 @@ namespace readboard
                 return false;
 
             string className = GetClassName(handle);
+            PixelRect bounds = new PixelRect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+            bool isDpiAware = GetSupportDpiState(handle);
             descriptor = new WindowDescriptor
             {
                 Handle = handle,
                 ClassName = className,
                 Title = GetWindowTitle(handle),
-                Bounds = new PixelRect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top),
-                IsDpiAware = GetSupportDpiState(handle),
-                DpiScale = dpiScale,
+                Bounds = bounds,
+                IsDpiAware = isDpiAware,
+                DpiScale = DisplayScaling.ResolveWindowScale(
+                    isDpiAware,
+                    DisplayScaling.GetScaleForWindow(handle),
+                    DisplayScaling.GetScaleForWindowBounds(bounds)),
                 IsJavaWindow = string.Equals(className, "SunAwtFrame", StringComparison.Ordinal)
             };
             return true;

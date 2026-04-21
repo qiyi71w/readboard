@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Web.Script.Serialization;
+using System.Drawing;
+using System.Windows.Forms;
 
 namespace readboard
 {
@@ -58,6 +60,7 @@ namespace readboard
                     Save(config);
             }
             EnsureConfigMetadata(config);
+            NormalizeWindowPosition(config);
             return new AppConfigLoadResult(config, hasExistingConfig);
         }
 
@@ -67,6 +70,7 @@ namespace readboard
                 throw new ArgumentNullException("config");
 
             EnsureConfigMetadata(config);
+            NormalizeWindowPosition(config);
             WriteJsonConfig(config);
             WriteLegacyMainConfig(config);
             WriteLegacyOtherConfig(config);
@@ -271,6 +275,30 @@ namespace readboard
         {
             config.ProtocolVersion = protocolVersion;
             config.MachineKey = machineKey;
+        }
+
+        private static void NormalizeWindowPosition(AppConfig config)
+        {
+            if (config == null)
+                return;
+
+            if (config.WindowPosX == -1 || config.WindowPosY == -1)
+            {
+                config.WindowPosX = -1;
+                config.WindowPosY = -1;
+                return;
+            }
+
+            Rectangle virtualScreen = SystemInformation.VirtualScreen;
+            if (config.WindowPosX <= -16000
+                || config.WindowPosY <= -16000
+                || virtualScreen.Width <= 0
+                || virtualScreen.Height <= 0
+                || !virtualScreen.Contains(config.WindowPosX, config.WindowPosY))
+            {
+                config.WindowPosX = -1;
+                config.WindowPosY = -1;
+            }
         }
 
         private JsonConfigReadResult RecoverFromInvalidJson(string path)

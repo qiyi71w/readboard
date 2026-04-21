@@ -141,6 +141,48 @@ namespace Readboard.VerificationTests
             }
         }
 
+        [Fact]
+        public void Load_ResetsLegacyWindowPositionWhenItLooksLikeAMinimizedWindow()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard.txt"),
+                    "101_42_77_18_1_0_1_0_1_1_MACHINE-001_4");
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard_others.txt"),
+                    "220430_13_13_15_16_150_1_61_-32000_-32000_1_0_1_1");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.True(result.HasExistingConfig);
+                Assert.Equal(-1, result.Config.WindowPosX);
+                Assert.Equal(-1, result.Config.WindowPosY);
+                string json = File.ReadAllText(workspace.PathFor("config.readboard.json"));
+                Assert.Contains("\"WindowPosX\":-1", json);
+                Assert.Contains("\"WindowPosY\":-1", json);
+            }
+        }
+
+        [Fact]
+        public void Load_ResetsJsonWindowPositionWhenSavedMonitorNoLongerExists()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config.readboard.json"),
+                    "{\"ProtocolVersion\":\"220430\",\"MachineKey\":\"MACHINE-001\",\"WindowPosX\":4096,\"WindowPosY\":240,\"BoardWidth\":19,\"BoardHeight\":19}");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.True(result.HasExistingConfig);
+                Assert.Equal(-1, result.Config.WindowPosX);
+                Assert.Equal(-1, result.Config.WindowPosY);
+            }
+        }
+
         private static void AssertImportedFixtureConfig(AppConfig config)
         {
             Assert.Equal(101, config.BlackOffset);
