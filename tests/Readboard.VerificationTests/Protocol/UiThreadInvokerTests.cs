@@ -38,18 +38,22 @@ namespace Readboard.VerificationTests
         {
             BlockingAsyncSynchronizer synchronizer = new BlockingAsyncSynchronizer();
             UiThreadInvoker invoker = new UiThreadInvoker(synchronizer);
-            bool shutdownRequested = false;
+            int shutdownRequested = 0;
 
-            Task<int> resultTask = Task.Run(() =>
+            // Use a dedicated thread so this test does not depend on thread-pool scheduling under CI load.
+            Task<int> resultTask = Task.Factory.StartNew(() =>
                 invoker.ExecuteOrCancel(
                     () => 42,
-                    () => shutdownRequested));
+                    () => Volatile.Read(ref shutdownRequested) != 0),
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
 
-            Assert.True(synchronizer.InvocationQueued.Wait(TimeSpan.FromSeconds(1)));
-            shutdownRequested = true;
+            Assert.True(synchronizer.InvocationQueued.Wait(TimeSpan.FromSeconds(5)));
+            Volatile.Write(ref shutdownRequested, 1);
 
             await Assert.ThrowsAsync<SnapshotCaptureCancelledException>(async () =>
-                await resultTask.WaitAsync(TimeSpan.FromSeconds(1)));
+                await resultTask.WaitAsync(TimeSpan.FromSeconds(5)));
             Assert.Equal(1, synchronizer.BeginInvokeCallCount);
             Assert.Equal(0, synchronizer.InvokeCallCount);
         }
