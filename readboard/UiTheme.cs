@@ -5,20 +5,73 @@ namespace readboard
 {
     internal static class UiTheme
     {
-        public static readonly Color WindowBackground = Color.FromArgb(242, 245, 249);
-        public static readonly Color SurfaceBackground = Color.FromArgb(242, 245, 249);
-        public static readonly Color InputBackground = Color.FromArgb(252, 253, 255);
-        public static readonly Color SurfaceBorder = Color.FromArgb(203, 213, 225);
-        public static readonly Color PrimaryText = Color.FromArgb(15, 23, 42);
-        public static readonly Color SecondaryText = Color.FromArgb(71, 85, 105);
-        public static readonly Color Accent = Color.FromArgb(3, 105, 161);
-        public static readonly Color AccentHover = Color.FromArgb(2, 132, 199);
-        public static readonly Color AccentPressed = Color.FromArgb(7, 89, 133);
-        public static readonly Color Danger = Color.FromArgb(185, 28, 28);
-        public static readonly Color DangerBack = Color.FromArgb(254, 242, 242);
-        public static readonly Color HighlightBack = Color.FromArgb(239, 246, 255);
+        public static Color WindowBackground
+        {
+            get { return IsDarkMode ? SystemColors.Window : Color.FromArgb(242, 245, 249); }
+        }
+
+        public static Color SurfaceBackground
+        {
+            get { return IsDarkMode ? SystemColors.Control : Color.FromArgb(242, 245, 249); }
+        }
+
+        public static Color InputBackground
+        {
+            get { return IsDarkMode ? SystemColors.Window : Color.FromArgb(252, 253, 255); }
+        }
+
+        public static Color SurfaceBorder
+        {
+            get { return IsDarkMode ? SystemColors.ControlDark : Color.FromArgb(203, 213, 225); }
+        }
+
+        public static Color PrimaryText
+        {
+            get { return IsDarkMode ? SystemColors.ControlText : Color.FromArgb(15, 23, 42); }
+        }
+
+        public static Color SecondaryText
+        {
+            get { return IsDarkMode ? SystemColors.GrayText : Color.FromArgb(71, 85, 105); }
+        }
+
+        public static Color Accent
+        {
+            get { return IsDarkMode ? SystemColors.Highlight : Color.FromArgb(3, 105, 161); }
+        }
+
+        public static Color AccentHover
+        {
+            get { return IsDarkMode ? SystemColors.HotTrack : Color.FromArgb(2, 132, 199); }
+        }
+
+        public static Color AccentPressed
+        {
+            get { return IsDarkMode ? SystemColors.Highlight : Color.FromArgb(7, 89, 133); }
+        }
+
+        public static Color Danger
+        {
+            get { return Color.FromArgb(185, 28, 28); }
+        }
+
+        public static Color DangerBack
+        {
+            get { return IsDarkMode ? Color.FromArgb(60, 20, 20) : Color.FromArgb(254, 242, 242); }
+        }
+
+        public static Color HighlightBack
+        {
+            get { return IsDarkMode ? SystemColors.ControlDark : Color.FromArgb(239, 246, 255); }
+        }
+
         public static readonly Font BodyFont = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
         public static readonly Font SectionFont = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold, GraphicsUnit.Point);
+
+        public static bool IsDarkMode
+        {
+            get { return Application.SystemColorMode == SystemColorMode.Dark; }
+        }
 
         public static void ApplyWindow(Form form)
         {
@@ -77,7 +130,7 @@ namespace readboard
 
         public static void StyleDangerButton(Button button)
         {
-            StyleButton(button, DangerBack, Danger, Color.FromArgb(254, 202, 202), DangerBack, DangerBack);
+            StyleButton(button, DangerBack, Danger, IsDarkMode ? Color.FromArgb(120, 40, 40) : Color.FromArgb(254, 202, 202), DangerBack, DangerBack);
         }
 
         public static void StyleSubtleLabel(Label label)

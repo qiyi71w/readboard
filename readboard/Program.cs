@@ -225,6 +225,7 @@ namespace readboard
                 return;
 
             InitializeRuntime(options);
+            Application.SetColorMode(SystemColorMode.System);
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
