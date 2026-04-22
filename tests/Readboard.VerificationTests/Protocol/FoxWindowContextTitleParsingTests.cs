@@ -9,6 +9,8 @@ namespace Readboard.VerificationTests.Protocol
         [InlineData("> [高级房1] > 43581号对弈房 观战中[第89手] - 升降级", "43581号", 89)]
         [InlineData("> [高级房1] > 23|890号房间 对弈中[第03手] - 友谊赛 - 数子规则", "23|890号", 3)]
         [InlineData("> [高级房1] > 43838号对弈房 对局结束 (白 中盘胜) - 升降级 - 数子规则 - [第308手]", "43838号", 308)]
+        [InlineData("> [高级房1] > 43581号对弈房 观战中第89手 - 升降级", "43581号", 89)]
+        [InlineData("> [高级房1] > 43838号对弈房 对局结束 (白 中盘胜) - 升降级 - 数子规则 - 第308手", "43838号", 308)]
         public void ParseLiveRoom_ExtractsRoomTokenAndDisplayedMove(
             string title,
             string expectedToken,

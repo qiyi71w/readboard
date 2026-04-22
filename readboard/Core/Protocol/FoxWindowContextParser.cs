@@ -9,9 +9,6 @@ namespace readboard
         private static readonly Regex RoomTokenPattern =
             new Regex(@">\s*([^\]\s>]+号)", RegexOptions.Compiled);
 
-        private static readonly Regex LiveMovePattern =
-            new Regex(@"\[第\s*(\d+)\s*手\]", RegexOptions.Compiled);
-
         private static readonly Regex RecordCurrentPattern =
             new Regex(@"第\s*(\d+)\s*手", RegexOptions.Compiled);
 
@@ -30,7 +27,7 @@ namespace readboard
                 {
                     Kind = FoxWindowKind.LiveRoom,
                     RoomToken = roomMatch.Groups[1].Value,
-                    LiveTitleMove = ParseNullableInt(LiveMovePattern.Match(title))
+                    LiveTitleMove = FoxMoveNumberParser.Parse(title)
                 };
             }
 
