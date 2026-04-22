@@ -15,7 +15,6 @@ namespace readboard
 
     internal sealed class LegacyBoardCaptureService : IBoardCaptureService
     {
-        private const double DefaultDpiScale = 1.0d;
         private readonly IBoardCapturePlatform platform;
         private ulong previousContentSignature;
         private int previousPixelWidth;
@@ -149,7 +148,11 @@ namespace readboard
             int offsetY = selection.Y - window.Bounds.Y;
             PixelRect candidate = window.IsDpiAware
                 ? new PixelRect(offsetX, offsetY, selection.Width, selection.Height)
-                : ScaleRectDown(offsetX, offsetY, selection.Width, selection.Height, scale);
+                : new PixelRect(
+                    DisplayScaling.ScaleCoordinateDown(offsetX, scale),
+                    DisplayScaling.ScaleCoordinateDown(offsetY, scale),
+                    DisplayScaling.ScaleSizeDown(selection.Width, scale),
+                    DisplayScaling.ScaleSizeDown(selection.Height, scale));
 
             if (!IsCropWithinWindow(candidate, window.Bounds))
                 return null;
@@ -187,16 +190,21 @@ namespace readboard
             if (!IsPositiveRect(screenBounds))
                 screenBounds = CloneRect(window.Bounds);
 
-            PixelRect screen = platform.GetPrimaryScreenBounds();
-            if (screenBounds.Y < 0)
-                return true;
-
+            PixelRect screen = platform.GetVirtualScreenBounds();
             int bottom = screenBounds.Y + screenBounds.Height;
             int right = screenBounds.X + screenBounds.Width;
             if (IsPositiveRect(request.SelectionBounds))
-                return screenBounds.X < 0 || right > screen.Width || bottom > screen.Height;
+            {
+                return screenBounds.X < screen.X
+                    || screenBounds.Y < screen.Y
+                    || right > screen.X + screen.Width
+                    || bottom > screen.Y + screen.Height;
+            }
 
-            return screenBounds.X < 0 || right > screen.Width || window.Bounds.Y < 0 || bottom > screen.Height;
+            return screenBounds.X < screen.X
+                || window.Bounds.Y < screen.Y
+                || right > screen.X + screen.Width
+                || bottom > screen.Y + screen.Height;
         }
 
         private Bitmap CaptureWindowBitmap(BoardCapturePlan plan)
@@ -288,34 +296,14 @@ namespace readboard
             window.Handle = IntPtr.Zero;
             window.Bounds = CloneRect(selection);
             window.IsDpiAware = true;
-            window.DpiScale = platform.GetDesktopDpiScale();
+            window.DpiScale = platform.GetScaleForPoint(new Point(selection.X + selection.Width / 2, selection.Y + selection.Height / 2));
             window.IsJavaWindow = false;
             return window;
         }
 
         private PixelRect CreateScreenBounds(WindowDescriptor window, PixelRect localBounds)
         {
-            double scale = GetEffectiveScale(window);
-            if (window.IsDpiAware)
-                return new PixelRect(window.Bounds.X + localBounds.X, window.Bounds.Y + localBounds.Y, localBounds.Width, localBounds.Height);
-
-            return ScaleRectUp(window.Bounds.X, window.Bounds.Y, localBounds, scale);
-        }
-
-        private static PixelRect ScaleRectDown(int x, int y, int width, int height, double scale)
-        {
-            double safeScale = scale <= 0d ? DefaultDpiScale : scale;
-            return new PixelRect((int)(x / safeScale), (int)(y / safeScale), (int)(width / safeScale), (int)(height / safeScale));
-        }
-
-        private static PixelRect ScaleRectUp(int originX, int originY, PixelRect localBounds, double scale)
-        {
-            double safeScale = scale <= 0d ? DefaultDpiScale : scale;
-            int x = originX + (int)(localBounds.X * safeScale);
-            int y = originY + (int)(localBounds.Y * safeScale);
-            int width = (int)(localBounds.Width * safeScale);
-            int height = (int)(localBounds.Height * safeScale);
-            return new PixelRect(x, y, width, height);
+            return DisplayScaling.ClientToScreenBounds(localBounds, window.Bounds, window.IsDpiAware, GetEffectiveScale(window));
         }
 
         private static bool IsCropWithinWindow(PixelRect crop, PixelRect windowBounds)
@@ -335,10 +323,7 @@ namespace readboard
 
         private static double GetEffectiveScale(WindowDescriptor window)
         {
-            if (window == null || window.DpiScale <= 0d)
-                return DefaultDpiScale;
-
-            return window.DpiScale;
+            return window == null ? DisplayScaling.DefaultScale : DisplayScaling.NormalizeScale(window.DpiScale);
         }
 
         private static IntPtr GetWindowHandle(WindowDescriptor window)
@@ -376,8 +361,8 @@ namespace readboard
 
     internal interface IBoardCapturePlatform
     {
-        double GetDesktopDpiScale();
-        PixelRect GetPrimaryScreenBounds();
+        double GetScaleForPoint(Point point);
+        PixelRect GetVirtualScreenBounds();
         bool TryDescribeWindow(IntPtr handle, WindowDescriptor seed, out WindowDescriptor descriptor);
         Bitmap CaptureWindow(IntPtr handle);
         Bitmap CapturePrintWindow(IntPtr handle);
@@ -388,27 +373,16 @@ namespace readboard
     {
         private const int SRCCOPY = 0x00CC0020;
         private const string JavaFrameClassName = "SunAwtFrame";
-        private const double BaseDpi = 96d;
         private const int ProcessDpiAwarenessOk = 0;
 
-        public double GetDesktopDpiScale()
+        public double GetScaleForPoint(Point point)
         {
-            using (Bitmap bitmap = new Bitmap(1, 1))
-            using (Graphics graphics = Graphics.FromImage(bitmap))
-            {
-                double scale = graphics.DpiX / BaseDpi;
-                return scale > 0d ? scale : 1.0d;
-            }
+            return DisplayScaling.GetScaleForPoint(point);
         }
 
-        public PixelRect GetPrimaryScreenBounds()
+        public PixelRect GetVirtualScreenBounds()
         {
-            Screen screen = Screen.PrimaryScreen;
-            if (screen == null)
-                return new PixelRect(0, 0, 0, 0);
-
-            Rectangle bounds = screen.Bounds;
-            return new PixelRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+            return DisplayScaling.GetVirtualScreenBounds();
         }
 
         public bool TryDescribeWindow(IntPtr handle, WindowDescriptor seed, out WindowDescriptor descriptor)
@@ -425,14 +399,19 @@ namespace readboard
 
             string className = GetWindowClassName(handle);
             string resolvedClassName = string.IsNullOrEmpty(className) ? GetSeedClassName(seed) : className;
+            PixelRect bounds = new PixelRect(rect.Left, rect.Top, width, height);
+            bool isDpiAware = GetSupportDpiState(handle);
             descriptor = new WindowDescriptor
             {
                 Handle = handle,
                 ClassName = resolvedClassName,
                 Title = GetSeedTitle(seed, handle),
-                Bounds = new PixelRect(rect.Left, rect.Top, width, height),
-                IsDpiAware = GetSupportDpiState(handle),
-                DpiScale = GetDesktopDpiScale(),
+                Bounds = bounds,
+                IsDpiAware = isDpiAware,
+                DpiScale = DisplayScaling.ResolveWindowScale(
+                    isDpiAware,
+                    DisplayScaling.GetScaleForWindow(handle),
+                    DisplayScaling.GetScaleForWindowBounds(bounds)),
                 IsJavaWindow = string.Equals(resolvedClassName, JavaFrameClassName, StringComparison.Ordinal)
             };
             return true;

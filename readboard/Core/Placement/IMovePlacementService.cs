@@ -138,15 +138,12 @@ namespace readboard
                 return false;
 
             PixelRect sourceBounds = frame.Viewport.SourceBounds;
-            PixelRect windowBounds = frame.Window == null ? null : frame.Window.Bounds;
+            WindowDescriptor window = frame.Window;
+            PixelRect windowBounds = window == null ? null : window.Bounds;
             if (!IsUsable(sourceBounds) || !IsUsable(windowBounds))
                 return false;
 
-            bounds = new PixelRect(
-                windowBounds.X + sourceBounds.X,
-                windowBounds.Y + sourceBounds.Y,
-                sourceBounds.Width,
-                sourceBounds.Height);
+            bounds = DisplayScaling.ClientToScreenBounds(sourceBounds, windowBounds, window.IsDpiAware, window.DpiScale);
             return true;
         }
 
@@ -174,13 +171,9 @@ namespace readboard
                 return false;
 
             PixelRect screenBounds = frame.Viewport.ScreenBounds;
-            PixelRect windowBounds = frame.Window.Bounds;
-            bounds = new PixelRect(
-                screenBounds.X - windowBounds.X,
-                screenBounds.Y - windowBounds.Y,
-                screenBounds.Width,
-                screenBounds.Height);
-            return true;
+            WindowDescriptor window = frame.Window;
+            bounds = DisplayScaling.ScreenToClientBounds(screenBounds, window.Bounds, window.IsDpiAware, window.DpiScale);
+            return IsUsable(bounds);
         }
 
         private static PlacementPoint BuildPlacementPoint(
@@ -197,9 +190,10 @@ namespace readboard
                 return new PlacementPoint(x, y);
 
             double dpiScale = ResolveBackgroundDpiScale(request.Frame.Window);
+            bool isDpiAware = request.Frame.Window != null && request.Frame.Window.IsDpiAware;
             return new PlacementPoint(
-                (int)Math.Round(x * dpiScale),
-                (int)Math.Round(y * dpiScale));
+                DisplayScaling.ScaleClientCoordinateForPostMessage(x, isDpiAware, dpiScale),
+                DisplayScaling.ScaleClientCoordinateForPostMessage(y, isDpiAware, dpiScale));
         }
 
         private static double ResolveCellSize(int boundsSize, double cellSize, int boardSize)

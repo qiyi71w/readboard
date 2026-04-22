@@ -71,7 +71,69 @@ namespace Readboard.VerificationTests
             coordinator.SendBoardSnapshot(firstSnapshot);
             coordinator.SendBoardSnapshot(secondSnapshot);
 
-            Assert.Equal(new[] { "foxMoveNumber 57", "re=000", "re=111", "end" }, transport.SentLines);
+            Assert.Equal(new[] { "syncPlatform generic", "foxMoveNumber 57", "re=000", "re=111", "end" }, transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_EmitsFoxLiveContextMetadataBeforeBoardPayload()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SetSyncPlatform("fox");
+            coordinator.SetFoxWindowContext(new FoxWindowContext
+            {
+                Kind = FoxWindowKind.LiveRoom,
+                RoomToken = "43581号",
+                LiveTitleMove = 89
+            });
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", 57));
+
+            Assert.Equal(
+                new[]
+                {
+                    "syncPlatform fox",
+                    "roomToken 43581号",
+                    "liveTitleMove 89",
+                    "foxMoveNumber 57",
+                    "re=000",
+                    "re=111",
+                    "end"
+                },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_EmitsFoxRecordContextMetadataBeforeBoardPayload()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SetSyncPlatform("fox");
+            coordinator.SetFoxWindowContext(new FoxWindowContext
+            {
+                Kind = FoxWindowKind.RecordView,
+                RecordCurrentMove = 333,
+                RecordTotalMove = 333,
+                RecordAtEnd = true,
+                TitleFingerprint = "record-fingerprint"
+            });
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", 333));
+
+            Assert.Equal(
+                new[]
+                {
+                    "syncPlatform fox",
+                    "recordCurrentMove 333",
+                    "recordTotalMove 333",
+                    "recordAtEnd 1",
+                    "recordTitleFingerprint record-fingerprint",
+                    "foxMoveNumber 333",
+                    "re=000",
+                    "re=111",
+                    "end"
+                },
+                transport.SentLines);
         }
 
         [Fact]
@@ -88,8 +150,52 @@ namespace Readboard.VerificationTests
             Assert.Equal(
                 new[]
                 {
-                    "foxMoveNumber 57", "re=000", "re=111", "end",
-                    "foxMoveNumber 58", "re=000", "re=111", "end"
+                    "syncPlatform generic", "foxMoveNumber 57", "re=000", "re=111", "end",
+                    "syncPlatform generic", "foxMoveNumber 58", "re=000", "re=111", "end"
+                },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_ResendsFullFrameWhenContextChangesWithoutPayloadChange()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SetSyncPlatform("fox");
+            coordinator.SetFoxWindowContext(new FoxWindowContext
+            {
+                Kind = FoxWindowKind.LiveRoom,
+                RoomToken = "43581号",
+                LiveTitleMove = 89
+            });
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", 57));
+
+            coordinator.SetFoxWindowContext(new FoxWindowContext
+            {
+                Kind = FoxWindowKind.LiveRoom,
+                RoomToken = "43582号",
+                LiveTitleMove = 89
+            });
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", 57));
+
+            Assert.Equal(
+                new[]
+                {
+                    "syncPlatform fox",
+                    "roomToken 43581号",
+                    "liveTitleMove 89",
+                    "foxMoveNumber 57",
+                    "re=000",
+                    "re=111",
+                    "end",
+                    "syncPlatform fox",
+                    "roomToken 43582号",
+                    "liveTitleMove 89",
+                    "foxMoveNumber 57",
+                    "re=000",
+                    "re=111",
+                    "end"
                 },
                 transport.SentLines);
         }
@@ -104,7 +210,7 @@ namespace Readboard.VerificationTests
             coordinator.SetCapturedFoxMoveNumber(57);
             coordinator.SendBoardSnapshot(snapshot);
 
-            Assert.Equal(new[] { "foxMoveNumber 57", "re=000", "re=111", "end" }, transport.SentLines);
+            Assert.Equal(new[] { "syncPlatform generic", "foxMoveNumber 57", "re=000", "re=111", "end" }, transport.SentLines);
         }
 
         [Fact]
@@ -120,7 +226,7 @@ namespace Readboard.VerificationTests
             coordinator.SetCapturedFoxMoveNumber(57);
             coordinator.SendBoardSnapshot(secondSnapshot);
 
-            Assert.Equal(new[] { "foxMoveNumber 57", "re=000", "re=111", "end" }, transport.SentLines);
+            Assert.Equal(new[] { "syncPlatform generic", "foxMoveNumber 57", "re=000", "re=111", "end" }, transport.SentLines);
         }
 
         [Fact]
@@ -139,8 +245,8 @@ namespace Readboard.VerificationTests
             Assert.Equal(
                 new[]
                 {
-                    "foxMoveNumber 57", "re=000", "re=111", "end",
-                    "foxMoveNumber 58", "re=000", "re=111", "end"
+                    "syncPlatform generic", "foxMoveNumber 57", "re=000", "re=111", "end",
+                    "syncPlatform generic", "foxMoveNumber 58", "re=000", "re=111", "end"
                 },
                 transport.SentLines);
         }
@@ -161,8 +267,32 @@ namespace Readboard.VerificationTests
             Assert.Equal(
                 new[]
                 {
-                    "foxMoveNumber 57", "re=000", "re=111", "end",
-                    "foxMoveNumber 58", "re=000", "re=111", "end"
+                    "syncPlatform generic", "foxMoveNumber 57", "re=000", "re=111", "end",
+                    "syncPlatform generic", "foxMoveNumber 58", "re=000", "re=111", "end"
+                },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_ConsumesForceRebuildFlagAfterOneFrame()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.ArmForceRebuild();
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", 57));
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", 57));
+
+            Assert.Single(transport.SentLines.FindAll(line => line == "forceRebuild"));
+            Assert.Equal(
+                new[]
+                {
+                    "syncPlatform generic",
+                    "forceRebuild",
+                    "foxMoveNumber 57",
+                    "re=000",
+                    "re=111",
+                    "end"
                 },
                 transport.SentLines);
         }

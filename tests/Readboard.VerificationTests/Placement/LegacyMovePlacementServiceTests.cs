@@ -76,7 +76,7 @@ namespace Readboard.VerificationTests.Placement
             Assert.True(result.Success);
             Assert.Equal(PlacementPathKind.BackgroundPost, result.PlacementPath);
             Assert.Equal(2, nativeMethods.PostedMessages.Count);
-            int expectedLParam = BuildMouseLParam(52, 82);
+            int expectedLParam = BuildMouseLParam(34, 54);
             Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(expectedLParam, message.LParam));
         }
 

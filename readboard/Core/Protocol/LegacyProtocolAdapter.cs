@@ -78,6 +78,46 @@ namespace readboard
             return CreateLegacyMessage(enabled ? "foreFoxWithInBoard" : "notForeFoxWithInBoard");
         }
 
+        public ProtocolMessage CreateSyncPlatformMessage(string platform)
+        {
+            return CreateLegacyMessage("syncPlatform " + NormalizeTextValue(platform, "generic"));
+        }
+
+        public ProtocolMessage CreateRoomTokenMessage(string roomToken)
+        {
+            return CreateLegacyMessage("roomToken " + roomToken);
+        }
+
+        public ProtocolMessage CreateLiveTitleMoveMessage(int moveNumber)
+        {
+            return CreateLegacyMessage("liveTitleMove " + moveNumber);
+        }
+
+        public ProtocolMessage CreateRecordCurrentMoveMessage(int moveNumber)
+        {
+            return CreateLegacyMessage("recordCurrentMove " + moveNumber);
+        }
+
+        public ProtocolMessage CreateRecordTotalMoveMessage(int moveNumber)
+        {
+            return CreateLegacyMessage("recordTotalMove " + moveNumber);
+        }
+
+        public ProtocolMessage CreateRecordAtEndMessage(bool atEnd)
+        {
+            return CreateLegacyMessage(atEnd ? "recordAtEnd 1" : "recordAtEnd 0");
+        }
+
+        public ProtocolMessage CreateRecordTitleFingerprintMessage(string fingerprint)
+        {
+            return CreateLegacyMessage("recordTitleFingerprint " + fingerprint);
+        }
+
+        public ProtocolMessage CreateForceRebuildMessage()
+        {
+            return ProtocolMessage.CreateForceRebuildLine("forceRebuild");
+        }
+
         public ProtocolMessage CreateFoxMoveNumberMessage(int moveNumber)
         {
             return CreateLegacyMessage("foxMoveNumber " + moveNumber);
@@ -176,6 +216,11 @@ namespace readboard
         private static string NormalizeNumericValue(string value)
         {
             return string.IsNullOrWhiteSpace(value) ? "0" : value;
+        }
+
+        private static string NormalizeTextValue(string value, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         }
     }
 }

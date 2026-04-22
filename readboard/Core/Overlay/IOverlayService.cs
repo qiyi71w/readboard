@@ -14,8 +14,6 @@ namespace readboard
         private const string InBoardCommand = "inboard";
         private const string DpiTokenPrefix = "99_";
         private const string DpiTokenSeparator = "_";
-        private const double DefaultDpiScale = 1d;
-
         private string lastProtocolLine;
 
         public OverlayUpdateResult BuildUpdate(OverlayUpdateRequest request)
@@ -94,7 +92,7 @@ namespace readboard
                 return null;
 
             double scale = GetDpiScale(request == null ? null : request.Frame == null ? null : request.Frame.Window);
-            if (scale <= DefaultDpiScale)
+            if (scale <= DisplayScaling.DefaultScale)
                 return baseToken;
 
             return string.Concat(
@@ -139,10 +137,7 @@ namespace readboard
             if (windowBounds == null || windowBounds.IsEmpty || sourceBounds == null || sourceBounds.IsEmpty)
                 return false;
 
-            double scale = GetDpiScale(window);
-            bounds = window.IsDpiAware
-                ? CreateAwareBounds(windowBounds, sourceBounds, scale)
-                : CreateUnawareBounds(windowBounds, sourceBounds, scale);
+            bounds = DisplayScaling.ProtocolBoundsFromWindow(windowBounds, sourceBounds, window.IsDpiAware, GetDpiScale(window));
             return bounds != null && !bounds.IsEmpty;
         }
 
@@ -153,55 +148,13 @@ namespace readboard
             if (screenBounds == null || screenBounds.IsEmpty)
                 return false;
 
-            double scale = GetDpiScale(frame.Window);
-            bounds = new PixelRect(
-                ScaleCoordinate(screenBounds.X, scale),
-                ScaleCoordinate(screenBounds.Y, scale),
-                ScaleSize(screenBounds.Width, scale),
-                ScaleSize(screenBounds.Height, scale));
+            bounds = DisplayScaling.ProtocolBoundsFromScreen(screenBounds, GetDpiScale(frame.Window));
             return !bounds.IsEmpty;
-        }
-
-        private static PixelRect CreateAwareBounds(PixelRect windowBounds, PixelRect sourceBounds, double scale)
-        {
-            return new PixelRect(
-                ScaleCoordinate(windowBounds.X + sourceBounds.X, scale),
-                ScaleCoordinate(windowBounds.Y + sourceBounds.Y, scale),
-                ScaleSize(sourceBounds.Width, scale),
-                ScaleSize(sourceBounds.Height, scale));
-        }
-
-        private static PixelRect CreateUnawareBounds(PixelRect windowBounds, PixelRect sourceBounds, double scale)
-        {
-            return new PixelRect(
-                sourceBounds.X + ScaleCoordinate(windowBounds.X, scale),
-                sourceBounds.Y + ScaleCoordinate(windowBounds.Y, scale),
-                sourceBounds.Width,
-                sourceBounds.Height);
-        }
-
-        private static int ScaleCoordinate(int value, double scale)
-        {
-            if (scale <= DefaultDpiScale)
-                return value;
-
-            return (int)(value / scale);
-        }
-
-        private static int ScaleSize(int value, double scale)
-        {
-            if (scale <= DefaultDpiScale)
-                return value;
-
-            return (int)Math.Round(value / scale);
         }
 
         private static double GetDpiScale(WindowDescriptor window)
         {
-            if (window == null || window.DpiScale <= 0d)
-                return DefaultDpiScale;
-
-            return window.DpiScale;
+            return window == null ? DisplayScaling.DefaultScale : DisplayScaling.NormalizeScale(window.DpiScale);
         }
     }
 }

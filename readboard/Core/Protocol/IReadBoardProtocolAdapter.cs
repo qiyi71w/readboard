@@ -16,6 +16,14 @@ namespace readboard
         ProtocolMessage CreateEndSyncMessage();
         ProtocolMessage CreateBothSyncMessage(bool enabled);
         ProtocolMessage CreateForegroundFoxInBoardMessage(bool enabled);
+        ProtocolMessage CreateSyncPlatformMessage(string platform);
+        ProtocolMessage CreateRoomTokenMessage(string roomToken);
+        ProtocolMessage CreateLiveTitleMoveMessage(int moveNumber);
+        ProtocolMessage CreateRecordCurrentMoveMessage(int moveNumber);
+        ProtocolMessage CreateRecordTotalMoveMessage(int moveNumber);
+        ProtocolMessage CreateRecordAtEndMessage(bool atEnd);
+        ProtocolMessage CreateRecordTitleFingerprintMessage(string fingerprint);
+        ProtocolMessage CreateForceRebuildMessage();
         ProtocolMessage CreateFoxMoveNumberMessage(int moveNumber);
         ProtocolMessage CreateStartMessage(int boardWidth, int boardHeight, IntPtr windowHandle, bool includeWindowHandle);
         ProtocolMessage CreatePlayMessage(string color, string time, string playouts, string firstPolicy);

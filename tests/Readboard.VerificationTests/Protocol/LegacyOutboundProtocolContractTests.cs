@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Xunit;
 using readboard;
@@ -67,17 +68,34 @@ namespace Readboard.VerificationTests.Protocol
                 {
                     startLine,
                     visibleLine,
+                    "syncPlatform generic",
                     replayLines[0],
                     replayLines[1],
                     "end",
                     clearLine,
                     hiddenLine,
                     visibleLine,
+                    "syncPlatform generic",
                     replayLines[0],
                     replayLines[1],
                     "end"
                 },
                 transport.SentLines);
+        }
+
+        [Fact]
+        public void ExtendedSyncContextMessages_SerializeWithStableLegacyTokens()
+        {
+            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
+
+            Assert.Equal("syncPlatform fox", adapter.Serialize(adapter.CreateSyncPlatformMessage("fox")));
+            Assert.Equal("roomToken 23|890号", adapter.Serialize(adapter.CreateRoomTokenMessage("23|890号")));
+            Assert.Equal("liveTitleMove 89", adapter.Serialize(adapter.CreateLiveTitleMoveMessage(89)));
+            Assert.Equal("recordCurrentMove 333", adapter.Serialize(adapter.CreateRecordCurrentMoveMessage(333)));
+            Assert.Equal("recordTotalMove 333", adapter.Serialize(adapter.CreateRecordTotalMoveMessage(333)));
+            Assert.Equal("recordAtEnd 1", adapter.Serialize(adapter.CreateRecordAtEndMessage(true)));
+            Assert.Equal("recordTitleFingerprint abc123", adapter.Serialize(adapter.CreateRecordTitleFingerprintMessage("abc123")));
+            Assert.Equal("forceRebuild", adapter.Serialize(adapter.CreateForceRebuildMessage()));
         }
 
         private static string BuildVisibleOverlayLine(LegacyOverlayService overlayService)
@@ -131,6 +149,36 @@ namespace Readboard.VerificationTests.Protocol
             });
 
             Assert.Equal("inboard 320 240 50 50 3", update.ProtocolLine);
+        }
+
+        [Fact]
+        public void BuildUpdate_DpiUnawareBackgroundSelectionScalesBoundsAndAddsDpiToken()
+        {
+            LegacyOverlayService overlayService = new LegacyOverlayService();
+
+            OverlayUpdateResult update = overlayService.BuildUpdate(new OverlayUpdateRequest
+            {
+                Visibility = OverlayVisibility.Visible,
+                LegacyTypeToken = "3",
+                Frame = new BoardFrame
+                {
+                    SyncMode = SyncMode.Background,
+                    Window = new WindowDescriptor
+                    {
+                        Bounds = new PixelRect(300, 200, 150, 150),
+                        IsDpiAware = false,
+                        DpiScale = 1.5d
+                    },
+                    Viewport = new BoardViewport
+                    {
+                        ScreenBounds = new PixelRect(320, 240, 50, 50)
+                    }
+                }
+            });
+
+            Assert.Equal(
+                string.Format(CultureInfo.CurrentCulture, "inboard 213 160 33 33 99_{0}_3", 1.5d),
+                update.ProtocolLine);
         }
 
         private sealed class RecordingTransport : IReadBoardTransport

@@ -80,9 +80,127 @@ namespace Readboard.VerificationTests.Host
             string source = LoadSource("readboard", "Form1.cs");
             string methodSlice = GetMethodSlice(source, "private void ApplyMainFormUi()");
             int layoutIndex = IndexOfRequired(methodSlice, "PerformLayout();");
-            int restoreIndex = IndexOfRequired(methodSlice, "RestoreSavedWindowLocation();");
+            int restoreIndex = IndexOfRequired(methodSlice, "RestoreSavedWindowLocationIfNeeded();");
 
             Assert.True(restoreIndex > layoutIndex, "Saved window coordinates must clamp after final layout has established the runtime size.");
+        }
+
+        [Fact]
+        public void MainForm_UsesTargetCommitWidthClampBeforeThemeApplication()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void ApplyMainFormUi()");
+
+            Assert.Contains("ConstrainMainFormWidth();", methodSlice);
+            Assert.DoesNotContain("MainFormLayoutProfile layoutProfile = CreateMainFormLayoutProfile();", methodSlice);
+            Assert.DoesNotContain("ApplyMainFormClientSizeProfile(layoutProfile);", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_UsesHeaderPlatformAnchorOnlyWhenUtilitiesStayInRightColumn()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void ApplyMainFormUi()");
+
+            Assert.Contains("int boardTop = headerLayout.UtilitiesInRightColumn", methodSlice);
+            Assert.Contains("? headerLayout.PlatformBottom + ScaleValue(12)", methodSlice);
+            Assert.Contains(": headerLayout.UtilityBottom + ScaleValue(12);", methodSlice);
+            Assert.Contains("int syncBottom = ArrangeMainSyncSection(Math.Max(boardBottom, headerLayout.UtilityBottom) + ScaleValue(12));", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_SwitchTheme_ReusesTheSameLayoutEntryPoint()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void SwitchTheme(int themeMode)");
+
+            Assert.Contains("Program.uiThemeMode = themeMode;", methodSlice);
+            Assert.Contains("ApplyMainFormUi();", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_PrefersLegacyDesktopLayoutBeforeAdaptiveFallback()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+
+            Assert.Contains("if (CanUseLegacyMainDesktopLayout())", source);
+            Assert.Contains("return ArrangeLegacyMainHeader();", source);
+            Assert.Contains("return ArrangeAdaptiveMainHeader();", source);
+            Assert.Contains("return ArrangeLegacyMainBoardSection(top);", source);
+            Assert.Contains("return ArrangeAdaptiveMainBoardSection(top, headerLayout);", source);
+            Assert.Contains("return ArrangeLegacyMainSyncSection(top);", source);
+            Assert.Contains("return ArrangeAdaptiveMainSyncSection(top);", source);
+            Assert.Contains("ArrangeLegacyMainActions(top);", source);
+            Assert.Contains("ArrangeAdaptiveMainActions(top);", source);
+        }
+
+        [Fact]
+        public void MainForm_SyncVisitsInputs_RestoreTargetCommitSizing()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string legacySlice = GetMethodSlice(source, "private int ArrangeLegacyMainSyncSection(int top)");
+            string adaptiveSlice = GetMethodSlice(source, "private int ArrangeAdaptiveMainSyncSection(int top)");
+            string helperSlice = GetMethodSlice(source, "private int GetSharedMainSyncVisitsLabelWidth()");
+
+            Assert.Contains("int sharedVisitsLabelWidth = GetSharedMainSyncVisitsLabelWidth();", legacySlice);
+            Assert.Contains("int sharedLegacyVisitsPanelWidth = GetLegacyMainSyncVisitsPanelWidth();", legacySlice);
+            Assert.Contains("lblTotalVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(18));", legacySlice);
+            Assert.Contains("lblBestMoveVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(18));", legacySlice);
+            Assert.Contains("int sharedVisitsLabelWidth = GetSharedMainSyncVisitsLabelWidth();", adaptiveSlice);
+            Assert.Contains("int sharedAdaptiveVisitsPanelWidth = GetAdaptiveMainSyncVisitsPanelWidth();", adaptiveSlice);
+            Assert.Contains("panel2.Size = new System.Drawing.Size(sharedAdaptiveVisitsPanelWidth, rowHeight);", adaptiveSlice);
+            Assert.Contains("panel4.Size = new System.Drawing.Size(sharedAdaptiveVisitsPanelWidth, rowHeight);", adaptiveSlice);
+            Assert.Contains("return Math.Max(lblTotalVisits.PreferredSize.Width, lblBestMoveVisits.PreferredSize.Width);", helperSlice);
+        }
+
+        [Fact]
+        public void BuildCurrentAppConfig_PersistsRestoreBoundsInsteadOfMinimizedCoordinates()
+        {
+            string source = LoadSource("readboard", "MainForm.Configuration.cs");
+            string methodSlice = GetMethodSlice(source, "private AppConfig BuildCurrentAppConfig()");
+
+            Assert.Contains("Point persistedWindowLocation = ResolvePersistableWindowLocation();", methodSlice);
+            Assert.Contains("config.WindowPosX = persistedWindowLocation.X;", methodSlice);
+            Assert.Contains("config.WindowPosY = persistedWindowLocation.Y;", methodSlice);
+        }
+
+        [Fact]
+        public void ResolvePersistableWindowLocation_RejectsHiddenOrOffscreenCoordinates()
+        {
+            string source = LoadSource("readboard", "MainForm.Configuration.cs");
+            string methodSlice = GetMethodSlice(source, "private Point ResolvePersistableWindowLocation()");
+
+            Assert.Contains("WindowState == FormWindowState.Normal", methodSlice);
+            Assert.Contains("RestoreBounds", methodSlice);
+            Assert.Contains("location.X <= -16000", methodSlice);
+            Assert.Contains("location.Y <= -16000", methodSlice);
+            Assert.Contains("SystemInformation.VirtualScreen", methodSlice);
+            Assert.Contains("!virtualScreen.Contains(location)", methodSlice);
+            Assert.Contains("return new Point(-1, -1);", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_OnlyRestoresSavedWindowLocationDuringStartupLayout()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void RestoreSavedWindowLocationIfNeeded()");
+
+            Assert.Contains("if (isMainFormSizeInitialized)", methodSlice);
+            Assert.Contains("RestoreSavedWindowLocation();", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_UsesSavedStartupScreenForInitialWorkingAreaAndScale()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string scaleSlice = GetMethodSlice(source, "private float GetCurrentDpiScale()");
+            string workingAreaSlice = GetMethodSlice(source, "private Rectangle GetCurrentWorkingArea()");
+            string startupPointSlice = GetMethodSlice(source, "private Point? TryGetStartupReferencePoint()");
+
+            Assert.Contains("Point? startupReferencePoint = TryGetStartupReferencePoint();", scaleSlice);
+            Assert.Contains("DisplayScaling.GetScaleForPoint(startupReferencePoint.Value)", scaleSlice);
+            Assert.Contains("ResolveLayoutReferencePoint()", workingAreaSlice);
+            Assert.Contains("if (isMainFormSizeInitialized || posX == -1 || posY == -1)", startupPointSlice);
         }
 
         [Fact]
@@ -109,12 +227,24 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void ResolveFoxMoveNumber_SupportsAllFoxSyncModes()
+        public void ResolveSyncPlatform_UsesFoxTokenForAllFoxSyncModes()
         {
             string source = LoadSource("readboard", "Form1.cs");
-            string methodSlice = GetMethodSlice(source, "private int? ResolveFoxMoveNumber()");
+            string methodSlice = GetMethodSlice(source, "private string ResolveSyncPlatform()");
 
-            Assert.Contains("IsFoxSyncType(CurrentSyncType)", methodSlice);
+            Assert.Contains("return IsFoxSyncType(CurrentSyncType) ? \"fox\" : \"generic\";", methodSlice);
+        }
+
+        [Fact]
+        public void ResolveFoxWindowContext_ResolvesFoxTitlesFromSelectedHandleOrAncestors()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private FoxWindowContext ResolveFoxWindowContext()");
+
+            Assert.Contains("if (!IsFoxSyncType(CurrentSyncType) || hwnd == IntPtr.Zero)", methodSlice);
+            Assert.Contains("InvalidateFoxWindowBinding();", methodSlice);
+            Assert.Contains("TryRefreshFoxWindowContextFromBinding(out foxWindowContext)", methodSlice);
+            Assert.Contains("TryResolveFoxWindowBinding(out foxWindowContext)", methodSlice);
         }
 
         [Fact]
@@ -158,10 +288,61 @@ namespace Readboard.VerificationTests.Host
         {
             string source = LoadSource("readboard", "Form4.cs");
             string layoutSlice = GetMethodSlice(source, "private void ArrangeSettingsLayout()");
+            string adaptiveSlice = GetMethodSlice(source, "private void ArrangeAdaptiveSettingsLayout()");
+            string legacySlice = GetMethodSlice(source, "private void ArrangeLegacySettingsLayout()");
 
-            Assert.Contains("chkVerifyMove.Location = new Point(left, top + 60);", layoutSlice);
-            Assert.Contains("chkDisableShowInBoardShortcut.Location = new Point(170, top + 60);", layoutSlice);
-            Assert.Contains("chkDisableShowInBoardShortcut.Size = new Size(170, 20);", layoutSlice);
+            Assert.Contains("CanUseLegacySettingsDesktopLayout()", layoutSlice);
+            Assert.Contains("ArrangeLegacySettingsLayout();", layoutSlice);
+            Assert.Contains("ArrangeAdaptiveSettingsLayout();", layoutSlice);
+            Assert.Contains("LayoutOptionRow(chkVerifyMove, chkDisableShowInBoardShortcut", adaptiveSlice);
+            Assert.Contains("chkDisableShowInBoardShortcut.Location = new Point(ScaleValue(170), top + optionRowGap * 2);", legacySlice);
+        }
+
+        [Fact]
+        public void SettingsForm_LegacyLayoutMeasurement_ClearsAdaptiveCheckboxWidthConstraintsBeforeDecision()
+        {
+            string source = LoadSource("readboard", "Form4.cs");
+            string decisionSlice = GetMethodSlice(source, "private bool CanUseLegacySettingsDesktopLayout()");
+            string helperSlice = GetMethodSlice(source, "private int GetLegacyOptionPreferredWidth(params CheckBox[] checkBoxes)");
+
+            Assert.Contains("GetLegacyOptionPreferredWidth(chkAutoMin, chkMag, chkVerifyMove)", decisionSlice);
+            Assert.Contains("GetLegacyOptionPreferredWidth(chkPonder, chkEnhanceScreen, chkDisableShowInBoardShortcut)", decisionSlice);
+            Assert.Contains("ConfigureLegacyOptionCheckBox(checkBox);", helperSlice);
+            Assert.Contains("checkBox.PreferredSize.Width", helperSlice);
+        }
+
+        [Fact]
+        public void TipsForm_PrefersLegacyDesktopLayoutBeforeAdaptiveFallback()
+        {
+            string source = LoadSource("readboard", "Form7.cs");
+            string layoutSlice = GetMethodSlice(source, "private void ArrangeTipsLayout()");
+            string legacySlice = GetMethodSlice(source, "private void ArrangeLegacyTipsLayout()");
+            string adaptiveSlice = GetMethodSlice(source, "private void ArrangeAdaptiveTipsLayout()");
+
+            Assert.Contains("CanUseLegacyTipsDesktopLayout()", layoutSlice);
+            Assert.Contains("ArrangeLegacyTipsLayout();", layoutSlice);
+            Assert.Contains("ArrangeAdaptiveTipsLayout();", layoutSlice);
+            Assert.Contains("btnConfirm.SetBounds(footerLeft, footerTop, primaryWidth, buttonHeight);", legacySlice);
+            Assert.Contains("btnNotAskAgain.SetBounds(btnConfirm.Right + buttonGap, footerTop, secondaryWidth, buttonHeight);", legacySlice);
+            Assert.Contains("btnConfirm.SetBounds(left, footerTop, contentWidth, buttonHeight);", adaptiveSlice);
+            Assert.Contains("btnNotAskAgain.SetBounds(left, btnConfirm.Bottom + rowGap, contentWidth, buttonHeight);", adaptiveSlice);
+        }
+
+        [Fact]
+        public void UpdateDialog_KeepsDesktopInformationOrderAndNonWrappingFooter()
+        {
+            string source = LoadSource("readboard", "FormUpdate.cs");
+            string designerSource = LoadSource("readboard", "FormUpdate.Designer.cs");
+
+            Assert.Contains("ApplyInfoPanelLayout();", source);
+            Assert.Contains("ConstrainUpdateDialogSize();", source);
+            Assert.Contains("buttonPanel.FlowDirection = System.Windows.Forms.FlowDirection.RightToLeft;", designerSource);
+            Assert.Contains("buttonPanel.WrapContents = false;", designerSource);
+            Assert.Contains("rootPanel.Controls.Add(lblTitle, 0, 0);", designerSource);
+            Assert.Contains("rootPanel.Controls.Add(infoPanel, 0, 1);", designerSource);
+            Assert.Contains("rootPanel.Controls.Add(lblReleaseNotes, 0, 2);", designerSource);
+            Assert.Contains("rootPanel.Controls.Add(txtReleaseNotes, 0, 3);", designerSource);
+            Assert.Contains("rootPanel.Controls.Add(buttonPanel, 0, 4);", designerSource);
         }
 
         [Fact]

@@ -22,3 +22,4 @@ msbuild-48.out
 msbuild.log
 msbuild.out
 nul
+release-runs/
