@@ -382,7 +382,7 @@ namespace readboard
             langItems["MainForm_groupPlatform"] = "平台类型";
             langItems["MainForm_groupBoard"] = "棋盘规格";
             langItems["MainForm_groupSync"] = "同步与自动落子";
-            langItems["MainForm_themeOptimized"] = "修复版主题";
+            langItems["MainForm_themeOptimized"] = "新版主题";
             langItems["MainForm_themeClassic"] = "默认主题";
             langItems["Update_upToDate"] = "已是最新版本";
             langItems["Update_checkFailed"] = "检查更新失败";

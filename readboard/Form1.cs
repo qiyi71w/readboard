@@ -83,6 +83,26 @@ namespace readboard
         private bool closeRequestedBeforeHandle = false;
         private bool isInitializingProtocolState = true;
         private static readonly System.Drawing.Size MainFormDefaultSize = new System.Drawing.Size(792, 374);
+
+        private readonly struct MainHeaderLayoutMetrics
+        {
+            public MainHeaderLayoutMetrics(int platformBottom, int utilityBottom, int platformWidth, bool utilitiesInRightColumn)
+            {
+                PlatformBottom = platformBottom;
+                UtilityBottom = utilityBottom;
+                PlatformWidth = platformWidth;
+                UtilitiesInRightColumn = utilitiesInRightColumn;
+            }
+
+            public int PlatformBottom { get; }
+
+            public int UtilityBottom { get; }
+
+            public int PlatformWidth { get; }
+
+            public bool UtilitiesInRightColumn { get; }
+        }
+
         private static Boolean IsFoxSyncType(int syncType)
         {
             return syncType == TYPE_FOX || syncType == TYPE_FOX_BACKGROUND_PLACE;
@@ -299,10 +319,13 @@ namespace readboard
                 ApplyMainFormTypography();
                 ApplyThemeControlTexts();
                 ApplyMainFormTheme();
-                int nextTop = ArrangeMainHeader();
-                nextTop = ArrangeMainBoardSection(nextTop + ScaleValue(12));
-                nextTop = ArrangeMainSyncSection(nextTop + ScaleValue(12));
-                ArrangeMainActions(nextTop + ScaleValue(12));
+                MainHeaderLayoutMetrics headerLayout = ArrangeMainHeader();
+                int boardTop = headerLayout.UtilitiesInRightColumn
+                    ? headerLayout.PlatformBottom + ScaleValue(12)
+                    : headerLayout.UtilityBottom + ScaleValue(12);
+                int boardBottom = ArrangeMainBoardSection(boardTop, headerLayout);
+                int syncBottom = ArrangeMainSyncSection(Math.Max(boardBottom, headerLayout.UtilityBottom) + ScaleValue(12));
+                ArrangeMainActions(syncBottom + ScaleValue(12));
             }
             finally
             {
@@ -447,7 +470,7 @@ namespace readboard
             btnClearBoard.Cursor = Cursors.Default;
         }
 
-        private int ArrangeMainHeader()
+        private MainHeaderLayoutMetrics ArrangeMainHeader()
         {
             if (CanUseLegacyMainDesktopLayout())
                 return ArrangeLegacyMainHeader();
@@ -455,7 +478,7 @@ namespace readboard
             return ArrangeAdaptiveMainHeader();
         }
 
-        private int ArrangeLegacyMainHeader()
+        private MainHeaderLayoutMetrics ArrangeLegacyMainHeader()
         {
             int left = ScaleValue(12);
             int top = ScaleValue(12);
@@ -484,10 +507,10 @@ namespace readboard
             btnTheme.SetBounds(themeLeft, top, themeWidth, buttonHeight);
             btnKomi65.SetBounds(settingsLeft, top + buttonHeight + utilityGap, utilityRight - settingsLeft, buttonHeight);
             btnCheckUpdate.SetBounds(settingsLeft, btnKomi65.Bottom + utilityGap, utilityRight - settingsLeft, buttonHeight);
-            return Math.Max(groupBox1.Bottom, btnCheckUpdate.Bottom);
+            return new MainHeaderLayoutMetrics(groupBox1.Bottom, btnCheckUpdate.Bottom, groupBox1.Width, true);
         }
 
-        private int ArrangeAdaptiveMainHeader()
+        private MainHeaderLayoutMetrics ArrangeAdaptiveMainHeader()
         {
             int left = ScaleValue(12);
             int top = ScaleValue(12);
@@ -522,7 +545,7 @@ namespace readboard
                 btnTheme.SetBounds(btnHelp.Right + buttonGap, top, themeWidth, buttonHeight);
                 btnKomi65.SetBounds(utilityLeft, btnSettings.Bottom + rowGap, utilityColumnWidth, buttonHeight);
                 btnCheckUpdate.SetBounds(utilityLeft, btnKomi65.Bottom + rowGap, utilityColumnWidth, buttonHeight);
-                return Math.Max(groupBox1.Bottom, btnCheckUpdate.Bottom);
+                return new MainHeaderLayoutMetrics(groupBox1.Bottom, btnCheckUpdate.Bottom, groupBox1.Width, true);
             }
 
             int utilityTop = groupBox1.Bottom + rowGap;
@@ -531,15 +554,15 @@ namespace readboard
             btnTheme.SetBounds(btnHelp.Right + buttonGap, utilityTop, themeWidth, buttonHeight);
             btnKomi65.SetBounds(left, btnSettings.Bottom + rowGap, contentWidth, buttonHeight);
             btnCheckUpdate.SetBounds(left, btnKomi65.Bottom + rowGap, contentWidth, buttonHeight);
-            return btnCheckUpdate.Bottom;
+            return new MainHeaderLayoutMetrics(groupBox1.Bottom, btnCheckUpdate.Bottom, contentWidth, false);
         }
 
-        private int ArrangeMainBoardSection(int top)
+        private int ArrangeMainBoardSection(int top, MainHeaderLayoutMetrics headerLayout)
         {
             if (CanUseLegacyMainDesktopLayout())
                 return ArrangeLegacyMainBoardSection(top);
 
-            return ArrangeAdaptiveMainBoardSection(top);
+            return ArrangeAdaptiveMainBoardSection(top, headerLayout);
         }
 
         private int ArrangeLegacyMainBoardSection(int top)
@@ -573,7 +596,7 @@ namespace readboard
             return groupBox2.Bottom;
         }
 
-        private int ArrangeAdaptiveMainBoardSection(int top)
+        private int ArrangeAdaptiveMainBoardSection(int top, MainHeaderLayoutMetrics headerLayout)
         {
             int left = ScaleValue(12);
             int optionTop = ScaleValue(29);
@@ -584,10 +607,11 @@ namespace readboard
             int customInputGap = ScaleValue(12);
             int separatorGap = ScaleValue(4);
             int contentWidth = ClientSize.Width - left * 2;
+            int groupWidth = headerLayout.UtilitiesInRightColumn ? headerLayout.PlatformWidth : contentWidth;
             int sectionPadding = ScaleValue(16);
             int rowGap = ScaleValue(12);
 
-            groupBox2.SetBounds(left, top, contentWidth, 0);
+            groupBox2.SetBounds(left, top, groupWidth, 0);
             lblBoardSize.SetBounds(sectionPadding, optionTop, Math.Max(lblBoardSize.PreferredSize.Width, ScaleValue(52)), ScaleValue(20));
             lblBoardSize.TextAlign = ContentAlignment.MiddleLeft;
             rdo19x19.Location = new System.Drawing.Point(lblBoardSize.Right + ScaleValue(6), optionTop);
@@ -603,7 +627,7 @@ namespace readboard
             label6.SetBounds(txtBoardWidth.Right + separatorGap, inputTop + ScaleValue(4), ScaleValue(10), ScaleValue(18));
             txtBoardHeight.SetBounds(label6.Right + separatorGap, inputTop, textBoxWidth, inputHeight);
             txtBoardHeight.TextAlign = HorizontalAlignment.Center;
-            if (txtBoardHeight.Right + sectionPadding > contentWidth)
+            if (txtBoardHeight.Right + sectionPadding > groupWidth)
             {
                 int wrappedTop = rdoOtherBoard.Bottom + rowGap;
                 txtBoardWidth.SetBounds(sectionPadding, wrappedTop, textBoxWidth, inputHeight);
@@ -818,7 +842,8 @@ namespace readboard
             }
 
             chkShowInBoard.AutoSize = true;
-            if (currentX + chkShowInBoard.PreferredSize.Width > maxRight)
+            int showInBoardWidth = GetLayoutOptionPreferredSize(chkShowInBoard).Width;
+            if (currentX + showInBoardWidth > maxRight)
             {
                 currentX = left;
                 currentY += rowHeight + rowGap;
@@ -835,7 +860,7 @@ namespace readboard
             int rowHeight = 0;
             foreach (ButtonBase option in options)
             {
-                Size preferredSize = option.PreferredSize;
+                Size preferredSize = GetLayoutOptionPreferredSize(option);
                 if (currentX > startX && currentX + preferredSize.Width > availableRight)
                 {
                     currentX = startX;
@@ -855,8 +880,46 @@ namespace readboard
         {
             int width = 0;
             foreach (ButtonBase option in options)
-                width += option.PreferredSize.Width;
+                width += GetLayoutOptionPreferredSize(option).Width;
             return width + itemGap * Math.Max(0, options.Length - 1);
+        }
+
+        private Size GetLayoutOptionPreferredSize(ButtonBase option)
+        {
+            Size standardSize = MeasureLayoutOptionPreferredSize(option, FlatStyle.Standard);
+            Size flatSize = MeasureLayoutOptionPreferredSize(option, FlatStyle.Flat);
+            return new Size(
+                Math.Max(standardSize.Width, flatSize.Width),
+                Math.Max(standardSize.Height, flatSize.Height));
+        }
+
+        private static Size MeasureLayoutOptionPreferredSize(ButtonBase option, FlatStyle flatStyle)
+        {
+            if (option is RadioButton radioButton)
+            {
+                using (RadioButton probe = new RadioButton())
+                {
+                    probe.AutoSize = true;
+                    probe.Text = radioButton.Text;
+                    probe.Font = radioButton.Font;
+                    probe.FlatStyle = flatStyle;
+                    return probe.PreferredSize;
+                }
+            }
+
+            if (option is CheckBox checkBox)
+            {
+                using (CheckBox probe = new CheckBox())
+                {
+                    probe.AutoSize = true;
+                    probe.Text = checkBox.Text;
+                    probe.Font = checkBox.Font;
+                    probe.FlatStyle = flatStyle;
+                    return probe.PreferredSize;
+                }
+            }
+
+            throw new NotSupportedException($"Unsupported layout option type: {option.GetType().FullName}");
         }
 
         private int MeasureButtonWidth(Button button, int minimumLogicalWidth)
@@ -919,14 +982,14 @@ namespace readboard
                 sectionPadding
                 + labelWidth
                 + ScaleValue(6)
-                + rdo19x19.PreferredSize.Width
+                + GetLayoutOptionPreferredSize(rdo19x19).Width
                 + optionGap
-                + rdo13x13.PreferredSize.Width
+                + GetLayoutOptionPreferredSize(rdo13x13).Width
                 + optionGap
-                + rdo9x9.PreferredSize.Width
+                + GetLayoutOptionPreferredSize(rdo9x9).Width
                 + optionGap
                 + ScaleValue(4)
-                + rdoOtherBoard.PreferredSize.Width
+                + GetLayoutOptionPreferredSize(rdoOtherBoard).Width
                 + customInputGap
                 + textBoxWidth
                 + separatorGap
@@ -944,9 +1007,9 @@ namespace readboard
             int buttonGap = ScaleValue(12);
             int sharedVisitsPanelWidth = GetLegacyMainSyncVisitsPanelWidth();
             int row1Width =
-                chkBothSync.PreferredSize.Width
+                GetLayoutOptionPreferredSize(chkBothSync).Width
                 + buttonGap
-                + radioBlack.PreferredSize.Width
+                + GetLayoutOptionPreferredSize(radioBlack).Width
                 + buttonGap
                 + Math.Max(ScaleValue(129) + timeFieldGap, lblPlayCondition.PreferredSize.Width + ScaleValue(22) + timeFieldGap)
                 + buttonGap
@@ -954,9 +1017,9 @@ namespace readboard
                 + ScaleValue(8)
                 + ScaleValue(92);
             int row2Width =
-                chkAutoPlay.PreferredSize.Width
+                GetLayoutOptionPreferredSize(chkAutoPlay).Width
                 + buttonGap
-                + radioWhite.PreferredSize.Width
+                + GetLayoutOptionPreferredSize(radioWhite).Width
                 + buttonGap
                 + Math.Max(ScaleValue(61), lblTime.PreferredSize.Width + ScaleValue(8))
                 + timeFieldGap
@@ -981,7 +1044,7 @@ namespace readboard
                 + buttonGap
                 + MeasureButtonWidth(btnCircleRow1, 104)
                 + ScaleValue(16)
-                + chkShowInBoard.PreferredSize.Width;
+                + GetLayoutOptionPreferredSize(chkShowInBoard).Width;
             int secondRowWidth =
                 MeasureButtonWidth(btnKeepSync, 128)
                 + buttonGap

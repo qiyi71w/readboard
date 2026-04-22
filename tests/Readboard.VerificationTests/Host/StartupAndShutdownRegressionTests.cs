@@ -86,6 +86,39 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void MainForm_UsesTargetCommitWidthClampBeforeThemeApplication()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void ApplyMainFormUi()");
+
+            Assert.Contains("ConstrainMainFormWidth();", methodSlice);
+            Assert.DoesNotContain("MainFormLayoutProfile layoutProfile = CreateMainFormLayoutProfile();", methodSlice);
+            Assert.DoesNotContain("ApplyMainFormClientSizeProfile(layoutProfile);", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_UsesHeaderPlatformAnchorOnlyWhenUtilitiesStayInRightColumn()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void ApplyMainFormUi()");
+
+            Assert.Contains("int boardTop = headerLayout.UtilitiesInRightColumn", methodSlice);
+            Assert.Contains("? headerLayout.PlatformBottom + ScaleValue(12)", methodSlice);
+            Assert.Contains(": headerLayout.UtilityBottom + ScaleValue(12);", methodSlice);
+            Assert.Contains("int syncBottom = ArrangeMainSyncSection(Math.Max(boardBottom, headerLayout.UtilityBottom) + ScaleValue(12));", methodSlice);
+        }
+
+        [Fact]
+        public void MainForm_SwitchTheme_ReusesTheSameLayoutEntryPoint()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void SwitchTheme(int themeMode)");
+
+            Assert.Contains("Program.uiThemeMode = themeMode;", methodSlice);
+            Assert.Contains("ApplyMainFormUi();", methodSlice);
+        }
+
+        [Fact]
         public void MainForm_PrefersLegacyDesktopLayoutBeforeAdaptiveFallback()
         {
             string source = LoadSource("readboard", "Form1.cs");
@@ -94,7 +127,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("return ArrangeLegacyMainHeader();", source);
             Assert.Contains("return ArrangeAdaptiveMainHeader();", source);
             Assert.Contains("return ArrangeLegacyMainBoardSection(top);", source);
-            Assert.Contains("return ArrangeAdaptiveMainBoardSection(top);", source);
+            Assert.Contains("return ArrangeAdaptiveMainBoardSection(top, headerLayout);", source);
             Assert.Contains("return ArrangeLegacyMainSyncSection(top);", source);
             Assert.Contains("return ArrangeAdaptiveMainSyncSection(top);", source);
             Assert.Contains("ArrangeLegacyMainActions(top);", source);
@@ -102,7 +135,7 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void MainForm_SyncVisitsInputs_UseSharedAlignedLabelColumn()
+        public void MainForm_SyncVisitsInputs_RestoreTargetCommitSizing()
         {
             string source = LoadSource("readboard", "Form1.cs");
             string legacySlice = GetMethodSlice(source, "private int ArrangeLegacyMainSyncSection(int top)");
@@ -111,8 +144,8 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Contains("int sharedVisitsLabelWidth = GetSharedMainSyncVisitsLabelWidth();", legacySlice);
             Assert.Contains("int sharedLegacyVisitsPanelWidth = GetLegacyMainSyncVisitsPanelWidth();", legacySlice);
-            Assert.Contains("lblTotalVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth", legacySlice);
-            Assert.Contains("lblBestMoveVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth", legacySlice);
+            Assert.Contains("lblTotalVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(18));", legacySlice);
+            Assert.Contains("lblBestMoveVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(18));", legacySlice);
             Assert.Contains("int sharedVisitsLabelWidth = GetSharedMainSyncVisitsLabelWidth();", adaptiveSlice);
             Assert.Contains("int sharedAdaptiveVisitsPanelWidth = GetAdaptiveMainSyncVisitsPanelWidth();", adaptiveSlice);
             Assert.Contains("panel2.Size = new System.Drawing.Size(sharedAdaptiveVisitsPanelWidth, rowHeight);", adaptiveSlice);
