@@ -37,6 +37,7 @@ namespace readboard
 
         public void Start()
         {
+            enabled = true;
             if (hookId != IntPtr.Zero)
                 return;
             using (Process process = Process.GetCurrentProcess())
@@ -49,6 +50,7 @@ namespace readboard
 
         public void Stop()
         {
+            enabled = false;
             if (hookId == IntPtr.Zero)
                 return;
             UnhookWindowsHookEx(hookId);

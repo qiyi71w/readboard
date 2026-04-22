@@ -297,10 +297,6 @@ namespace Readboard.VerificationTests.Protocol
             {
             }
 
-            public void ReleasePlacementBinding(IntPtr handle)
-            {
-            }
-
             public bool TrySendPlaceProtocolError(string message)
             {
                 return false;

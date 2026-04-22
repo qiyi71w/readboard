@@ -283,7 +283,6 @@ namespace readboard
             ClearRuntimeFrame();
             runtimeState.ResetProbeState();
             CancelPendingMove();
-            ReleasePlacementBindings(runtime.Host);
             if (restoreUi)
                 runtime.Host.OnKeepSyncStopped(false);
         }
@@ -750,8 +749,6 @@ namespace readboard
             runtimeState.ResetProbeState();
             if (runtimeDependencies != null)
                 ResetRuntimeSyncCaches(runtimeDependencies);
-            if (runtimeDependencies != null)
-                ReleasePlacementBindings(runtimeDependencies.Host);
         }
 
         private void CompleteStopCleanupIfIdle()
@@ -902,10 +899,6 @@ namespace readboard
             ReplaceRuntimeFrame(null);
             runtimeState.CurrentBoardPixelWidth = 0;
             runtimeState.CurrentBoardPixelHeight = 0;
-        }
-
-        private void ReleasePlacementBindings(ISyncCoordinatorHost host)
-        {
         }
 
         private static void DisposeBoardFrame(BoardFrame frame)

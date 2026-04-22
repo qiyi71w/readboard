@@ -1327,12 +1327,6 @@ namespace readboard
             sessionCoordinator.SendShutdownProtocol();
         }
 
-        private void ReleasePlacementBinding(IntPtr handle)
-        {
-            if (handle == IntPtr.Zero)
-                return;
-        }
-
         private void NormalizeNumericTextBox(TextBox textBox)
         {
             var reg = new Regex("^[0-9]*$");
@@ -1727,14 +1721,6 @@ namespace readboard
             {
                 if (WindowState != FormWindowState.Minimized)
                     WindowState = FormWindowState.Minimized;
-            });
-        }
-
-        void ISyncCoordinatorHost.ReleasePlacementBinding(IntPtr handle)
-        {
-            InvokeHostAction(delegate
-            {
-                ReleasePlacementBinding(handle);
             });
         }
 
@@ -2541,9 +2527,9 @@ namespace readboard
         private void sendBackgroundMouseClickWithMove(int x, int y, IntPtr hwnd)
         {
             int lParam = buildMouseLParam(x, y);
-            SendMessage(hwnd, WM_MOUSEMOVE, 0, lParam);
-            SendMessage(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lParam);
-            SendMessage(hwnd, WM_LBUTTONUP, 0, lParam);
+            SendMessage(hwnd, WM_MOUSEMOVE, IntPtr.Zero, (IntPtr)lParam);
+            SendMessage(hwnd, WM_LBUTTONDOWN, (IntPtr)MK_LBUTTON, (IntPtr)lParam);
+            SendMessage(hwnd, WM_LBUTTONUP, IntPtr.Zero, (IntPtr)lParam);
         }
 
         public enum MouseEventFlags

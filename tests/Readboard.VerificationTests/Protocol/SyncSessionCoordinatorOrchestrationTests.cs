@@ -589,7 +589,7 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
-        public void StopSyncSession_ThenRestartKeepSync_DoesNotReleasePlacementBindingsAfterLwRemoval()
+        public void StopSyncSession_ThenRestartKeepSync_PreservesLifecycleThroughStopAndRestart()
         {
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
@@ -633,14 +633,10 @@ namespace Readboard.VerificationTests.Protocol
             Assert.True(WaitForCondition(() => !staleWorker.IsAlive, TimeSpan.FromSeconds(1)));
             Assert.True(coordinator.StartedSync);
             Assert.Equal(0, hostRecorder.KeepStoppedCount);
-            Assert.False(hostRecorder.ContainsReleasedHandle(firstHandle));
-            Assert.False(hostRecorder.ContainsReleasedHandle(secondHandle));
 
             Invoke(coordinator, "StopSyncSession");
 
             Assert.True(WaitForCondition(() => hostRecorder.KeepStoppedCount == 1, TimeSpan.FromSeconds(1)));
-            Assert.False(hostRecorder.ContainsReleasedHandle(firstHandle));
-            Assert.False(hostRecorder.ContainsReleasedHandle(secondHandle));
         }
 
         [Fact]
@@ -955,7 +951,6 @@ namespace Readboard.VerificationTests.Protocol
                     case "ShowMissingSyncSourceMessage":
                     case "ShowRecognitionFailureMessage":
                     case "MinimizeWindow":
-                    case "ReleasePlacementBinding":
                         return null;
                     default:
                         return GetDefault(method.ReturnType);
@@ -967,7 +962,6 @@ namespace Readboard.VerificationTests.Protocol
         {
             private readonly object snapshot;
             private readonly SyncSessionCoordinator coordinator;
-            private readonly List<IntPtr> releasedHandles = new List<IntPtr>();
             private bool queuedInitialMove;
 
             public LightweightBindingRestartHostRecorder(object snapshot, SyncSessionCoordinator coordinator)
@@ -1007,12 +1001,6 @@ namespace Readboard.VerificationTests.Protocol
                         KeepStoppedCount++;
                         KeepStopped.Set();
                         return null;
-                    case "ReleasePlacementBinding":
-                        lock (releasedHandles)
-                        {
-                            releasedHandles.Add((IntPtr)args[0]);
-                        }
-                        return null;
                     case "OnContinuousSyncStarted":
                     case "OnContinuousSyncStopped":
                     case "ShowMissingSyncSourceMessage":
@@ -1021,14 +1009,6 @@ namespace Readboard.VerificationTests.Protocol
                         return null;
                     default:
                         return GetDefault(method.ReturnType);
-                }
-            }
-
-            public bool ContainsReleasedHandle(IntPtr handle)
-            {
-                lock (releasedHandles)
-                {
-                    return releasedHandles.Contains(handle);
                 }
             }
         }
@@ -1071,7 +1051,6 @@ namespace Readboard.VerificationTests.Protocol
                     case "ShowMissingSyncSourceMessage":
                     case "ShowRecognitionFailureMessage":
                     case "MinimizeWindow":
-                    case "ReleasePlacementBinding":
                         return null;
                     default:
                         return GetDefault(method.ReturnType);
