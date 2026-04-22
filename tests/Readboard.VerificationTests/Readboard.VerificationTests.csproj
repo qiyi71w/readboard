@@ -18,10 +18,8 @@
 
   <ItemGroup>
     <Compile Include="..\Shared\ProtocolFixtureCatalog.cs" Link="Support\ProtocolFixtureCatalog.cs" />
-    <Compile Include="..\Shared\ProgramShim.cs" Link="Support\ProgramShim.cs" />
     <Compile Include="..\Shared\ReplayFixtureCatalog.cs" Link="Support\ReplayFixtureCatalog.cs" />
     <Compile Include="..\Shared\VerificationFixtureLocator.cs" Link="Support\VerificationFixtureLocator.cs" />
-    <Compile Include="..\Shared\WindowsFormsScreenShim.cs" Link="Support\WindowsFormsScreenShim.cs" />
     <Compile Include="..\..\readboard\Core\Capture\BoardCaptureRequest.cs" Link="Production\Core\Capture\BoardCaptureRequest.cs" />
     <Compile Include="..\..\readboard\Core\Capture\BoardCaptureResult.cs" Link="Production\Core\Capture\BoardCaptureResult.cs" />
     <Compile Include="..\..\readboard\Core\Capture\IBoardCaptureService.cs" Link="Production\Core\Capture\IBoardCaptureService.cs" />

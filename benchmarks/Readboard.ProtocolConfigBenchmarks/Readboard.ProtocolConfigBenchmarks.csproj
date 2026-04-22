@@ -12,7 +12,6 @@
 
   <ItemGroup>
     <Compile Include="..\..\tests\Shared\ProtocolFixtureCatalog.cs" Link="Support\ProtocolFixtureCatalog.cs" />
-    <Compile Include="..\..\tests\Shared\ProgramShim.cs" Link="Support\ProgramShim.cs" />
     <Compile Include="..\..\tests\Shared\ReplayFixtureCatalog.cs" Link="Support\ReplayFixtureCatalog.cs" />
     <Compile Include="..\..\tests\Readboard.VerificationTests\Recognition\RecognitionPerformanceAcceptanceHarness.cs" Link="Support\RecognitionPerformanceAcceptanceHarness.cs" />
     <Compile Include="..\..\tests\Readboard.VerificationTests\Protocol\SustainedSyncAcceptanceHarness.cs" Link="Support\SustainedSyncAcceptanceHarness.cs" />

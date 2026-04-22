@@ -2,11 +2,8 @@
 param(
     [ValidateSet('Release')]
     [string]$Configuration = 'Release',
-    [ValidateSet('x86')]
-    [string]$Platform = 'x86',
     [string]$ReleaseRoot,
     [string]$BuildOutputDir,
-    [string]$MSBuildPath = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe',
     [switch]$SkipBuild,
     [switch]$SkipZip
 )
@@ -17,8 +14,6 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectRoot = Join-Path $repoRoot 'readboard'
-$solutionFile = Join-Path $repoRoot 'readboard.sln'
-$nugetConfigPath = Join-Path $repoRoot 'NuGet.Config'
 $projectFile = Join-Path $projectRoot 'readboard.csproj'
 $assemblyInfoPath = Join-Path $projectRoot 'Properties\AssemblyInfo.cs'
 
@@ -27,16 +22,17 @@ if (-not $ReleaseRoot) {
 }
 
 if (-not $BuildOutputDir) {
-    $BuildOutputDir = Join-Path $projectRoot "bin\$Platform\$Configuration"
+    $BuildOutputDir = Join-Path $projectRoot "bin\$Configuration\net10.0-windows"
 }
 
 $buildPatterns = @(
     'readboard.exe',
-    'readboard.exe.config',
+    'readboard.dll',
     'readboard.pdb',
-    'MouseKeyboardActivityMonitor.dll',
-    'OpenCvSharp*.pdb',
-    'OpenCvSharp*.xml'
+    'readboard.runtimeconfig.json',
+    'readboard.deps.json',
+    'OpenCvSharp*.dll',
+    'OpenCvSharp*.pdb'
 )
 
 $optionalStaticPatterns = @(
@@ -44,27 +40,14 @@ $optionalStaticPatterns = @(
     'readme*.rtf'
 )
 
-$requiredStaticFiles = @(
-    'lw.dll'
-)
-
-$managedRuntimeFiles = @(
-    'OpenCvSharp.dll',
-    'OpenCvSharp.Blob.dll',
-    'OpenCvSharp.Extensions.dll',
-    'OpenCvSharp.UserInterface.dll'
-)
-
-$nativeRuntimeFiles = @(
-    'dll\x86\OpenCvSharpExtern.dll',
-    'dll\x86\opencv_ffmpeg400.dll'
+$nativeRuntimePatterns = @(
+    'OpenCvSharpExtern.dll'
 )
 
 $requiredBuildFiles = @(
     'readboard.exe',
-    'readboard.exe.config',
-    'MouseKeyboardActivityMonitor.dll'
-) + $managedRuntimeFiles + $nativeRuntimeFiles
+    'readboard.dll'
+)
 
 function Get-ReleaseVersion {
     param([string]$Path)
@@ -106,57 +89,6 @@ function Assert-PathExists {
     }
 }
 
-function Invoke-MSBuildProcess {
-    param(
-        [string]$ResolvedMSBuildPath,
-        [string[]]$Arguments,
-        [string]$OperationName
-    )
-
-    $process = Start-Process -FilePath $ResolvedMSBuildPath -ArgumentList $arguments -NoNewWindow -Wait -PassThru
-    if ($process.ExitCode -ne 0) {
-        throw "$OperationName 失败，MSBuild 退出码: $($process.ExitCode)"
-    }
-}
-
-function Invoke-LegacyPackageRestore {
-    param(
-        [string]$ResolvedMSBuildPath,
-        [string]$ResolvedSolutionFile,
-        [string]$ResolvedNuGetConfigPath
-    )
-
-    $arguments = @(
-        $ResolvedSolutionFile,
-        '/t:Restore',
-        '/p:RestorePackagesConfig=true',
-        "/p:RestoreConfigFile=$ResolvedNuGetConfigPath",
-        '/nologo',
-        '/v:m'
-    )
-
-    Invoke-MSBuildProcess -ResolvedMSBuildPath $ResolvedMSBuildPath -Arguments $arguments -OperationName '依赖还原'
-}
-
-function Invoke-ProjectBuild {
-    param(
-        [string]$ResolvedMSBuildPath,
-        [string]$ResolvedProjectFile
-    )
-
-    $arguments = @(
-        $ResolvedProjectFile,
-        '/t:Build',
-        "/p:Configuration=$Configuration",
-        "/p:Platform=$Platform",
-        '/p:TargetFrameworkVersion=v4.8',
-        '/nologo',
-        '/v:m'
-    )
-
-    Invoke-MSBuildProcess -ResolvedMSBuildPath $ResolvedMSBuildPath -Arguments $arguments -OperationName '构建'
-}
-
 function Assert-RequiredFiles {
     param(
         [string]$SourceDir,
@@ -188,23 +120,17 @@ function Copy-MatchingFiles {
     }
 }
 
-function Copy-RelativeFiles {
+function Copy-NativeRuntimeFiles {
     param(
         [string]$SourceDir,
-        [string[]]$RelativePaths,
+        [string[]]$Patterns,
         [string]$DestinationDir
     )
 
-    foreach ($relativePath in $RelativePaths) {
-        $sourcePath = Join-Path $SourceDir $relativePath
-        if (-not (Test-Path -LiteralPath $sourcePath)) {
-            throw "构建输出不完整，缺少: $relativePath"
+    foreach ($pattern in $Patterns) {
+        foreach ($item in Get-ChildItem -Path $SourceDir -Filter $pattern -Recurse -File -ErrorAction SilentlyContinue) {
+            Copy-Item -LiteralPath $item.FullName -Destination (Join-Path $DestinationDir $item.Name) -Force
         }
-
-        $destinationPath = Join-Path $DestinationDir $relativePath
-        $destinationParent = Split-Path -Parent $destinationPath
-        New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
-        Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
     }
 }
 
@@ -240,16 +166,12 @@ $releaseDirectory = Join-Path $ReleaseRoot $releaseDirectoryName
 $releaseZipPath = Join-Path $ReleaseRoot ($releaseDirectoryName + '.zip')
 $resolvedReleaseZipPath = $releaseZipPath
 
-Assert-PathExists -Path $MSBuildPath -Label 'MSBuild.exe'
 if (-not $SkipBuild) {
-    Assert-PathExists -Path $solutionFile -Label 'readboard.sln'
-    Assert-PathExists -Path $nugetConfigPath -Label 'NuGet.Config'
-
-    Write-Host "Restoring legacy packages with $MSBuildPath"
-    Invoke-LegacyPackageRestore -ResolvedMSBuildPath $MSBuildPath -ResolvedSolutionFile $solutionFile -ResolvedNuGetConfigPath $nugetConfigPath
-
-    Write-Host "Building $($versionInfo.TagVersion) with $MSBuildPath"
-    Invoke-ProjectBuild -ResolvedMSBuildPath $MSBuildPath -ResolvedProjectFile $projectFile
+    Write-Host "Building $($versionInfo.TagVersion) with dotnet"
+    dotnet build $projectFile -c $Configuration --nologo -v m
+    if ($LASTEXITCODE -ne 0) {
+        throw "构建失败，dotnet 退出码: $LASTEXITCODE"
+    }
 }
 
 Assert-RequiredFiles -SourceDir $BuildOutputDir -RequiredFiles $requiredBuildFiles
@@ -261,9 +183,7 @@ if (Test-Path -LiteralPath $releaseDirectory) {
 New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
 Copy-MatchingFiles -SourceDir $BuildOutputDir -Patterns $buildPatterns -DestinationDir $releaseDirectory
 Copy-MatchingFiles -SourceDir $projectRoot -Patterns $optionalStaticPatterns -DestinationDir $releaseDirectory
-Copy-RelativeFiles -SourceDir $projectRoot -RelativePaths $requiredStaticFiles -DestinationDir $releaseDirectory
-Copy-RelativeFiles -SourceDir $BuildOutputDir -RelativePaths $managedRuntimeFiles -DestinationDir $releaseDirectory
-Copy-RelativeFiles -SourceDir $BuildOutputDir -RelativePaths $nativeRuntimeFiles -DestinationDir $releaseDirectory
+Copy-NativeRuntimeFiles -SourceDir $BuildOutputDir -Patterns $nativeRuntimePatterns -DestinationDir $releaseDirectory
 $packageTimestampUtc = [DateTime]::UtcNow
 Update-ReleaseArtifactTimestamps -ReleaseDirectory $releaseDirectory -TimestampUtc $packageTimestampUtc
 if ($SkipZip) {

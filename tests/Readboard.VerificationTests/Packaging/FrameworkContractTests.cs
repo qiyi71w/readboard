@@ -28,7 +28,7 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
-        public void PackagingScriptAndWorkflow_UseSharedFramework48Contract()
+        public void PackagingScriptAndWorkflow_UseNet10BuildContract()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string scriptPath = Path.Combine(repositoryRoot, "scripts", "package-readboard-release.local.ps1");
@@ -36,8 +36,8 @@ namespace Readboard.VerificationTests
             string scriptContent = File.ReadAllText(scriptPath);
             string workflowContent = File.ReadAllText(workflowPath);
 
-            Assert.Contains("/p:TargetFrameworkVersion=v4.8", scriptContent);
-            Assert.DoesNotContain("v4.5", scriptContent);
+            Assert.Contains("dotnet build", scriptContent);
+            Assert.DoesNotContain("TargetFrameworkVersion=v4.8", scriptContent);
             Assert.Contains("./scripts/package-readboard-release.local.ps1", workflowContent);
             Assert.Contains("Readboard.VerificationTests.csproj", workflowContent);
         }
@@ -53,37 +53,33 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
-        public void PackagingScriptAndWorkflow_RestoreLegacyPackagesConfigBeforeBuild()
+        public void PackagingScript_DoesNotUseLegacyPackagesConfigRestore()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string scriptContent = File.ReadAllText(Path.Combine(repositoryRoot, "scripts", "package-readboard-release.local.ps1"));
-            string workflowContent = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "package-release.yml"));
 
-            Assert.Contains("RestorePackagesConfig=true", scriptContent);
-            Assert.Contains("NuGet.Config", scriptContent);
-            Assert.Contains("RestorePackagesConfig=true", workflowContent);
-            Assert.Contains("NuGet.Config", workflowContent);
+            Assert.DoesNotContain("RestorePackagesConfig", scriptContent);
+            Assert.DoesNotContain("packages.config", scriptContent);
         }
 
         [Fact]
-        public void PackagingScript_UsesBuildTargetForReadboardProject()
+        public void PackagingScript_UsesDotnetBuildForReadboardProject()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string scriptContent = File.ReadAllText(Path.Combine(repositoryRoot, "scripts", "package-readboard-release.local.ps1"));
 
-            Assert.Contains("/t:Build", scriptContent);
+            Assert.Contains("dotnet build", scriptContent);
             Assert.DoesNotContain("/t:Rebuild", scriptContent);
         }
 
         [Fact]
-        public void PackagingScript_RequiresLightweightRuntimeFile()
+        public void PackagingScript_DoesNotReferenceLightweightRuntime()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string scriptContent = File.ReadAllText(Path.Combine(repositoryRoot, "scripts", "package-readboard-release.local.ps1"));
 
-            Assert.Contains("$requiredStaticFiles", scriptContent);
-            Assert.Contains("'lw.dll'", scriptContent);
-            Assert.Contains("Copy-RelativeFiles -SourceDir $projectRoot -RelativePaths $requiredStaticFiles", scriptContent);
+            Assert.DoesNotContain("lw.dll", scriptContent);
+            Assert.DoesNotContain("Interop.lw", scriptContent);
         }
 
         [Fact]
