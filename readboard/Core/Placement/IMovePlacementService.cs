@@ -1,7 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
-using LwInterop = Interop.lw;
 
 namespace readboard
 {
@@ -13,26 +12,19 @@ namespace readboard
     internal sealed class LegacyMovePlacementService : IMovePlacementService
     {
         private readonly IPlacementNativeMethods nativeMethods;
-        private readonly IPlacementLightweightInteropFactory lightweightInteropFactory;
 
-        internal LegacyMovePlacementService(
-            IPlacementNativeMethods nativeMethods,
-            IPlacementLightweightInteropFactory lightweightInteropFactory)
+        internal LegacyMovePlacementService(IPlacementNativeMethods nativeMethods)
         {
             if (nativeMethods == null)
                 throw new ArgumentNullException("nativeMethods");
-            if (lightweightInteropFactory == null)
-                throw new ArgumentNullException("lightweightInteropFactory");
 
             this.nativeMethods = nativeMethods;
-            this.lightweightInteropFactory = lightweightInteropFactory;
         }
 
         internal static LegacyMovePlacementService CreateDefault()
         {
             return new LegacyMovePlacementService(
-                new User32PlacementNativeMethods(),
-                new PlacementLightweightInteropFactory());
+                new User32PlacementNativeMethods());
         }
 
         public MovePlacementResult Place(MovePlacementRequest request)
@@ -80,8 +72,6 @@ namespace readboard
         private static PlacementPathKind ResolvePath(MovePlacementRequest request)
         {
             SyncMode syncMode = request.Frame.SyncMode;
-            if (syncMode == SyncMode.Fox && request.UseLightweightInterop)
-                return PlacementPathKind.LightweightInterop;
             if (request.Frame.Window != null && request.Frame.Window.IsJavaWindow)
                 return PlacementPathKind.Foreground;
             if (syncMode == SyncMode.Foreground || syncMode == SyncMode.Fox)
@@ -226,7 +216,7 @@ namespace readboard
                 return PlaceBackgroundPost(request, point);
             if (path == PlacementPathKind.BackgroundSend)
                 return PlaceBackgroundSend(request, point);
-            return PlaceLightweight(request, point);
+            return Failure(request, path, MovePlacementFailureKind.UnsupportedPath, "Unsupported placement path.");
         }
 
         private MovePlacementResult PlaceForeground(MovePlacementRequest request, PlacementPoint point)
@@ -302,25 +292,6 @@ namespace readboard
             return Success(request, PlacementPathKind.BackgroundSend);
         }
 
-        private MovePlacementResult PlaceLightweight(MovePlacementRequest request, PlacementPoint point)
-        {
-            MovePlacementResult cancellationFailure = FailIfCancellationRequested(request, PlacementPathKind.LightweightInterop);
-            if (cancellationFailure != null)
-                return cancellationFailure;
-            IntPtr handle = ResolveTargetHandle(request);
-            using (IPlacementLightweightInteropClient client = lightweightInteropFactory.Create())
-            {
-                if (!client.BindWindow(handle))
-                    return Failure(request, PlacementPathKind.LightweightInterop, MovePlacementFailureKind.PlacementFailed, "lw BindWindow failed.");
-                cancellationFailure = FailIfCancellationRequested(request, PlacementPathKind.LightweightInterop);
-                if (cancellationFailure != null)
-                    return cancellationFailure;
-                client.MoveTo(point.X, point.Y);
-                client.LeftClick();
-            }
-            return Success(request, PlacementPathKind.LightweightInterop);
-        }
-
         private static IntPtr ResolveTargetHandle(MovePlacementRequest request)
         {
             if (request.Frame.Window == null || request.Frame.Window.Handle == IntPtr.Zero)
@@ -394,74 +365,6 @@ namespace readboard
         void Wait(int millisecondsTimeout);
     }
 
-    internal interface IPlacementLightweightInteropFactory
-    {
-        IPlacementLightweightInteropClient Create();
-    }
-
-    internal interface IPlacementLightweightInteropClient : IDisposable
-    {
-        bool BindWindow(IntPtr handle);
-        void MoveTo(int x, int y);
-        void LeftClick();
-    }
-
-    internal sealed class PlacementLightweightInteropFactory : IPlacementLightweightInteropFactory
-    {
-        public IPlacementLightweightInteropClient Create()
-        {
-            return new PlacementLightweightInteropClient();
-        }
-    }
-
-    internal sealed class PlacementLightweightInteropClient : IPlacementLightweightInteropClient
-    {
-        private readonly dynamic lightweightInterop;
-        private bool isBound;
-
-        public PlacementLightweightInteropClient()
-        {
-            lightweightInterop = new LwInterop.lwsoft();
-        }
-
-        public bool BindWindow(IntPtr handle)
-        {
-            object result = lightweightInterop.BindWindow((int)handle, 0, 4, 0, 0, 0);
-            isBound = ToBoolean(result);
-            return isBound;
-        }
-
-        public void MoveTo(int x, int y)
-        {
-            lightweightInterop.MoveTo(x, y);
-        }
-
-        public void LeftClick()
-        {
-            lightweightInterop.LeftClick();
-        }
-
-        public void Dispose()
-        {
-            if (!isBound)
-                return;
-
-            lightweightInterop.UnBindWindow();
-            isBound = false;
-        }
-
-        private static bool ToBoolean(object value)
-        {
-            if (value == null)
-                return false;
-            if (value is bool)
-                return (bool)value;
-            if (value is int)
-                return (int)value != 0;
-            return true;
-        }
-    }
-
     internal sealed class User32PlacementNativeMethods : IPlacementNativeMethods
     {
         private readonly IPlacementDelay placementDelay;
@@ -516,12 +419,12 @@ namespace readboard
 
         public bool TryPostMouseMessage(IntPtr handle, uint message, int wParam, int lParam)
         {
-            return PostMessage(handle, message, wParam, lParam);
+            return PostMessage(handle, message, (IntPtr)wParam, (IntPtr)lParam);
         }
 
         public void SendMouseMessage(IntPtr handle, uint message, int wParam, int lParam)
         {
-            SendMessage(handle, message, wParam, lParam);
+            SendMessage(handle, message, (IntPtr)wParam, (IntPtr)lParam);
         }
 
         [DllImport("USER32.DLL")]
@@ -531,10 +434,10 @@ namespace readboard
         private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool PostMessage(IntPtr hWnd, uint msg, int wParam, int lParam);
+        private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, int wParam, int lParam);
+        private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetCursorPos(int x, int y);

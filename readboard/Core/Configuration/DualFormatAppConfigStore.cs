@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -38,7 +38,8 @@ namespace readboard
         private readonly string baseDirectory;
         private readonly string machineKey;
         private readonly string protocolVersion;
-        private readonly JavaScriptSerializer serializer = new JavaScriptSerializer();
+        private static readonly JsonSerializerOptions DeserializeOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        private static readonly JsonSerializerOptions SerializeOptions = new JsonSerializerOptions { WriteIndented = true };
 
         public DualFormatAppConfigStore(string baseDirectory, string machineKey, string protocolVersion)
         {
@@ -102,7 +103,7 @@ namespace readboard
 
         private AppConfig DeserializePartialJsonConfig(string content)
         {
-            IDictionary<string, object> values = serializer.Deserialize<Dictionary<string, object>>(content);
+            IDictionary<string, object> values = JsonSerializer.Deserialize<Dictionary<string, object>>(content, DeserializeOptions);
             if (values == null)
                 return null;
 
@@ -220,7 +221,7 @@ namespace readboard
         {
             string path = GetPath(JsonFileName);
             string tempPath = path + JsonTempSuffix;
-            string content = serializer.Serialize(config);
+            string content = JsonSerializer.Serialize(config, SerializeOptions);
             File.WriteAllText(tempPath, content, Encoding.UTF8);
             try
             {
@@ -339,7 +340,7 @@ namespace readboard
         {
             return ex is InvalidOperationException
                 || ex is ArgumentException
-                || string.Equals(ex.GetType().FullName, "System.Text.Json.JsonException", StringComparison.Ordinal);
+                || ex is JsonException;
         }
 
         private static int ReadInt(string value, int fallback)

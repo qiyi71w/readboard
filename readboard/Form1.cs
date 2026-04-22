@@ -6,14 +6,11 @@ using System.Windows.Forms;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
-using MouseKeyboardActivityMonitor;
-using MouseKeyboardActivityMonitor.WinApi;
 using System.Runtime.InteropServices;
 using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.ComponentModel;
-using LwInterop = Interop.lw;
 
 namespace readboard
 {
@@ -45,11 +42,10 @@ namespace readboard
         int boardH = 19;
         int boardW = 19;
         //Boolean noticeLast = true;
-        Boolean canUseLW = false;
         //Boolean noLw = false;
         Boolean isMannulCircle = false;
         float factor = 1.0f;
-        private KeyboardHookListener hookListener;
+        private GlobalKeyboardHook keyboardHook;
         private readonly LaunchOptions launchOptions;
         private readonly ISyncSessionCoordinator sessionCoordinator;
         private readonly ILegacySelectionCalibrationService selectionCalibrationService;
@@ -72,7 +68,6 @@ namespace readboard
         int posX = -1;
         int posY = -1;
 
-        LwInterop.lwsoft lw;
         private Button btnTheme;
         private ContextMenuStrip themeMenu;
         private ToolStripMenuItem menuThemeOptimized;
@@ -1254,7 +1249,7 @@ namespace readboard
 
         private bool CanUseForegroundFoxInBoardProtocol()
         {
-            return CurrentSyncType == TYPE_FOX && !canUseLW;
+            return CurrentSyncType == TYPE_FOX;
         }
 
         private void SendForegroundFoxInBoardCommand(bool enabled)
@@ -1336,8 +1331,6 @@ namespace readboard
         {
             if (handle == IntPtr.Zero)
                 return;
-            LwInterop.lwsoft lwh = new LwInterop.lwsoft();
-            lwh.ForceUnBindWindow((int)handle);
         }
 
         private void NormalizeNumericTextBox(TextBox textBox)
@@ -1535,7 +1528,6 @@ namespace readboard
                 LegacyTypeToken = CurrentSyncType.ToString(),
                 ShowInBoard = Program.showInBoard,
                 SupportsForegroundFoxInBoardProtocol = CanUseForegroundFoxInBoardProtocol(),
-                CanUseLightweightInterop = CurrentSyncType == TYPE_FOX && canUseLW,
                 AutoMinimize = Program.autoMin,
                 SampleIntervalMs = Program.timeinterval,
                 UseEnhancedCapture = Program.useEnhanceScreen,
@@ -1842,11 +1834,10 @@ namespace readboard
             this.uiThreadInvoker = new UiThreadInvoker(this);
             this.placeRequestQueue = new SerialBackgroundWorkQueue("ReadboardPlaceRequestQueue");
             InitializeComponent();
-            GlobalHooker hooker = new GlobalHooker();
-            hookListener = new KeyboardHookListener(hooker);
-            hookListener.KeyDown += HookListener_KeyDown;
-            hookListener.KeyUp += HookListener_KeyUp;
-            hookListener.Start();
+            keyboardHook = new GlobalKeyboardHook();
+            keyboardHook.KeyDown += HookListener_KeyDown;
+            keyboardHook.KeyUp += HookListener_KeyUp;
+            keyboardHook.Start();
             using (System.Drawing.Bitmap bitmap = new Bitmap(1, 1))
             using (System.Drawing.Graphics graphics2 = Graphics.FromImage(bitmap))
             {
@@ -1865,32 +1856,6 @@ namespace readboard
                 textBox2.Text = launchOptions.Playouts;
             if (!launchOptions.FirstPolicy.Equals(" "))
                 textBox3.Text = launchOptions.FirstPolicy;
-            try
-            {
-                //  int s = DllRegisterServer();
-                //  if (s >= 0)
-                //  {
-                //注册成功!             
-                try
-                {
-                    lw = new LwInterop.lwsoft();
-                    canUseLW = false;// true;
-                }
-                catch (Exception)
-                {
-                    canUseLW = false;
-                }
-                //  }
-                //  else
-                //  {
-                //注册失败}
-                //      canUseLW = false;
-                //  }
-            }
-            catch (Exception)
-            {
-                canUseLW = false;
-            }
             radioWhite.Enabled = false;
             radioBlack.Enabled = false;
             textBox1.Enabled = false;
@@ -2079,7 +2044,7 @@ namespace readboard
             SendPonderStatusCommand();
         }
 
-        MouseHookListener mh;
+        GlobalMouseHook mouseHook;
         /// <summary>
         /// 注册
         /// </summary>
@@ -2116,11 +2081,11 @@ namespace readboard
             int pp = startup.LastIndexOf("\\");
             startup = startup.Substring(0, pp);
 
-            mh = new MouseHookListener(new GlobalHooker());
+            mouseHook = new GlobalMouseHook();
 
-            mh.MouseMove += mh_MouseMoveEvent;
-            mh.MouseClick += mh_MouseMoveEvent2;
-            mh.Enabled = false;
+            mouseHook.MouseMove += mh_MouseMoveEvent;
+            mouseHook.MouseClick += mh_MouseMoveEvent2;
+            mouseHook.Enabled = false;
             this.btnKeepSync.Text = getLangStr("keepSync") + "(" + Program.timename + "ms)";
         }
 
@@ -2142,7 +2107,7 @@ namespace readboard
                 BeginResolveBackgroundSelectionWindowAsync();
             else
                 RestoreMainWindowAfterSelection();
-            //mh.Enabled = false;
+            //mouseHook.Enabled = false;
         }
 
         private bool TryFinalizeSelectionBounds()
@@ -2219,7 +2184,7 @@ namespace readboard
             if (clicked)
             {
                 //if (!isKuangxuan)
-                //     mh.Enabled = false;
+                //     mouseHook.Enabled = false;
                 clicked = false;
                 hwnd = getMousePointHwnd();
                 ResetMainWindowTitle();
@@ -2235,7 +2200,7 @@ namespace readboard
 
         private void button3_Click(object sender, EventArgs e)
         {
-            mh.Enabled = true;
+            mouseHook.Enabled = true;
             clicked = true;
         }
 
@@ -2416,22 +2381,22 @@ namespace readboard
 
         private void DisposeInputHooks()
         {
-            if (hookListener != null)
+            if (keyboardHook != null)
             {
-                hookListener.KeyDown -= HookListener_KeyDown;
-                hookListener.KeyUp -= HookListener_KeyUp;
-                hookListener.Stop();
-                hookListener.Dispose();
-                hookListener = null;
+                keyboardHook.KeyDown -= HookListener_KeyDown;
+                keyboardHook.KeyUp -= HookListener_KeyUp;
+                keyboardHook.Stop();
+                keyboardHook.Dispose();
+                keyboardHook = null;
             }
-            if (mh == null)
+            if (mouseHook == null)
                 return;
-            mh.MouseMove -= mh_MouseMoveEvent;
-            mh.MouseClick -= mh_MouseMoveEvent2;
-            mh.Enabled = false;
-            mh.Stop();
-            mh.Dispose();
-            mh = null;
+            mouseHook.MouseMove -= mh_MouseMoveEvent;
+            mouseHook.MouseClick -= mh_MouseMoveEvent2;
+            mouseHook.Enabled = false;
+            mouseHook.Stop();
+            mouseHook.Dispose();
+            mouseHook = null;
         }
 
         private static void RunShutdownStep(List<Exception> shutdownExceptions, Action shutdownStep)
@@ -2554,10 +2519,10 @@ namespace readboard
         uint WM_LBUTTONUP = 0x202;
 
         [DllImport("user32.dll", SetLastError = true)]
-        static extern bool PostMessage(IntPtr hWnd, uint Msg, int wParam, int lParam);
+        static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll", SetLastError = true)]
-        static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, int wParam, int lParam);
+        static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
         private static int buildMouseLParam(int x, int y)
         {
@@ -2568,8 +2533,8 @@ namespace readboard
         private void postBackgroundMouseClick(int x, int y, IntPtr hwnd)
         {
             int lParam = buildMouseLParam(x, y);
-            PostMessage(hwnd, WM_LBUTTONDOWN, 0, lParam);
-            PostMessage(hwnd, WM_LBUTTONUP, 0, lParam);
+            PostMessage(hwnd, WM_LBUTTONDOWN, IntPtr.Zero, (IntPtr)lParam);
+            PostMessage(hwnd, WM_LBUTTONUP, IntPtr.Zero, (IntPtr)lParam);
         }
 
         // Fox background placement needs a blocking move/click sequence in client coordinates.
@@ -2863,7 +2828,7 @@ namespace readboard
 
         private void selectBoard()
         {
-            mh.Enabled = true;
+            mouseHook.Enabled = true;
             this.WindowState = FormWindowState.Minimized;
             form2 = new Form2(this, isMannulCircle);
             form2.ShowDialog(this);

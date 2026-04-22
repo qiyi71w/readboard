@@ -6,7 +6,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 
 namespace readboard
 {
@@ -191,8 +191,7 @@ namespace readboard
                 throw new InvalidOperationException("Latest release response is empty.");
             }
 
-            var serializer = new JavaScriptSerializer();
-            var payload = serializer.DeserializeObject(json) as Dictionary<string, object>;
+            var payload = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
             if (payload == null)
             {
                 throw new InvalidOperationException("Latest release response is not a JSON object.");
@@ -218,6 +217,11 @@ namespace readboard
                 return null;
             }
 
+            if (value is JsonElement element)
+            {
+                return element.ValueKind == JsonValueKind.Null ? null : element.GetString();
+            }
+
             string stringValue = value as string;
             if (stringValue == null)
             {
@@ -240,7 +244,16 @@ namespace readboard
                     "Latest release JSON is missing '" + key + "'.");
             }
 
-            string stringValue = value as string;
+            string stringValue;
+            if (value is JsonElement element)
+            {
+                stringValue = element.ValueKind == JsonValueKind.Null ? null : element.GetString();
+            }
+            else
+            {
+                stringValue = value as string;
+            }
+
             if (stringValue == null)
             {
                 throw new InvalidOperationException(
@@ -264,7 +277,16 @@ namespace readboard
                 return null;
             }
 
-            string publishedAtValue = rawValue as string;
+            string publishedAtValue;
+            if (rawValue is JsonElement element)
+            {
+                publishedAtValue = element.ValueKind == JsonValueKind.Null ? null : element.GetString();
+            }
+            else
+            {
+                publishedAtValue = rawValue as string;
+            }
+
             if (string.IsNullOrWhiteSpace(publishedAtValue))
             {
                 return null;

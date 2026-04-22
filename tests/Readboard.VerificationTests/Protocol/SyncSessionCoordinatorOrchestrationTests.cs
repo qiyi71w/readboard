@@ -589,7 +589,7 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
-        public void StopSyncSession_ThenRestartKeepSync_ReleasesStaleLightweightBindingHandleInsteadOfNewSessionHandle()
+        public void StopSyncSession_ThenRestartKeepSync_DoesNotReleasePlacementBindingsAfterLwRemoval()
         {
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
@@ -601,7 +601,6 @@ namespace Readboard.VerificationTests.Protocol
             IntPtr firstHandle = new IntPtr(1111);
             IntPtr secondHandle = new IntPtr(2222);
             object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, firstHandle);
-            SetProperty(snapshot, "CanUseLightweightInterop", true);
             LightweightBindingRestartHostRecorder hostRecorder = new LightweightBindingRestartHostRecorder(snapshot, coordinator);
             object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
             ScriptedBlockingCaptureService captureService = new ScriptedBlockingCaptureService(CreateFrame(), 2, true);
@@ -640,7 +639,7 @@ namespace Readboard.VerificationTests.Protocol
             Invoke(coordinator, "StopSyncSession");
 
             Assert.True(WaitForCondition(() => hostRecorder.KeepStoppedCount == 1, TimeSpan.FromSeconds(1)));
-            Assert.True(hostRecorder.ContainsReleasedHandle(firstHandle));
+            Assert.False(hostRecorder.ContainsReleasedHandle(firstHandle));
             Assert.False(hostRecorder.ContainsReleasedHandle(secondHandle));
         }
 
@@ -780,7 +779,6 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(snapshot, "LegacyTypeToken", "0");
             SetProperty(snapshot, "ShowInBoard", false);
             SetProperty(snapshot, "SupportsForegroundFoxInBoardProtocol", false);
-            SetProperty(snapshot, "CanUseLightweightInterop", false);
             SetProperty(snapshot, "AutoMinimize", false);
             SetProperty(snapshot, "SampleIntervalMs", 5);
             return snapshot;
@@ -1353,7 +1351,7 @@ namespace Readboard.VerificationTests.Protocol
                     return new MovePlacementResult
                     {
                         Success = true,
-                        PlacementPath = PlacementPathKind.LightweightInterop
+                        PlacementPath = PlacementPathKind.Foreground
                     };
                 }
 

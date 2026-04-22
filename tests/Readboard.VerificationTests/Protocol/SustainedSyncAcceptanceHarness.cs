@@ -100,7 +100,6 @@ namespace Readboard.VerificationTests.Protocol
                 LegacyTypeToken = "5",
                 ShowInBoard = true,
                 SupportsForegroundFoxInBoardProtocol = false,
-                CanUseLightweightInterop = false,
                 AutoMinimize = false,
                 SampleIntervalMs = SampleIntervalMs
             };

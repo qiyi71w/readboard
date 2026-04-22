@@ -16,46 +16,10 @@ namespace Readboard.VerificationTests.Placement
 
         public static IEnumerable<object[]> CancellationCases()
         {
-            yield return new object[] { (int)SyncMode.Foreground, false };
-            yield return new object[] { (int)SyncMode.Background, false };
-            yield return new object[] { (int)SyncMode.FoxBackgroundPlace, false };
-            yield return new object[] { (int)SyncMode.Fox, true };
-        }
-
-        [Fact]
-        public void Place_FoxLightweightInteropUsesLwWhenDllIsAvailable()
-        {
-            RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
-            RecordingLightweightClient client = new RecordingLightweightClient();
-            LegacyMovePlacementService service = new LegacyMovePlacementService(
-                nativeMethods,
-                new RecordingLightweightFactory(client));
-
-            MovePlacementResult result = service.Place(CreateRequest(SyncMode.Fox, useLightweightInterop: true));
-
-            Assert.True(result.Success);
-            Assert.Equal(PlacementPathKind.LightweightInterop, result.PlacementPath);
-            Assert.Equal(new IntPtr(3003), client.BoundHandle);
-            Assert.Equal((35, 55), client.MoveToPoint);
-            Assert.True(client.LeftClicked);
-            Assert.True(client.DisposeCalled);
-            Assert.Empty(nativeMethods.PostedMessages);
-            Assert.Empty(nativeMethods.SentMessages);
-        }
-
-        [Fact]
-        public void Place_FoxLightweightInteropFailsWhenDllIsUnavailable()
-        {
-            LegacyMovePlacementService service = new LegacyMovePlacementService(
-                new RecordingNativeMethods(),
-                new ThrowingLightweightFactory(new DllNotFoundException("lw.dll missing")));
-
-            MovePlacementResult result = service.Place(CreateRequest(SyncMode.Fox, useLightweightInterop: true));
-
-            Assert.False(result.Success);
-            Assert.Equal(PlacementPathKind.LightweightInterop, result.PlacementPath);
-            Assert.Equal(MovePlacementFailureKind.PlacementFailed, result.FailureKind);
-            Assert.Contains("lw.dll", result.FailureReason);
+            yield return new object[] { (int)SyncMode.Foreground };
+            yield return new object[] { (int)SyncMode.Background };
+            yield return new object[] { (int)SyncMode.FoxBackgroundPlace };
+            yield return new object[] { (int)SyncMode.Fox };
         }
 
         [Theory]
@@ -67,11 +31,9 @@ namespace Readboard.VerificationTests.Placement
             SyncMode syncMode = (SyncMode)syncModeValue;
             PlacementPathKind expectedPath = (PlacementPathKind)expectedPathValue;
             RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
-            LegacyMovePlacementService service = new LegacyMovePlacementService(
-                nativeMethods,
-                new RecordingLightweightFactory(new RecordingLightweightClient()));
+            LegacyMovePlacementService service = new LegacyMovePlacementService(nativeMethods);
 
-            MovePlacementResult result = service.Place(CreateRequest(syncMode, useLightweightInterop: false));
+            MovePlacementResult result = service.Place(CreateRequest(syncMode));
 
             Assert.True(result.Success);
             Assert.Equal(expectedPath, result.PlacementPath);
@@ -81,16 +43,11 @@ namespace Readboard.VerificationTests.Placement
 
         [Theory]
         [MemberData(nameof(CancellationCases))]
-        public void Place_CancelledRequest_SkipsPlacementSideEffects(
-            int syncModeValue,
-            bool useLightweightInterop)
+        public void Place_CancelledRequest_SkipsPlacementSideEffects(int syncModeValue)
         {
             RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
-            RecordingLightweightClient client = new RecordingLightweightClient();
-            LegacyMovePlacementService service = new LegacyMovePlacementService(
-                nativeMethods,
-                new RecordingLightweightFactory(client));
-            MovePlacementRequest request = CreateRequest((SyncMode)syncModeValue, useLightweightInterop);
+            LegacyMovePlacementService service = new LegacyMovePlacementService(nativeMethods);
+            MovePlacementRequest request = CreateRequest((SyncMode)syncModeValue);
             request.ShouldCancel = delegate { return true; };
 
             MovePlacementResult result = service.Place(request);
@@ -101,8 +58,6 @@ namespace Readboard.VerificationTests.Placement
             Assert.Empty(nativeMethods.ForegroundClicks);
             Assert.Empty(nativeMethods.PostedMessages);
             Assert.Empty(nativeMethods.SentMessages);
-            Assert.Equal(IntPtr.Zero, client.BoundHandle);
-            Assert.False(client.LeftClicked);
         }
 
         private static void AssertPlacementMessages(
@@ -128,7 +83,7 @@ namespace Readboard.VerificationTests.Placement
             return (x & 0xFFFF) | ((y & 0xFFFF) << 16);
         }
 
-        private static MovePlacementRequest CreateRequest(SyncMode syncMode, bool useLightweightInterop)
+        private static MovePlacementRequest CreateRequest(SyncMode syncMode)
         {
             return new MovePlacementRequest
             {
@@ -148,8 +103,7 @@ namespace Readboard.VerificationTests.Placement
                         DpiScale = 1d
                     }
                 },
-                Move = new MoveRequest { X = 1, Y = 2 },
-                UseLightweightInterop = useLightweightInterop
+                Move = new MoveRequest { X = 1, Y = 2 }
             };
         }
 
@@ -183,65 +137,6 @@ namespace Readboard.VerificationTests.Placement
             public void SendMouseMessage(IntPtr handle, uint message, int wParam, int lParam)
             {
                 SentMessages.Add(new MouseMessage(handle, message, wParam, lParam));
-            }
-        }
-
-        private sealed class RecordingLightweightFactory : IPlacementLightweightInteropFactory
-        {
-            private readonly RecordingLightweightClient client;
-
-            public RecordingLightweightFactory(RecordingLightweightClient client)
-            {
-                this.client = client;
-            }
-
-            public IPlacementLightweightInteropClient Create()
-            {
-                return client;
-            }
-        }
-
-        private sealed class ThrowingLightweightFactory : IPlacementLightweightInteropFactory
-        {
-            private readonly Exception exception;
-
-            public ThrowingLightweightFactory(Exception exception)
-            {
-                this.exception = exception;
-            }
-
-            public IPlacementLightweightInteropClient Create()
-            {
-                throw exception;
-            }
-        }
-
-        private sealed class RecordingLightweightClient : IPlacementLightweightInteropClient
-        {
-            public IntPtr BoundHandle { get; private set; }
-            public (int X, int Y) MoveToPoint { get; private set; }
-            public bool LeftClicked { get; private set; }
-            public bool DisposeCalled { get; private set; }
-
-            public bool BindWindow(IntPtr handle)
-            {
-                BoundHandle = handle;
-                return true;
-            }
-
-            public void MoveTo(int x, int y)
-            {
-                MoveToPoint = (x, y);
-            }
-
-            public void LeftClick()
-            {
-                LeftClicked = true;
-            }
-
-            public void Dispose()
-            {
-                DisposeCalled = true;
             }
         }
 
