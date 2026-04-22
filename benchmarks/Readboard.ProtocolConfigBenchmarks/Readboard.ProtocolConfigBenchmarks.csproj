@@ -46,6 +46,7 @@
     <Compile Include="..\..\readboard\Core\Placement\IMovePlacementService.cs" Link="Production\Core\Placement\IMovePlacementService.cs" />
     <Compile Include="..\..\readboard\Core\Placement\MovePlacementRequest.cs" Link="Production\Core\Placement\MovePlacementRequest.cs" />
     <Compile Include="..\..\readboard\Core\Placement\MovePlacementResult.cs" Link="Production\Core\Placement\MovePlacementResult.cs" />
+    <Compile Include="..\..\readboard\Core\Protocol\FoxWindowContext.cs" Link="Production\Core\Protocol\FoxWindowContext.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\IProtocolCommandHost.cs" Link="Production\Core\Protocol\IProtocolCommandHost.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\IReadBoardProtocolAdapter.cs" Link="Production\Core\Protocol\IReadBoardProtocolAdapter.cs" />
     <Compile Include="..\..\readboard\Core\Protocol\IReadBoardTransport.cs" Link="Production\Core\Protocol\IReadBoardTransport.cs" />
