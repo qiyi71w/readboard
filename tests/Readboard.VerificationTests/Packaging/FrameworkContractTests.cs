@@ -108,6 +108,29 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
+        public void ReadboardProject_DoesNotKeepRemovedMainFormLayoutProfileOrStaleRuleSet()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string projectContent = File.ReadAllText(Path.Combine(repositoryRoot, "readboard", "readboard.csproj"));
+
+            Assert.False(File.Exists(Path.Combine(repositoryRoot, "readboard", "MainForm.LayoutProfile.cs")));
+            Assert.DoesNotContain("MainForm.LayoutProfile.cs", projectContent);
+            Assert.DoesNotContain("MinimumRecommendedRules.ruleset", projectContent);
+        }
+
+        [Fact]
+        public void UiThemeSource_UsesRepositoryConfiguredCrlfLineEndings()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string editorConfigContent = File.ReadAllText(Path.Combine(repositoryRoot, ".editorconfig"));
+            byte[] sourceBytes = File.ReadAllBytes(Path.Combine(repositoryRoot, "readboard", "UiTheme.cs"));
+
+            Assert.Contains("[*.{sln,cs,csproj,config,resx,settings,manifest,user,props,targets,ruleset,ps1,bat,cmd,txt,rtf}]", editorConfigContent);
+            Assert.Contains("end_of_line = crlf", editorConfigContent);
+            Assert.Equal(0, CountBareLf(sourceBytes));
+        }
+
+        [Fact]
         public void ProtocolConfigBenchmarks_Project_IncludesRequiredProductionSources()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
@@ -200,6 +223,18 @@ namespace Readboard.VerificationTests
         private static int GetIndent(string line)
         {
             return line.Length - line.TrimStart().Length;
+        }
+
+        private static int CountBareLf(byte[] bytes)
+        {
+            int count = 0;
+            for (int index = 0; index < bytes.Length; index++)
+            {
+                if (bytes[index] == (byte)'\n' && (index == 0 || bytes[index - 1] != (byte)'\r'))
+                    count++;
+            }
+
+            return count;
         }
 
         private readonly struct MappingNode
