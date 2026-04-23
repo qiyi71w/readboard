@@ -144,6 +144,18 @@ namespace Readboard.VerificationTests
                     StringComparison.Ordinal));
         }
 
+        [Fact]
+        public void Program_WiresColorModeStartupThroughGetSystemColorMode()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string source = File.ReadAllText(Path.Combine(repositoryRoot, "readboard", "Program.cs"));
+
+            Assert.Contains("Application.SetColorMode(GetSystemColorMode(Config.ColorMode))", source);
+            Assert.Contains("case AppConfig.ColorModeDark: return SystemColorMode.Dark;", source);
+            Assert.Contains("case AppConfig.ColorModeLight: return SystemColorMode.Classic;", source);
+            Assert.Contains("default: return SystemColorMode.System;", source);
+        }
+
         private static string[] ReadWorkflowSequence(string workflowContent, string rootKey, string parentKey, string sequenceKey)
         {
             string[] lines = workflowContent.Replace("\r\n", "\n").Split('\n');

@@ -34,6 +34,8 @@ namespace readboard
                 hookId = SetWindowsHookEx(WH_KEYBOARD_LL, callback,
                     GetModuleHandle(module.ModuleName), 0);
             }
+            if (hookId == IntPtr.Zero)
+                Trace.WriteLine("GlobalKeyboardHook.Start: SetWindowsHookEx failed, hook is not active.");
         }
 
         public void Stop()

@@ -24,7 +24,6 @@ namespace readboard
             get { return enabled; }
             set
             {
-                enabled = value;
                 if (value) Start();
                 else Stop();
             }
@@ -37,15 +36,20 @@ namespace readboard
 
         public void Start()
         {
-            enabled = true;
             if (hookId != IntPtr.Zero)
+            {
+                enabled = true;
                 return;
+            }
             using (Process process = Process.GetCurrentProcess())
             using (ProcessModule module = process.MainModule)
             {
                 hookId = SetWindowsHookEx(WH_MOUSE_LL, callback,
                     GetModuleHandle(module.ModuleName), 0);
             }
+            enabled = hookId != IntPtr.Zero;
+            if (!enabled)
+                Trace.WriteLine("GlobalMouseHook.Start: SetWindowsHookEx failed, hook is not active.");
         }
 
         public void Stop()

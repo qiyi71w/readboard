@@ -90,9 +90,30 @@ public static bool IsDarkMode { get; }
 | 颜色模式 RadioButton 翻译过长溢出 | 不修复 | 当前 cn/en/jp/kr 翻译长度可控 |
 | 颜色模式 RadioButton 包 GroupBox | 不修复 | 当前设置面板无其他 RadioButton，不会冲突 |
 | `Application.Restart()` 一键重启 | 不修复 | 会打断同步任务 |
+| `DualFormatAppConfigStore` 重构为强类型 DTO 或 `Dictionary<string, JsonElement>` | 不修复 | 现有 `value.ToString()` + `*.TryParse` 模式正确处理 `JsonElement`，已被 13 个 store 测试验证 |
+| `GitHubUpdateChecker` 重构为 DTO + `Deserialize<T>` | 不修复 | 风格建议；现有实现已被 8 个用例覆盖 |
+
+## JsonElement 兼容性
+
+`DualFormatAppConfigStore` 反序列化为 `Dictionary<string, object>`，在 `System.Text.Json` 下 value 实际是 `JsonElement`。`Read*Value` 系列通过 `value.ToString()` 取原始 JSON 文本：
+
+- `JsonElement` (Number) → `ToString()` 返回数字字面量（如 `"42"`）→ `int.TryParse` 解析正确
+- `JsonElement` (True/False) → `ToString()` 返回 `"True"`/`"False"` → `bool.TryParse` 解析正确
+- `JsonElement` (String) → `ToString()` 返回字符串内容（不含引号）
+
+此机制已被 `Save_RoundTripsColorMode` 与 `DualFormatAppConfigStoreTests` 全套用例验证。
+
+## Win32 Hook 失败处理
+
+`GlobalMouseHook` / `GlobalKeyboardHook` 调用 `SetWindowsHookEx`，可能在低权限或被安全软件拦截时返回 `IntPtr.Zero`：
+
+- `GlobalMouseHook.Start`: 失败时 `enabled = false` 保持状态一致性，`Trace.WriteLine` 记录（Release 与 Debug 都生效）
+- `GlobalKeyboardHook.Start`: 无 `Enabled` 状态对外暴露，失败时 `Trace.WriteLine` 记录
+- 不抛异常：避免现有调用点必须加 try/catch；钩子失败不应阻塞应用启动
 
 ## 测试覆盖
 
 - `AppConfigDefaultsTests`: 默认 `ColorMode = 0`
-- `DualFormatAppConfigStoreTests.Save_RoundTripsColorMode`: 三种值往返
+- `DualFormatAppConfigStoreTests.Save_RoundTripsColorMode`: 三种值往返 + JSON 字段名/值断言（用 `JsonDocument` 解耦格式）
 - `DualFormatAppConfigStoreTests.Save_WritesJsonAndLegacyMirrorWithUpdatedMetadata`: legacy 格式末位追加 ColorMode
+- `FrameworkContractTests.Program_WiresColorModeStartupThroughGetSystemColorMode`: source-level 锁定 `Application.SetColorMode(GetSystemColorMode(Config.ColorMode))` 与三个分支映射
