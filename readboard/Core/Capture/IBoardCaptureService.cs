@@ -721,17 +721,17 @@ namespace readboard
             };
         }
 
-        private static ulong CopyRow(BitmapData bitmapData, int row, int width, byte[] pixels, int packedStride, ulong hash)
+        private static unsafe ulong CopyRow(BitmapData bitmapData, int row, int width, byte[] pixels, int packedStride, ulong hash)
         {
-            int sourceOffset = row * bitmapData.Stride;
+            byte* sourceRow = (byte*)bitmapData.Scan0 + (row * bitmapData.Stride);
             int targetOffset = row * packedStride;
             for (int column = 0; column < width; column++)
             {
-                int sourceIndex = sourceOffset + (column * BytesPerPixel);
+                int sourceIndex = column * BytesPerPixel;
                 int targetIndex = targetOffset + (column * BytesPerPixel);
-                byte red = Marshal.ReadByte(bitmapData.Scan0, sourceIndex + 2);
-                byte green = Marshal.ReadByte(bitmapData.Scan0, sourceIndex + 1);
-                byte blue = Marshal.ReadByte(bitmapData.Scan0, sourceIndex);
+                byte blue = sourceRow[sourceIndex];
+                byte green = sourceRow[sourceIndex + 1];
+                byte red = sourceRow[sourceIndex + 2];
                 pixels[targetIndex] = red;
                 pixels[targetIndex + 1] = green;
                 pixels[targetIndex + 2] = blue;

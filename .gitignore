@@ -1,6 +1,7 @@
 /.project
 packages/
 readboard/obj/
+readboard/bin/
 .codex/
 release/
 temp-build/
