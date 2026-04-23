@@ -120,7 +120,7 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
-        public void ProtocolConfigBenchmarks_Project_IncludesRequiredProductionSources()
+        public void ProtocolConfigBenchmarks_Project_UsesProjectReferenceForProductionSources()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string projectPath = Path.Combine(
@@ -131,17 +131,50 @@ namespace Readboard.VerificationTests
             XDocument projectDocument = XDocument.Load(projectPath);
 
             Assert.Contains(
-                projectDocument.Descendants("Compile"),
+                projectDocument.Descendants("ProjectReference"),
                 element => string.Equals(
                     (string)element.Attribute("Include"),
-                    @"..\..\readboard\Core\Protocol\PlaceRequestExecutionResult.cs",
+                    @"..\..\readboard\readboard.csproj",
                     StringComparison.Ordinal));
             Assert.Contains(
                 projectDocument.Descendants("Compile"),
                 element => string.Equals(
                     (string)element.Attribute("Include"),
-                    @"..\..\readboard\Core\Display\DisplayScaling.cs",
+                    @"..\..\tests\Shared\ProtocolFixtureCatalog.cs",
                     StringComparison.Ordinal));
+            Assert.DoesNotContain(
+                projectDocument.Descendants("Compile"),
+                element => ((string)element.Attribute("Include") ?? string.Empty)
+                    .StartsWith(@"..\..\readboard\", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void VerificationTests_Project_UsesProjectReferenceForProductionSources()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string projectPath = Path.Combine(
+                repositoryRoot,
+                "tests",
+                "Readboard.VerificationTests",
+                "Readboard.VerificationTests.csproj");
+            XDocument projectDocument = XDocument.Load(projectPath);
+
+            Assert.Contains(
+                projectDocument.Descendants("ProjectReference"),
+                element => string.Equals(
+                    (string)element.Attribute("Include"),
+                    @"..\..\readboard\readboard.csproj",
+                    StringComparison.Ordinal));
+            Assert.Contains(
+                projectDocument.Descendants("Compile"),
+                element => string.Equals(
+                    (string)element.Attribute("Include"),
+                    @"..\Shared\ProtocolFixtureCatalog.cs",
+                    StringComparison.Ordinal));
+            Assert.DoesNotContain(
+                projectDocument.Descendants("Compile"),
+                element => ((string)element.Attribute("Include") ?? string.Empty)
+                    .StartsWith(@"..\..\readboard\", StringComparison.Ordinal));
         }
 
         [Fact]

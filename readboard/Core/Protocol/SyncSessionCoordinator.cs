@@ -225,6 +225,11 @@ namespace readboard
             return syncIdleEvent.Wait(millisecondsTimeout);
         }
 
+        internal bool WaitForPendingMoveAvailability(TimeSpan timeout)
+        {
+            return pendingMoveAvailableEvent.Wait(timeout);
+        }
+
         public bool TryQueuePendingMove(MoveRequest request, int boardPixelWidth, int boardWidth)
         {
             if (request == null)
