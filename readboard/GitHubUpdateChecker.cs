@@ -16,9 +16,6 @@ namespace readboard
         private const string GitHubAcceptHeader = "application/vnd.github+json";
         private const string GitHubUserAgent = "readboard-update-checker";
         private const int RequestTimeoutMilliseconds = 15000;
-        private const int Tls12ProtocolValue = 3072;
-        private static readonly SecurityProtocolType Tls12SecurityProtocol =
-            (SecurityProtocolType)Tls12ProtocolValue;
 
         private readonly Func<string> _currentVersionProvider;
         private readonly Func<Task<string>> _latestReleaseJsonProvider;
@@ -308,8 +305,6 @@ namespace readboard
 
         private static Task<string> DownloadLatestReleaseJsonAsync()
         {
-            EnableGlobalTls12();
-
             var handler = new HttpClientHandler
             {
                 AutomaticDecompression =
@@ -335,13 +330,6 @@ namespace readboard
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
             return completion.Task;
-        }
-
-        // net40 only exposes TLS selection through the process-wide ServicePointManager switch.
-        private static void EnableGlobalTls12()
-        {
-            ServicePointManager.SecurityProtocol =
-                ServicePointManager.SecurityProtocol | Tls12SecurityProtocol;
         }
 
         private static HttpClient CreateLatestReleaseClient(HttpClientHandler handler)

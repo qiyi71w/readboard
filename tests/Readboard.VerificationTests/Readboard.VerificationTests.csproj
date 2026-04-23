@@ -85,5 +85,10 @@
     <Compile Include="..\..\readboard\MainWindowTitleFormatter.cs" Link="Production\MainWindowTitleFormatter.cs" />
     <Compile Include="..\..\readboard\UpdateDialogFormatter.cs" Link="Production\UpdateDialogFormatter.cs" />
     <Compile Include="..\..\readboard\UpdateDialogLayoutMetrics.cs" Link="Production\UpdateDialogLayoutMetrics.cs" />
+    <Compile Include="..\..\readboard\GitHubUpdateChecker.cs" Link="Production\GitHubUpdateChecker.cs" />
+    <Compile Include="..\..\readboard\GitHubReleaseInfo.cs" Link="Production\GitHubReleaseInfo.cs" />
+    <Compile Include="..\..\readboard\UpdateCheckResult.cs" Link="Production\UpdateCheckResult.cs" />
+    <Compile Include="..\..\readboard\UpdateCheckStatus.cs" Link="Production\UpdateCheckStatus.cs" />
+    <Compile Include="..\..\readboard\AppReleaseVersion.cs" Link="Production\AppReleaseVersion.cs" />
   </ItemGroup>
 </Project>
