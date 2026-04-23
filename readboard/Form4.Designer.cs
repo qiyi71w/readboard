@@ -55,6 +55,10 @@
             this.chkEnhanceScreen = new System.Windows.Forms.CheckBox();
             this.chkPonder = new System.Windows.Forms.CheckBox();
             this.chkDisableShowInBoardShortcut = new System.Windows.Forms.CheckBox();
+            this.lblColorMode = new System.Windows.Forms.Label();
+            this.rdoColorSystem = new System.Windows.Forms.RadioButton();
+            this.rdoColorDark = new System.Windows.Forms.RadioButton();
+            this.rdoColorLight = new System.Windows.Forms.RadioButton();
             this.SuspendLayout();
             // 
             // lblBlackOffsets
@@ -288,12 +292,55 @@
             this.chkDisableShowInBoardShortcut.TabIndex = 29;
             this.chkDisableShowInBoardShortcut.Text = "关闭显示选点快捷键";
             this.chkDisableShowInBoardShortcut.UseVisualStyleBackColor = true;
-            // 
+            //
+            // lblColorMode
+            //
+            this.lblColorMode.AutoSize = true;
+            this.lblColorMode.Location = new System.Drawing.Point(10, 55);
+            this.lblColorMode.Name = "lblColorMode";
+            this.lblColorMode.Size = new System.Drawing.Size(59, 12);
+            this.lblColorMode.TabIndex = 30;
+            this.lblColorMode.Text = "颜色模式:";
+            //
+            // rdoColorSystem
+            //
+            this.rdoColorSystem.AutoSize = true;
+            this.rdoColorSystem.Location = new System.Drawing.Point(80, 53);
+            this.rdoColorSystem.Name = "rdoColorSystem";
+            this.rdoColorSystem.Size = new System.Drawing.Size(71, 16);
+            this.rdoColorSystem.TabIndex = 31;
+            this.rdoColorSystem.Text = "跟随系统";
+            this.rdoColorSystem.UseVisualStyleBackColor = true;
+            //
+            // rdoColorDark
+            //
+            this.rdoColorDark.AutoSize = true;
+            this.rdoColorDark.Location = new System.Drawing.Point(160, 53);
+            this.rdoColorDark.Name = "rdoColorDark";
+            this.rdoColorDark.Size = new System.Drawing.Size(47, 16);
+            this.rdoColorDark.TabIndex = 32;
+            this.rdoColorDark.Text = "深色";
+            this.rdoColorDark.UseVisualStyleBackColor = true;
+            //
+            // rdoColorLight
+            //
+            this.rdoColorLight.AutoSize = true;
+            this.rdoColorLight.Location = new System.Drawing.Point(220, 53);
+            this.rdoColorLight.Name = "rdoColorLight";
+            this.rdoColorLight.Size = new System.Drawing.Size(47, 16);
+            this.rdoColorLight.TabIndex = 33;
+            this.rdoColorLight.Text = "浅色";
+            this.rdoColorLight.UseVisualStyleBackColor = true;
+            //
             // SettingsForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(424, 231);
+            this.Controls.Add(this.rdoColorLight);
+            this.Controls.Add(this.rdoColorDark);
+            this.Controls.Add(this.rdoColorSystem);
+            this.Controls.Add(this.lblColorMode);
             this.Controls.Add(this.chkDisableShowInBoardShortcut);
             this.Controls.Add(this.chkPonder);
             this.Controls.Add(this.chkEnhanceScreen);
@@ -357,5 +404,9 @@
         private System.Windows.Forms.CheckBox chkEnhanceScreen;
         private System.Windows.Forms.CheckBox chkPonder;
         private System.Windows.Forms.CheckBox chkDisableShowInBoardShortcut;
+        private System.Windows.Forms.Label lblColorMode;
+        private System.Windows.Forms.RadioButton rdoColorSystem;
+        private System.Windows.Forms.RadioButton rdoColorDark;
+        private System.Windows.Forms.RadioButton rdoColorLight;
     }
 }

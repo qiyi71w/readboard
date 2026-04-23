@@ -192,6 +192,11 @@ namespace readboard
             return Program.uiThemeMode == Program.UiThemeOptimized;
         }
 
+        private static bool IsDarkMode()
+        {
+            return UiTheme.IsDarkMode;
+        }
+
         private IEnumerable<GroupBox> MainThemeGroups()
         {
             return new[] { groupBox1, groupBox2, groupBox4 };
@@ -418,6 +423,7 @@ namespace readboard
 
             foreach (ButtonBase option in MainThemeOptions())
             {
+                UiTheme.ResetOption(option);
                 option.BackColor = SystemColors.Control;
                 option.ForeColor = SystemColors.ControlText;
                 option.Font = Control.DefaultFont;

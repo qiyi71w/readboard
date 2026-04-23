@@ -41,6 +41,10 @@ namespace readboard
             this.btnCancel.Text = getLangStr("SettingsForm_btnCancel");
             this.chkEnhanceScreen.Text = getLangStr("SettingsForm_chkEnhanceScreen");
             this.chkDisableShowInBoardShortcut.Text = getLangStr("SettingsForm_chkDisableShowInBoardShortcut");
+            this.lblColorMode.Text = getLangStr("SettingsForm_lblColorMode");
+            this.rdoColorSystem.Text = getLangStr("SettingsForm_rdoColorSystem");
+            this.rdoColorDark.Text = getLangStr("SettingsForm_rdoColorDark");
+            this.rdoColorLight.Text = getLangStr("SettingsForm_rdoColorLight");
 
            // this.Size= new Size((int)(461 *Program.factor), (int)(270 * Program.factor));
            
@@ -93,6 +97,12 @@ namespace readboard
         {
             foreach (CheckBox checkBox in new[] { chkAutoMin, chkPonder, chkMag, chkEnhanceScreen, chkVerifyMove, chkDisableShowInBoardShortcut })
                 UiTheme.StyleOption(checkBox);
+
+            foreach (RadioButton radio in new[] { rdoColorSystem, rdoColorDark, rdoColorLight })
+                UiTheme.StyleOption(radio);
+
+            lblColorMode.ForeColor = UiTheme.PrimaryText;
+            lblColorMode.Font = UiTheme.BodyFont;
 
             foreach (TextBox textBox in new[] { txtSyncInterval, txtGrayOffsets, txtBlackOffsets, txtBlackPercents, txtWhiteOffsets, txtWhitePercents })
             {
@@ -154,7 +164,8 @@ namespace readboard
             chkEnhanceScreen.Location = new Point(ScaleValue(170), top + optionRowGap);
             chkVerifyMove.Location = new Point(left, top + optionRowGap * 2);
             chkDisableShowInBoardShortcut.Location = new Point(ScaleValue(170), top + optionRowGap * 2);
-            int fieldsTop = LayoutWrappedLabel(lblBackForeOnly, left, ScaleValue(110), contentWidth, true) + ScaleValue(20);
+            LayoutColorModeRow(left, top + optionRowGap * 3);
+            int fieldsTop = LayoutWrappedLabel(lblBackForeOnly, left, ScaleValue(140), contentWidth, true) + ScaleValue(20);
             LayoutSettingsField(lblSyncInterval, txtSyncInterval, left, fieldsTop, labelWidth, inputWidth, fieldGap, ScaleValue(24));
             LayoutSettingsField(lblGrayOffsets, txtGrayOffsets, right, fieldsTop, labelWidth, inputWidth, fieldGap, ScaleValue(24));
             LayoutSettingsField(lblBlackOffsets, txtBlackOffsets, left, fieldsTop + fieldRowGap, labelWidth, inputWidth, fieldGap, ScaleValue(24));
@@ -194,6 +205,8 @@ namespace readboard
             currentTop = LayoutOptionRow(chkAutoMin, chkPonder, left, currentTop, contentWidth, optionGap, optionRowGap);
             currentTop = LayoutOptionRow(chkMag, chkEnhanceScreen, left, currentTop, contentWidth, optionGap, optionRowGap);
             currentTop = LayoutOptionRow(chkVerifyMove, chkDisableShowInBoardShortcut, left, currentTop, contentWidth, optionGap, optionRowGap);
+
+            currentTop = LayoutColorModeRow(left, currentTop) + optionRowGap;
 
             currentTop = LayoutWrappedLabel(lblBackForeOnly, left, currentTop + ScaleValue(8), contentWidth, true) + ScaleValue(16);
 
@@ -314,6 +327,20 @@ namespace readboard
             checkBox.MaximumSize = new Size(ClientSize.Width - ScaleValue(36), 0);
         }
 
+        private int LayoutColorModeRow(int left, int top)
+        {
+            lblColorMode.AutoSize = true;
+            lblColorMode.Location = new Point(left, top + ScaleValue(2));
+            int radioLeft = lblColorMode.Right + ScaleValue(6);
+            foreach (RadioButton radio in new[] { rdoColorSystem, rdoColorDark, rdoColorLight })
+            {
+                radio.AutoSize = true;
+                radio.Location = new Point(radioLeft, top);
+                radioLeft = radio.Right + ScaleValue(10);
+            }
+            return Math.Max(lblColorMode.Bottom, rdoColorLight.Bottom);
+        }
+
         private void ConfigureLegacyOptionCheckBox(CheckBox checkBox)
         {
             checkBox.AutoSize = true;
@@ -365,6 +392,7 @@ namespace readboard
 
             foreach (CheckBox checkBox in new[] { chkAutoMin, chkPonder, chkMag, chkEnhanceScreen, chkVerifyMove, chkDisableShowInBoardShortcut })
             {
+                UiTheme.ResetOption(checkBox);
                 checkBox.BackColor = SystemColors.Control;
                 checkBox.ForeColor = SystemColors.ControlText;
                 checkBox.Font = Control.DefaultFont;
@@ -372,6 +400,21 @@ namespace readboard
                 checkBox.FlatStyle = FlatStyle.Standard;
                 checkBox.UseVisualStyleBackColor = true;
             }
+
+            foreach (RadioButton radio in new[] { rdoColorSystem, rdoColorDark, rdoColorLight })
+            {
+                UiTheme.ResetOption(radio);
+                radio.BackColor = SystemColors.Control;
+                radio.ForeColor = SystemColors.ControlText;
+                radio.Font = Control.DefaultFont;
+                radio.Cursor = Cursors.Default;
+                radio.FlatStyle = FlatStyle.Standard;
+                radio.UseVisualStyleBackColor = true;
+            }
+
+            lblColorMode.BackColor = Color.Transparent;
+            lblColorMode.ForeColor = SystemColors.ControlText;
+            lblColorMode.Font = Control.DefaultFont;
 
             foreach (TextBox textBox in new[] { txtSyncInterval, txtGrayOffsets, txtBlackOffsets, txtBlackPercents, txtWhiteOffsets, txtWhitePercents })
             {
@@ -503,6 +546,7 @@ namespace readboard
             if (!TryBuildUpdatedConfig(out updatedConfig))
                 return;
 
+            bool colorModeChanged = updatedConfig.ColorMode != Program.CurrentConfig.ColorMode;
             Program.CurrentContext.Config = updatedConfig;
             MainForm mainForm = GetHost();
             mainForm.PersistConfiguration();
@@ -510,6 +554,15 @@ namespace readboard
             mainForm.resetBtnKeepSyncName();
             mainForm.sendPonderStatus();
             Close();
+            if (colorModeChanged)
+            {
+                MessageBox.Show(
+                    mainForm,
+                    getLangStr("SettingsForm_colorModeRestartTip"),
+                    getLangStr("SettingsForm_title"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
         }
 
         private void button2_Click(object sender, EventArgs e)
@@ -540,6 +593,9 @@ namespace readboard
             chkDisableShowInBoardShortcut.Checked = config.DisableShowInBoardShortcut;
             txtGrayOffsets.Text = config.GrayOffset.ToString();
             chkPonder.Checked = config.PlayPonder;
+            rdoColorSystem.Checked = config.ColorMode == AppConfig.ColorModeSystem;
+            rdoColorDark.Checked = config.ColorMode == AppConfig.ColorModeDark;
+            rdoColorLight.Checked = config.ColorMode == AppConfig.ColorModeLight;
         }
 
         private bool TryBuildUpdatedConfig(out AppConfig updatedConfig)
@@ -574,6 +630,9 @@ namespace readboard
             updatedConfig.UseEnhanceScreen = chkEnhanceScreen.Checked;
             updatedConfig.PlayPonder = chkPonder.Checked;
             updatedConfig.DisableShowInBoardShortcut = chkDisableShowInBoardShortcut.Checked;
+            updatedConfig.ColorMode = rdoColorDark.Checked ? AppConfig.ColorModeDark
+                : rdoColorLight.Checked ? AppConfig.ColorModeLight
+                : AppConfig.ColorModeSystem;
             if (IsOffsetOrPercentOutOfRange(updatedConfig))
             {
                 MessageBox.Show(getLangStr("SettingsForm_outOfRange"));

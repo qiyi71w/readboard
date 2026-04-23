@@ -20,6 +20,7 @@ namespace Readboard.VerificationTests
             Assert.False(config.DisableShowInBoardShortcut);
             Assert.Equal(SyncMode.Fox, config.SyncMode);
             Assert.Equal(1, config.UiThemeMode);
+            Assert.Equal(0, config.ColorMode);
             Assert.Equal(-1, config.WindowPosX);
             Assert.Equal(-1, config.WindowPosY);
         }
