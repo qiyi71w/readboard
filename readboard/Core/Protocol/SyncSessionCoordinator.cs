@@ -45,38 +45,28 @@ namespace readboard
 
         public bool StartedSync
         {
-            get
-            {
-                lock (stateLock)
-                    return sessionState.StartedSync;
-            }
+            get { return GetLockedSessionState(s => s.StartedSync); }
         }
 
         public bool KeepSync
         {
-            get
-            {
-                lock (stateLock)
-                    return sessionState.KeepSync;
-            }
+            get { return GetLockedSessionState(s => s.KeepSync); }
         }
 
         public bool IsContinuousSyncing
         {
-            get
-            {
-                lock (stateLock)
-                    return sessionState.IsContinuousSyncing;
-            }
+            get { return GetLockedSessionState(s => s.IsContinuousSyncing); }
         }
 
         public bool SyncBoth
         {
-            get
-            {
-                lock (stateLock)
-                    return sessionState.SyncBoth;
-            }
+            get { return GetLockedSessionState(s => s.SyncBoth); }
+        }
+
+        private T GetLockedSessionState<T>(Func<SessionState, T> selector)
+        {
+            lock (stateLock)
+                return selector(sessionState);
         }
 
         public void AttachHost(IProtocolCommandHost host)
@@ -233,6 +223,11 @@ namespace readboard
         public bool WaitForSyncIdle(int millisecondsTimeout)
         {
             return syncIdleEvent.Wait(millisecondsTimeout);
+        }
+
+        internal bool WaitForPendingMoveAvailability(TimeSpan timeout)
+        {
+            return pendingMoveAvailableEvent.Wait(timeout);
         }
 
         public bool TryQueuePendingMove(MoveRequest request, int boardPixelWidth, int boardWidth)

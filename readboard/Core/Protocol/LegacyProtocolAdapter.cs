@@ -10,15 +10,15 @@ namespace readboard
                 return null;
 
             string trimmed = rawLine.Trim();
-            if (trimmed.StartsWith("place", StringComparison.Ordinal))
+            if (trimmed.StartsWith(ProtocolKeywords.Place, StringComparison.Ordinal))
                 return CreatePlaceMessage(trimmed);
-            if (trimmed.StartsWith("loss", StringComparison.Ordinal))
+            if (trimmed.StartsWith(ProtocolKeywords.Loss, StringComparison.Ordinal))
                 return new ProtocolMessage { Kind = ProtocolMessageKind.LossFocus, RawText = trimmed };
-            if (trimmed.StartsWith("notinboard", StringComparison.Ordinal))
+            if (trimmed.StartsWith(ProtocolKeywords.NotInBoard, StringComparison.Ordinal))
                 return new ProtocolMessage { Kind = ProtocolMessageKind.StopInBoard, RawText = trimmed };
-            if (trimmed.StartsWith("version", StringComparison.Ordinal))
+            if (trimmed.StartsWith(ProtocolKeywords.Version, StringComparison.Ordinal))
                 return new ProtocolMessage { Kind = ProtocolMessageKind.VersionRequest, RawText = trimmed };
-            if (trimmed.StartsWith("quit", StringComparison.Ordinal))
+            if (trimmed.StartsWith(ProtocolKeywords.Quit, StringComparison.Ordinal))
                 return new ProtocolMessage { Kind = ProtocolMessageKind.Quit, RawText = trimmed };
             return ProtocolMessage.CreateLegacyLine(trimmed);
         }
@@ -30,102 +30,108 @@ namespace readboard
 
         public ProtocolMessage CreateReadyMessage()
         {
-            return CreateLegacyMessage("ready");
+            return CreateLegacyMessage(ProtocolKeywords.Ready);
         }
 
         public ProtocolMessage CreateClearMessage()
         {
-            return CreateLegacyMessage("clear");
+            return CreateLegacyMessage(ProtocolKeywords.Clear);
         }
 
         public ProtocolMessage CreateBoardEndMessage()
         {
-            return CreateLegacyMessage("end");
+            return CreateLegacyMessage(ProtocolKeywords.BoardEnd);
         }
 
         public ProtocolMessage CreatePonderStatusMessage(bool playPonderEnabled)
         {
-            return CreateLegacyMessage(playPonderEnabled ? "playponder on" : "playponder off");
+            return CreateLegacyMessage(
+                playPonderEnabled ? ProtocolKeywords.PlayPonderOn : ProtocolKeywords.PlayPonderOff);
         }
 
         public ProtocolMessage CreateVersionMessage(string version)
         {
-            return CreateLegacyMessage("version: " + version);
+            return CreateLegacyMessage(ProtocolKeywords.VersionResponsePrefix + version);
         }
 
         public ProtocolMessage CreateSyncMessage()
         {
-            return CreateLegacyMessage("sync");
+            return CreateLegacyMessage(ProtocolKeywords.Sync);
         }
 
         public ProtocolMessage CreateStopSyncMessage()
         {
-            return CreateLegacyMessage("stopsync");
+            return CreateLegacyMessage(ProtocolKeywords.StopSync);
         }
 
         public ProtocolMessage CreateEndSyncMessage()
         {
-            return CreateLegacyMessage("endsync");
+            return CreateLegacyMessage(ProtocolKeywords.EndSync);
         }
 
         public ProtocolMessage CreateBothSyncMessage(bool enabled)
         {
-            return CreateLegacyMessage(enabled ? "bothSync" : "nobothSync");
+            return CreateLegacyMessage(enabled ? ProtocolKeywords.BothSync : ProtocolKeywords.NoBothSync);
         }
 
         public ProtocolMessage CreateForegroundFoxInBoardMessage(bool enabled)
         {
-            return CreateLegacyMessage(enabled ? "foreFoxWithInBoard" : "notForeFoxWithInBoard");
+            return CreateLegacyMessage(
+                enabled
+                    ? ProtocolKeywords.ForegroundFoxWithInBoard
+                    : ProtocolKeywords.NotForegroundFoxWithInBoard);
         }
 
         public ProtocolMessage CreateSyncPlatformMessage(string platform)
         {
-            return CreateLegacyMessage("syncPlatform " + NormalizeTextValue(platform, "generic"));
+            return CreateLegacyMessage(
+                ProtocolKeywords.SyncPlatformPrefix
+                + NormalizeTextValue(platform, ProtocolKeywords.GenericSyncPlatform));
         }
 
         public ProtocolMessage CreateRoomTokenMessage(string roomToken)
         {
-            return CreateLegacyMessage("roomToken " + roomToken);
+            return CreateLegacyMessage(ProtocolKeywords.RoomTokenPrefix + roomToken);
         }
 
         public ProtocolMessage CreateLiveTitleMoveMessage(int moveNumber)
         {
-            return CreateLegacyMessage("liveTitleMove " + moveNumber);
+            return CreateLegacyMessage(ProtocolKeywords.LiveTitleMovePrefix + moveNumber);
         }
 
         public ProtocolMessage CreateRecordCurrentMoveMessage(int moveNumber)
         {
-            return CreateLegacyMessage("recordCurrentMove " + moveNumber);
+            return CreateLegacyMessage(ProtocolKeywords.RecordCurrentMovePrefix + moveNumber);
         }
 
         public ProtocolMessage CreateRecordTotalMoveMessage(int moveNumber)
         {
-            return CreateLegacyMessage("recordTotalMove " + moveNumber);
+            return CreateLegacyMessage(ProtocolKeywords.RecordTotalMovePrefix + moveNumber);
         }
 
         public ProtocolMessage CreateRecordAtEndMessage(bool atEnd)
         {
-            return CreateLegacyMessage(atEnd ? "recordAtEnd 1" : "recordAtEnd 0");
+            return CreateLegacyMessage(atEnd ? ProtocolKeywords.RecordAtEndTrue : ProtocolKeywords.RecordAtEndFalse);
         }
 
         public ProtocolMessage CreateRecordTitleFingerprintMessage(string fingerprint)
         {
-            return CreateLegacyMessage("recordTitleFingerprint " + fingerprint);
+            return CreateLegacyMessage(ProtocolKeywords.RecordTitleFingerprintPrefix + fingerprint);
         }
 
         public ProtocolMessage CreateForceRebuildMessage()
         {
-            return ProtocolMessage.CreateForceRebuildLine("forceRebuild");
+            return ProtocolMessage.CreateForceRebuildLine(ProtocolKeywords.ForceRebuild);
         }
 
         public ProtocolMessage CreateFoxMoveNumberMessage(int moveNumber)
         {
-            return CreateLegacyMessage("foxMoveNumber " + moveNumber);
+            return CreateLegacyMessage(ProtocolKeywords.FoxMoveNumberPrefix + moveNumber);
         }
 
         public ProtocolMessage CreateStartMessage(int boardWidth, int boardHeight, IntPtr windowHandle, bool includeWindowHandle)
         {
-            string line = "start " + boardWidth + " " + boardHeight;
+            string line = ProtocolKeywords.StartPrefix + boardWidth + " " + boardHeight;
             if (includeWindowHandle)
                 line += " " + windowHandle;
             return CreateLegacyMessage(line);
@@ -134,9 +140,9 @@ namespace readboard
         public ProtocolMessage CreatePlayMessage(string color, string time, string playouts, string firstPolicy)
         {
             return CreateLegacyMessage(
-                "play>"
+                ProtocolKeywords.PlayPrefix
                 + color
-                + ">"
+                + ProtocolKeywords.PlaySeparator
                 + NormalizeNumericValue(time)
                 + " "
                 + NormalizeNumericValue(playouts)
@@ -146,47 +152,47 @@ namespace readboard
 
         public ProtocolMessage CreateNoInBoardMessage()
         {
-            return CreateLegacyMessage("noinboard");
+            return CreateLegacyMessage(ProtocolKeywords.NoInBoard);
         }
 
         public ProtocolMessage CreateNotInBoardMessage()
         {
-            return CreateLegacyMessage("notinboard");
+            return CreateLegacyMessage(ProtocolKeywords.NotInBoard);
         }
 
         public ProtocolMessage CreatePlacementResultMessage(bool success)
         {
-            return CreateLegacyMessage(success ? "placeComplete" : "error place failed");
+            return CreateLegacyMessage(success ? ProtocolKeywords.PlaceComplete : ProtocolKeywords.PlacementFailed);
         }
 
         public ProtocolMessage CreateTimeChangedMessage(string value)
         {
-            return CreateLegacyMessage("timechanged " + NormalizeNumericValue(value));
+            return CreateLegacyMessage(ProtocolKeywords.TimeChangedPrefix + NormalizeNumericValue(value));
         }
 
         public ProtocolMessage CreatePlayoutsChangedMessage(string value)
         {
-            return CreateLegacyMessage("playoutschanged " + NormalizeNumericValue(value));
+            return CreateLegacyMessage(ProtocolKeywords.PlayoutsChangedPrefix + NormalizeNumericValue(value));
         }
 
         public ProtocolMessage CreateFirstPolicyChangedMessage(string value)
         {
-            return CreateLegacyMessage("firstchanged " + NormalizeNumericValue(value));
+            return CreateLegacyMessage(ProtocolKeywords.FirstPolicyChangedPrefix + NormalizeNumericValue(value));
         }
 
         public ProtocolMessage CreateNoPonderMessage()
         {
-            return CreateLegacyMessage("noponder");
+            return CreateLegacyMessage(ProtocolKeywords.NoPonder);
         }
 
         public ProtocolMessage CreateStopAutoPlayMessage()
         {
-            return CreateLegacyMessage("stopAutoPlay");
+            return CreateLegacyMessage(ProtocolKeywords.StopAutoPlay);
         }
 
         public ProtocolMessage CreatePassMessage()
         {
-            return CreateLegacyMessage("pass");
+            return CreateLegacyMessage(ProtocolKeywords.Pass);
         }
 
         private static ProtocolMessage CreatePlaceMessage(string rawLine)
@@ -215,7 +221,7 @@ namespace readboard
 
         private static string NormalizeNumericValue(string value)
         {
-            return string.IsNullOrWhiteSpace(value) ? "0" : value;
+            return string.IsNullOrWhiteSpace(value) ? ProtocolKeywords.DefaultNumericValue : value;
         }
 
         private static string NormalizeTextValue(string value, string fallback)

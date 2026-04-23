@@ -17,53 +17,6 @@
     <Compile Include="..\..\tests\Readboard.VerificationTests\Recognition\RecognitionPerformanceAcceptanceHarness.cs" Link="Support\RecognitionPerformanceAcceptanceHarness.cs" />
     <Compile Include="..\..\tests\Readboard.VerificationTests\Protocol\SustainedSyncAcceptanceHarness.cs" Link="Support\SustainedSyncAcceptanceHarness.cs" />
     <Compile Include="..\..\tests\Shared\VerificationFixtureLocator.cs" Link="Support\VerificationFixtureLocator.cs" />
-    <Compile Include="..\..\readboard\Core\Capture\BoardCaptureRequest.cs" Link="Production\Core\Capture\BoardCaptureRequest.cs" />
-    <Compile Include="..\..\readboard\Core\Capture\BoardCaptureResult.cs" Link="Production\Core\Capture\BoardCaptureResult.cs" />
-    <Compile Include="..\..\readboard\Core\Capture\IBoardCaptureService.cs" Link="Production\Core\Capture\IBoardCaptureService.cs" />
-    <Compile Include="..\..\readboard\Core\Configuration\AppConfigLoadResult.cs" Link="Production\Core\Configuration\AppConfigLoadResult.cs" />
-    <Compile Include="..\..\readboard\Core\Configuration\DualFormatAppConfigStore.cs" Link="Production\Core\Configuration\DualFormatAppConfigStore.cs" />
-    <Compile Include="..\..\readboard\Core\Configuration\IAppConfigStore.cs" Link="Production\Core\Configuration\IAppConfigStore.cs" />
-    <Compile Include="..\..\readboard\Core\Contracts\BoardCellState.cs" Link="Production\Core\Contracts\BoardCellState.cs" />
-    <Compile Include="..\..\readboard\Core\Contracts\BoardCoordinate.cs" Link="Production\Core\Contracts\BoardCoordinate.cs" />
-    <Compile Include="..\..\readboard\Core\Contracts\BoardDimensions.cs" Link="Production\Core\Contracts\BoardDimensions.cs" />
-    <Compile Include="..\..\readboard\Core\Contracts\BoardViewport.cs" Link="Production\Core\Contracts\BoardViewport.cs" />
-    <Compile Include="..\..\readboard\Core\Contracts\PixelBuffer.cs" Link="Production\Core\Contracts\PixelBuffer.cs" />
-    <Compile Include="..\..\readboard\Core\Contracts\PixelRect.cs" Link="Production\Core\Contracts\PixelRect.cs" />
-    <Compile Include="..\..\readboard\Core\Contracts\WindowDescriptor.cs" Link="Production\Core\Contracts\WindowDescriptor.cs" />
-    <Compile Include="..\..\readboard\Core\Display\DisplayScaling.cs" Link="Production\Core\Display\DisplayScaling.cs" />
-    <Compile Include="..\..\readboard\Core\Models\AppConfig.cs" Link="Production\Core\Models\AppConfig.cs" />
-    <Compile Include="..\..\readboard\Core\Models\BoardFrame.cs" Link="Production\Core\Models\BoardFrame.cs" />
-    <Compile Include="..\..\readboard\Core\Models\BoardSnapshot.cs" Link="Production\Core\Models\BoardSnapshot.cs" />
-    <Compile Include="..\..\readboard\Core\Models\MoveRequest.cs" Link="Production\Core\Models\MoveRequest.cs" />
-    <Compile Include="..\..\readboard\Core\Models\ProtocolMessage.cs" Link="Production\Core\Models\ProtocolMessage.cs" />
-    <Compile Include="..\..\readboard\Core\Models\SessionState.cs" Link="Production\Core\Models\SessionState.cs" />
-    <Compile Include="..\..\readboard\Core\Models\SyncMode.cs" Link="Production\Core\Models\SyncMode.cs" />
-    <Compile Include="..\..\readboard\Core\Overlay\IOverlayService.cs" Link="Production\Core\Overlay\IOverlayService.cs" />
-    <Compile Include="..\..\readboard\Core\Overlay\OverlayUpdateRequest.cs" Link="Production\Core\Overlay\OverlayUpdateRequest.cs" />
-    <Compile Include="..\..\readboard\Core\Overlay\OverlayUpdateResult.cs" Link="Production\Core\Overlay\OverlayUpdateResult.cs" />
-    <Compile Include="..\..\readboard\Core\Placement\IMovePlacementService.cs" Link="Production\Core\Placement\IMovePlacementService.cs" />
-    <Compile Include="..\..\readboard\Core\Placement\MovePlacementRequest.cs" Link="Production\Core\Placement\MovePlacementRequest.cs" />
-    <Compile Include="..\..\readboard\Core\Placement\MovePlacementResult.cs" Link="Production\Core\Placement\MovePlacementResult.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\FoxWindowContext.cs" Link="Production\Core\Protocol\FoxWindowContext.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\IProtocolCommandHost.cs" Link="Production\Core\Protocol\IProtocolCommandHost.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\IReadBoardProtocolAdapter.cs" Link="Production\Core\Protocol\IReadBoardProtocolAdapter.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\IReadBoardTransport.cs" Link="Production\Core\Protocol\IReadBoardTransport.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\LegacyProtocolAdapter.cs" Link="Production\Core\Protocol\LegacyProtocolAdapter.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\ISyncCoordinatorHost.cs" Link="Production\Core\Protocol\ISyncCoordinatorHost.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\ISyncSessionCoordinator.cs" Link="Production\Core\Protocol\ISyncSessionCoordinator.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\ISyncWindowLocator.cs" Link="Production\Core\Protocol\ISyncWindowLocator.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\IWindowDescriptorFactory.cs" Link="Production\Core\Protocol\IWindowDescriptorFactory.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\LegacySyncWindowLocator.cs" Link="Production\Core\Protocol\LegacySyncWindowLocator.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\LegacyWindowDescriptorFactory.cs" Link="Production\Core\Protocol\LegacyWindowDescriptorFactory.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\PlaceRequestExecutionResult.cs" Link="Production\Core\Protocol\PlaceRequestExecutionResult.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\SyncCoordinatorHostSnapshot.cs" Link="Production\Core\Protocol\SyncCoordinatorHostSnapshot.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\SyncSessionCoordinator.cs" Link="Production\Core\Protocol\SyncSessionCoordinator.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\SyncSessionCoordinator.Orchestration.cs" Link="Production\Core\Protocol\SyncSessionCoordinator.Orchestration.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\SyncSessionRuntimeDependencies.cs" Link="Production\Core\Protocol\SyncSessionRuntimeDependencies.cs" />
-    <Compile Include="..\..\readboard\Core\Protocol\SyncSessionRuntimeState.cs" Link="Production\Core\Protocol\SyncSessionRuntimeState.cs" />
-    <Compile Include="..\..\readboard\Core\Recognition\BoardRecognitionRequest.cs" Link="Production\Core\Recognition\BoardRecognitionRequest.cs" />
-    <Compile Include="..\..\readboard\Core\Recognition\BoardRecognitionResult.cs" Link="Production\Core\Recognition\BoardRecognitionResult.cs" />
-    <Compile Include="..\..\readboard\Core\Recognition\IBoardRecognitionService.cs" Link="Production\Core\Recognition\IBoardRecognitionService.cs" />
-    <Compile Include="..\..\readboard\Core\Recognition\RecognitionThresholds.cs" Link="Production\Core\Recognition\RecognitionThresholds.cs" />
+    <ProjectReference Include="..\..\readboard\readboard.csproj" />
   </ItemGroup>
 </Project>
