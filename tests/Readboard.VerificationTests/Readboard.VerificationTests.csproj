@@ -1,13 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <IsPackable>false</IsPackable>
     <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
-    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+    <PackageReference Include="OpenCvSharp4.Extensions" Version="4.10.0.20241108" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -16,13 +18,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\Shared\JavaScriptSerializerShim.cs" Link="Support\JavaScriptSerializerShim.cs" />
-    <Compile Include="..\Shared\LightweightInteropShim.cs" Link="Support\LightweightInteropShim.cs" />
     <Compile Include="..\Shared\ProtocolFixtureCatalog.cs" Link="Support\ProtocolFixtureCatalog.cs" />
-    <Compile Include="..\Shared\ProgramShim.cs" Link="Support\ProgramShim.cs" />
     <Compile Include="..\Shared\ReplayFixtureCatalog.cs" Link="Support\ReplayFixtureCatalog.cs" />
     <Compile Include="..\Shared\VerificationFixtureLocator.cs" Link="Support\VerificationFixtureLocator.cs" />
-    <Compile Include="..\Shared\WindowsFormsScreenShim.cs" Link="Support\WindowsFormsScreenShim.cs" />
     <Compile Include="..\..\readboard\Core\Capture\BoardCaptureRequest.cs" Link="Production\Core\Capture\BoardCaptureRequest.cs" />
     <Compile Include="..\..\readboard\Core\Capture\BoardCaptureResult.cs" Link="Production\Core\Capture\BoardCaptureResult.cs" />
     <Compile Include="..\..\readboard\Core\Capture\IBoardCaptureService.cs" Link="Production\Core\Capture\IBoardCaptureService.cs" />
@@ -87,5 +85,10 @@
     <Compile Include="..\..\readboard\MainWindowTitleFormatter.cs" Link="Production\MainWindowTitleFormatter.cs" />
     <Compile Include="..\..\readboard\UpdateDialogFormatter.cs" Link="Production\UpdateDialogFormatter.cs" />
     <Compile Include="..\..\readboard\UpdateDialogLayoutMetrics.cs" Link="Production\UpdateDialogLayoutMetrics.cs" />
+    <Compile Include="..\..\readboard\GitHubUpdateChecker.cs" Link="Production\GitHubUpdateChecker.cs" />
+    <Compile Include="..\..\readboard\GitHubReleaseInfo.cs" Link="Production\GitHubReleaseInfo.cs" />
+    <Compile Include="..\..\readboard\UpdateCheckResult.cs" Link="Production\UpdateCheckResult.cs" />
+    <Compile Include="..\..\readboard\UpdateCheckStatus.cs" Link="Production\UpdateCheckStatus.cs" />
+    <Compile Include="..\..\readboard\AppReleaseVersion.cs" Link="Production\AppReleaseVersion.cs" />
   </ItemGroup>
 </Project>

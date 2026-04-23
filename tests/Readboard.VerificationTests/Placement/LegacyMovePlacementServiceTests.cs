@@ -12,8 +12,7 @@ namespace Readboard.VerificationTests.Placement
         {
             RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
             LegacyMovePlacementService service = new LegacyMovePlacementService(
-                nativeMethods,
-                new RecordingLightweightFactory());
+                nativeMethods);
 
             MovePlacementResult result = service.Place(new MovePlacementRequest
             {
@@ -31,8 +30,7 @@ namespace Readboard.VerificationTests.Placement
         {
             RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
             LegacyMovePlacementService service = new LegacyMovePlacementService(
-                nativeMethods,
-                new RecordingLightweightFactory());
+                nativeMethods);
 
             MovePlacementResult result = service.Place(new MovePlacementRequest
             {
@@ -64,8 +62,7 @@ namespace Readboard.VerificationTests.Placement
         {
             RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
             LegacyMovePlacementService service = new LegacyMovePlacementService(
-                nativeMethods,
-                new RecordingLightweightFactory());
+                nativeMethods);
 
             MovePlacementResult result = service.Place(new MovePlacementRequest
             {
@@ -85,8 +82,7 @@ namespace Readboard.VerificationTests.Placement
         {
             RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
             LegacyMovePlacementService service = new LegacyMovePlacementService(
-                nativeMethods,
-                new RecordingLightweightFactory());
+                nativeMethods);
 
             MovePlacementResult result = service.Place(new MovePlacementRequest
             {
@@ -124,8 +120,7 @@ namespace Readboard.VerificationTests.Placement
             RecordingNativeMethods nativeMethods = new RecordingNativeMethods();
             nativeMethods.OnSwitchToWindow = delegate { cancelRequested = true; };
             LegacyMovePlacementService service = new LegacyMovePlacementService(
-                nativeMethods,
-                new RecordingLightweightFactory());
+                nativeMethods);
 
             MovePlacementResult result = service.Place(new MovePlacementRequest
             {
@@ -216,34 +211,6 @@ namespace Readboard.VerificationTests.Placement
             }
 
             public void SendMouseMessage(IntPtr handle, uint message, int wParam, int lParam)
-            {
-            }
-        }
-
-        private sealed class RecordingLightweightFactory : IPlacementLightweightInteropFactory
-        {
-            public IPlacementLightweightInteropClient Create()
-            {
-                return new RecordingLightweightClient();
-            }
-        }
-
-        private sealed class RecordingLightweightClient : IPlacementLightweightInteropClient
-        {
-            public bool BindWindow(IntPtr handle)
-            {
-                return true;
-            }
-
-            public void MoveTo(int x, int y)
-            {
-            }
-
-            public void LeftClick()
-            {
-            }
-
-            public void Dispose()
             {
             }
         }

@@ -100,7 +100,6 @@ namespace Readboard.VerificationTests.Protocol
                 LegacyTypeToken = "5",
                 ShowInBoard = true,
                 SupportsForegroundFoxInBoardProtocol = false,
-                CanUseLightweightInterop = false,
                 AutoMinimize = false,
                 SampleIntervalMs = SampleIntervalMs
             };
@@ -295,10 +294,6 @@ namespace Readboard.VerificationTests.Protocol
             }
 
             public void MinimizeWindow()
-            {
-            }
-
-            public void ReleasePlacementBinding(IntPtr handle)
             {
             }
 

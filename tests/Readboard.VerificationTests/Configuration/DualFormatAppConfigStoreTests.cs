@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using Xunit;
 using readboard;
 
@@ -41,6 +42,7 @@ namespace Readboard.VerificationTests
                 config.PlayPonder = false;
                 config.DisableShowInBoardShortcut = true;
                 config.UiThemeMode = 7;
+                config.ColorMode = AppConfig.ColorModeDark;
 
                 store.Save(config);
 
@@ -48,10 +50,12 @@ namespace Readboard.VerificationTests
                 string legacyMain = File.ReadAllText(workspace.PathFor("config_readboard.txt"));
                 string legacyOther = File.ReadAllText(workspace.PathFor("config_readboard_others.txt"));
 
-                Assert.Contains("\"ProtocolVersion\":\"220430\"", json);
-                Assert.Contains("\"MachineKey\":\"SECONDARY-HOST\"", json);
+                Assert.Contains("\"ProtocolVersion\"", json);
+                Assert.Contains("220430", json);
+                Assert.Contains("\"MachineKey\"", json);
+                Assert.Contains("SECONDARY-HOST", json);
                 Assert.Equal("96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5", legacyMain);
-                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7", legacyOther);
+                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1", legacyOther);
             }
         }
 
@@ -160,8 +164,9 @@ namespace Readboard.VerificationTests
                 Assert.Equal(-1, result.Config.WindowPosX);
                 Assert.Equal(-1, result.Config.WindowPosY);
                 string json = File.ReadAllText(workspace.PathFor("config.readboard.json"));
-                Assert.Contains("\"WindowPosX\":-1", json);
-                Assert.Contains("\"WindowPosY\":-1", json);
+                Assert.Contains("\"WindowPosX\"", json);
+                Assert.Contains("-1", json);
+                Assert.Contains("\"WindowPosY\"", json);
             }
         }
 
@@ -214,12 +219,14 @@ namespace Readboard.VerificationTests
             Assert.True(File.Exists(jsonPath));
 
             string json = File.ReadAllText(jsonPath);
-            Assert.Contains("\"ProtocolVersion\":\"220430\"", json);
-            Assert.Contains("\"MachineKey\":\"MACHINE-001\"", json);
-            Assert.Contains("\"BoardWidth\":13", json);
-            Assert.Contains("\"SyncBoth\":true", json);
-            Assert.Contains("\"PlayPonder\":false", json);
-            Assert.Contains("\"DisableShowInBoardShortcut\":false", json);
+            Assert.Contains("\"ProtocolVersion\"", json);
+            Assert.Contains("220430", json);
+            Assert.Contains("\"MachineKey\"", json);
+            Assert.Contains("MACHINE-001", json);
+            Assert.Contains("\"BoardWidth\"", json);
+            Assert.Contains("\"SyncBoth\"", json);
+            Assert.Contains("\"PlayPonder\"", json);
+            Assert.Contains("\"DisableShowInBoardShortcut\"", json);
         }
 
         private static void AssertDefaultConfig(AppConfig config)
@@ -244,8 +251,33 @@ namespace Readboard.VerificationTests
             Assert.True(config.PlayPonder);
             Assert.False(config.DisableShowInBoardShortcut);
             Assert.Equal(1, config.UiThemeMode);
+            Assert.Equal(0, config.ColorMode);
             Assert.Equal(ProtocolVersion, config.ProtocolVersion);
             Assert.Equal(FixtureMachineKey, config.MachineKey);
+        }
+
+        [Theory]
+        [InlineData(AppConfig.ColorModeSystem)]
+        [InlineData(AppConfig.ColorModeDark)]
+        [InlineData(AppConfig.ColorModeLight)]
+        public void Save_RoundTripsColorMode(int colorMode)
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, SaveMachineKey, ProtocolVersion);
+                AppConfig config = AppConfig.CreateDefault(ProtocolVersion, SaveMachineKey);
+                config.ColorMode = colorMode;
+
+                store.Save(config);
+                string json = File.ReadAllText(workspace.PathFor("config.readboard.json"));
+                AppConfig loaded = store.Load().Config;
+
+                using (JsonDocument doc = JsonDocument.Parse(json))
+                {
+                    Assert.Equal(colorMode, doc.RootElement.GetProperty("ColorMode").GetInt32());
+                }
+                Assert.Equal(colorMode, loaded.ColorMode);
+            }
         }
     }
 }

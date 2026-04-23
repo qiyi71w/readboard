@@ -14,8 +14,7 @@ namespace readboard
         Unknown = 0,
         Foreground = 1,
         BackgroundPost = 2,
-        BackgroundSend = 3,
-        LightweightInterop = 4
+        BackgroundSend = 3
     }
 
     internal sealed class MovePlacementResult

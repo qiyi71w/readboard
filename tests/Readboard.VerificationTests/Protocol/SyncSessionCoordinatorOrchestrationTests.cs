@@ -589,7 +589,7 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
-        public void StopSyncSession_ThenRestartKeepSync_ReleasesStaleLightweightBindingHandleInsteadOfNewSessionHandle()
+        public void StopSyncSession_ThenRestartKeepSync_PreservesLifecycleThroughStopAndRestart()
         {
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
@@ -601,7 +601,6 @@ namespace Readboard.VerificationTests.Protocol
             IntPtr firstHandle = new IntPtr(1111);
             IntPtr secondHandle = new IntPtr(2222);
             object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, firstHandle);
-            SetProperty(snapshot, "CanUseLightweightInterop", true);
             LightweightBindingRestartHostRecorder hostRecorder = new LightweightBindingRestartHostRecorder(snapshot, coordinator);
             object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
             ScriptedBlockingCaptureService captureService = new ScriptedBlockingCaptureService(CreateFrame(), 2, true);
@@ -634,14 +633,10 @@ namespace Readboard.VerificationTests.Protocol
             Assert.True(WaitForCondition(() => !staleWorker.IsAlive, TimeSpan.FromSeconds(1)));
             Assert.True(coordinator.StartedSync);
             Assert.Equal(0, hostRecorder.KeepStoppedCount);
-            Assert.False(hostRecorder.ContainsReleasedHandle(firstHandle));
-            Assert.False(hostRecorder.ContainsReleasedHandle(secondHandle));
 
             Invoke(coordinator, "StopSyncSession");
 
             Assert.True(WaitForCondition(() => hostRecorder.KeepStoppedCount == 1, TimeSpan.FromSeconds(1)));
-            Assert.True(hostRecorder.ContainsReleasedHandle(firstHandle));
-            Assert.False(hostRecorder.ContainsReleasedHandle(secondHandle));
         }
 
         [Fact]
@@ -780,7 +775,6 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(snapshot, "LegacyTypeToken", "0");
             SetProperty(snapshot, "ShowInBoard", false);
             SetProperty(snapshot, "SupportsForegroundFoxInBoardProtocol", false);
-            SetProperty(snapshot, "CanUseLightweightInterop", false);
             SetProperty(snapshot, "AutoMinimize", false);
             SetProperty(snapshot, "SampleIntervalMs", 5);
             return snapshot;
@@ -957,7 +951,6 @@ namespace Readboard.VerificationTests.Protocol
                     case "ShowMissingSyncSourceMessage":
                     case "ShowRecognitionFailureMessage":
                     case "MinimizeWindow":
-                    case "ReleasePlacementBinding":
                         return null;
                     default:
                         return GetDefault(method.ReturnType);
@@ -969,7 +962,6 @@ namespace Readboard.VerificationTests.Protocol
         {
             private readonly object snapshot;
             private readonly SyncSessionCoordinator coordinator;
-            private readonly List<IntPtr> releasedHandles = new List<IntPtr>();
             private bool queuedInitialMove;
 
             public LightweightBindingRestartHostRecorder(object snapshot, SyncSessionCoordinator coordinator)
@@ -1009,12 +1001,6 @@ namespace Readboard.VerificationTests.Protocol
                         KeepStoppedCount++;
                         KeepStopped.Set();
                         return null;
-                    case "ReleasePlacementBinding":
-                        lock (releasedHandles)
-                        {
-                            releasedHandles.Add((IntPtr)args[0]);
-                        }
-                        return null;
                     case "OnContinuousSyncStarted":
                     case "OnContinuousSyncStopped":
                     case "ShowMissingSyncSourceMessage":
@@ -1023,14 +1009,6 @@ namespace Readboard.VerificationTests.Protocol
                         return null;
                     default:
                         return GetDefault(method.ReturnType);
-                }
-            }
-
-            public bool ContainsReleasedHandle(IntPtr handle)
-            {
-                lock (releasedHandles)
-                {
-                    return releasedHandles.Contains(handle);
                 }
             }
         }
@@ -1073,7 +1051,6 @@ namespace Readboard.VerificationTests.Protocol
                     case "ShowMissingSyncSourceMessage":
                     case "ShowRecognitionFailureMessage":
                     case "MinimizeWindow":
-                    case "ReleasePlacementBinding":
                         return null;
                     default:
                         return GetDefault(method.ReturnType);
@@ -1353,7 +1330,7 @@ namespace Readboard.VerificationTests.Protocol
                     return new MovePlacementResult
                     {
                         Success = true,
-                        PlacementPath = PlacementPathKind.LightweightInterop
+                        PlacementPath = PlacementPathKind.Foreground
                     };
                 }
 

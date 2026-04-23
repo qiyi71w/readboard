@@ -6,7 +6,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 
 namespace readboard
 {
@@ -16,9 +16,6 @@ namespace readboard
         private const string GitHubAcceptHeader = "application/vnd.github+json";
         private const string GitHubUserAgent = "readboard-update-checker";
         private const int RequestTimeoutMilliseconds = 15000;
-        private const int Tls12ProtocolValue = 3072;
-        private static readonly SecurityProtocolType Tls12SecurityProtocol =
-            (SecurityProtocolType)Tls12ProtocolValue;
 
         private readonly Func<string> _currentVersionProvider;
         private readonly Func<Task<string>> _latestReleaseJsonProvider;
@@ -191,8 +188,7 @@ namespace readboard
                 throw new InvalidOperationException("Latest release response is empty.");
             }
 
-            var serializer = new JavaScriptSerializer();
-            var payload = serializer.DeserializeObject(json) as Dictionary<string, object>;
+            var payload = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
             if (payload == null)
             {
                 throw new InvalidOperationException("Latest release response is not a JSON object.");
@@ -218,6 +214,11 @@ namespace readboard
                 return null;
             }
 
+            if (value is JsonElement element)
+            {
+                return element.ValueKind == JsonValueKind.Null ? null : element.GetString();
+            }
+
             string stringValue = value as string;
             if (stringValue == null)
             {
@@ -240,7 +241,16 @@ namespace readboard
                     "Latest release JSON is missing '" + key + "'.");
             }
 
-            string stringValue = value as string;
+            string stringValue;
+            if (value is JsonElement element)
+            {
+                stringValue = element.ValueKind == JsonValueKind.Null ? null : element.GetString();
+            }
+            else
+            {
+                stringValue = value as string;
+            }
+
             if (stringValue == null)
             {
                 throw new InvalidOperationException(
@@ -264,7 +274,16 @@ namespace readboard
                 return null;
             }
 
-            string publishedAtValue = rawValue as string;
+            string publishedAtValue;
+            if (rawValue is JsonElement element)
+            {
+                publishedAtValue = element.ValueKind == JsonValueKind.Null ? null : element.GetString();
+            }
+            else
+            {
+                publishedAtValue = rawValue as string;
+            }
+
             if (string.IsNullOrWhiteSpace(publishedAtValue))
             {
                 return null;
@@ -286,8 +305,6 @@ namespace readboard
 
         private static Task<string> DownloadLatestReleaseJsonAsync()
         {
-            EnableGlobalTls12();
-
             var handler = new HttpClientHandler
             {
                 AutomaticDecompression =
@@ -313,13 +330,6 @@ namespace readboard
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
             return completion.Task;
-        }
-
-        // net40 only exposes TLS selection through the process-wide ServicePointManager switch.
-        private static void EnableGlobalTls12()
-        {
-            ServicePointManager.SecurityProtocol =
-                ServicePointManager.SecurityProtocol | Tls12SecurityProtocol;
         }
 
         private static HttpClient CreateLatestReleaseClient(HttpClientHandler handler)

@@ -149,13 +149,13 @@ namespace readboard
         {
             IntPtr shellWindow = GetShellWindow();
             Dictionary<IntPtr, string> windows = new Dictionary<IntPtr, string>();
-            EnumWindows(delegate(IntPtr handle, int lParam)
+            EnumWindows(delegate(IntPtr handle, IntPtr lParam)
             {
                 if (handle == shellWindow || !IsWindowVisible(handle) || IsIconic(handle))
                     return true;
                 windows[handle] = string.Empty;
                 return true;
-            }, 0);
+            }, IntPtr.Zero);
             return windows;
         }
 
@@ -204,7 +204,7 @@ namespace readboard
         private static extern bool EnumChildWindows(IntPtr window, EnumWindowProc callback, IntPtr parameter);
 
         [DllImport("user32.dll")]
-        private static extern bool EnumWindows(EnumWindowsProc callback, int parameter);
+        private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
 
         [DllImport("user32.dll")]
         private static extern int GetClassName(IntPtr handle, StringBuilder className, int maxCount);
@@ -227,7 +227,7 @@ namespace readboard
         [DllImport("user32.dll")]
         private static extern bool GetWindowRect(IntPtr handle, out RECT rect);
 
-        private delegate bool EnumWindowsProc(IntPtr handle, int parameter);
+        private delegate bool EnumWindowsProc(IntPtr handle, IntPtr parameter);
 
         private delegate bool EnumWindowProc(IntPtr handle, IntPtr parameter);
 

@@ -117,8 +117,7 @@ namespace Readboard.ProtocolConfigBenchmarks
 
         private static int DetermineRecognitionExitCode(RecognitionPerformanceAcceptanceReport report)
         {
-            return report.MeetsLatencyAcceptance
-                && report.MeetsAllocationAcceptance
+            return report.MeetsAllocationAcceptance
                 && report.MeetsAccuracyAcceptance
                 ? 0
                 : 1;

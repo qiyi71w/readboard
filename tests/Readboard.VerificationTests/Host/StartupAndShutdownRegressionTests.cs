@@ -521,15 +521,15 @@ namespace Readboard.VerificationTests.Host
             string helperSlice = GetMethodSlice(source, "private void DisposeInputHooks()");
 
             Assert.Contains("DisposeInputHooks();", shutdownSlice);
-            Assert.Contains("hookListener.KeyDown -= HookListener_KeyDown;", helperSlice);
-            Assert.Contains("hookListener.KeyUp -= HookListener_KeyUp;", helperSlice);
-            Assert.Contains("hookListener.Stop();", helperSlice);
-            Assert.Contains("hookListener.Dispose();", helperSlice);
-            Assert.Contains("mh.MouseMove -= mh_MouseMoveEvent;", helperSlice);
-            Assert.Contains("mh.MouseClick -= mh_MouseMoveEvent2;", helperSlice);
-            Assert.Contains("mh.Enabled = false;", helperSlice);
-            Assert.Contains("mh.Stop();", helperSlice);
-            Assert.Contains("mh.Dispose();", helperSlice);
+            Assert.Contains("keyboardHook.KeyDown -= HookListener_KeyDown;", helperSlice);
+            Assert.Contains("keyboardHook.KeyUp -= HookListener_KeyUp;", helperSlice);
+            Assert.Contains("keyboardHook.Stop();", helperSlice);
+            Assert.Contains("keyboardHook.Dispose();", helperSlice);
+            Assert.Contains("mouseHook.MouseMove -= mh_MouseMoveEvent;", helperSlice);
+            Assert.Contains("mouseHook.MouseClick -= mh_MouseMoveEvent2;", helperSlice);
+            Assert.Contains("mouseHook.Enabled = false;", helperSlice);
+            Assert.Contains("mouseHook.Stop();", helperSlice);
+            Assert.Contains("mouseHook.Dispose();", helperSlice);
         }
 
         [Fact]

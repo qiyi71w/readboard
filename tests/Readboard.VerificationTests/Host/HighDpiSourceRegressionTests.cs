@@ -7,14 +7,11 @@ namespace Readboard.VerificationTests.Host
     public sealed class HighDpiSourceRegressionTests
     {
         [Fact]
-        public void AppConfig_DeclaresPerMonitorV2AndAutoResizing()
+        public void ProgramMain_SetsHighDpiModePerMonitorV2()
         {
-            string content = LoadSource("readboard", "App.config");
+            string content = LoadSource("readboard", "Program.cs");
 
-            Assert.Contains("DpiAwareness\" value=\"PerMonitorV2\"", content);
-            Assert.Contains("EnableWindowsFormsHighDpiAutoResizing\" value=\"true\"", content);
-            Assert.DoesNotContain("<configSections>", content);
-            Assert.DoesNotContain("name=\"System.Windows.Forms.ApplicationConfigurationSection\"", content);
+            Assert.Contains("SetHighDpiMode(HighDpiMode.PerMonitorV2)", content);
         }
 
         [Fact]

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -38,7 +38,8 @@ namespace readboard
         private readonly string baseDirectory;
         private readonly string machineKey;
         private readonly string protocolVersion;
-        private readonly JavaScriptSerializer serializer = new JavaScriptSerializer();
+        private static readonly JsonSerializerOptions DeserializeOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        private static readonly JsonSerializerOptions SerializeOptions = new JsonSerializerOptions { WriteIndented = true };
 
         public DualFormatAppConfigStore(string baseDirectory, string machineKey, string protocolVersion)
         {
@@ -102,7 +103,7 @@ namespace readboard
 
         private AppConfig DeserializePartialJsonConfig(string content)
         {
-            IDictionary<string, object> values = serializer.Deserialize<Dictionary<string, object>>(content);
+            IDictionary<string, object> values = JsonSerializer.Deserialize<Dictionary<string, object>>(content, DeserializeOptions);
             if (values == null)
                 return null;
 
@@ -141,6 +142,7 @@ namespace readboard
             config.PlayPonder = ReadBoolValue(values, "PlayPonder", config.PlayPonder);
             config.DisableShowInBoardShortcut = ReadBoolValue(values, "DisableShowInBoardShortcut", config.DisableShowInBoardShortcut);
             config.UiThemeMode = ReadIntValue(values, "UiThemeMode", config.UiThemeMode);
+            config.ColorMode = ReadIntValue(values, "ColorMode", config.ColorMode);
             config.SyncMode = (SyncMode)ReadIntValue(values, "SyncMode", (int)config.SyncMode);
             config.SyncBoth = ReadBoolValue(values, "SyncBoth", config.SyncBoth);
             config.BoardWidth = ReadIntValue(values, "BoardWidth", config.BoardWidth);
@@ -173,6 +175,13 @@ namespace readboard
             return LegacyMainConfigStatus.Imported;
         }
 
+        // LegacyOther layout by length (parts.Length):
+        //   12: ProtocolVersion, BoardWidth, BoardHeight, CustomBoardWidth, CustomBoardHeight,
+        //       SyncIntervalMs, SyncBoth, GrayOffset, WindowPosX, WindowPosY,
+        //       UseEnhanceScreen, PlayPonder
+        //   13: + UiThemeMode @ 12 (legacy v2 — no DisableShowInBoardShortcut)
+        //   14: + DisableShowInBoardShortcut @ 12, UiThemeMode @ 13
+        //   15: + ColorMode @ 14
         private bool ApplyLegacyOtherConfig(AppConfig config)
         {
             string[] parts = ReadLegacyParts(LegacyOtherFileName);
@@ -190,7 +199,13 @@ namespace readboard
             config.WindowPosY = ReadInt(parts[9], config.WindowPosY);
             config.UseEnhanceScreen = ReadBool(parts[10], config.UseEnhanceScreen);
             config.PlayPonder = ReadBool(parts[11], config.PlayPonder);
-            if (parts.Length >= 14)
+            if (parts.Length >= 15)
+            {
+                config.DisableShowInBoardShortcut = ReadBool(parts[12], config.DisableShowInBoardShortcut);
+                config.UiThemeMode = ReadInt(parts[13], config.UiThemeMode);
+                config.ColorMode = ReadInt(parts[14], config.ColorMode);
+            }
+            else if (parts.Length >= 14)
             {
                 config.DisableShowInBoardShortcut = ReadBool(parts[12], config.DisableShowInBoardShortcut);
                 config.UiThemeMode = ReadInt(parts[13], config.UiThemeMode);
@@ -220,7 +235,7 @@ namespace readboard
         {
             string path = GetPath(JsonFileName);
             string tempPath = path + JsonTempSuffix;
-            string content = serializer.Serialize(config);
+            string content = JsonSerializer.Serialize(config, SerializeOptions);
             File.WriteAllText(tempPath, content, Encoding.UTF8);
             try
             {
@@ -268,6 +283,7 @@ namespace readboard
             builder.Append('_').Append(ToLegacyBool(config.PlayPonder));
             builder.Append('_').Append(ToLegacyBool(config.DisableShowInBoardShortcut));
             builder.Append('_').Append(config.UiThemeMode);
+            builder.Append('_').Append(config.ColorMode);
             File.WriteAllText(GetPath(LegacyOtherFileName), builder.ToString(), Encoding.UTF8);
         }
 
@@ -339,7 +355,7 @@ namespace readboard
         {
             return ex is InvalidOperationException
                 || ex is ArgumentException
-                || string.Equals(ex.GetType().FullName, "System.Text.Json.JsonException", StringComparison.Ordinal);
+                || ex is JsonException;
         }
 
         private static int ReadInt(string value, int fallback)

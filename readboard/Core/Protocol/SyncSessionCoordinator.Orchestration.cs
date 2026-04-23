@@ -10,7 +10,6 @@ namespace readboard
 
         private readonly object workerLock = new object();
         private readonly ManualResetEventSlim keepSyncStopRequestedEvent = new ManualResetEventSlim(true);
-        private readonly HashSet<IntPtr> pendingPlacementBindingHandles = new HashSet<IntPtr>();
         private SyncSessionRuntimeDependencies runtimeDependencies;
         private readonly SyncSessionRuntimeState runtimeState = new SyncSessionRuntimeState();
         private Thread continuousSyncThread;
@@ -284,7 +283,6 @@ namespace readboard
             ClearRuntimeFrame();
             runtimeState.ResetProbeState();
             CancelPendingMove();
-            ReleasePlacementBindings(runtime.Host);
             if (restoreUi)
                 runtime.Host.OnKeepSyncStopped(false);
         }
@@ -370,7 +368,6 @@ namespace readboard
         {
             bool notifyStop = false;
             bool continuousSyncActive = false;
-            IntPtr[] releaseHandles = null;
 
             lock (workerLock)
             {
@@ -383,13 +380,11 @@ namespace readboard
                 ResetRuntimeSyncCaches(runtime);
                 SendStopSync();
                 ClearRuntimeFrame();
-                releaseHandles = TakePendingPlacementBindingHandlesLocked();
                 keepSyncThread = null;
                 continuousSyncActive = IsContinuousSyncing;
                 notifyStop = true;
             }
 
-            ReleasePlacementBindings(runtime.Host, releaseHandles);
             if (notifyStop)
                 runtime.Host.OnKeepSyncStopped(continuousSyncActive);
         }
@@ -710,13 +705,11 @@ namespace readboard
             {
                 Frame = runtimeState.CurrentBoardFrame,
                 Move = new MoveRequest { X = request.X, Y = request.Y, VerifyMove = request.VerifyMove },
-                UseLightweightInterop = snapshot.CanUseLightweightInterop,
                 BringTargetToFront = snapshot.SyncMode == SyncMode.Foreground,
                 ShouldCancel = delegate { return !IsOperationCurrent(isOperationCurrent); }
             });
             if (result != null && result.Success)
             {
-                TrackPlacementBindingHandle(snapshot, result);
                 return true;
             }
             if (!IsOperationCurrent(isOperationCurrent))
@@ -756,8 +749,6 @@ namespace readboard
             runtimeState.ResetProbeState();
             if (runtimeDependencies != null)
                 ResetRuntimeSyncCaches(runtimeDependencies);
-            if (runtimeDependencies != null)
-                ReleasePlacementBindings(runtimeDependencies.Host);
         }
 
         private void CompleteStopCleanupIfIdle()
@@ -908,59 +899,6 @@ namespace readboard
             ReplaceRuntimeFrame(null);
             runtimeState.CurrentBoardPixelWidth = 0;
             runtimeState.CurrentBoardPixelHeight = 0;
-        }
-
-        private void TrackPlacementBindingHandle(
-            SyncCoordinatorHostSnapshot snapshot,
-            MovePlacementResult result)
-        {
-            if (result == null
-                || !result.Success
-                || result.PlacementPath != PlacementPathKind.LightweightInterop)
-                return;
-
-            IntPtr handle = ResolveSelectedWindowHandle(snapshot);
-            if (handle == IntPtr.Zero)
-                return;
-
-            lock (workerLock)
-            {
-                pendingPlacementBindingHandles.Add(handle);
-            }
-        }
-
-        private void ReleasePlacementBindings(ISyncCoordinatorHost host)
-        {
-            if (host == null)
-                return;
-
-            IntPtr[] handles;
-            lock (workerLock)
-            {
-                handles = TakePendingPlacementBindingHandlesLocked();
-            }
-
-            ReleasePlacementBindings(host, handles);
-        }
-
-        private static void ReleasePlacementBindings(ISyncCoordinatorHost host, IntPtr[] handles)
-        {
-            if (host == null || handles == null)
-                return;
-
-            for (int index = 0; index < handles.Length; index++)
-                host.ReleasePlacementBinding(handles[index]);
-        }
-
-        private IntPtr[] TakePendingPlacementBindingHandlesLocked()
-        {
-            if (pendingPlacementBindingHandles.Count == 0)
-                return null;
-
-            IntPtr[] handles = new IntPtr[pendingPlacementBindingHandles.Count];
-            pendingPlacementBindingHandles.CopyTo(handles);
-            pendingPlacementBindingHandles.Clear();
-            return handles;
         }
 
         private static void DisposeBoardFrame(BoardFrame frame)

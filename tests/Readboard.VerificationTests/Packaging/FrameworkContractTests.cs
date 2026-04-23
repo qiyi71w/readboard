@@ -9,33 +9,26 @@ namespace Readboard.VerificationTests
 {
     public sealed class FrameworkContractTests
     {
-        private const string ExpectedTargetFrameworkVersion = "v4.8";
-        private const string ExpectedRuntimeSku = ".NETFramework,Version=v4.8";
+        private const string ExpectedTargetFramework = "net10.0-windows";
 
         [Fact]
-        public void ProjectAndAppConfig_DeclareDotNetFramework48()
+        public void Project_DeclaresNet10WindowsTargetFramework()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string projectPath = Path.Combine(repositoryRoot, "readboard", "readboard.csproj");
-            string appConfigPath = Path.Combine(repositoryRoot, "readboard", "App.config");
 
-            XNamespace projectNamespace = "http://schemas.microsoft.com/developer/msbuild/2003";
             XDocument projectDocument = XDocument.Load(projectPath);
-            string[] targetFrameworkVersions = projectDocument
-                .Descendants(projectNamespace + "TargetFrameworkVersion")
+            string[] targetFrameworks = projectDocument
+                .Descendants("TargetFramework")
                 .Select(element => element.Value.Trim())
                 .ToArray();
 
-            Assert.NotEmpty(targetFrameworkVersions);
-            Assert.All(targetFrameworkVersions, value => Assert.Equal(ExpectedTargetFrameworkVersion, value));
-
-            XDocument appConfigDocument = XDocument.Load(appConfigPath);
-            XElement supportedRuntime = appConfigDocument.Descendants("supportedRuntime").Single();
-            Assert.Equal(ExpectedRuntimeSku, supportedRuntime.Attribute("sku").Value);
+            Assert.NotEmpty(targetFrameworks);
+            Assert.All(targetFrameworks, value => Assert.Equal(ExpectedTargetFramework, value));
         }
 
         [Fact]
-        public void PackagingScriptAndWorkflow_UseSharedFramework48Contract()
+        public void PackagingScriptAndWorkflow_UseNet10BuildContract()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string scriptPath = Path.Combine(repositoryRoot, "scripts", "package-readboard-release.local.ps1");
@@ -43,8 +36,8 @@ namespace Readboard.VerificationTests
             string scriptContent = File.ReadAllText(scriptPath);
             string workflowContent = File.ReadAllText(workflowPath);
 
-            Assert.Contains("/p:TargetFrameworkVersion=v4.8", scriptContent);
-            Assert.DoesNotContain("v4.5", scriptContent);
+            Assert.Contains("dotnet build", scriptContent);
+            Assert.DoesNotContain("TargetFrameworkVersion=v4.8", scriptContent);
             Assert.Contains("./scripts/package-readboard-release.local.ps1", workflowContent);
             Assert.Contains("Readboard.VerificationTests.csproj", workflowContent);
         }
@@ -60,49 +53,45 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
-        public void PackagingScriptAndWorkflow_RestoreLegacyPackagesConfigBeforeBuild()
+        public void PackagingScript_DoesNotUseLegacyPackagesConfigRestore()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string scriptContent = File.ReadAllText(Path.Combine(repositoryRoot, "scripts", "package-readboard-release.local.ps1"));
-            string workflowContent = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "package-release.yml"));
 
-            Assert.Contains("RestorePackagesConfig=true", scriptContent);
-            Assert.Contains("NuGet.Config", scriptContent);
-            Assert.Contains("RestorePackagesConfig=true", workflowContent);
-            Assert.Contains("NuGet.Config", workflowContent);
+            Assert.DoesNotContain("RestorePackagesConfig", scriptContent);
+            Assert.DoesNotContain("packages.config", scriptContent);
         }
 
         [Fact]
-        public void PackagingScript_UsesBuildTargetForReadboardProject()
+        public void PackagingScript_UsesDotnetBuildForReadboardProject()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string scriptContent = File.ReadAllText(Path.Combine(repositoryRoot, "scripts", "package-readboard-release.local.ps1"));
 
-            Assert.Contains("/t:Build", scriptContent);
+            Assert.Contains("dotnet build", scriptContent);
             Assert.DoesNotContain("/t:Rebuild", scriptContent);
         }
 
         [Fact]
-        public void PackagingScript_RequiresLightweightRuntimeFile()
+        public void PackagingScript_DoesNotReferenceLightweightRuntime()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string scriptContent = File.ReadAllText(Path.Combine(repositoryRoot, "scripts", "package-readboard-release.local.ps1"));
 
-            Assert.Contains("$requiredStaticFiles", scriptContent);
-            Assert.Contains("'lw.dll'", scriptContent);
-            Assert.Contains("Copy-RelativeFiles -SourceDir $projectRoot -RelativePaths $requiredStaticFiles", scriptContent);
+            Assert.DoesNotContain("lw.dll", scriptContent);
+            Assert.DoesNotContain("Interop.lw", scriptContent);
         }
 
         [Fact]
-        public void ReadboardProject_UsesCheckedInInteropAssembly()
+        public void ReadboardProject_DoesNotReferenceRemovedLightweightInterop()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string projectContent = File.ReadAllText(Path.Combine(repositoryRoot, "readboard", "readboard.csproj"));
-            string interopAssemblyPath = Path.Combine(repositoryRoot, "readboard", "Interop.lw.dll");
 
-            Assert.True(File.Exists(interopAssemblyPath), "Expected checked-in Interop.lw.dll for clean builds.");
-            Assert.Contains("<HintPath>Interop.lw.dll</HintPath>", projectContent);
-            Assert.DoesNotContain("<Content Include=\"lw.dll\">", projectContent);
+            Assert.False(File.Exists(Path.Combine(repositoryRoot, "readboard", "Interop.lw.dll")));
+            Assert.False(File.Exists(Path.Combine(repositoryRoot, "readboard", "lw.dll")));
+            Assert.DoesNotContain("Interop.lw", projectContent);
+            Assert.DoesNotContain("lw.dll", projectContent);
             Assert.DoesNotContain("GenerateLwInterop", projectContent);
             Assert.DoesNotContain("generate_lw_interop.ps1", projectContent);
         }
@@ -153,6 +142,18 @@ namespace Readboard.VerificationTests
                     (string)element.Attribute("Include"),
                     @"..\..\readboard\Core\Display\DisplayScaling.cs",
                     StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void Program_WiresColorModeStartupThroughGetSystemColorMode()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string source = File.ReadAllText(Path.Combine(repositoryRoot, "readboard", "Program.cs"));
+
+            Assert.Contains("Application.SetColorMode(GetSystemColorMode(Config.ColorMode))", source);
+            Assert.Contains("case AppConfig.ColorModeDark: return SystemColorMode.Dark;", source);
+            Assert.Contains("case AppConfig.ColorModeLight: return SystemColorMode.Classic;", source);
+            Assert.Contains("default: return SystemColorMode.System;", source);
         }
 
         private static string[] ReadWorkflowSequence(string workflowContent, string rootKey, string parentKey, string sequenceKey)

@@ -5,6 +5,10 @@ namespace readboard
         internal const int ClassicUiThemeMode = 0;
         internal const int OptimizedUiThemeMode = 1;
 
+        internal const int ColorModeSystem = 0;
+        internal const int ColorModeDark = 1;
+        internal const int ColorModeLight = 2;
+
         public string ProtocolVersion { get; set; }
         public string MachineKey { get; set; }
         public int BlackOffset { get; set; }
@@ -23,6 +27,7 @@ namespace readboard
         public bool PlayPonder { get; set; }
         public bool DisableShowInBoardShortcut { get; set; }
         public int UiThemeMode { get; set; }
+        public int ColorMode { get; set; }
         public SyncMode SyncMode { get; set; }
         public bool SyncBoth { get; set; }
         public int BoardWidth { get; set; }
@@ -54,6 +59,7 @@ namespace readboard
                 PlayPonder = true,
                 DisableShowInBoardShortcut = false,
                 UiThemeMode = OptimizedUiThemeMode,
+                ColorMode = ColorModeSystem,
                 SyncMode = SyncMode.Fox,
                 SyncBoth = false,
                 BoardWidth = 19,

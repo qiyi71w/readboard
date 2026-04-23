@@ -69,7 +69,6 @@ namespace readboard
         public string LegacyTypeToken { get; set; }
         public bool ShowInBoard { get; set; }
         public bool SupportsForegroundFoxInBoardProtocol { get; set; }
-        public bool CanUseLightweightInterop { get; set; }
         public bool AutoMinimize { get; set; }
         public int SampleIntervalMs { get; set; }
         public bool UseEnhancedCapture { get; set; }

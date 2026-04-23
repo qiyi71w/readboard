@@ -227,6 +227,8 @@ namespace readboard
             InitializeRuntime(options);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+            Application.SetColorMode(GetSystemColorMode(Config.ColorMode));
 
             using (IReadBoardTransport transport = CreateTransport(options))
             {
@@ -423,6 +425,11 @@ namespace readboard
             langItems["SettingsForm_chkDisableShowInBoardShortcut"] = "关闭显示选点快捷键";
             langItems["SettingsForm_chkEnhanceScreen_ToolTip"] = "勾选可获取桌面外的截图,通常不需要(可能导致刷新降低,无法实时切换棋局等问题)";
             langItems["SettingsForm_chkPonder_ToolTip"] = "双向同步自动落子时,引擎在对手的回合计算";
+            langItems["SettingsForm_lblColorMode"] = "颜色模式:";
+            langItems["SettingsForm_rdoColorSystem"] = "跟随系统";
+            langItems["SettingsForm_rdoColorDark"] = "深色";
+            langItems["SettingsForm_rdoColorLight"] = "浅色";
+            langItems["SettingsForm_colorModeRestartTip"] = "颜色模式已更改，重启后生效。";
             langItems["SettingsForm_mustBeInteger"] = "必须输入整数";
             langItems["SettingsForm_outOfRange"] = "输入的值超过范围";
             langItems["SettingsForm_resetDefaultTip"] = "已恢复默认设置,请重新打开";
@@ -458,6 +465,16 @@ namespace readboard
             if (candidate == null || candidate.IsDisposed)
                 return null;
             return candidate;
+        }
+
+        private static SystemColorMode GetSystemColorMode(int colorMode)
+        {
+            switch (colorMode)
+            {
+                case AppConfig.ColorModeDark: return SystemColorMode.Dark;
+                case AppConfig.ColorModeLight: return SystemColorMode.Classic;
+                default: return SystemColorMode.System;
+            }
         }
     }
 }
