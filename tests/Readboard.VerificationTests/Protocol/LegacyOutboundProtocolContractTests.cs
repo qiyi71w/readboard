@@ -98,6 +98,53 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("forceRebuild", adapter.Serialize(adapter.CreateForceRebuildMessage()));
         }
 
+        [Fact]
+        public void ProtocolKeywords_DefineStableLegacyWireTokens()
+        {
+            Assert.Equal("place", ProtocolKeywords.Place);
+            Assert.Equal("loss", ProtocolKeywords.Loss);
+            Assert.Equal("notinboard", ProtocolKeywords.NotInBoard);
+            Assert.Equal("version", ProtocolKeywords.Version);
+            Assert.Equal("quit", ProtocolKeywords.Quit);
+            Assert.Equal("ready", ProtocolKeywords.Ready);
+            Assert.Equal("clear", ProtocolKeywords.Clear);
+            Assert.Equal("end", ProtocolKeywords.BoardEnd);
+            Assert.Equal("playponder on", ProtocolKeywords.PlayPonderOn);
+            Assert.Equal("playponder off", ProtocolKeywords.PlayPonderOff);
+            Assert.Equal("version: ", ProtocolKeywords.VersionResponsePrefix);
+            Assert.Equal("sync", ProtocolKeywords.Sync);
+            Assert.Equal("stopsync", ProtocolKeywords.StopSync);
+            Assert.Equal("endsync", ProtocolKeywords.EndSync);
+            Assert.Equal("bothSync", ProtocolKeywords.BothSync);
+            Assert.Equal("nobothSync", ProtocolKeywords.NoBothSync);
+            Assert.Equal("foreFoxWithInBoard", ProtocolKeywords.ForegroundFoxWithInBoard);
+            Assert.Equal("notForeFoxWithInBoard", ProtocolKeywords.NotForegroundFoxWithInBoard);
+            Assert.Equal("syncPlatform ", ProtocolKeywords.SyncPlatformPrefix);
+            Assert.Equal("generic", ProtocolKeywords.GenericSyncPlatform);
+            Assert.Equal("roomToken ", ProtocolKeywords.RoomTokenPrefix);
+            Assert.Equal("liveTitleMove ", ProtocolKeywords.LiveTitleMovePrefix);
+            Assert.Equal("recordCurrentMove ", ProtocolKeywords.RecordCurrentMovePrefix);
+            Assert.Equal("recordTotalMove ", ProtocolKeywords.RecordTotalMovePrefix);
+            Assert.Equal("recordAtEnd 1", ProtocolKeywords.RecordAtEndTrue);
+            Assert.Equal("recordAtEnd 0", ProtocolKeywords.RecordAtEndFalse);
+            Assert.Equal("recordTitleFingerprint ", ProtocolKeywords.RecordTitleFingerprintPrefix);
+            Assert.Equal("forceRebuild", ProtocolKeywords.ForceRebuild);
+            Assert.Equal("foxMoveNumber ", ProtocolKeywords.FoxMoveNumberPrefix);
+            Assert.Equal("start ", ProtocolKeywords.StartPrefix);
+            Assert.Equal("play>", ProtocolKeywords.PlayPrefix);
+            Assert.Equal(">", ProtocolKeywords.PlaySeparator);
+            Assert.Equal("noinboard", ProtocolKeywords.NoInBoard);
+            Assert.Equal("placeComplete", ProtocolKeywords.PlaceComplete);
+            Assert.Equal("error place failed", ProtocolKeywords.PlacementFailed);
+            Assert.Equal("timechanged ", ProtocolKeywords.TimeChangedPrefix);
+            Assert.Equal("playoutschanged ", ProtocolKeywords.PlayoutsChangedPrefix);
+            Assert.Equal("firstchanged ", ProtocolKeywords.FirstPolicyChangedPrefix);
+            Assert.Equal("noponder", ProtocolKeywords.NoPonder);
+            Assert.Equal("stopAutoPlay", ProtocolKeywords.StopAutoPlay);
+            Assert.Equal("pass", ProtocolKeywords.Pass);
+            Assert.Equal("0", ProtocolKeywords.DefaultNumericValue);
+        }
+
         private static string BuildVisibleOverlayLine(LegacyOverlayService overlayService)
         {
             OverlayUpdateResult update = overlayService.BuildUpdate(new OverlayUpdateRequest
