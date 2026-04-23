@@ -23,13 +23,14 @@
 
 ---
 
-## 2026-04-23 本轮工作区完成记录
+## 2026-04-23 本轮工作完成记录
 
-- **B: ProjectReference 转换**：测试项目和 benchmark 项目已从生产源码链接改为引用 `readboard.csproj`；保留测试支撑源码链接；新增 `InternalsVisibleTo`；把跨程序集不可用的测试侧 `partial` hook 改为生产程序集内的 `internal` 诊断入口。
-- **D: 协议关键字常量化**：新增 `ProtocolKeywords`，`LegacyProtocolAdapter` 的 parse / emit 路径改用常量；已确认 `lizzieyzy-next` 没有共享 enum/常量，wire 文本逐字不变。
-- **E: MainForm 静态镜像字段清理**：删除 `ox1` / `oy1` / `type` 这三个历史 `public static` 镜像字段及同步赋值；保留 `boardW` / `boardH` 运行时字段和 `LegacyTypeToken = CurrentSyncType.ToString()` 协议行为。
+- **B: ProjectReference 转换** —— commit `d16b7fc`：测试项目和 benchmark 项目从生产源码链接改为引用 `readboard.csproj`；保留测试支撑源码链接；新增 `InternalsVisibleTo`；把跨程序集不可用的测试侧 `partial` hook 改为生产程序集内的 `internal` 诊断入口；新增 `VerificationTests_Project_UsesProjectReferenceForProductionSources` 对称合约测试。
+- **D: 协议关键字常量化** —— commit `5fef44a`：新增 `ProtocolKeywords`，`LegacyProtocolAdapter` 的 parse / emit 路径改用常量；已确认 `lizzieyzy-next` 没有共享 enum/常量，wire 文本逐字不变。
+- **E: MainForm 静态镜像字段清理** —— commit `4dcd7fb`：删除 `ox1` / `oy1` / `type` 这三个历史 `public static` 镜像字段及同步赋值；保留 `boardW` / `boardH` 运行时字段和 `LegacyTypeToken = CurrentSyncType.ToString()` 协议行为。
+- **superpowers 文档入库** —— commit `ce4cad7`：把原 `docs/superpowers/{specs,plans}/` 平迁到 `docs/specs/` 与 `docs/plans/`，让 mainform 主题、.NET 10 升级、legacy 桌面布局的设计与实施计划进入版本控制。
 - **未继续执行 C**：`SyncSessionCoordinator` 拆 `OutboundProtocolDispatcher` 的问题真实存在，但属于拆类级大重构；本轮只记录复审结论，等待明确确认后再执行。
-- **本轮最终验证**：`dotnet build readboard.sln -c Debug` 为 0 错误；`timeout 60s dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --no-build` 为 311 通过 / 0 失败；`git diff --check` 干净。
+- **本轮最终验证**：`dotnet build readboard.sln -c Debug` 为 0 错误；`dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --no-build` 为 312 通过 / 0 失败；benchmark 项目独立 build 0 错误；`git status` 工作树干净。
 
 ---
 
@@ -49,24 +50,21 @@
 ### 🟢 高 ROI · 中风险（推荐继续，但先处理阻塞）
 
 #### B. 测试 / 基准项目改 ProjectReference + InternalsVisibleTo
-- **状态**: 工作区已完成，待单独 commit
-- **依据**: `docs/superpowers/plans/2026-04-22-dotnet10-upgrade.md` Task 7-8（Phase 2 早已规划，未执行）
-- **当前问题**: `tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj` 有 69 行生产源码链接，benchmark 项目有 48 行生产源码链接；另有 3 行测试共享源码链接和 5 行 benchmark 复用测试支撑源码不能直接删除。最近 commit `956528c` 就是因为 benchmark 漏同步 `FoxWindowContext` 导致 CI 红。每加一个 Core 类型要改 3 个文件。
+- **状态**: ✅ 已完成（commit `d16b7fc`）
+- **依据**: `docs/plans/2026-04-22-dotnet10-upgrade.md` Task 7-8（Phase 2 早已规划，本轮落地）
+- **执行前的问题**: `tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj` 有 69 行生产源码链接，benchmark 项目有 48 行；最近 commit `956528c` 就是因为 benchmark 漏同步 `FoxWindowContext` 导致 CI 红 —— 每加一个 Core 类型要改 3 个文件。
 - **补充边界**: 见 `docs/specs/2026-04-23-test-project-reference-boundaries.md`。`ProjectReference` 只替代生产源码链接，不替代测试支撑源码。
-- **方案**（按文档原计划执行，但需套用补充边界）：
-  1. 在 `readboard/Properties/AssemblyInfo.cs` 加 `[assembly: InternalsVisibleTo("Readboard.VerificationTests")]` 与 `[assembly: InternalsVisibleTo("Readboard.ProtocolConfigBenchmarks")]`
-  2. 先处理 `tests/Readboard.VerificationTests/Protocol/SyncSessionCoordinator.TestHooks.cs`：测试项目里的生产类型 `partial` 扩展不能跨程序集工作；删除/改写测试，或把极小的 `internal` 诊断入口放进生产程序集
-  3. 测试项目只删除 `..\..\readboard\...` 生产源码链接，保留 `..\Shared\...` 测试支撑源码链接
-  4. benchmark 项目只删除 `..\..\readboard\...` 生产源码链接，保留 `tests/Shared` 与测试 harness 链接，除非先抽独立测试支撑项目
-  5. 两个项目都加 `<ProjectReference Include="..\..\readboard\readboard.csproj" />`
-  6. `WindowsFormsScreenShim.cs`、`ProgramShim.cs` 仅在实际存在时删除；当前 `tests/Shared` 下未发现这两个文件则该步骤 no-op
-  7. 跑 `dotnet build` + `timeout 60s dotnet test` 修可见性问题，特别核对 `DispatchProxy` 代理内部接口的测试
-- **风险**: 中偏高。除一般 `internal` 可见性外，还存在 partial 测试钩子和内部接口动态代理的编译/运行风险
-- **预估**: 1-2 commit，总改动仍以 csproj 为主，但可能需要少量测试钩子重写
+- **实际执行**:
+  1. `readboard/Properties/AssemblyInfo.cs` 加 `[assembly: InternalsVisibleTo("Readboard.VerificationTests")]` 与 `[assembly: InternalsVisibleTo("Readboard.ProtocolConfigBenchmarks")]`
+  2. 删除 `tests/.../SyncSessionCoordinator.TestHooks.cs`（跨程序集 partial 不可用），把 `WaitForPendingMoveAvailability` 作为 `internal` 诊断入口移到生产 `SyncSessionCoordinator`
+  3. 测试和 benchmark 项目都删除 `..\..\readboard\...` 生产源码链接，保留 `..\Shared\...` / harness 测试支撑链接
+  4. 两个项目都加 `<ProjectReference Include="..\..\readboard\readboard.csproj" />`
+  5. `FrameworkContractTests` 改为锁定两个项目都用 `ProjectReference` 且不再链接生产源码（含新增的 `VerificationTests_Project_UsesProjectReferenceForProductionSources` 对称合约）
+- **风险记录**: 中偏高；实际编译通过，无可见性破坏
 - **新文档**: `docs/specs/2026-04-23-test-project-reference-boundaries.md`
 - **验证**:
-  - `dotnet build readboard.sln -c Debug` —— 0 错误（工作区修复前后均通过）
-  - `timeout 60s dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj` —— 309 通过 / 0 失败
+  - `dotnet build readboard.sln -c Debug` —— 0 错误
+  - `dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --no-build` —— 312 通过 / 0 失败
   - `dotnet build benchmarks/Readboard.ProtocolConfigBenchmarks/Readboard.ProtocolConfigBenchmarks.csproj -c Debug` —— 0 错误
 
 #### C. `SyncSessionCoordinator` 拆 OutboundProtocolDispatcher
@@ -83,35 +81,31 @@
 ### 🟡 中 ROI · 需谨慎（要先校对外部影响）
 
 #### D. 协议关键字常量化
-- **状态**: 工作区已完成，待单独 commit
-- **当前**: `Core/Protocol/LegacyProtocolAdapter.cs` 散落 `"sync"` / `"start"` / `"place"` / `"end"` / `"placeComplete"` / `"notinboard"` / `"version"` / `"quit"` / `"loss"` / `"bothSync"` / `"foreFoxWithInBoard"` 等裸字符串
+- **状态**: ✅ 已完成（commit `5fef44a`）
+- **执行前的问题**: `Core/Protocol/LegacyProtocolAdapter.cs` 散落 `"sync"` / `"start"` / `"place"` / `"end"` / `"placeComplete"` / `"notinboard"` / `"version"` / `"quit"` / `"loss"` / `"bothSync"` / `"foreFoxWithInBoard"` 等裸字符串
 - **依据**: dotnet10-upgrade-design.md 明确 **Non-Goals: 不改变与 LizzieYzy-Next 的通信协议** —— 常量值必须**逐字相同**
 - **补充边界**: 见 `docs/specs/2026-04-23-protocol-keyword-constants.md`。`ProtocolKeywords` 只是内部字符串别名，不是新公共 API；所有值必须与旧 wire 文本逐字相同。
 - **行动前已完成**: 已 grep `D:\dev\weiqi\lizzieyzy-next`，确认集成端 `src/main/java/featurecat/lizzie/analysis/ReadBoard.java` 直接用字面值 `startsWith` / `equals` 解析，没有共享代码或跨仓库 enum 可复用。
-- **方案**: 已加 `Core/Protocol/ProtocolKeywords.cs` 静态类（不是 enum，因为 wire 格式是字符串），`LegacyProtocolAdapter` 的 parse / emit 已改为引用常量
+- **实际执行**: 加 `Core/Protocol/ProtocolKeywords.cs` 静态 internal 类（保持 string 类型，wire 协议本身才是公共合约），`LegacyProtocolAdapter` 的 parse / emit 改为引用常量；新增 `ProtocolKeywords_DefineStableLegacyWireTokens` 锁定每个常量的字面值
 - **新文档**: `docs/specs/2026-04-23-protocol-keyword-constants.md`
 - **验证**:
-  - 先新增 `ProtocolKeywords_DefineStableLegacyWireTokens`，在缺少 `ProtocolKeywords` 时编译失败，确认测试覆盖本轮新边界
   - `dotnet build readboard.sln -c Debug` —— 0 错误
-  - `timeout 60s dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --no-build` —— 310 通过 / 0 失败
-- **预估**: 1 commit，纯内部清理
+  - `dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --no-build` —— 312 通过 / 0 失败
 
 #### E. 清理 `Form1` 的 `public static` 可变字段
-- **状态**: 工作区已完成，待单独 commit
-- **当前**: `Form1.cs:22, 25, 38` —— `public static int ox1, oy1, type`，外加 `boardW`/`boardH`（`Form1.cs:42-43`）与 `Config.BoardWidth/Height` 双份同步
+- **状态**: ✅ 已完成（commit `4dcd7fb`）
+- **执行前的问题**: `Form1.cs:22, 25, 38` —— `public static int ox1, oy1, type`，外加 `boardW`/`boardH`（`Form1.cs:42-43`）与 `Config.BoardWidth/Height` 双份同步
 - **补充边界**: 见 `docs/specs/2026-04-23-mainform-state-boundaries.md`。`AppConfig` 是持久化配置快照，不是所有 UI 编辑中间态的实时唯一来源。
-- **方案**:
-  1. `ox1` / `oy1` 是框选坐标的历史 public static 镜像；确认无外部引用后删除字段和 `UpdateSelectionBounds` 中的镜像赋值，不迁移到 Config
-  2. `type` 是 `currentSyncType` 的历史 public static 镜像；确认无外部引用后删除字段和 `SetCurrentSyncType` 中的镜像赋值，保留 `CurrentSyncType` 与 `LegacyTypeToken = CurrentSyncType.ToString()` 行为
-  3. `boardW` / `boardH` 暂不直接改走 `Program.CurrentContext.Config.BoardWidth/Height`；如要清理，另起小步用私有属性或 setter 收敛运行时读写，并保持保存时才写回 Config 的语义
+- **实际执行**:
+  1. 删除 `ox1` / `oy1` 字段和 `UpdateSelectionBounds` 中的镜像赋值（不迁移到 Config）
+  2. 删除 `type` 字段和 `SetCurrentSyncType` 中的镜像赋值，保留 `CurrentSyncType` 与 `LegacyTypeToken = CurrentSyncType.ToString()` 行为
+  3. `boardW` / `boardH` 本轮不动，作为后续单独 commit 候选
 - **行动前已完成**: grep 全仓 + `D:\dev\weiqi\lizzieyzy-next`，未发现 `MainForm.ox1`、`MainForm.oy1`、`MainForm.type`、`readboard.MainForm` 或相关 reflection 字段访问
-- **风险**: 中（如果集成端用了 reflection 访问，会无声破坏；`boardW`/`boardH` 若误改会改变配置保存语义）
-- **预估**: 1 commit 仅清理 public static 镜像；`boardW`/`boardH` 若继续清理应单独 commit
 - **新文档**: `docs/specs/2026-04-23-mainform-state-boundaries.md`
 - **验证**:
-  - 先新增 `MainForm_RemovesLegacyPublicStaticSelectionAndTypeMirrors`，在字段仍存在时失败，确认测试覆盖本轮清理目标
+  - 新增 `MainForm_RemovesLegacyPublicStaticSelectionAndTypeMirrors` 源码级回归测试，锁定字段不能复活
   - `dotnet build readboard.sln -c Debug` —— 0 错误
-  - `timeout 60s dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --no-build` —— 311 通过 / 0 失败
+  - `dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --no-build` —— 312 通过 / 0 失败
 
 ---
 
@@ -144,18 +138,19 @@
 ## 推荐执行顺序
 
 1. ✅ **A** —— 已完成（commit `3f03c2c`）
-2. ✅ **B** —— ProjectReference + InternalsVisibleTo（工作区已完成，待单独 commit）
-3. ✅ **D** —— 协议关键字常量化（工作区已完成，待单独 commit）
-4. ✅ **E** —— 清理 `Form1.public static` 字段（工作区已完成，待单独 commit）
-5. **C** —— 拆 `OutboundProtocolDispatcher`（最大改动面，前面铺垫做完再上）
+2. ✅ **B** —— ProjectReference + InternalsVisibleTo（commit `d16b7fc`）
+3. ✅ **D** —— 协议关键字常量化（commit `5fef44a`）
+4. ✅ **E** —— 清理 `Form1.public static` 字段（commit `4dcd7fb`）
+5. **C** —— 拆 `OutboundProtocolDispatcher`（最大改动面，待用户确认后再上）
 
-每完成一条：跑 `dotnet build` + 带 60 秒硬超时的 `dotnet test`，确认 309 测试不回退；自查不引入新问题；commit；继续下一条。
+每完成一条：跑 `dotnet build` + `dotnet test`，确认测试不回退；自查不引入新问题；commit；继续下一条。
 
 ## 验证基线
 
 - `dotnet build readboard.sln -c Debug` —— 0 错误（已确认）
-- `timeout 60s dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj` —— 311 通过 / 0 失败（已确认，D/E 各新增 1 个回归测试）
-- 每轮 simplify 后必须维持这两个数字
+- `dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --no-build` —— 312 通过 / 0 失败（已确认；A/D/E 各新增 1 个回归测试，B 增 1 个对称合约测试）
+- benchmark 项目独立 build 0 错误（已确认）
+- 每轮 simplify 后必须维持这三个数字
 
 ## 不在范围内（评审后决策为不做）
 
