@@ -7,9 +7,9 @@
 
 - `docs/specs/2026-04-23-color-mode-design.md`
 - `docs/specs/2026-04-21-readboard-fox-title-status-design.md`
-- `docs/superpowers/specs/2026-04-22-dotnet10-upgrade-design.md`
-- `docs/superpowers/plans/2026-04-22-dotnet10-upgrade.md`（Phase 2 已规划测试/基准换 ProjectReference 的方案）
-- `docs/superpowers/specs/2026-04-21-mainform-theme-*`
+- `docs/specs/2026-04-22-dotnet10-upgrade-design.md`
+- `docs/plans/2026-04-22-dotnet10-upgrade.md`（Phase 2 已规划测试/基准换 ProjectReference 的方案）
+- `docs/specs/2026-04-21-mainform-theme-*`
 - `docs/specs/2026-04-23-test-project-reference-boundaries.md`
 - `docs/specs/2026-04-23-mainform-state-boundaries.md`
 - `docs/specs/2026-04-23-protocol-keyword-constants.md`
@@ -69,9 +69,9 @@
 
 #### C. `SyncSessionCoordinator` 拆 OutboundProtocolDispatcher
 - **状态**: 已复审，问题真实存在，但属于大重构；按仓库规则需确认后再执行
-- **当前**: `SyncSessionCoordinator.cs`（892 行）+ `.Orchestration.cs`（926 行），承担状态机、pending move 生命周期、协议下发、窗口上下文构建多重职责
+- **当前**: `SyncSessionCoordinator.cs`（887 行）+ `.Orchestration.cs`（926 行），承担状态机、pending move 生命周期、协议下发、窗口上下文构建多重职责
 - **方案**: 抽 `OutboundProtocolDispatcher` —— 把 `outboundProtocolSyncRoot` 锁住的 send/serialize 路径搬出来，coordinator 只调度
-- **风险**: 中。改动面大，但有 309 个测试覆盖
+- **风险**: 中。改动面大，但有 312 个测试覆盖
 - **必须新建 docs**: `docs/specs/2026-04-2X-sync-coordinator-decomposition.md` 说明边界（哪些状态/事件留 coordinator、哪些搬走）
 - **建议**: 先做 B，B 完了如果还有时间精力再做
 - **本轮复审记录**: 当前文件为 `SyncSessionCoordinator.cs` 887 行 + `.Orchestration.cs` 926 行；`outboundProtocolSyncRoot` 仍集中保护发送/序列化路径，未发现已有 docs 将该项定义为不做。由于这是拆类级别的大重构，本轮只记录复审结论，不直接改代码。
