@@ -236,6 +236,26 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void MainForm_RemovesLegacyPublicStaticSelectionAndTypeMirrors()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string setSyncTypeSlice = GetMethodSlice(source, "private void SetCurrentSyncType(int syncType)");
+            string updateSelectionSlice = GetMethodSlice(source, "private void UpdateSelectionBounds(int x1, int y1, int x2, int y2)");
+            string captureSlice = GetMethodSlice(source, "private SyncCoordinatorHostSnapshot CaptureSnapshotCore()");
+
+            Assert.DoesNotContain("public static int ox1", source);
+            Assert.DoesNotContain("public static int oy1", source);
+            Assert.DoesNotContain("public static int type", source);
+            Assert.Contains("currentSyncType = syncType;", setSyncTypeSlice);
+            Assert.DoesNotContain("type = syncType;", setSyncTypeSlice);
+            Assert.Contains("selectionX1 = x1;", updateSelectionSlice);
+            Assert.Contains("selectionY1 = y1;", updateSelectionSlice);
+            Assert.DoesNotContain("ox1 = x1;", updateSelectionSlice);
+            Assert.DoesNotContain("oy1 = y1;", updateSelectionSlice);
+            Assert.Contains("LegacyTypeToken = CurrentSyncType.ToString()", captureSlice);
+        }
+
+        [Fact]
         public void ResolveFoxWindowContext_ResolvesFoxTitlesFromSelectedHandleOrAncestors()
         {
             string source = LoadSource("readboard", "Form1.cs");

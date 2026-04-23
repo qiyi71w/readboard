@@ -19,10 +19,8 @@ namespace readboard
         // Boolean showDebugImage = true;
         Boolean clicked = false;
 
-        public static int ox1;
         private int selectionX1;
         int ox2;
-        public static int oy1;
         private int selectionY1;
         int oy2;
         IntPtr hwnd = IntPtr.Zero;
@@ -35,7 +33,6 @@ namespace readboard
         private const int TYPE_FOX_BACKGROUND_PLACE = 4;
         private const int TYPE_FOREGROUND = 5;
         private const int ContinuousSyncPollIntervalMs = 100;
-        public static int type = TYPE_FOX;
         private int currentSyncType = TYPE_FOX;
         // Boolean isQTYC = false;
         // int boardWidth=19;
@@ -126,15 +123,12 @@ namespace readboard
         private void SetCurrentSyncType(int syncType)
         {
             currentSyncType = syncType;
-            type = syncType;
         }
 
         private void UpdateSelectionBounds(int x1, int y1, int x2, int y2)
         {
             selectionX1 = x1;
             selectionY1 = y1;
-            ox1 = x1;
-            oy1 = y1;
             ox2 = x2;
             oy2 = y2;
         }
