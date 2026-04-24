@@ -38,7 +38,8 @@ namespace Readboard.VerificationTests
 
             Assert.Contains("dotnet publish", scriptContent);
             Assert.Contains("--self-contained true", scriptContent);
-            Assert.Contains("-r win-x64", scriptContent);
+            Assert.Contains("$publishRuntimeIdentifier = 'win-x64'", scriptContent);
+            Assert.Contains("-r $publishRuntimeIdentifier", scriptContent);
             Assert.DoesNotContain("TargetFrameworkVersion=v4.8", scriptContent);
             Assert.Contains("./scripts/package-readboard-release.local.ps1", workflowContent);
             Assert.Contains("Readboard.VerificationTests.csproj", workflowContent);

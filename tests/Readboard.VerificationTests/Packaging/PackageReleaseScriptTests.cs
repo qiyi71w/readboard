@@ -9,6 +9,20 @@ namespace Readboard.VerificationTests
     public sealed class PackageReleaseScriptTests
     {
         [Fact]
+        public void SkipBuild_FailsWhenBuildOutputDirectoryDoesNotExist()
+        {
+            using (PackagingWorkspace workspace = PackagingWorkspace.Create())
+            {
+                Directory.Delete(workspace.BuildOutputDir, recursive: true);
+
+                PackagingResult result = workspace.RunPackagingScript();
+
+                Assert.NotEqual(0, result.ExitCode);
+                Assert.Contains("发布输出目录", result.Output);
+            }
+        }
+
+        [Fact]
         public void SkipBuild_FailsWhenRequiredBuildFilesAreMissing()
         {
             using (PackagingWorkspace workspace = PackagingWorkspace.Create())

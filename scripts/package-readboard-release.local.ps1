@@ -17,12 +17,15 @@ $projectRoot = Join-Path $repoRoot 'readboard'
 $projectFile = Join-Path $projectRoot 'readboard.csproj'
 $assemblyInfoPath = Join-Path $projectRoot 'Properties\AssemblyInfo.cs'
 
+$publishRuntimeIdentifier = 'win-x64'
+$publishTargetFramework = 'net10.0-windows'
+
 if (-not $ReleaseRoot) {
     $ReleaseRoot = Join-Path $repoRoot 'release'
 }
 
 if (-not $BuildOutputDir) {
-    $BuildOutputDir = Join-Path $projectRoot "bin\$Configuration\net10.0-windows\win-x64\publish"
+    $BuildOutputDir = Join-Path $projectRoot "bin\$Configuration\$publishTargetFramework\$publishRuntimeIdentifier\publish"
 }
 
 $requiredBuildFiles = @(
@@ -129,13 +132,14 @@ $releaseZipPath = Join-Path $ReleaseRoot ($releaseDirectoryName + '.zip')
 $resolvedReleaseZipPath = $releaseZipPath
 
 if (-not $SkipBuild) {
-    Write-Host "Publishing $($versionInfo.TagVersion) with dotnet (self-contained, win-x64)"
-    dotnet publish $projectFile -c $Configuration -r win-x64 --self-contained true --nologo -v m
+    Write-Host "Publishing $($versionInfo.TagVersion) with dotnet (self-contained, $publishRuntimeIdentifier)"
+    dotnet publish $projectFile -c $Configuration -r $publishRuntimeIdentifier --self-contained true --nologo -v m
     if ($LASTEXITCODE -ne 0) {
         throw "发布失败，dotnet 退出码: $LASTEXITCODE"
     }
 }
 
+Assert-PathExists -Path $BuildOutputDir -Label '发布输出目录（dotnet publish 未产出或 BuildOutputDir 路径配置错误）'
 Assert-RequiredFiles -SourceDir $BuildOutputDir -RequiredFiles $requiredBuildFiles
 
 if (Test-Path -LiteralPath $releaseDirectory) {
