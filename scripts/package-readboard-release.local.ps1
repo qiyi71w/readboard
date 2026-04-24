@@ -93,9 +93,7 @@ function Copy-DirectoryContents {
         [string]$DestinationDir
     )
 
-    foreach ($item in Get-ChildItem -LiteralPath $SourceDir -File) {
-        Copy-Item -LiteralPath $item.FullName -Destination (Join-Path $DestinationDir $item.Name) -Force
-    }
+    Copy-Item -Path (Join-Path $SourceDir '*') -Destination $DestinationDir -Recurse -Force
 }
 
 function Update-ReleaseArtifactTimestamps {
