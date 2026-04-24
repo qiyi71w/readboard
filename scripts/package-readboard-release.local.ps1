@@ -17,32 +17,16 @@ $projectRoot = Join-Path $repoRoot 'readboard'
 $projectFile = Join-Path $projectRoot 'readboard.csproj'
 $assemblyInfoPath = Join-Path $projectRoot 'Properties\AssemblyInfo.cs'
 
+$publishRuntimeIdentifier = 'win-x64'
+$publishTargetFramework = 'net10.0-windows'
+
 if (-not $ReleaseRoot) {
     $ReleaseRoot = Join-Path $repoRoot 'release'
 }
 
 if (-not $BuildOutputDir) {
-    $BuildOutputDir = Join-Path $projectRoot "bin\$Configuration\net10.0-windows"
+    $BuildOutputDir = Join-Path $projectRoot "bin\$Configuration\$publishTargetFramework\$publishRuntimeIdentifier\publish"
 }
-
-$buildPatterns = @(
-    'readboard.exe',
-    'readboard.dll',
-    'readboard.pdb',
-    'readboard.runtimeconfig.json',
-    'readboard.deps.json',
-    'OpenCvSharp*.dll',
-    'OpenCvSharp*.pdb'
-)
-
-$optionalStaticPatterns = @(
-    'language_*.txt',
-    'readme*.rtf'
-)
-
-$nativeRuntimePatterns = @(
-    'OpenCvSharpExtern.dll'
-)
 
 $requiredBuildFiles = @(
     'readboard.exe',
@@ -106,32 +90,13 @@ function Assert-RequiredFiles {
     }
 }
 
-function Copy-MatchingFiles {
+function Copy-DirectoryContents {
     param(
         [string]$SourceDir,
-        [string[]]$Patterns,
         [string]$DestinationDir
     )
 
-    foreach ($pattern in $Patterns) {
-        foreach ($item in Get-ChildItem -LiteralPath $SourceDir -Filter $pattern -File -ErrorAction SilentlyContinue) {
-            Copy-Item -LiteralPath $item.FullName -Destination (Join-Path $DestinationDir $item.Name) -Force
-        }
-    }
-}
-
-function Copy-NativeRuntimeFiles {
-    param(
-        [string]$SourceDir,
-        [string[]]$Patterns,
-        [string]$DestinationDir
-    )
-
-    foreach ($pattern in $Patterns) {
-        foreach ($item in Get-ChildItem -Path $SourceDir -Filter $pattern -Recurse -File -ErrorAction SilentlyContinue) {
-            Copy-Item -LiteralPath $item.FullName -Destination (Join-Path $DestinationDir $item.Name) -Force
-        }
-    }
+    Copy-Item -Path (Join-Path $SourceDir '*') -Destination $DestinationDir -Recurse -Force
 }
 
 function Update-ReleaseArtifactTimestamps {
@@ -167,13 +132,14 @@ $releaseZipPath = Join-Path $ReleaseRoot ($releaseDirectoryName + '.zip')
 $resolvedReleaseZipPath = $releaseZipPath
 
 if (-not $SkipBuild) {
-    Write-Host "Building $($versionInfo.TagVersion) with dotnet"
-    dotnet build $projectFile -c $Configuration --nologo -v m
+    Write-Host "Publishing $($versionInfo.TagVersion) with dotnet (self-contained, $publishRuntimeIdentifier)"
+    dotnet publish $projectFile -c $Configuration -r $publishRuntimeIdentifier --self-contained true --nologo -v m
     if ($LASTEXITCODE -ne 0) {
-        throw "构建失败，dotnet 退出码: $LASTEXITCODE"
+        throw "发布失败，dotnet 退出码: $LASTEXITCODE"
     }
 }
 
+Assert-PathExists -Path $BuildOutputDir -Label '发布输出目录（dotnet publish 未产出或 BuildOutputDir 路径配置错误）'
 Assert-RequiredFiles -SourceDir $BuildOutputDir -RequiredFiles $requiredBuildFiles
 
 if (Test-Path -LiteralPath $releaseDirectory) {
@@ -181,9 +147,7 @@ if (Test-Path -LiteralPath $releaseDirectory) {
 }
 
 New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
-Copy-MatchingFiles -SourceDir $BuildOutputDir -Patterns $buildPatterns -DestinationDir $releaseDirectory
-Copy-MatchingFiles -SourceDir $projectRoot -Patterns $optionalStaticPatterns -DestinationDir $releaseDirectory
-Copy-NativeRuntimeFiles -SourceDir $BuildOutputDir -Patterns $nativeRuntimePatterns -DestinationDir $releaseDirectory
+Copy-DirectoryContents -SourceDir $BuildOutputDir -DestinationDir $releaseDirectory
 $packageTimestampUtc = [DateTime]::UtcNow
 Update-ReleaseArtifactTimestamps -ReleaseDirectory $releaseDirectory -TimestampUtc $packageTimestampUtc
 if ($SkipZip) {

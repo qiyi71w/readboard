@@ -36,7 +36,10 @@ namespace Readboard.VerificationTests
             string scriptContent = File.ReadAllText(scriptPath);
             string workflowContent = File.ReadAllText(workflowPath);
 
-            Assert.Contains("dotnet build", scriptContent);
+            Assert.Contains("dotnet publish", scriptContent);
+            Assert.Contains("--self-contained true", scriptContent);
+            Assert.Contains("$publishRuntimeIdentifier = 'win-x64'", scriptContent);
+            Assert.Contains("-r $publishRuntimeIdentifier", scriptContent);
             Assert.DoesNotContain("TargetFrameworkVersion=v4.8", scriptContent);
             Assert.Contains("./scripts/package-readboard-release.local.ps1", workflowContent);
             Assert.Contains("Readboard.VerificationTests.csproj", workflowContent);
@@ -63,12 +66,12 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
-        public void PackagingScript_UsesDotnetBuildForReadboardProject()
+        public void PackagingScript_UsesDotnetPublishForReadboardProject()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
             string scriptContent = File.ReadAllText(Path.Combine(repositoryRoot, "scripts", "package-readboard-release.local.ps1"));
 
-            Assert.Contains("dotnet build", scriptContent);
+            Assert.Contains("dotnet publish", scriptContent);
             Assert.DoesNotContain("/t:Rebuild", scriptContent);
         }
 
