@@ -19,6 +19,15 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void CreateDownloadStartInfo_ThrowsOnNullUri()
+        {
+            ArgumentNullException exception =
+                Assert.Throws<ArgumentNullException>(() => FormUpdate.CreateDownloadStartInfo(null));
+
+            Assert.Equal("downloadUri", exception.ParamName);
+        }
+
+        [Fact]
         public void DownloadClick_UsesShellLauncherAndLogsFailures()
         {
             string source = LoadReadboardSource("FormUpdate.cs");
