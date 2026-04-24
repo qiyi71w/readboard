@@ -260,10 +260,11 @@ namespace readboard
 
             try
             {
-                Process.Start(downloadUri.AbsoluteUri);
+                OpenDownloadUri(downloadUri);
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                Trace.TraceError(exception.ToString());
                 MessageBox.Show(
                     this,
                     NormalizeFallbackText(
@@ -273,6 +274,26 @@ namespace readboard
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
             }
+        }
+
+        internal static void OpenDownloadUri(Uri downloadUri)
+        {
+            using (Process process = Process.Start(CreateDownloadStartInfo(downloadUri)))
+            {
+            }
+        }
+
+        internal static ProcessStartInfo CreateDownloadStartInfo(Uri downloadUri)
+        {
+            if (downloadUri == null)
+            {
+                throw new ArgumentNullException(nameof(downloadUri));
+            }
+
+            return new ProcessStartInfo(downloadUri.AbsoluteUri)
+            {
+                UseShellExecute = true
+            };
         }
 
         private bool TryCreateDownloadUri(out Uri downloadUri, out string validationMessage)
