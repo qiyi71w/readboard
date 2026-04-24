@@ -10,8 +10,25 @@ $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $scriptDirectory "..")).Path
 $projectPath = Join-Path $repoRoot "readboard\readboard.csproj"
 
+function Get-TargetFramework {
+    param([string]$ProjectFile)
+
+    if (-not (Test-Path -LiteralPath $ProjectFile -PathType Leaf)) {
+        throw "Project file not found: $ProjectFile"
+    }
+
+    [xml]$csproj = Get-Content -LiteralPath $ProjectFile
+    $tfm = $csproj.Project.PropertyGroup.TargetFramework
+    if ($tfm -is [array]) { $tfm = ($tfm | Where-Object { $_ } | Select-Object -First 1) }
+    if ([string]::IsNullOrWhiteSpace($tfm)) {
+        throw "Could not read <TargetFramework> from $ProjectFile"
+    }
+    return $tfm.Trim()
+}
+
 if ([string]::IsNullOrWhiteSpace($ExePath)) {
-    $exePath = Join-Path $repoRoot "readboard\bin\$Configuration\net10.0-windows\readboard.exe"
+    $targetFramework = Get-TargetFramework -ProjectFile $projectPath
+    $exePath = Join-Path $repoRoot "readboard\bin\$Configuration\$targetFramework\readboard.exe"
 
     if (-not (Test-Path -LiteralPath $exePath -PathType Leaf)) {
         Write-Host "Building readboard $Configuration..."
