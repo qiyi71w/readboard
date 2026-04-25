@@ -33,7 +33,6 @@
 - `readboard/Core/Protocol/LegacySyncWindowLocator.cs` —— 加 `FindYikeWindow`（按标题前缀匹配 `弈客大厅` / `弈客直播`）
 - `readboard/Core/Protocol/LegacyProtocolAdapter.cs` —— 入站识别 `yike` 行，出站新增 `CreateYikeRoomTokenMessage` / `CreateYikeMoveNumberMessage`
 - `readboard/Core/Protocol/IReadBoardProtocolAdapter.cs` —— 同步增加方法签名
-- `readboard/Core/Protocol/SyncCoordinatorHostSnapshot.cs` —— 加 `YikeContext` 字段
 - `readboard/Core/Protocol/SyncSessionRuntimeState.cs` —— 加 `lastSentYikeContextSignature` / `lastCapturedYikeContext`
 - `readboard/Core/Protocol/SyncSessionCoordinator.cs` —— `SendBoardSnapshot` 判重纳入弈客签名；新增 `SetYikeContext` 入口；`Reset` 清理弈客字段
 - `readboard/Core/Protocol/SyncSessionCoordinator.Orchestration.cs` —— 后台落子分支接受 `SyncMode.Yike`
@@ -796,7 +795,7 @@ public void switching_away_from_yike_clears_context()
 }
 ```
 
-如果 `MainForm.Protocol.cs` 当前不便单测（直接持有 WinForms 句柄），先在本 task 抽出一层薄的 `YikeProtocolHandler` 静态/可测类型再测。
+如果 `MainForm.Protocol.cs` 当前不便单测（直接持有 WinForms 句柄），先在本 task 抽出一层薄的 `YikeProtocolHandler` 静态/可测类型再测。`_TestAccess` shim（`DualFormatAppConfigStore_TestAccess` / `MainFormProtocolHandler_TestAccess`）参考现有 Fox 测试的 `InternalsVisibleTo` 风格新建，不复用名字相近的别处 shim。`OnSyncModeChanged` 是该 handler 上新增的方法，作为本 task 实现的一部分。
 
 - [ ] **Step 2: 跑测试 FAIL**（如已通过则改加 UI 行为断言）
 
