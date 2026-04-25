@@ -43,9 +43,11 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Contains("void SetSyncPlatform(string platform);", coordinatorSource);
             Assert.Contains("void SetFoxWindowContext(FoxWindowContext context);", coordinatorSource);
+            Assert.Contains("void SetYikeContext(YikeWindowContext context);", coordinatorSource);
             Assert.Contains("void ArmForceRebuild();", coordinatorSource);
             Assert.Contains("sessionCoordinator.SetSyncPlatform(syncPlatform);", formSource);
             Assert.Contains("sessionCoordinator.SetFoxWindowContext(foxWindowContext);", formSource);
+            Assert.Contains("sessionCoordinator.SetYikeContext(yikeWindowContext);", formSource);
             Assert.Contains("sessionCoordinator.ArmForceRebuild();", formSource);
             Assert.DoesNotContain("((SyncSessionCoordinator)sessionCoordinator)", formSource);
         }

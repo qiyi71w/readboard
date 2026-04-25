@@ -113,6 +113,14 @@ namespace readboard
             }
         }
 
+        public void SetYikeContext(YikeWindowContext context)
+        {
+            lock (stateLock)
+            {
+                runtimeState.LastCapturedYikeContext = YikeWindowContext.CopyOf(context);
+            }
+        }
+
         public void ArmForceRebuild()
         {
             lock (stateLock)
@@ -425,13 +433,16 @@ namespace readboard
 
             int? effectiveFoxMoveNumber = ResolveEffectiveFoxMoveNumber(snapshot.FoxMoveNumber);
             OutboundWindowContext outboundContext;
+            string yikeSignature;
             lock (stateLock)
             {
                 outboundContext = BuildOutboundWindowContextUnsafe();
+                yikeSignature = ResolveYikeContextSignatureUnsafe();
                 if (string.Equals(sessionState.LastBoardPayload, snapshot.Payload, StringComparison.Ordinal)
                     && lastSentBoardFoxMoveNumber == effectiveFoxMoveNumber)
                 {
                     if (string.Equals(lastSentWindowContextSignature, outboundContext.Signature, StringComparison.Ordinal)
+                        && string.Equals(runtimeState.LastSentYikeContextSignature, yikeSignature, StringComparison.Ordinal)
                         && !outboundContext.ShouldForceRebuild)
                     {
                         return;
@@ -441,6 +452,7 @@ namespace readboard
                 sessionState.LastBoardPayload = snapshot.Payload;
                 lastSentBoardFoxMoveNumber = effectiveFoxMoveNumber;
                 lastSentWindowContextSignature = outboundContext.Signature;
+                runtimeState.LastSentYikeContextSignature = yikeSignature;
                 if (outboundContext.ShouldForceRebuild)
                     forceRebuildArmed = false;
             }
@@ -604,6 +616,12 @@ namespace readboard
             {
                 case ProtocolMessageKind.PlaceMove:
                     return () => currentHost.HandlePlaceRequest(message.MoveRequest);
+                case ProtocolMessageKind.YikeContext:
+                    return () => currentHost.HandleYikeContext(new YikeWindowContext
+                    {
+                        RoomToken = message.YikeRoomToken,
+                        MoveNumber = message.YikeMoveNumber
+                    });
                 case ProtocolMessageKind.LossFocus:
                     return currentHost.HandleLossFocus;
                 case ProtocolMessageKind.StopInBoard:
@@ -671,6 +689,8 @@ namespace readboard
             sessionState.LastOverlayProtocolLine = null;
             lastSentBoardFoxMoveNumber = null;
             lastSentWindowContextSignature = null;
+            runtimeState.LastCapturedYikeContext = null;
+            runtimeState.LastSentYikeContextSignature = null;
         }
 
         private bool TryCompletePendingMove(bool success)
@@ -819,6 +839,24 @@ namespace readboard
             messages.Add(protocolAdapter.CreateSyncPlatformMessage(normalizedPlatform));
             signatureParts.Add("platform=" + normalizedPlatform);
 
+            if (string.Equals(normalizedPlatform, ProtocolKeywords.Yike, StringComparison.Ordinal))
+            {
+                YikeWindowContext yikeContext = YikeWindowContext.CopyOf(runtimeState.LastCapturedYikeContext);
+                string yikeSignature = yikeContext.ContextSignature;
+                signatureParts.Add("yike=" + yikeSignature);
+
+                if (!string.IsNullOrWhiteSpace(yikeContext.RoomToken))
+                {
+                    string roomToken = yikeContext.RoomToken.Trim();
+                    messages.Add(protocolAdapter.CreateYikeRoomTokenMessage(roomToken));
+                }
+
+                if (yikeContext.MoveNumber.HasValue)
+                    messages.Add(protocolAdapter.CreateYikeMoveNumberMessage(yikeContext.MoveNumber.Value));
+
+                return new OutboundWindowContext(messages, string.Join("|", signatureParts), forceRebuildArmed);
+            }
+
             FoxWindowContext context = FoxWindowContext.CopyOf(foxWindowContext);
             signatureParts.Add("kind=" + (int)context.Kind);
 
@@ -863,6 +901,14 @@ namespace readboard
             }
 
             return new OutboundWindowContext(messages, string.Join("|", signatureParts), forceRebuildArmed);
+        }
+
+        private string ResolveYikeContextSignatureUnsafe()
+        {
+            if (!string.Equals(NormalizeSyncPlatform(syncPlatform), ProtocolKeywords.Yike, StringComparison.Ordinal))
+                return null;
+
+            return (runtimeState.LastCapturedYikeContext ?? YikeWindowContext.Unknown()).ContextSignature;
         }
 
         private static string NormalizeSyncPlatform(string platform)

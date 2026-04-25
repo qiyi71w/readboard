@@ -37,6 +37,7 @@
             this.btnClearBoard = new System.Windows.Forms.Button();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.rdoFoxBack = new System.Windows.Forms.RadioButton();
+            this.rdoYike = new System.Windows.Forms.RadioButton();
             this.rdoFore = new System.Windows.Forms.RadioButton();
             this.rdoSina = new System.Windows.Forms.RadioButton();
             this.rdoBack = new System.Windows.Forms.RadioButton();
@@ -153,6 +154,7 @@
             // groupBox1
             // 
             this.groupBox1.Controls.Add(this.rdoFoxBack);
+            this.groupBox1.Controls.Add(this.rdoYike);
             this.groupBox1.Controls.Add(this.rdoFore);
             this.groupBox1.Controls.Add(this.rdoSina);
             this.groupBox1.Controls.Add(this.rdoBack);
@@ -160,7 +162,7 @@
             this.groupBox1.Controls.Add(this.rdoFox);
             this.groupBox1.Location = new System.Drawing.Point(7, -2);
             this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Size = new System.Drawing.Size(500, 32);
+            this.groupBox1.Size = new System.Drawing.Size(560, 32);
             this.groupBox1.TabIndex = 14;
             this.groupBox1.TabStop = false;
             // 
@@ -176,10 +178,22 @@
             this.rdoFoxBack.UseVisualStyleBackColor = true;
             this.rdoFoxBack.CheckedChanged += new System.EventHandler(this.radioButtonFoxBack_CheckedChanged);
             // 
+            // rdoYike
+            // 
+            this.rdoYike.AutoSize = true;
+            this.rdoYike.Location = new System.Drawing.Point(174, 11);
+            this.rdoYike.Name = "rdoYike";
+            this.rdoYike.Size = new System.Drawing.Size(47, 16);
+            this.rdoYike.TabIndex = 16;
+            this.rdoYike.TabStop = true;
+            this.rdoYike.Text = "弈客";
+            this.rdoYike.UseVisualStyleBackColor = true;
+            this.rdoYike.CheckedChanged += new System.EventHandler(this.radioButtonYike_CheckedChanged);
+            // 
             // rdoFore
             // 
             this.rdoFore.AutoSize = true;
-            this.rdoFore.Location = new System.Drawing.Point(402, 11);
+            this.rdoFore.Location = new System.Drawing.Point(459, 11);
             this.rdoFore.Name = "rdoFore";
             this.rdoFore.Size = new System.Drawing.Size(83, 16);
             this.rdoFore.TabIndex = 14;
@@ -191,7 +205,7 @@
             // rdoSina
             // 
             this.rdoSina.AutoSize = true;
-            this.rdoSina.Location = new System.Drawing.Point(228, 11);
+            this.rdoSina.Location = new System.Drawing.Point(285, 11);
             this.rdoSina.Name = "rdoSina";
             this.rdoSina.Size = new System.Drawing.Size(47, 16);
             this.rdoSina.TabIndex = 13;
@@ -203,7 +217,7 @@
             // rdoBack
             // 
             this.rdoBack.AutoSize = true;
-            this.rdoBack.Location = new System.Drawing.Point(287, 11);
+            this.rdoBack.Location = new System.Drawing.Point(344, 11);
             this.rdoBack.Name = "rdoBack";
             this.rdoBack.Size = new System.Drawing.Size(83, 16);
             this.rdoBack.TabIndex = 12;
@@ -215,7 +229,7 @@
             // rdoTygem
             // 
             this.rdoTygem.AutoSize = true;
-            this.rdoTygem.Location = new System.Drawing.Point(174, 11);
+            this.rdoTygem.Location = new System.Drawing.Point(231, 11);
             this.rdoTygem.Name = "rdoTygem";
             this.rdoTygem.Size = new System.Drawing.Size(47, 16);
             this.rdoTygem.TabIndex = 11;
@@ -676,6 +690,7 @@
         private System.Windows.Forms.Button btnClearBoard;
         private System.Windows.Forms.GroupBox groupBox1;
         private System.Windows.Forms.RadioButton rdoFoxBack;
+        private System.Windows.Forms.RadioButton rdoYike;
         private System.Windows.Forms.RadioButton rdoSina;
         private System.Windows.Forms.RadioButton rdoBack;
         private System.Windows.Forms.RadioButton rdoTygem;

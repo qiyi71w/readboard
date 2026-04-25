@@ -16,6 +16,8 @@ namespace readboard
                 return FindSinaWindow();
             if (syncMode == SyncMode.Fox || syncMode == SyncMode.FoxBackgroundPlace)
                 return FindFoxWindow();
+            if (syncMode == SyncMode.Yike)
+                return FindYikeWindow();
             return IntPtr.Zero;
         }
 
@@ -79,6 +81,27 @@ namespace readboard
                 }
             }
             return selected;
+        }
+
+        internal static bool IsYikeTitleCandidate(string title)
+        {
+            if (string.IsNullOrEmpty(title))
+                return false;
+
+            return title.StartsWith("弈客大厅", StringComparison.Ordinal)
+                || title.StartsWith("弈客直播", StringComparison.Ordinal);
+        }
+
+        private static IntPtr FindYikeWindow()
+        {
+            Dictionary<IntPtr, string> roots = GetOpenWindows();
+            foreach (KeyValuePair<IntPtr, string> item in roots)
+            {
+                if (IsYikeTitleCandidate(GetWindowTitle(item.Key)))
+                    return item.Key;
+            }
+
+            return IntPtr.Zero;
         }
 
         private static bool IsNearSquare(int x, int y, int width, int height)

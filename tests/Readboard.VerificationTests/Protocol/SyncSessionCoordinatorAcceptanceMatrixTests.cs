@@ -150,6 +150,10 @@ namespace Readboard.VerificationTests.Protocol
             {
             }
 
+            public void HandleYikeContext(YikeWindowContext context)
+            {
+            }
+
             public void HandleQuitRequest()
             {
             }

@@ -1,11 +1,22 @@
 using System;
 using System.IO;
 using Xunit;
+using readboard;
 
 namespace Readboard.VerificationTests.Protocol
 {
     public sealed class LegacySyncWindowLocatorTests
     {
+        [Fact]
+        public void Yike_lobby_title_matches()
+        {
+            Assert.True(LegacySyncWindowLocator.IsYikeTitleCandidate("弈客大厅"));
+            Assert.True(LegacySyncWindowLocator.IsYikeTitleCandidate("弈客直播"));
+            Assert.True(LegacySyncWindowLocator.IsYikeTitleCandidate("弈客直播 - 19路"));
+            Assert.False(LegacySyncWindowLocator.IsYikeTitleCandidate("野狐"));
+            Assert.False(LegacySyncWindowLocator.IsYikeTitleCandidate(string.Empty));
+        }
+
         [Fact]
         public void AppendMatchesForProcess_DisposesProcessWithinProbeScope()
         {

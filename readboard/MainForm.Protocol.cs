@@ -107,6 +107,13 @@ namespace readboard
             });
         }
 
+        void IProtocolCommandHost.HandleYikeContext(YikeWindowContext context)
+        {
+            lastYikeWindowContext = YikeWindowContext.CopyOf(context);
+            sessionCoordinator.SetYikeContext(lastYikeWindowContext);
+            ApplyMainWindowTitle();
+        }
+
         void IProtocolCommandHost.HandleLossFocus()
         {
             lossFocus();

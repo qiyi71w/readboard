@@ -232,7 +232,11 @@ namespace Readboard.VerificationTests.Host
             string source = LoadSource("readboard", "Form1.cs");
             string methodSlice = GetMethodSlice(source, "private string ResolveSyncPlatform()");
 
-            Assert.Contains("return IsFoxSyncType(CurrentSyncType) ? \"fox\" : \"generic\";", methodSlice);
+            Assert.Contains("if (IsFoxSyncType(CurrentSyncType))", methodSlice);
+            Assert.Contains("return \"fox\";", methodSlice);
+            Assert.Contains("if (CurrentSyncType == TYPE_YIKE)", methodSlice);
+            Assert.Contains("return ProtocolKeywords.Yike;", methodSlice);
+            Assert.Contains("return \"generic\";", methodSlice);
         }
 
         [Fact]

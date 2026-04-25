@@ -8,7 +8,8 @@ namespace readboard
         StopInBoard = 3,
         VersionRequest = 4,
         Quit = 5,
-        ForceRebuild = 6
+        ForceRebuild = 6,
+        YikeContext = 7
     }
 
     internal sealed class ProtocolMessage
@@ -16,6 +17,8 @@ namespace readboard
         public ProtocolMessageKind Kind { get; set; }
         public string RawText { get; set; }
         public MoveRequest MoveRequest { get; set; }
+        public string YikeRoomToken { get; set; }
+        public int? YikeMoveNumber { get; set; }
 
         public static ProtocolMessage CreateLegacyLine(string rawText)
         {

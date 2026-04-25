@@ -76,7 +76,7 @@ namespace readboard
                 return PlacementPathKind.Foreground;
             if (syncMode == SyncMode.Foreground || syncMode == SyncMode.Fox)
                 return PlacementPathKind.Foreground;
-            if (syncMode == SyncMode.FoxBackgroundPlace)
+            if (syncMode == SyncMode.FoxBackgroundPlace || syncMode == SyncMode.Yike)
                 return PlacementPathKind.BackgroundSend;
             if (syncMode == SyncMode.Tygem || syncMode == SyncMode.Sina || syncMode == SyncMode.Background)
                 return PlacementPathKind.BackgroundPost;

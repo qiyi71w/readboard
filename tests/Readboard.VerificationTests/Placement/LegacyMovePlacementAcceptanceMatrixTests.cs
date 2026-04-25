@@ -12,6 +12,7 @@ namespace Readboard.VerificationTests.Placement
             yield return new object[] { (int)SyncMode.Tygem, (int)PlacementPathKind.BackgroundPost };
             yield return new object[] { (int)SyncMode.Sina, (int)PlacementPathKind.BackgroundPost };
             yield return new object[] { (int)SyncMode.FoxBackgroundPlace, (int)PlacementPathKind.BackgroundSend };
+            yield return new object[] { (int)SyncMode.Yike, (int)PlacementPathKind.BackgroundSend };
         }
 
         public static IEnumerable<object[]> CancellationCases()
@@ -19,6 +20,7 @@ namespace Readboard.VerificationTests.Placement
             yield return new object[] { (int)SyncMode.Foreground };
             yield return new object[] { (int)SyncMode.Background };
             yield return new object[] { (int)SyncMode.FoxBackgroundPlace };
+            yield return new object[] { (int)SyncMode.Yike };
             yield return new object[] { (int)SyncMode.Fox };
         }
 

@@ -55,6 +55,44 @@ namespace readboard
             return FormatMissingTitle(normalizedBaseTitle, displayMode, foxTag, syncingTag, titleMissingTag);
         }
 
+        public static string FormatYike(
+            string baseTitle,
+            MainWindowTitleDisplayMode displayMode,
+            bool hasWindowHandle,
+            YikeWindowContext context,
+            string yikeTag,
+            string roomSuffix,
+            string singleMoveFormat,
+            string titleMissingTag,
+            string syncingTag)
+        {
+            string normalizedBaseTitle = Normalize(baseTitle, "readboard");
+            if (displayMode == MainWindowTitleDisplayMode.Hidden)
+                return normalizedBaseTitle;
+
+            YikeWindowContext normalizedContext = YikeWindowContext.CopyOf(context);
+            if (!hasWindowHandle)
+                return FormatMissingTitle(normalizedBaseTitle, displayMode, yikeTag, syncingTag, titleMissingTag);
+
+            StringBuilder builder = new StringBuilder(normalizedBaseTitle);
+            builder.Append(LeadingTag(yikeTag));
+
+            if (!string.IsNullOrWhiteSpace(normalizedContext.RoomToken))
+                builder.Append(Tag(normalizedContext.RoomToken.Trim() + Normalize(roomSuffix, string.Empty)));
+
+            if (normalizedContext.MoveNumber.HasValue)
+                builder.Append(Tag(FormatMoveText(singleMoveFormat, "{0}", normalizedContext.MoveNumber.Value)));
+
+            if (string.IsNullOrWhiteSpace(normalizedContext.RoomToken) && !normalizedContext.MoveNumber.HasValue)
+            {
+                if (displayMode == MainWindowTitleDisplayMode.Syncing)
+                    builder.Append(Tag(syncingTag));
+                builder.Append(Tag(titleMissingTag));
+            }
+
+            return builder.ToString();
+        }
+
         private static string FormatMissingTitle(
             string normalizedBaseTitle,
             MainWindowTitleDisplayMode displayMode,

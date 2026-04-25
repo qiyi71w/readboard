@@ -90,7 +90,8 @@ namespace readboard
             return syncMode == SyncMode.Fox
                 || syncMode == SyncMode.FoxBackgroundPlace
                 || syncMode == SyncMode.Tygem
-                || syncMode == SyncMode.Sina;
+                || syncMode == SyncMode.Sina
+                || syncMode == SyncMode.Yike;
         }
 
         private static PixelRect GetExistingBounds(BoardViewport viewport, LegacyPixelMap pixels)
@@ -160,6 +161,8 @@ namespace readboard
                     return TryResolveSinaBounds(pixels, out sourceBounds);
                 case SyncMode.Tygem:
                     return TryResolveTygemBounds(pixels, out sourceBounds);
+                case SyncMode.Yike:
+                    return TryResolveYikeBounds(pixels, out sourceBounds);
                 default:
                     sourceBounds = new PixelRect(0, 0, pixels.Width, pixels.Height);
                     return true;
@@ -214,6 +217,27 @@ namespace readboard
             if (!TryFindPattern(pixels, CreateFoxLeftPatterns(), SearchDirection.LeftTop, out upLeft))
                 return false;
             if (!TryFindPattern(pixels, CreateFoxRightPatterns(), SearchDirection.RightTop, out upRight))
+                return false;
+
+            int size = upRight.X - upLeft.X;
+            if (size <= 0)
+                return false;
+
+            sourceBounds = ClipBounds(
+                new PixelRect(upLeft.X, upLeft.Y, size, size),
+                pixels.Width,
+                pixels.Height);
+            return sourceBounds != null;
+        }
+
+        private static bool TryResolveYikeBounds(LegacyPixelMap pixels, out PixelRect sourceBounds)
+        {
+            sourceBounds = null;
+            SearchPoint upLeft;
+            SearchPoint upRight;
+            if (!TryFindPattern(pixels, CreateYikeLeftPatterns(), SearchDirection.LeftTop, out upLeft))
+                return false;
+            if (!TryFindPattern(pixels, CreateYikeRightPatterns(), SearchDirection.RightTop, out upRight))
                 return false;
 
             int size = upRight.X - upLeft.X;
@@ -369,6 +393,35 @@ namespace readboard
                 new ColorPattern(46, 46, 46, 5, 5, 5, -2, 1, true),
                 new ColorPattern(46, 46, 46, 5, 5, 5, -1, 1, true),
                 new ColorPattern(46, 46, 46, 5, 5, 5, -1, 2, true)
+            };
+        }
+
+        private static ColorPattern[] CreateYikeLeftPatterns()
+        {
+            return new[]
+            {
+                new ColorPattern(150, 105, 62, 45, 40, 30, 0, 0, false),
+                new ColorPattern(150, 105, 62, 45, 40, 30, 1, 0, false),
+                new ColorPattern(150, 105, 62, 45, 40, 30, 2, 0, false),
+                new ColorPattern(150, 105, 62, 45, 40, 30, 0, 1, false),
+                new ColorPattern(150, 105, 62, 45, 40, 30, 0, 2, false),
+                new ColorPattern(250, 190, 115, 35, 30, 25, -1, 0, false),
+                new ColorPattern(250, 190, 115, 35, 30, 25, 0, -1, false),
+                new ColorPattern(250, 190, 115, 35, 30, 25, -1, 1, false)
+            };
+        }
+
+        private static ColorPattern[] CreateYikeRightPatterns()
+        {
+            return new[]
+            {
+                new ColorPattern(150, 105, 62, 45, 40, 30, 0, 0, false),
+                new ColorPattern(150, 105, 62, 45, 40, 30, -1, 0, false),
+                new ColorPattern(150, 105, 62, 45, 40, 30, -2, 0, false),
+                new ColorPattern(150, 105, 62, 45, 40, 30, 0, 1, false),
+                new ColorPattern(150, 105, 62, 45, 40, 30, 0, 2, false),
+                new ColorPattern(250, 190, 115, 35, 30, 25, 1, 0, false),
+                new ColorPattern(250, 190, 115, 35, 30, 25, 0, -1, false)
             };
         }
     }

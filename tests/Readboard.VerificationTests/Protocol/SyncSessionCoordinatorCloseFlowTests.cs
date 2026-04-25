@@ -180,6 +180,10 @@ namespace Readboard.VerificationTests.Protocol
             {
             }
 
+            public void HandleYikeContext(YikeWindowContext context)
+            {
+            }
+
             public void HandleQuitRequest()
             {
                 QuitCount++;
@@ -217,6 +221,10 @@ namespace Readboard.VerificationTests.Protocol
             }
 
             public void HandlePlaceRequest(MoveRequest request)
+            {
+            }
+
+            public void HandleYikeContext(YikeWindowContext context)
             {
             }
 

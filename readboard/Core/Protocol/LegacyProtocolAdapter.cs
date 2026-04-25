@@ -20,6 +20,8 @@ namespace readboard
                 return new ProtocolMessage { Kind = ProtocolMessageKind.VersionRequest, RawText = trimmed };
             if (trimmed.StartsWith(ProtocolKeywords.Quit, StringComparison.Ordinal))
                 return new ProtocolMessage { Kind = ProtocolMessageKind.Quit, RawText = trimmed };
+            if (trimmed == ProtocolKeywords.Yike || trimmed.StartsWith(ProtocolKeywords.Yike + " ", StringComparison.Ordinal))
+                return ParseYikeContext(trimmed);
             return ProtocolMessage.CreateLegacyLine(trimmed);
         }
 
@@ -129,6 +131,16 @@ namespace readboard
             return CreateLegacyMessage(ProtocolKeywords.FoxMoveNumberPrefix + moveNumber);
         }
 
+        public ProtocolMessage CreateYikeRoomTokenMessage(string roomToken)
+        {
+            return CreateLegacyMessage(ProtocolKeywords.YikeRoomTokenPrefix + (roomToken ?? string.Empty));
+        }
+
+        public ProtocolMessage CreateYikeMoveNumberMessage(int moveNumber)
+        {
+            return CreateLegacyMessage(ProtocolKeywords.YikeMoveNumberPrefix + moveNumber);
+        }
+
         public ProtocolMessage CreateStartMessage(int boardWidth, int boardHeight, IntPtr windowHandle, bool includeWindowHandle)
         {
             string line = ProtocolKeywords.StartPrefix + boardWidth + " " + boardHeight;
@@ -217,6 +229,38 @@ namespace readboard
         private static ProtocolMessage CreateLegacyMessage(string rawLine)
         {
             return ProtocolMessage.CreateLegacyLine(rawLine);
+        }
+
+        private static ProtocolMessage ParseYikeContext(string trimmed)
+        {
+            string roomToken = null;
+            int? moveNumber = null;
+            string[] parts = trimmed.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int index = 1; index < parts.Length; index++)
+            {
+                string part = parts[index];
+                if (part.StartsWith("room=", StringComparison.Ordinal))
+                {
+                    string value = part.Substring("room=".Length);
+                    roomToken = string.IsNullOrWhiteSpace(value) ? null : value;
+                    continue;
+                }
+
+                if (part.StartsWith("move=", StringComparison.Ordinal))
+                {
+                    string value = part.Substring("move=".Length);
+                    if (int.TryParse(value, out int parsedMove))
+                        moveNumber = parsedMove;
+                }
+            }
+
+            return new ProtocolMessage
+            {
+                Kind = ProtocolMessageKind.YikeContext,
+                RawText = trimmed,
+                YikeRoomToken = roomToken,
+                YikeMoveNumber = moveNumber
+            };
         }
 
         private static string NormalizeNumericValue(string value)

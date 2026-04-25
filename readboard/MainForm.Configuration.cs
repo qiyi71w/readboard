@@ -132,6 +132,9 @@ namespace readboard
                 case TYPE_FOREGROUND:
                     rdoFore.Checked = true;
                     return;
+                case TYPE_YIKE:
+                    rdoYike.Checked = true;
+                    return;
             }
             rdoBack.Checked = true;
         }

@@ -60,6 +60,29 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
+        public void Save_RoundTripsYikeSyncModeAcrossJsonAndLegacyMirror()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, SaveMachineKey, ProtocolVersion);
+                AppConfig config = AppConfig.CreateDefault(ProtocolVersion, SaveMachineKey);
+                config.SyncMode = SyncMode.Yike;
+
+                store.Save(config);
+                AppConfig loaded = store.Load().Config;
+
+                string json = File.ReadAllText(workspace.PathFor("config.readboard.json"));
+                string legacyMain = File.ReadAllText(workspace.PathFor("config_readboard.txt"));
+                using (JsonDocument doc = JsonDocument.Parse(json))
+                {
+                    Assert.Equal(6, doc.RootElement.GetProperty("SyncMode").GetInt32());
+                }
+                Assert.Equal(SyncMode.Yike, loaded.SyncMode);
+                Assert.EndsWith("_6", legacyMain);
+            }
+        }
+
+        [Fact]
         public void Load_IgnoresLegacyOtherConfigWhenMainConfigBelongsToDifferentMachine()
         {
             using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
