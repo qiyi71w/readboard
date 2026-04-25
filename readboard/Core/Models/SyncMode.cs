@@ -7,6 +7,7 @@ namespace readboard
         Sina = 2,
         Background = 3,
         FoxBackgroundPlace = 4,
-        Foreground = 5
+        Foreground = 5,
+        Yike = 6
     }
 }
