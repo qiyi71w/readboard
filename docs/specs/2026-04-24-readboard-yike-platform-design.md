@@ -91,8 +91,10 @@ readboard 侧：
 新增 `YikeWindowContext`，结构对齐 `FoxWindowContext` 的精简子集：
 
 - `RoomToken`（可空）
-- `YikeMoveNumber`（可空）
-- `ContextFingerprint`：由上述字段拼出的稳定签名，用于判重
+- `MoveNumber`（可空）—— 类名已含 `Yike` 前缀，类型成员不再重复
+- `ContextSignature`：由上述字段拼出的稳定签名，用于判重
+
+出站协议字段名仍为 `yikeRoomToken` / `yikeMoveNumber`（线上字段需要平台前缀以便下游分派）。
 
 `SyncCoordinatorHostSnapshot` / `SyncSessionRuntimeState` 增加可选的 `YikeWindowContext` 字段；非弈客模式下保持 null，与现有野狐字段并列、不互相干扰。
 
@@ -102,7 +104,7 @@ readboard 侧：
 
 - `Payload` 变化 → 发送
 - `foxMoveNumber` 变化（野狐路径）→ 发送
-- 弈客上下文签名变化（`RoomToken` 或 `YikeMoveNumber`）→ 发送
+- 弈客上下文签名变化（`RoomToken` 或 `MoveNumber`）→ 发送
 - `forceRebuild` armed → 发送
 
 禁止退化为"只有 Payload 变化才发送"。`yikeMoveNumber` 的语义与 `foxMoveNumber` 平行，不复用同一字段名，避免下游误判平台。
@@ -147,7 +149,7 @@ readboard 侧：
 - `lizzieyzy-next` 未发送过 `yike` 消息或最近一次 `yike` 消息显式声明无房间号且无手数
 - 协议断开重连后，重连前的弈客上下文不沿用，必须等新一条 `yike` 消息
 
-readboard 端在收到首条 `yike` 消息前的兜底：按"未知"处理（`RoomToken` 与 `YikeMoveNumber` 均为 null），主窗体标题显示 `[弈客][同步中][未抓到上下文]`，棋盘识别与后台落子仍正常运行。
+readboard 端在收到首条 `yike` 消息前的兜底：按"未知"处理（`RoomToken` 与 `MoveNumber` 均为 null），主窗体标题显示 `[弈客][同步中][未抓到上下文]`，棋盘识别与后台落子仍正常运行。
 
 不允许：
 
