@@ -44,5 +44,8 @@ namespace readboard
         internal const string StopAutoPlay = "stopAutoPlay";
         internal const string Pass = "pass";
         internal const string DefaultNumericValue = "0";
+        internal const string Yike = "yike";
+        internal const string YikeRoomTokenPrefix = "yikeRoomToken ";
+        internal const string YikeMoveNumberPrefix = "yikeMoveNumber ";
     }
 }
