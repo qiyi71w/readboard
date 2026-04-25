@@ -107,7 +107,12 @@ readboard 侧：
 
 禁止退化为"只有 Payload 变化才发送"。`yikeMoveNumber` 的语义与 `foxMoveNumber` 平行，不复用同一字段名，避免下游误判平台。
 
-`lizzieyzy-next` 侧的下游消费契约由 `lizzieyzy-next` 项目自行设计。本 spec 只锁定 readboard 出站行为：当弈客上下文存在时，棋盘快照消息必须随附等效于野狐 `roomToken` / `foxMoveNumber` 的弈客字段（具体行名与字段名在协议常量提交时确认），保证下游能识别同盘 / 换房 / 手数回退等场景。
+`lizzieyzy-next` 侧的下游消费契约由 `lizzieyzy-next` 项目自行设计。本 spec 锁定 readboard 出站字段名：
+
+- `yikeRoomToken`：与野狐 `roomToken` 平行
+- `yikeMoveNumber`：与野狐 `foxMoveNumber` 平行
+
+字段独立命名、不复用野狐字段，便于下游按平台分派。出现的具体行格式与协议常量在实现期间按 `ProtocolKeywords` 现有风格落地。
 
 ### 主窗体标题
 
@@ -137,9 +142,12 @@ readboard 侧：
 立即失效并把弈客上下文回到 `Unknown` 的条件：
 
 - 当前平台不是弈客
-- 句柄无效
+- 句柄无效（`hwnd == IntPtr.Zero` 或窗口已销毁）
+- 用户切换到非弈客平台
 - `lizzieyzy-next` 未发送过 `yike` 消息或最近一次 `yike` 消息显式声明无房间号且无手数
 - 协议断开重连后，重连前的弈客上下文不沿用，必须等新一条 `yike` 消息
+
+readboard 端在收到首条 `yike` 消息前的兜底：按"未知"处理（`RoomToken` 与 `YikeMoveNumber` 均为 null），主窗体标题显示 `[弈客][同步中][未抓到上下文]`，棋盘识别与后台落子仍正常运行。
 
 不允许：
 
