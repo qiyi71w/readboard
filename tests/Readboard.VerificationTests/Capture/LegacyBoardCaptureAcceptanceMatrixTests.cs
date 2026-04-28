@@ -295,6 +295,14 @@ namespace Readboard.VerificationTests.Capture
                 return CloneBitmap();
             }
 
+            public Bitmap CapturePrintWindowFullContent(IntPtr handle)
+            {
+                PrintWindowCalls++;
+                if (failPrintWindow)
+                    return null;
+                return CloneBitmap();
+            }
+
             public Bitmap CaptureScreen(PixelRect bounds)
             {
                 throw new NotSupportedException();

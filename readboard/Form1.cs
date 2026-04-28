@@ -60,6 +60,7 @@ namespace readboard
         private const int MainFormScreenLogicalPadding = 40;
         private FoxWindowContext lastFoxWindowContext = FoxWindowContext.Unknown();
         private YikeWindowContext lastYikeWindowContext = YikeWindowContext.Unknown();
+        private IntPtr lastYikeContextWindowHandle = IntPtr.Zero;
         private FoxWindowBinding foxWindowBinding = null;
         private bool hasRetainedFoxTitleSnapshot = false;
         private string lastAppliedMainWindowTitle = string.Empty;
@@ -1516,7 +1517,6 @@ namespace readboard
         {
             string syncPlatform = ResolveSyncPlatform();
             FoxWindowContext foxWindowContext = ResolveFoxWindowContext();
-            YikeWindowContext yikeWindowContext = ResolveYikeWindowContext();
             int? foxMoveNumber = foxWindowContext.ResolveDisplayedMoveNumber();
             UpdateMainWindowTitle(foxWindowContext);
 
@@ -1543,7 +1543,6 @@ namespace readboard
 
             sessionCoordinator.SetSyncPlatform(syncPlatform);
             sessionCoordinator.SetFoxWindowContext(foxWindowContext);
-            sessionCoordinator.SetYikeContext(yikeWindowContext);
             UpdateCapturedFoxMoveNumber(snapshot.FoxMoveNumber);
             return snapshot;
         }
@@ -1559,12 +1558,15 @@ namespace readboard
 
         private YikeWindowContext ResolveYikeWindowContext()
         {
-            return CurrentSyncType == TYPE_YIKE ? YikeWindowContext.CopyOf(lastYikeWindowContext) : YikeWindowContext.Unknown();
+            if (CurrentSyncType != TYPE_YIKE)
+                return YikeWindowContext.Unknown();
+            return YikeWindowContext.CopyOf(lastYikeWindowContext);
         }
 
         private void ClearYikeContext()
         {
             lastYikeWindowContext = YikeWindowContext.Unknown();
+            lastYikeContextWindowHandle = IntPtr.Zero;
             sessionCoordinator.SetYikeContext(lastYikeWindowContext);
         }
 
@@ -1635,6 +1637,8 @@ namespace readboard
             lastFoxWindowContext = FoxWindowContext.Unknown();
             if (CurrentSyncType != TYPE_YIKE)
                 lastYikeWindowContext = YikeWindowContext.Unknown();
+            if (CurrentSyncType != TYPE_YIKE || lastYikeContextWindowHandle != hwnd)
+                lastYikeContextWindowHandle = IntPtr.Zero;
             InvalidateFoxWindowBinding();
             ApplyMainWindowTitle();
         }
@@ -1654,11 +1658,12 @@ namespace readboard
         {
             if (CurrentSyncType == TYPE_YIKE)
             {
+                YikeWindowContext yikeWindowContext = ResolveYikeWindowContext();
                 string yikeTitle = MainWindowTitleFormatter.FormatYike(
                     getLangStr("MainForm_title"),
                     ResolveMainWindowTitleDisplayMode(),
-                    hwnd != IntPtr.Zero,
-                    lastYikeWindowContext,
+                    IsSelectedYikeWindowHandleValid(),
+                    yikeWindowContext,
                     getLangStr("MainForm_titleTagYike"),
                     "号",
                     getLangStr("MainForm_titleMoveFormatSingle"),
@@ -1711,7 +1716,7 @@ namespace readboard
         {
             InvokeHostAction(delegate
             {
-                hwnd = handle;
+                SetSelectedWindowHandle(handle);
                 hasRetainedFoxTitleSnapshot = false;
                 lastFoxWindowContext = FoxWindowContext.Unknown();
                 InvalidateFoxWindowBinding();
@@ -1722,6 +1727,18 @@ namespace readboard
                 }
                 ApplyMainWindowTitle();
             });
+        }
+
+        private void SetSelectedWindowHandle(IntPtr handle)
+        {
+            if (CurrentSyncType == TYPE_YIKE && hwnd != handle)
+                ClearYikeContext();
+            hwnd = handle;
+        }
+
+        private bool IsSelectedYikeWindowHandleValid()
+        {
+            return hwnd != IntPtr.Zero && IsWindow(hwnd);
         }
 
         void ISyncCoordinatorHost.OnKeepSyncStarted()
@@ -1745,6 +1762,14 @@ namespace readboard
         void ISyncCoordinatorHost.OnContinuousSyncStopped()
         {
             InvokeUiHostAction(ApplyContinuousSyncStoppedUi);
+        }
+
+        void ISyncCoordinatorHost.OnSyncCachesReset()
+        {
+            InvokeUiHostAction(delegate
+            {
+                ApplyMainWindowTitle();
+            });
         }
 
         void ISyncCoordinatorHost.ShowMissingSyncSourceMessage()
@@ -2187,7 +2212,7 @@ namespace readboard
                 WindowFromPoint,
                 delegate(IntPtr handle)
                 {
-                    hwnd = handle;
+                    SetSelectedWindowHandle(handle);
                     ResetMainWindowTitle();
                 },
                 delegate
@@ -2221,7 +2246,7 @@ namespace readboard
                 //if (!isKuangxuan)
                 //     mouseHook.Enabled = false;
                 clicked = false;
-                hwnd = getMousePointHwnd();
+                SetSelectedWindowHandle(getMousePointHwnd());
                 ResetMainWindowTitle();
             }
 
@@ -2561,6 +2586,9 @@ namespace readboard
 
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindow(IntPtr handle);
 
         [DllImport("user32.dll", SetLastError = true)]
         static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);

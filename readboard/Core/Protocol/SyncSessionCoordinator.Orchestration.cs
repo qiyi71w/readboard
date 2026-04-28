@@ -847,8 +847,9 @@ namespace readboard
 
         private void ResetRuntimeSyncCaches(SyncSessionRuntimeDependencies runtime)
         {
-            ResetSyncCaches();
+            ResetSyncCaches(false);
             runtime.OverlayService.Reset();
+            runtime.Host.OnSyncCachesReset();
         }
 
         private SyncCoordinatorHostSnapshot CaptureSnapshot(SyncSessionRuntimeDependencies runtime)

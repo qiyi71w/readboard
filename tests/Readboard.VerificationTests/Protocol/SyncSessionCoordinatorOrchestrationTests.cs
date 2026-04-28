@@ -724,6 +724,7 @@ namespace Readboard.VerificationTests.Protocol
             Assert.True((bool)Invoke(coordinator, "TryRunOneTimeSync"));
 
             Assert.Equal(2, overlayService.ResetCount);
+            Assert.Equal(2, hostRecorder.SyncCachesResetCount);
             Assert.Equal(
                 new[]
                 {
@@ -741,6 +742,33 @@ namespace Readboard.VerificationTests.Protocol
                     "end"
                 },
                 transport.SentLines);
+        }
+
+        [Fact]
+        public void SendClear_NotifiesHostWhenSyncCachesReset()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Yike, new IntPtr(5151));
+            HostRecorder hostRecorder = new HostRecorder(snapshot);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=yike")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            coordinator.SendClear();
+
+            Assert.Equal(1, hostRecorder.SyncCachesResetCount);
+            Assert.Equal(new[] { "clear" }, transport.SentLines);
         }
 
         private static object CreateProxy(Type interfaceType, Func<MethodInfo, object[], object> handler)
@@ -920,6 +948,7 @@ namespace Readboard.VerificationTests.Protocol
             public int KeepStoppedCount { get; private set; }
             public int ContinuousStartedCount { get; private set; }
             public int ContinuousStoppedCount { get; private set; }
+            public int SyncCachesResetCount { get; private set; }
 
             public object HandleCall(MethodInfo method, object[] args)
             {
@@ -947,6 +976,9 @@ namespace Readboard.VerificationTests.Protocol
                     case "OnContinuousSyncStopped":
                         ContinuousStoppedCount++;
                         ContinuousStopped.Set();
+                        return null;
+                    case "OnSyncCachesReset":
+                        SyncCachesResetCount++;
                         return null;
                     case "ShowMissingSyncSourceMessage":
                     case "ShowRecognitionFailureMessage":

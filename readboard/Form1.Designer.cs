@@ -162,7 +162,7 @@
             this.groupBox1.Controls.Add(this.rdoFox);
             this.groupBox1.Location = new System.Drawing.Point(7, -2);
             this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Size = new System.Drawing.Size(560, 32);
+            this.groupBox1.Size = new System.Drawing.Size(500, 32);
             this.groupBox1.TabIndex = 14;
             this.groupBox1.TabStop = false;
             // 
@@ -181,7 +181,7 @@
             // rdoYike
             // 
             this.rdoYike.AutoSize = true;
-            this.rdoYike.Location = new System.Drawing.Point(174, 11);
+            this.rdoYike.Location = new System.Drawing.Point(490, 11);
             this.rdoYike.Name = "rdoYike";
             this.rdoYike.Size = new System.Drawing.Size(47, 16);
             this.rdoYike.TabIndex = 16;
@@ -191,9 +191,9 @@
             this.rdoYike.CheckedChanged += new System.EventHandler(this.radioButtonYike_CheckedChanged);
             // 
             // rdoFore
-            // 
+            //
             this.rdoFore.AutoSize = true;
-            this.rdoFore.Location = new System.Drawing.Point(459, 11);
+            this.rdoFore.Location = new System.Drawing.Point(402, 11);
             this.rdoFore.Name = "rdoFore";
             this.rdoFore.Size = new System.Drawing.Size(83, 16);
             this.rdoFore.TabIndex = 14;
@@ -201,11 +201,11 @@
             this.rdoFore.Text = "其他(前台)";
             this.rdoFore.UseVisualStyleBackColor = true;
             this.rdoFore.CheckedChanged += new System.EventHandler(this.rdoqiantai_CheckedChanged);
-            // 
+            //
             // rdoSina
-            // 
+            //
             this.rdoSina.AutoSize = true;
-            this.rdoSina.Location = new System.Drawing.Point(285, 11);
+            this.rdoSina.Location = new System.Drawing.Point(228, 11);
             this.rdoSina.Name = "rdoSina";
             this.rdoSina.Size = new System.Drawing.Size(47, 16);
             this.rdoSina.TabIndex = 13;
@@ -213,11 +213,11 @@
             this.rdoSina.Text = "新浪";
             this.rdoSina.UseVisualStyleBackColor = true;
             this.rdoSina.CheckedChanged += new System.EventHandler(this.radioButton4_CheckedChanged);
-            // 
+            //
             // rdoBack
-            // 
+            //
             this.rdoBack.AutoSize = true;
-            this.rdoBack.Location = new System.Drawing.Point(344, 11);
+            this.rdoBack.Location = new System.Drawing.Point(287, 11);
             this.rdoBack.Name = "rdoBack";
             this.rdoBack.Size = new System.Drawing.Size(83, 16);
             this.rdoBack.TabIndex = 12;
@@ -225,11 +225,11 @@
             this.rdoBack.Text = "其他(后台)";
             this.rdoBack.UseVisualStyleBackColor = true;
             this.rdoBack.CheckedChanged += new System.EventHandler(this.radioButton3_CheckedChanged);
-            // 
+            //
             // rdoTygem
-            // 
+            //
             this.rdoTygem.AutoSize = true;
-            this.rdoTygem.Location = new System.Drawing.Point(231, 11);
+            this.rdoTygem.Location = new System.Drawing.Point(174, 11);
             this.rdoTygem.Name = "rdoTygem";
             this.rdoTygem.Size = new System.Drawing.Size(47, 16);
             this.rdoTygem.TabIndex = 11;

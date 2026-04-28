@@ -36,6 +36,7 @@ namespace Readboard.VerificationTests.Host
             string protocolSource = LoadSource("readboard", "MainForm.Protocol.cs");
 
             Assert.Contains("sessionCoordinator.SetYikeContext(lastYikeWindowContext);", formSource);
+            Assert.DoesNotContain("sessionCoordinator.SetYikeContext(yikeWindowContext);", formSource);
             Assert.Contains("MainWindowTitleFormatter.FormatYike(", formSource);
             Assert.Contains("getLangStr(\"MainForm_titleTagYike\")", formSource);
             Assert.Contains("YikeWindowContext.Unknown()", formSource);
@@ -43,6 +44,41 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("lastYikeWindowContext = YikeWindowContext.CopyOf(context);", protocolSource);
             Assert.Contains("sessionCoordinator.SetYikeContext(lastYikeWindowContext);", protocolSource);
             Assert.Contains("ApplyMainWindowTitle();", protocolSource);
+        }
+
+        [Fact]
+        public void MainForm_YikeContextHandlingIsSimplified()
+        {
+            string formSource = LoadSource("readboard", "Form1.cs");
+            string protocolSource = LoadSource("readboard", "MainForm.Protocol.cs");
+            string resolveMethod = GetMethodSlice(formSource, "private YikeWindowContext ResolveYikeWindowContext()");
+            string setHandleMethod = GetMethodSlice(formSource, "private void SetSelectedWindowHandle(IntPtr handle)");
+            string protocolMethod = GetMethodSlice(protocolSource, "void IProtocolCommandHost.HandleYikeContext(YikeWindowContext context)");
+
+            Assert.Contains("CurrentSyncType != TYPE_YIKE", resolveMethod);
+            Assert.Contains("YikeWindowContext.CopyOf(lastYikeWindowContext)", resolveMethod);
+            Assert.DoesNotContain("ClearYikeContext()", resolveMethod);
+
+            Assert.Contains("ClearYikeContext();", setHandleMethod);
+
+            Assert.Contains("CurrentSyncType != TYPE_YIKE", protocolMethod);
+            Assert.Contains("lastYikeWindowContext = YikeWindowContext.CopyOf(context);", protocolMethod);
+            Assert.Contains("sessionCoordinator.SetYikeContext(lastYikeWindowContext);", protocolMethod);
+        }
+
+        [Fact]
+        public void MainForm_SyncLifecycleDoesNotClearYikeContext()
+        {
+            string formSource = LoadSource("readboard", "Form1.cs");
+            string keepStartedMethod = GetMethodSlice(formSource, "private void ApplyKeepSyncStartedUi()");
+            string keepStoppedMethod = GetMethodSlice(formSource, "private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)");
+            string continuousStartedMethod = GetMethodSlice(formSource, "private void ApplyContinuousSyncStartedUi()");
+            string resetMethod = GetMethodSlice(formSource, "void ISyncCoordinatorHost.OnSyncCachesReset()");
+
+            Assert.DoesNotContain("ClearYikeContext()", keepStartedMethod);
+            Assert.DoesNotContain("ClearYikeContext()", keepStoppedMethod);
+            Assert.DoesNotContain("ClearYikeContext()", continuousStartedMethod);
+            Assert.DoesNotContain("ClearYikeContext()", resetMethod);
         }
 
         [Fact]
@@ -64,6 +100,26 @@ namespace Readboard.VerificationTests.Host
         {
             string path = Path.Combine(VerificationFixtureLocator.RepositoryRoot(), Path.Combine(segments));
             return File.ReadAllText(path);
+        }
+
+        private static string GetMethodSlice(string source, string signature)
+        {
+            int start = source.IndexOf(signature, StringComparison.Ordinal);
+            Assert.True(start >= 0, $"Missing signature: {signature}");
+            int braceStart = source.IndexOf('{', start);
+            int depth = 0;
+            for (int index = braceStart; index < source.Length; index++)
+            {
+                if (source[index] == '{')
+                    depth++;
+                else if (source[index] == '}')
+                    depth--;
+
+                if (depth == 0)
+                    return source.Substring(start, index - start + 1);
+            }
+
+            throw new InvalidOperationException($"Could not slice method: {signature}");
         }
     }
 }

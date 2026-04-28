@@ -492,6 +492,7 @@ namespace Readboard.VerificationTests
             public int DispatchCount { get; private set; }
             public MoveRequest LastMoveRequest { get; private set; }
 
+
             public void DispatchProtocolCommand(Action command)
             {
                 DispatchCount++;

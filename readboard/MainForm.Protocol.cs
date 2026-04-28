@@ -109,7 +109,16 @@ namespace readboard
 
         void IProtocolCommandHost.HandleYikeContext(YikeWindowContext context)
         {
+            if (CurrentSyncType != TYPE_YIKE)
+            {
+                ClearYikeContext();
+                ApplyMainWindowTitle();
+                return;
+            }
+
             lastYikeWindowContext = YikeWindowContext.CopyOf(context);
+            if (hwnd != IntPtr.Zero)
+                lastYikeContextWindowHandle = hwnd;
             sessionCoordinator.SetYikeContext(lastYikeWindowContext);
             ApplyMainWindowTitle();
         }

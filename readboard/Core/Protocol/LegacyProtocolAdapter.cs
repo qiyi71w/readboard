@@ -249,7 +249,7 @@ namespace readboard
                 if (part.StartsWith("move=", StringComparison.Ordinal))
                 {
                     string value = part.Substring("move=".Length);
-                    if (int.TryParse(value, out int parsedMove))
+                    if (int.TryParse(value, out int parsedMove) && parsedMove > 0)
                         moveNumber = parsedMove;
                 }
             }

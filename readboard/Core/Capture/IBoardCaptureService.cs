@@ -72,7 +72,7 @@ namespace readboard
             if (failure != null)
                 return failure;
 
-            Bitmap source = CaptureWindowBitmap(plan);
+            Bitmap source = CaptureWindowBitmap(plan, request);
             if (source == null)
                 return BoardCaptureResult.CreateFailure(BoardCaptureFailureKind.CaptureFailed, "Window capture returned no bitmap.");
 
@@ -179,6 +179,8 @@ namespace readboard
 
         private bool ShouldUsePrintWindow(BoardCaptureRequest request, WindowDescriptor window)
         {
+            if (request.SyncMode == SyncMode.Yike)
+                return true;
             if (window.IsJavaWindow)
                 return true;
 
@@ -207,11 +209,15 @@ namespace readboard
                 || bottom > screen.Y + screen.Height;
         }
 
-        private Bitmap CaptureWindowBitmap(BoardCapturePlan plan)
+        private Bitmap CaptureWindowBitmap(BoardCapturePlan plan, BoardCaptureRequest request)
         {
-            return plan.UsePrintWindow
-                ? platform.CapturePrintWindow(plan.Window.Handle)
-                : platform.CaptureWindow(plan.Window.Handle);
+            if (plan.UsePrintWindow)
+            {
+                return request.SyncMode == SyncMode.Yike
+                    ? platform.CapturePrintWindowFullContent(plan.Window.Handle)
+                    : platform.CapturePrintWindow(plan.Window.Handle);
+            }
+            return platform.CaptureWindow(plan.Window.Handle);
         }
 
         private BoardFrame BuildFrame(
@@ -366,6 +372,7 @@ namespace readboard
         bool TryDescribeWindow(IntPtr handle, WindowDescriptor seed, out WindowDescriptor descriptor);
         Bitmap CaptureWindow(IntPtr handle);
         Bitmap CapturePrintWindow(IntPtr handle);
+        Bitmap CapturePrintWindowFullContent(IntPtr handle);
         Bitmap CaptureScreen(PixelRect bounds);
     }
 
@@ -454,6 +461,16 @@ namespace readboard
 
         public Bitmap CapturePrintWindow(IntPtr handle)
         {
+            return CapturePrintWindowCore(handle, PrintWindow);
+        }
+
+        public Bitmap CapturePrintWindowFullContent(IntPtr handle)
+        {
+            return CapturePrintWindowCore(handle, PrintWindowFullContent);
+        }
+
+        private Bitmap CapturePrintWindowCore(IntPtr handle, PrintWindowInvoker invoker)
+        {
             RECT rect;
             if (!GetWindowRect(handle, out rect))
                 return null;
@@ -463,7 +480,13 @@ namespace readboard
             if (width <= 0 || height <= 0)
                 return null;
 
-            return CapturePrintWindowBitmap(handle, width, height, PrintWindow);
+            return CapturePrintWindowBitmap(handle, width, height, invoker);
+        }
+
+        private static bool PrintWindowFullContent(IntPtr hwnd, IntPtr hdcBlt, uint nFlags)
+        {
+            // PW_RENDERFULLCONTENT = 0x2 — required to capture CEF/Chromium GPU-composited surfaces.
+            return PrintWindow(hwnd, hdcBlt, nFlags | 0x2u);
         }
 
         internal static Bitmap CapturePrintWindowBitmap(

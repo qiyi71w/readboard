@@ -20,6 +20,7 @@ namespace readboard
         private readonly ManualResetEventSlim continuousSyncStoppedEvent = new ManualResetEventSlim(true);
         private readonly ManualResetEventSlim syncIdleEvent = new ManualResetEventSlim(true);
         private int disposeState;
+        private int inboundProtocolGeneration;
         private volatile bool acceptingInboundProtocolMessages;
         private volatile bool outboundProtocolClosed;
         private string syncPlatform = "generic";
@@ -132,6 +133,7 @@ namespace readboard
         public void Start()
         {
             outboundProtocolClosed = false;
+            Interlocked.Increment(ref inboundProtocolGeneration);
             acceptingInboundProtocolMessages = true;
             transport.MessageReceived += OnMessageReceived;
             transport.Start();
@@ -149,6 +151,7 @@ namespace readboard
         {
             CloseOutboundProtocol();
             acceptingInboundProtocolMessages = false;
+            Interlocked.Increment(ref inboundProtocolGeneration);
             StopSyncSessionCore(waitForWorkers);
             transport.MessageReceived -= OnMessageReceived;
             CancelPendingMove();
@@ -395,10 +398,7 @@ namespace readboard
 
         public void ResetSyncCaches()
         {
-            lock (stateLock)
-            {
-                ResetSyncCachesCore();
-            }
+            ResetSyncCaches(true);
         }
 
         public void SendClear()
@@ -594,6 +594,7 @@ namespace readboard
         {
             if (!acceptingInboundProtocolMessages)
                 return;
+            int receivedGeneration = Volatile.Read(ref inboundProtocolGeneration);
             ProtocolMessage message = protocolAdapter.ParseInbound(rawLine);
             IProtocolCommandHost currentHost = host;
             Action command = CreateDispatchCommand(currentHost, message);
@@ -601,7 +602,8 @@ namespace readboard
                 return;
             currentHost.DispatchProtocolCommand(delegate
             {
-                if (!acceptingInboundProtocolMessages)
+                if (!acceptingInboundProtocolMessages
+                    || receivedGeneration != Volatile.Read(ref inboundProtocolGeneration))
                     return;
                 command();
             });
@@ -691,6 +693,25 @@ namespace readboard
             lastSentWindowContextSignature = null;
             runtimeState.LastCapturedYikeContext = null;
             runtimeState.LastSentYikeContextSignature = null;
+        }
+
+        private void ResetSyncCaches(bool notifyHost)
+        {
+            lock (stateLock)
+            {
+                ResetSyncCachesCore();
+            }
+
+            if (notifyHost)
+                NotifySyncCachesReset();
+        }
+
+        private void NotifySyncCachesReset()
+        {
+            SyncSessionRuntimeDependencies runtime = runtimeDependencies;
+            if (runtime == null || runtime.Host == null)
+                return;
+            runtime.Host.OnSyncCachesReset();
         }
 
         private bool TryCompletePendingMove(bool success)

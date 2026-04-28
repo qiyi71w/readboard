@@ -275,6 +275,10 @@ namespace Readboard.VerificationTests.Protocol
                 continuousSyncStopped.Set();
             }
 
+            public void OnSyncCachesReset()
+            {
+            }
+
             public bool WaitForKeepSyncStopped(TimeSpan timeout)
             {
                 return keepSyncStopped.Wait(timeout);

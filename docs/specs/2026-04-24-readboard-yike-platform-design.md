@@ -74,6 +74,7 @@ yike room=<roomToken> move=<moveNumber>
 
 - `room`：房间号字符串。比赛页或未知场景下，整个 `room=...` 段缺省。
 - `move`：当前手数，正整数。未知时整段缺省。
+- readboard 接收到 `move<=0` 或无法解析为整数时，按未知手数处理，不向下游发送 `yikeMoveNumber`。
 - 二者都缺省时，`yike` 行用于通知 readboard 当前进入的弈客上下文为"未知"。
 - `lizzieyzy-next` 在以下时机发送 `yike` 消息：
   - 浏览器加载新 URL 后
@@ -96,7 +97,7 @@ readboard 侧：
 
 出站协议字段名仍为 `yikeRoomToken` / `yikeMoveNumber`（线上字段需要平台前缀以便下游分派）。
 
-`SyncCoordinatorHostSnapshot` / `SyncSessionRuntimeState` 增加可选的 `YikeWindowContext` 字段；非弈客模式下保持 null，与现有野狐字段并列、不互相干扰。
+`YikeWindowContext` 只进入 `SyncSessionRuntimeState`，不进入 `SyncCoordinatorHostSnapshot`。上下文由入站 `yike` 协议消息写入 runtime state；快照采集路径不得把 MainForm 本地缓存重新写回 coordinator，避免 reset / 重连后旧上下文被回灌。
 
 ### 下游契约约束
 
@@ -145,9 +146,14 @@ readboard 侧：
 
 - 当前平台不是弈客
 - 句柄无效（`hwnd == IntPtr.Zero` 或窗口已销毁）
+- 最近一次 `yike` 消息不是在当前弈客窗口句柄下接收的；用户重选窗口或自动发现到新窗口后，必须等待 host 为新句柄重发 `yike` 消息
+- readboard 以协议行到达时的当前选中窗口句柄作为 `yike` 消息接收句柄；如果 UI 队列执行该命令时句柄已变化，丢弃该上下文并保持 `Unknown`
 - 用户切换到非弈客平台
 - `lizzieyzy-next` 未发送过 `yike` 消息或最近一次 `yike` 消息显式声明无房间号且无手数
+- 同步会话停止、重新开始或内部同步缓存 reset 后，MainForm 本地缓存的弈客上下文也必须失效；新的同步会话必须等待 host 重新发送 `yike` 消息
 - 协议断开重连后，重连前的弈客上下文不沿用，必须等新一条 `yike` 消息
+
+内部同步缓存 reset 由 coordinator 通过 host 通知 MainForm 清理本地弈客缓存；快照采集不得把 reset 前的 MainForm 本地缓存重新写回 runtime state。
 
 readboard 端在收到首条 `yike` 消息前的兜底：按"未知"处理（`RoomToken` 与 `MoveNumber` 均为 null），主窗体标题显示 `[弈客][同步中][未抓到上下文]`，棋盘识别与后台落子仍正常运行。
 

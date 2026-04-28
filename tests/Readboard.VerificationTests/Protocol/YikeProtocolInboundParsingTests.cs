@@ -54,5 +54,16 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("65191829", msg.YikeRoomToken);
             Assert.Null(msg.YikeMoveNumber);
         }
+
+        [Theory]
+        [InlineData("yike move=0")]
+        [InlineData("yike move=-1")]
+        public void treats_non_positive_move_as_unknown(string rawLine)
+        {
+            ProtocolMessage msg = new LegacyProtocolAdapter().ParseInbound(rawLine);
+
+            Assert.Equal(ProtocolMessageKind.YikeContext, msg.Kind);
+            Assert.Null(msg.YikeMoveNumber);
+        }
     }
 }

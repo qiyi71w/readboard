@@ -136,6 +136,7 @@ namespace Readboard.VerificationTests.Protocol
         {
             public int LossFocusCount { get; private set; }
 
+
             public void DispatchProtocolCommand(Action command)
             {
                 command();

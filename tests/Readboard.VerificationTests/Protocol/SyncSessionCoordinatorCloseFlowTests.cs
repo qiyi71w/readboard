@@ -60,6 +60,33 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public void Restart_DropsQueuedInboundProtocolCommandsFromPreviousStart()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            DeferredDispatchHost host = new DeferredDispatchHost();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.AttachHost(host);
+
+            try
+            {
+                coordinator.Start();
+                transport.Emit("quit");
+
+                Assert.NotNull(host.PendingCommand);
+
+                coordinator.Stop();
+                coordinator.Start();
+                host.RunPendingCommand();
+            }
+            finally
+            {
+                coordinator.Stop();
+            }
+
+            Assert.Equal(0, host.QuitCount);
+        }
+
+        [Fact]
         public void SendShutdownProtocol_ClosesOutboundProtocolAfterShutdownSequence()
         {
             RecordingTransport transport = new RecordingTransport();
@@ -167,6 +194,7 @@ namespace Readboard.VerificationTests.Protocol
         {
             public int QuitCount { get; private set; }
 
+
             public void DispatchProtocolCommand(Action command)
             {
                 command();
@@ -202,6 +230,7 @@ namespace Readboard.VerificationTests.Protocol
         {
             public Action PendingCommand { get; private set; }
             public int QuitCount { get; private set; }
+
 
             public void RunPendingCommand()
             {
