@@ -77,7 +77,7 @@ namespace readboard
         private bool isShuttingDown = false;
         private bool closeRequestedBeforeHandle = false;
         private bool isInitializingProtocolState = true;
-        private static readonly System.Drawing.Size MainFormDefaultSize = new System.Drawing.Size(792, 374);
+        private static readonly System.Drawing.Size MainFormDefaultSize = new System.Drawing.Size(852, 374);
 
         private readonly struct MainHeaderLayoutMetrics
         {
