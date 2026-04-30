@@ -9,6 +9,7 @@ namespace readboard
         public IBoardRecognitionService RecognitionService { get; set; }
         public IMovePlacementService PlacementService { get; set; }
         public IOverlayService OverlayService { get; set; }
+        public BoardDebugDiagnosticsWriter DebugDiagnostics { get; set; }
         public ISyncWindowLocator WindowLocator { get; set; }
         public IWindowDescriptorFactory WindowDescriptorFactory { get; set; }
     }

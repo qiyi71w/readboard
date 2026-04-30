@@ -41,6 +41,7 @@ namespace Readboard.VerificationTests
                 config.UseEnhanceScreen = true;
                 config.PlayPonder = false;
                 config.DisableShowInBoardShortcut = true;
+                config.DebugDiagnosticsEnabled = true;
                 config.UiThemeMode = 7;
                 config.ColorMode = AppConfig.ColorModeDark;
 
@@ -54,6 +55,7 @@ namespace Readboard.VerificationTests
                 Assert.Contains("220430", json);
                 Assert.Contains("\"MachineKey\"", json);
                 Assert.Contains("SECONDARY-HOST", json);
+                Assert.Contains("\"DebugDiagnosticsEnabled\"", json);
                 Assert.Equal("96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5", legacyMain);
                 Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1", legacyOther);
             }
@@ -209,6 +211,7 @@ namespace Readboard.VerificationTests
             Assert.True(config.UseEnhanceScreen);
             Assert.False(config.PlayPonder);
             Assert.False(config.DisableShowInBoardShortcut);
+            Assert.False(config.DebugDiagnosticsEnabled);
             Assert.Equal(1, config.UiThemeMode);
             Assert.Equal(ProtocolVersion, config.ProtocolVersion);
             Assert.Equal(FixtureMachineKey, config.MachineKey);
@@ -250,6 +253,7 @@ namespace Readboard.VerificationTests
             Assert.False(config.UseEnhanceScreen);
             Assert.True(config.PlayPonder);
             Assert.False(config.DisableShowInBoardShortcut);
+            Assert.False(config.DebugDiagnosticsEnabled);
             Assert.Equal(1, config.UiThemeMode);
             Assert.Equal(0, config.ColorMode);
             Assert.Equal(ProtocolVersion, config.ProtocolVersion);
@@ -277,6 +281,29 @@ namespace Readboard.VerificationTests
                     Assert.Equal(colorMode, doc.RootElement.GetProperty("ColorMode").GetInt32());
                 }
                 Assert.Equal(colorMode, loaded.ColorMode);
+            }
+        }
+
+        [Fact]
+        public void Save_RoundTripsDebugDiagnosticsEnabledThroughJsonOnly()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, SaveMachineKey, ProtocolVersion);
+                AppConfig config = AppConfig.CreateDefault(ProtocolVersion, SaveMachineKey);
+                config.DebugDiagnosticsEnabled = true;
+
+                store.Save(config);
+                string json = File.ReadAllText(workspace.PathFor("config.readboard.json"));
+                string legacyOther = File.ReadAllText(workspace.PathFor("config_readboard_others.txt"));
+                AppConfig loaded = store.Load().Config;
+
+                using (JsonDocument doc = JsonDocument.Parse(json))
+                {
+                    Assert.True(doc.RootElement.GetProperty("DebugDiagnosticsEnabled").GetBoolean());
+                }
+                Assert.True(loaded.DebugDiagnosticsEnabled);
+                Assert.Equal(15, legacyOther.Split('_').Length);
             }
         }
     }

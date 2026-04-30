@@ -498,7 +498,7 @@ namespace readboard
                 if (frame == null)
                     return false;
 
-                BoardRecognitionResult recognition = RecognizeFrame(runtime, frame, isOperationCurrent);
+                BoardRecognitionResult recognition = RecognizeFrame(runtime, snapshot, frame, isOperationCurrent);
                 if (recognition == null)
                     return false;
 
@@ -510,7 +510,7 @@ namespace readboard
                         return false;
                     }
 
-                    sample = CompleteRecognizedSample(snapshot, frame, recognition);
+                    sample = CompleteRecognizedSample(runtime, snapshot, frame, recognition);
                 }
                 if (!NeedsBlackRetry(sample, allowBlackRetry))
                     return true;
@@ -532,14 +532,20 @@ namespace readboard
             }
             if (captureResult == null || !captureResult.Success || captureResult.Frame == null)
             {
-                SendError(captureResult == null ? "Capture returned no result." : captureResult.FailureReason);
+                string failureReason = captureResult == null ? "Capture returned no result." : captureResult.FailureReason;
+                RecordCaptureFailure(runtime, snapshot, captureResult, failureReason);
+                SendError(failureReason);
                 return null;
             }
-            return NormalizeCapturedFrame(captureResult.Frame, snapshot);
+            BoardFrame frame = NormalizeCapturedFrame(captureResult.Frame, snapshot);
+            if (frame != null)
+                frame.CapturePath = captureResult.CapturePath;
+            return frame;
         }
 
         private BoardRecognitionResult RecognizeFrame(
             SyncSessionRuntimeDependencies runtime,
+            SyncCoordinatorHostSnapshot snapshot,
             BoardFrame frame,
             Func<bool> isOperationCurrent)
         {
@@ -551,7 +557,9 @@ namespace readboard
             }
             if (recognition == null || !recognition.Success || recognition.Snapshot == null)
             {
-                SendError(recognition == null ? "Recognition returned no result." : recognition.FailureReason);
+                string failureReason = recognition == null ? "Recognition returned no result." : recognition.FailureReason;
+                RecordRecognitionFailure(runtime, snapshot, frame, failureReason);
+                SendError(failureReason);
                 DisposeBoardFrame(frame);
                 return null;
             }
@@ -559,16 +567,111 @@ namespace readboard
         }
 
         private RecognizedSyncSample CompleteRecognizedSample(
+            SyncSessionRuntimeDependencies runtime,
             SyncCoordinatorHostSnapshot snapshot,
             BoardFrame frame,
             BoardRecognitionResult recognition)
         {
             int previousArea = runtimeState.CurrentBoardPixelWidth * runtimeState.CurrentBoardPixelHeight;
             ApplyRecognizedFrame(frame, recognition);
+            RecordRecognitionSuccess(runtime, snapshot, frame, recognition.Snapshot);
             UpdateBoardGeometry(frame, snapshot);
             ReplaceRuntimeFrame(frame);
             runtimeState.InitialProbePending = false;
             return new RecognizedSyncSample(previousArea, frame, recognition.Snapshot);
+        }
+
+        private static void RecordCaptureFailure(
+            SyncSessionRuntimeDependencies runtime,
+            SyncCoordinatorHostSnapshot snapshot,
+            BoardCaptureResult captureResult,
+            string failureReason)
+        {
+            if (runtime == null || runtime.DebugDiagnostics == null)
+                return;
+
+            runtime.DebugDiagnostics.RecordCaptureFailure(CreateDebugDiagnosticRecord(
+                snapshot,
+                captureResult == null ? null : captureResult.Frame,
+                null,
+                captureResult == null ? CapturePathKind.Unknown : captureResult.CapturePath,
+                failureReason));
+        }
+
+        private static void RecordRecognitionFailure(
+            SyncSessionRuntimeDependencies runtime,
+            SyncCoordinatorHostSnapshot snapshot,
+            BoardFrame frame,
+            string failureReason)
+        {
+            if (runtime == null || runtime.DebugDiagnostics == null)
+                return;
+
+            runtime.DebugDiagnostics.RecordRecognitionFailure(CreateDebugDiagnosticRecord(
+                snapshot,
+                frame,
+                null,
+                ResolveCapturePath(frame),
+                failureReason));
+        }
+
+        private static void RecordRecognitionSuccess(
+            SyncSessionRuntimeDependencies runtime,
+            SyncCoordinatorHostSnapshot snapshot,
+            BoardFrame frame,
+            BoardSnapshot boardSnapshot)
+        {
+            if (runtime == null || runtime.DebugDiagnostics == null)
+                return;
+
+            runtime.DebugDiagnostics.RecordRecognitionSuccess(CreateDebugDiagnosticRecord(
+                snapshot,
+                frame,
+                boardSnapshot,
+                ResolveCapturePath(frame),
+                null));
+        }
+
+        private static BoardDebugDiagnosticRecord CreateDebugDiagnosticRecord(
+            SyncCoordinatorHostSnapshot snapshot,
+            BoardFrame frame,
+            BoardSnapshot boardSnapshot,
+            CapturePathKind capturePath,
+            string failureReason)
+        {
+            return new BoardDebugDiagnosticRecord
+            {
+                SyncMode = snapshot == null ? SyncMode.Foreground : snapshot.SyncMode,
+                BoardWidth = ResolveDebugBoardWidth(snapshot, frame),
+                BoardHeight = ResolveDebugBoardHeight(snapshot, frame),
+                CapturePath = capturePath,
+                Frame = frame,
+                Snapshot = boardSnapshot,
+                FailureReason = failureReason
+            };
+        }
+
+        private static CapturePathKind ResolveCapturePath(BoardFrame frame)
+        {
+            return frame == null ? CapturePathKind.Unknown : frame.CapturePath;
+        }
+
+        private static int ResolveDebugBoardWidth(SyncCoordinatorHostSnapshot snapshot, BoardFrame frame)
+        {
+            if (snapshot != null && snapshot.BoardWidth > 0)
+                return snapshot.BoardWidth;
+            if (frame != null && frame.BoardSize != null)
+                return frame.BoardSize.Width;
+            return 0;
+        }
+
+        private static int ResolveDebugBoardHeight(SyncCoordinatorHostSnapshot snapshot, BoardFrame frame)
+        {
+            if (snapshot != null && snapshot.BoardHeight > 0)
+                return snapshot.BoardHeight;
+            if (frame != null && frame.BoardSize != null)
+                return frame.BoardSize.Height;
+            return 0;
         }
 
         private bool NeedsBlackRetry(RecognizedSyncSample sample, bool allowBlackRetry)

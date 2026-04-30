@@ -8,6 +8,7 @@ namespace readboard
         public SyncMode SyncMode { get; set; }
         public BoardDimensions BoardSize { get; set; }
         public BoardViewport Viewport { get; set; }
+        public CapturePathKind CapturePath { get; set; }
         public Bitmap Image { get; set; }
         public PixelBuffer PixelBuffer { get; set; }
         public bool PreferPrintWindow { get; set; }

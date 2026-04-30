@@ -1625,8 +1625,11 @@ namespace readboard
 
         private void ApplyMainWindowTitle()
         {
-            string title = MainWindowTitleFormatter.Format(
+            string baseTitle = MainWindowTitleFormatter.FormatBaseTitle(
                 getLangStr("MainForm_title"),
+                AppReleaseVersion.GetCurrentVersion());
+            string title = MainWindowTitleFormatter.Format(
+                baseTitle,
                 ResolveMainWindowTitleDisplayMode(),
                 hwnd != IntPtr.Zero,
                 lastFoxWindowContext,

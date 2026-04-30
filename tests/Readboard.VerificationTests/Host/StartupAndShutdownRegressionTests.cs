@@ -295,6 +295,29 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void SettingsForm_LoadsPersistsAndOpensDebugDiagnostics()
+        {
+            string source = LoadSource("readboard", "Form4.cs");
+            string designerSource = LoadSource("readboard", "Form4.Designer.cs");
+            string programSource = LoadSource("readboard", "Program.cs");
+            string cnSource = LoadSource("readboard", "language_cn.txt");
+            string enSource = LoadSource("readboard", "language_en.txt");
+
+            Assert.Contains("chkDebugDiagnostics.Checked = config.DebugDiagnosticsEnabled;", source);
+            Assert.Contains("updatedConfig.DebugDiagnosticsEnabled = chkDebugDiagnostics.Checked;", source);
+            Assert.Contains("btnOpenDebugDiagnostics.Text = getLangStr(\"SettingsForm_btnOpenDebugDiagnostics\");", source);
+            Assert.Contains("OpenDebugDiagnosticsDirectory();", source);
+            Assert.Contains("this.chkDebugDiagnostics", designerSource);
+            Assert.Contains("this.btnOpenDebugDiagnostics", designerSource);
+            Assert.Contains("SettingsForm_chkDebugDiagnostics", programSource);
+            Assert.Contains("SettingsForm_btnOpenDebugDiagnostics", programSource);
+            Assert.Contains("SettingsForm_chkDebugDiagnostics=", cnSource);
+            Assert.Contains("SettingsForm_btnOpenDebugDiagnostics=", cnSource);
+            Assert.Contains("SettingsForm_chkDebugDiagnostics=", enSource);
+            Assert.Contains("SettingsForm_btnOpenDebugDiagnostics=", enSource);
+        }
+
+        [Fact]
         public void SettingsForm_RefreshesMainFormShortcutTooltipAfterSaving()
         {
             string source = LoadSource("readboard", "Form4.cs");
@@ -315,7 +338,10 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("ArrangeLegacySettingsLayout();", layoutSlice);
             Assert.Contains("ArrangeAdaptiveSettingsLayout();", layoutSlice);
             Assert.Contains("LayoutOptionRow(chkVerifyMove, chkDisableShowInBoardShortcut", adaptiveSlice);
+            Assert.Contains("LayoutOptionRow(chkDebugDiagnostics, btnOpenDebugDiagnostics", adaptiveSlice);
             Assert.Contains("chkDisableShowInBoardShortcut.Location = new Point(ScaleValue(170), top + optionRowGap * 2);", legacySlice);
+            Assert.Contains("chkDebugDiagnostics.Location = new Point(left, top + optionRowGap * 3);", legacySlice);
+            Assert.Contains("btnOpenDebugDiagnostics.SetBounds(ScaleValue(170), top + optionRowGap * 3", legacySlice);
         }
 
         [Fact]
