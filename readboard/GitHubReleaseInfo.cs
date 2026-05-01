@@ -13,5 +13,11 @@ namespace readboard
         public string HtmlUrl { get; internal set; }
 
         public DateTime? PublishedAt { get; internal set; }
+
+        public string AssetName { get; internal set; }
+
+        public string AssetDownloadUrl { get; internal set; }
+
+        public long? AssetSize { get; internal set; }
     }
 }

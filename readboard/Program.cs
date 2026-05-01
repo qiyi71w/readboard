@@ -395,6 +395,13 @@ namespace readboard
             langItems["Update_releaseDate"] = "发布日期";
             langItems["Update_releaseNotes"] = "更新说明";
             langItems["Update_download"] = "去下载";
+            langItems["Update_downloadAndInstall"] = "下载并安装";
+            langItems["Update_downloading"] = "下载中...";
+            langItems["Update_waitingForHostInstall"] = "等待宿主安装...";
+            langItems["Update_hostCancelled"] = "宿主已取消安装。";
+            langItems["Update_hostFailed"] = "宿主安装失败。";
+            langItems["Update_hostTimedOut"] = "宿主长时间未响应。";
+            langItems["Update_manualDownloadFallback"] = "已回退为手动下载，可点击“去下载”打开 release 页面。";
             langItems["Update_close"] = "关闭";
             langItems["Update_notProvided"] = "未提供";
             langItems["Update_releaseNotesUnavailable"] = "暂无更新说明。";

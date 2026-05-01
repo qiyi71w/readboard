@@ -40,6 +40,27 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
+        public void Start_DispatchesHostedUpdateLifecycleCommandsThroughHostCallbacks()
+        {
+            FakeTransport transport = new FakeTransport();
+            CapturingHost host = new CapturingHost();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.AttachHost(host);
+
+            coordinator.Start();
+            transport.Emit("readboardUpdateSupported");
+            transport.Emit("readboardUpdateInstalling");
+            transport.Emit("readboardUpdateCancelled");
+            transport.Emit("readboardUpdateFailed\tbad zip");
+
+            Assert.Equal(4, host.DispatchCount);
+            Assert.Equal(1, host.ReadboardUpdateSupportedCount);
+            Assert.Equal(1, host.ReadboardUpdateInstallingCount);
+            Assert.Equal(1, host.ReadboardUpdateCancelledCount);
+            Assert.Equal("bad zip", host.LastReadboardUpdateFailedMessage);
+        }
+
+        [Fact]
         public void SendError_ForwardsToTransport()
         {
             FakeTransport transport = new FakeTransport();
@@ -354,6 +375,10 @@ namespace Readboard.VerificationTests
         {
             public int DispatchCount { get; private set; }
             public MoveRequest LastMoveRequest { get; private set; }
+            public int ReadboardUpdateSupportedCount { get; private set; }
+            public int ReadboardUpdateInstallingCount { get; private set; }
+            public int ReadboardUpdateCancelledCount { get; private set; }
+            public string LastReadboardUpdateFailedMessage { get; private set; }
 
             public void DispatchProtocolCommand(Action command)
             {
@@ -372,6 +397,26 @@ namespace Readboard.VerificationTests
 
             public void HandleQuitRequest()
             {
+            }
+
+            public void HandleReadboardUpdateSupported()
+            {
+                ReadboardUpdateSupportedCount++;
+            }
+
+            public void HandleReadboardUpdateInstalling()
+            {
+                ReadboardUpdateInstallingCount++;
+            }
+
+            public void HandleReadboardUpdateCancelled()
+            {
+                ReadboardUpdateCancelledCount++;
+            }
+
+            public void HandleReadboardUpdateFailed(string message)
+            {
+                LastReadboardUpdateFailedMessage = message;
             }
 
             public void HandleStopInBoardRequest()

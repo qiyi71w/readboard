@@ -13,6 +13,17 @@ namespace Readboard.VerificationTests.Host
             "\"html_url\":\"https://github.com/qiyi71w/readboard/releases/tag/v2.0.3\"," +
             "\"published_at\":\"2025-03-15T10:30:00Z\"}";
 
+        private const string ReleaseWithMatchingAssetJson =
+            "{\"tag_name\":\"v3.0.2\",\"name\":\"readboard v3.0.2\"," +
+            "\"body\":\"Hosted update asset.\"," +
+            "\"html_url\":\"https://github.com/qiyi71w/readboard/releases/tag/v3.0.2\"," +
+            "\"published_at\":\"2026-05-01T10:30:00Z\"," +
+            "\"assets\":[{" +
+            "\"name\":\"readboard-github-release-v3.0.2.zip\"," +
+            "\"browser_download_url\":\"https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip\"," +
+            "\"size\":12345" +
+            "}]}";
+
         [Fact]
         public void CheckAsync_ParsesTypicalReleaseResponse()
         {
@@ -29,6 +40,70 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal("Bug fixes and improvements.", result.ReleaseNotes);
             Assert.NotNull(result.PublishedAt);
             Assert.Null(result.ErrorMessage);
+        }
+
+        [Fact]
+        public void CheckAsync_ParsesMatchingReleaseAsset()
+        {
+            GitHubUpdateChecker checker = new GitHubUpdateChecker(
+                () => "v3.0.1",
+                () => Task.FromResult(ReleaseWithMatchingAssetJson));
+
+            UpdateCheckResult result = checker.CheckAsync().Result;
+
+            Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
+            Assert.Equal("readboard-github-release-v3.0.2.zip", result.AssetName);
+            Assert.Equal(
+                "https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip",
+                result.AssetDownloadUrl);
+            Assert.Equal(12345L, result.AssetSize);
+        }
+
+        [Fact]
+        public void CheckAsync_LeavesAssetFieldsEmptyWhenNoMatchingAssetExists()
+        {
+            string json =
+                "{\"tag_name\":\"v3.0.2\"," +
+                "\"html_url\":\"https://github.com/qiyi71w/readboard/releases/tag/v3.0.2\"," +
+                "\"assets\":[{" +
+                "\"name\":\"readboard-github-release-vv3.0.2.zip\"," +
+                "\"browser_download_url\":\"https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-vv3.0.2.zip\"," +
+                "\"size\":12345" +
+                "}]}";
+            GitHubUpdateChecker checker = new GitHubUpdateChecker(
+                () => "v3.0.1",
+                () => Task.FromResult(json));
+
+            UpdateCheckResult result = checker.CheckAsync().Result;
+
+            Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
+            Assert.Equal("https://github.com/qiyi71w/readboard/releases/tag/v3.0.2", result.ReleaseUrl);
+            Assert.Null(result.AssetName);
+            Assert.Null(result.AssetDownloadUrl);
+            Assert.Null(result.AssetSize);
+        }
+
+        [Fact]
+        public void CheckAsync_LeavesAssetFieldsEmptyWhenMatchingAssetUrlIsNotHttps()
+        {
+            string json =
+                "{\"tag_name\":\"v3.0.2\"," +
+                "\"html_url\":\"https://github.com/qiyi71w/readboard/releases/tag/v3.0.2\"," +
+                "\"assets\":[{" +
+                "\"name\":\"readboard-github-release-v3.0.2.zip\"," +
+                "\"browser_download_url\":\"http://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip\"," +
+                "\"size\":12345" +
+                "}]}";
+            GitHubUpdateChecker checker = new GitHubUpdateChecker(
+                () => "v3.0.1",
+                () => Task.FromResult(json));
+
+            UpdateCheckResult result = checker.CheckAsync().Result;
+
+            Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
+            Assert.Null(result.AssetName);
+            Assert.Null(result.AssetDownloadUrl);
+            Assert.Null(result.AssetSize);
         }
 
         [Fact]

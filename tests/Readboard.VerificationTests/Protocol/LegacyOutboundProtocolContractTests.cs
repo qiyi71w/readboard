@@ -143,6 +143,42 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("stopAutoPlay", ProtocolKeywords.StopAutoPlay);
             Assert.Equal("pass", ProtocolKeywords.Pass);
             Assert.Equal("0", ProtocolKeywords.DefaultNumericValue);
+            Assert.Equal("readboardUpdateSupported", ProtocolKeywords.ReadboardUpdateSupported);
+            Assert.Equal("readboardUpdateReady\t", ProtocolKeywords.ReadboardUpdateReadyPrefix);
+            Assert.Equal("readboardUpdateInstalling", ProtocolKeywords.ReadboardUpdateInstalling);
+            Assert.Equal("readboardUpdateCancelled", ProtocolKeywords.ReadboardUpdateCancelled);
+            Assert.Equal("readboardUpdateFailed\t", ProtocolKeywords.ReadboardUpdateFailedPrefix);
+        }
+
+        [Fact]
+        public void HostedUpdateMessages_SerializeWithStableLegacyTokens()
+        {
+            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
+
+            Assert.Equal(
+                "readboardUpdateReady\tv3.0.2\tC:\\updates\\readboard-github-release-v3.0.2.zip",
+                adapter.Serialize(
+                    adapter.CreateReadboardUpdateReadyMessage(
+                        "v3.0.2",
+                        @"C:\updates\readboard-github-release-v3.0.2.zip")));
+        }
+
+        [Fact]
+        public void SendReadboardUpdateReady_WritesHostedUpdateReadyLine()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SendReadboardUpdateReady(
+                "v3.0.2",
+                @"C:\updates\readboard-github-release-v3.0.2.zip");
+
+            Assert.Equal(
+                new[]
+                {
+                    @"readboardUpdateReady	v3.0.2	C:\updates\readboard-github-release-v3.0.2.zip"
+                },
+                transport.SentLines);
         }
 
         private static string BuildVisibleOverlayLine(LegacyOverlayService overlayService)

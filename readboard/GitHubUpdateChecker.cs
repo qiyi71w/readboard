@@ -16,6 +16,8 @@ namespace readboard
         private const string GitHubAcceptHeader = "application/vnd.github+json";
         private const string GitHubUserAgent = "readboard-update-checker";
         private const int RequestTimeoutMilliseconds = 15000;
+        private const string HostedReleaseAssetPrefix = "readboard-github-release-";
+        private const string HostedReleaseAssetSuffix = ".zip";
 
         private readonly Func<string> _currentVersionProvider;
         private readonly Func<Task<string>> _latestReleaseJsonProvider;
@@ -101,9 +103,13 @@ namespace readboard
                     : UpdateCheckStatus.UpToDate,
                 CurrentVersion = currentVersion.ToString(),
                 LatestVersion = latestVersion.ToString(),
+                Tag = latestRelease.Tag,
                 PublishedAt = latestRelease.PublishedAt,
                 ReleaseNotes = latestRelease.Body,
                 ReleaseUrl = latestRelease.HtmlUrl,
+                AssetName = latestRelease.AssetName,
+                AssetDownloadUrl = latestRelease.AssetDownloadUrl,
+                AssetSize = latestRelease.AssetSize,
                 ErrorMessage = null
             };
         }
@@ -124,6 +130,9 @@ namespace readboard
                 PublishedAt = null,
                 ReleaseNotes = null,
                 ReleaseUrl = null,
+                AssetName = null,
+                AssetDownloadUrl = null,
+                AssetSize = null,
                 ErrorMessage = baseException.Message
             };
         }
@@ -194,14 +203,67 @@ namespace readboard
                 throw new InvalidOperationException("Latest release response is not a JSON object.");
             }
 
+            string tag = ReadRequiredString(payload, "tag_name", false);
+            GitHubReleaseAssetInfo asset = ReadMatchingAsset(payload, tag);
+
             return new GitHubReleaseInfo
             {
-                Tag = ReadRequiredString(payload, "tag_name", false),
+                Tag = tag,
                 Name = ReadOptionalString(payload, "name"),
                 Body = ReadOptionalString(payload, "body"),
                 HtmlUrl = ReadRequiredString(payload, "html_url", false),
-                PublishedAt = ReadPublishedAt(payload)
+                PublishedAt = ReadPublishedAt(payload),
+                AssetName = asset == null ? null : asset.Name,
+                AssetDownloadUrl = asset == null ? null : asset.DownloadUrl,
+                AssetSize = asset == null ? (long?)null : asset.Size
             };
+        }
+
+        private static GitHubReleaseAssetInfo ReadMatchingAsset(
+            IDictionary<string, object> payload,
+            string tag)
+        {
+            object rawAssets;
+            if (!payload.TryGetValue("assets", out rawAssets) || rawAssets == null)
+            {
+                return null;
+            }
+
+            if (!(rawAssets is JsonElement assetsElement) ||
+                assetsElement.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            string expectedName = HostedReleaseAssetPrefix + tag + HostedReleaseAssetSuffix;
+            foreach (JsonElement assetElement in assetsElement.EnumerateArray())
+            {
+                if (assetElement.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                string assetName = ReadOptionalString(assetElement, "name");
+                if (!string.Equals(assetName, expectedName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string assetDownloadUrl = ReadOptionalString(assetElement, "browser_download_url");
+                if (!IsAbsoluteHttpsUrl(assetDownloadUrl))
+                {
+                    continue;
+                }
+
+                return new GitHubReleaseAssetInfo
+                {
+                    Name = assetName,
+                    DownloadUrl = assetDownloadUrl,
+                    Size = ReadOptionalInt64(assetElement, "size")
+                };
+            }
+
+            return null;
         }
 
         private static string ReadOptionalString(
@@ -266,6 +328,39 @@ namespace readboard
             return stringValue;
         }
 
+        private static string ReadOptionalString(JsonElement payload, string key)
+        {
+            JsonElement value;
+            if (!payload.TryGetProperty(key, out value) || value.ValueKind == JsonValueKind.Null)
+            {
+                return null;
+            }
+
+            if (value.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            return value.GetString();
+        }
+
+        private static long? ReadOptionalInt64(JsonElement payload, string key)
+        {
+            JsonElement value;
+            if (!payload.TryGetProperty(key, out value) || value.ValueKind == JsonValueKind.Null)
+            {
+                return null;
+            }
+
+            long result;
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out result))
+            {
+                return result;
+            }
+
+            return null;
+        }
+
         private static DateTime? ReadPublishedAt(IDictionary<string, object> payload)
         {
             object rawValue;
@@ -301,6 +396,18 @@ namespace readboard
             }
 
             return null;
+        }
+
+        private static bool IsAbsoluteHttpsUrl(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            Uri uri;
+            return Uri.TryCreate(value, UriKind.Absolute, out uri) &&
+                string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
         }
 
         private static Task<string> DownloadLatestReleaseJsonAsync()
@@ -509,6 +616,15 @@ namespace readboard
                     CultureInfo.InvariantCulture,
                     out number);
             }
+        }
+
+        private sealed class GitHubReleaseAssetInfo
+        {
+            public string Name { get; set; }
+
+            public string DownloadUrl { get; set; }
+
+            public long? Size { get; set; }
         }
     }
 }
