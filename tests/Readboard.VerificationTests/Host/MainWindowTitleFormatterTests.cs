@@ -5,6 +5,19 @@ namespace Readboard.VerificationTests.Host
 {
     public sealed class MainWindowTitleFormatterTests
     {
+        [Theory]
+        [InlineData("棋盘同步工具", "3.0.1", "棋盘同步工具 v3.0.1")]
+        [InlineData("棋盘同步工具", "v3.0.1", "棋盘同步工具 v3.0.1")]
+        [InlineData("棋盘同步工具", "  V3.0.1  ", "棋盘同步工具 v3.0.1")]
+        [InlineData("棋盘同步工具", "", "棋盘同步工具")]
+        public void FormatBaseTitle_AppendsVersionAfterBaseTitle(
+            string baseTitle,
+            string releaseVersion,
+            string expected)
+        {
+            Assert.Equal(expected, MainWindowTitleFormatter.FormatBaseTitle(baseTitle, releaseVersion));
+        }
+
         [Fact]
         public void Format_ReturnsBaseTitleWhenTitleModeHidden()
         {

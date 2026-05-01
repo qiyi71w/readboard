@@ -13,6 +13,7 @@ namespace readboard
         bool KeepSync { get; }
         bool IsContinuousSyncing { get; }
         bool SyncBoth { get; }
+        bool IsProtocolSessionActive { get; }
         void SetSyncBoth(bool enabled);
         void SetSyncPlatform(string platform);
         void SetCapturedFoxMoveNumber(int? foxMoveNumber);
@@ -37,6 +38,7 @@ namespace readboard
         void NotifyReady(bool playPonderEnabled);
         void SendPonderStatus(bool playPonderEnabled);
         void SendVersion(string version);
+        void SendReadboardUpdateReady(string tag, string absoluteZipPath);
         void SendSync();
         void SendStopSync();
         void SendBothSync(bool enabled);

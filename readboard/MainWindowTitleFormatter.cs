@@ -12,6 +12,15 @@ namespace readboard
 
     internal static class MainWindowTitleFormatter
     {
+        public static string FormatBaseTitle(string baseTitle, string releaseVersion)
+        {
+            string normalizedBaseTitle = Normalize(baseTitle, "readboard");
+            string normalizedVersion = NormalizeVersion(releaseVersion);
+            return string.IsNullOrEmpty(normalizedVersion)
+                ? normalizedBaseTitle
+                : normalizedBaseTitle + " " + normalizedVersion;
+        }
+
         public static string Format(
             string baseTitle,
             MainWindowTitleDisplayMode displayMode,
@@ -104,6 +113,17 @@ namespace readboard
         private static string Normalize(string value, string fallback)
         {
             return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+        }
+
+        private static string NormalizeVersion(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            string trimmedValue = value.Trim();
+            if (trimmedValue.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                return "v" + trimmedValue.Substring(1);
+            return "v" + trimmedValue;
         }
     }
 }

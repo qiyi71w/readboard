@@ -45,6 +45,8 @@ namespace readboard
             this.rdoColorSystem.Text = getLangStr("SettingsForm_rdoColorSystem");
             this.rdoColorDark.Text = getLangStr("SettingsForm_rdoColorDark");
             this.rdoColorLight.Text = getLangStr("SettingsForm_rdoColorLight");
+            this.chkDebugDiagnostics.Text = getLangStr("SettingsForm_chkDebugDiagnostics");
+            this.btnOpenDebugDiagnostics.Text = getLangStr("SettingsForm_btnOpenDebugDiagnostics");
 
            // this.Size= new Size((int)(461 *Program.factor), (int)(270 * Program.factor));
            
@@ -95,7 +97,7 @@ namespace readboard
 
         private void ApplySettingsTheme()
         {
-            foreach (CheckBox checkBox in new[] { chkAutoMin, chkPonder, chkMag, chkEnhanceScreen, chkVerifyMove, chkDisableShowInBoardShortcut })
+            foreach (CheckBox checkBox in new[] { chkAutoMin, chkPonder, chkMag, chkEnhanceScreen, chkVerifyMove, chkDisableShowInBoardShortcut, chkDebugDiagnostics })
                 UiTheme.StyleOption(checkBox);
 
             foreach (RadioButton radio in new[] { rdoColorSystem, rdoColorDark, rdoColorLight })
@@ -122,6 +124,7 @@ namespace readboard
             UiTheme.StyleNoticeLabel(lblBackForeOnly);
             UiTheme.StyleDangerButton(btnReset);
             UiTheme.StyleSecondaryButton(btnCancel);
+            UiTheme.StyleSecondaryButton(btnOpenDebugDiagnostics);
             UiTheme.StylePrimaryButton(btnConfirm);
         }
 
@@ -164,8 +167,10 @@ namespace readboard
             chkEnhanceScreen.Location = new Point(ScaleValue(170), top + optionRowGap);
             chkVerifyMove.Location = new Point(left, top + optionRowGap * 2);
             chkDisableShowInBoardShortcut.Location = new Point(ScaleValue(170), top + optionRowGap * 2);
-            LayoutColorModeRow(left, top + optionRowGap * 3);
-            int fieldsTop = LayoutWrappedLabel(lblBackForeOnly, left, ScaleValue(140), contentWidth, true) + ScaleValue(20);
+            chkDebugDiagnostics.Location = new Point(left, top + optionRowGap * 3);
+            btnOpenDebugDiagnostics.SetBounds(ScaleValue(170), top + optionRowGap * 3 - ScaleValue(4), MeasureButtonWidth(btnOpenDebugDiagnostics, 124), buttonHeight);
+            LayoutColorModeRow(left, top + optionRowGap * 4);
+            int fieldsTop = LayoutWrappedLabel(lblBackForeOnly, left, ScaleValue(170), contentWidth, true) + ScaleValue(20);
             LayoutSettingsField(lblSyncInterval, txtSyncInterval, left, fieldsTop, labelWidth, inputWidth, fieldGap, ScaleValue(24));
             LayoutSettingsField(lblGrayOffsets, txtGrayOffsets, right, fieldsTop, labelWidth, inputWidth, fieldGap, ScaleValue(24));
             LayoutSettingsField(lblBlackOffsets, txtBlackOffsets, left, fieldsTop + fieldRowGap, labelWidth, inputWidth, fieldGap, ScaleValue(24));
@@ -205,6 +210,7 @@ namespace readboard
             currentTop = LayoutOptionRow(chkAutoMin, chkPonder, left, currentTop, contentWidth, optionGap, optionRowGap);
             currentTop = LayoutOptionRow(chkMag, chkEnhanceScreen, left, currentTop, contentWidth, optionGap, optionRowGap);
             currentTop = LayoutOptionRow(chkVerifyMove, chkDisableShowInBoardShortcut, left, currentTop, contentWidth, optionGap, optionRowGap);
+            currentTop = LayoutOptionRow(chkDebugDiagnostics, btnOpenDebugDiagnostics, left, currentTop, contentWidth, optionGap, optionRowGap);
 
             currentTop = LayoutColorModeRow(left, currentTop) + optionRowGap;
 
@@ -288,7 +294,9 @@ namespace readboard
             int contentWidth = ClientSize.Width - left * 2;
             int optionColumnLeft = ScaleValue(170);
             int requiredOptionWidth = GetLegacyOptionPreferredWidth(chkAutoMin, chkMag, chkVerifyMove);
+            requiredOptionWidth = Math.Max(requiredOptionWidth, GetLegacyOptionPreferredWidth(chkDebugDiagnostics));
             int requiredSecondOptionWidth = GetLegacyOptionPreferredWidth(chkPonder, chkEnhanceScreen, chkDisableShowInBoardShortcut);
+            requiredSecondOptionWidth = Math.Max(requiredSecondOptionWidth, MeasureButtonWidth(btnOpenDebugDiagnostics, 124));
             int requiredFieldsWidth = labelWidth * 2 + inputWidth * 2 + fieldGap * 2 + fieldColumnGap;
             int requiredFooterWidth =
                 MeasureButtonWidth(btnReset, 124)
@@ -318,6 +326,23 @@ namespace readboard
 
             primary.Location = new Point(left, top);
             secondary.Location = new Point(left, primary.Bottom + optionRowGap);
+            return secondary.Bottom + optionRowGap;
+        }
+
+        private int LayoutOptionRow(CheckBox primary, Button secondary, int left, int top, int contentWidth, int optionGap, int optionRowGap)
+        {
+            ConfigureOptionCheckBox(primary);
+            int secondaryWidth = MeasureButtonWidth(secondary, 124);
+            int buttonHeight = ScaleValue(32);
+            if (primary.PreferredSize.Width + secondaryWidth + optionGap <= contentWidth)
+            {
+                primary.Location = new Point(left, top + ScaleValue(8));
+                secondary.SetBounds(left + primary.PreferredSize.Width + optionGap, top, secondaryWidth, buttonHeight);
+                return Math.Max(primary.Bottom, secondary.Bottom) + optionRowGap;
+            }
+
+            primary.Location = new Point(left, top);
+            secondary.SetBounds(left, primary.Bottom + optionRowGap, Math.Min(secondaryWidth, contentWidth), buttonHeight);
             return secondary.Bottom + optionRowGap;
         }
 
@@ -390,7 +415,7 @@ namespace readboard
             ForeColor = SystemColors.ControlText;
             Font = Control.DefaultFont;
 
-            foreach (CheckBox checkBox in new[] { chkAutoMin, chkPonder, chkMag, chkEnhanceScreen, chkVerifyMove, chkDisableShowInBoardShortcut })
+            foreach (CheckBox checkBox in new[] { chkAutoMin, chkPonder, chkMag, chkEnhanceScreen, chkVerifyMove, chkDisableShowInBoardShortcut, chkDebugDiagnostics })
             {
                 UiTheme.ResetOption(checkBox);
                 checkBox.BackColor = SystemColors.Control;
@@ -434,7 +459,7 @@ namespace readboard
                 label.Padding = Padding.Empty;
             }
 
-            foreach (Button button in new[] { btnReset, btnCancel, btnConfirm })
+            foreach (Button button in new[] { btnReset, btnCancel, btnConfirm, btnOpenDebugDiagnostics })
             {
                 button.FlatStyle = FlatStyle.System;
                 button.UseVisualStyleBackColor = true;
@@ -591,6 +616,7 @@ namespace readboard
             txtSyncInterval.Text = config.SyncIntervalMs.ToString();
             chkEnhanceScreen.Checked = config.UseEnhanceScreen;
             chkDisableShowInBoardShortcut.Checked = config.DisableShowInBoardShortcut;
+            chkDebugDiagnostics.Checked = config.DebugDiagnosticsEnabled;
             txtGrayOffsets.Text = config.GrayOffset.ToString();
             chkPonder.Checked = config.PlayPonder;
             rdoColorSystem.Checked = config.ColorMode == AppConfig.ColorModeSystem;
@@ -630,6 +656,7 @@ namespace readboard
             updatedConfig.UseEnhanceScreen = chkEnhanceScreen.Checked;
             updatedConfig.PlayPonder = chkPonder.Checked;
             updatedConfig.DisableShowInBoardShortcut = chkDisableShowInBoardShortcut.Checked;
+            updatedConfig.DebugDiagnosticsEnabled = chkDebugDiagnostics.Checked;
             updatedConfig.ColorMode = rdoColorDark.Checked ? AppConfig.ColorModeDark
                 : rdoColorLight.Checked ? AppConfig.ColorModeLight
                 : AppConfig.ColorModeSystem;
@@ -639,6 +666,22 @@ namespace readboard
                 return false;
             }
             return true;
+        }
+
+        private void btnOpenDebugDiagnostics_Click(object sender, EventArgs e)
+        {
+            OpenDebugDiagnosticsDirectory();
+        }
+
+        private static void OpenDebugDiagnosticsDirectory()
+        {
+            string directory = BoardDebugDiagnosticsPaths.GetRootDirectory(AppDomain.CurrentDomain.BaseDirectory);
+            Directory.CreateDirectory(directory);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = directory,
+                UseShellExecute = true
+            });
         }
 
         private static bool IsOffsetOrPercentOutOfRange(AppConfig config)

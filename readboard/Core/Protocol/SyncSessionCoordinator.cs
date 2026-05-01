@@ -63,6 +63,11 @@ namespace readboard
             get { return GetLockedSessionState(s => s.SyncBoth); }
         }
 
+        public bool IsProtocolSessionActive
+        {
+            get { return acceptingInboundProtocolMessages && !outboundProtocolClosed; }
+        }
+
         private T GetLockedSessionState<T>(Func<SessionState, T> selector)
         {
             lock (stateLock)
@@ -468,6 +473,11 @@ namespace readboard
             SendProtocolMessage(protocolAdapter.CreateVersionMessage(version));
         }
 
+        public void SendReadboardUpdateReady(string tag, string absoluteZipPath)
+        {
+            SendProtocolMessage(protocolAdapter.CreateReadboardUpdateReadyMessage(tag, absoluteZipPath));
+        }
+
         public void SendSync()
         {
             SendProtocolMessage(protocolAdapter.CreateSyncMessage());
@@ -612,6 +622,15 @@ namespace readboard
                     return currentHost.HandleVersionRequest;
                 case ProtocolMessageKind.Quit:
                     return currentHost.HandleQuitRequest;
+                case ProtocolMessageKind.ReadboardUpdateSupported:
+                    return currentHost.HandleReadboardUpdateSupported;
+                case ProtocolMessageKind.ReadboardUpdateInstalling:
+                    return currentHost.HandleReadboardUpdateInstalling;
+                case ProtocolMessageKind.ReadboardUpdateCancelled:
+                    return currentHost.HandleReadboardUpdateCancelled;
+                case ProtocolMessageKind.ReadboardUpdateFailed:
+                    return () => currentHost.HandleReadboardUpdateFailed(
+                        message.RawText.Substring(ProtocolKeywords.ReadboardUpdateFailedPrefix.Length));
                 default:
                     return null;
             }

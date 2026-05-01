@@ -130,6 +130,7 @@ $releaseDirectoryName = "readboard-github-release-$($versionInfo.TagVersion)"
 $releaseDirectory = Join-Path $ReleaseRoot $releaseDirectoryName
 $releaseZipPath = Join-Path $ReleaseRoot ($releaseDirectoryName + '.zip')
 $resolvedReleaseZipPath = $releaseZipPath
+$releaseAppDirectory = Join-Path $releaseDirectory 'readboard'
 
 if (-not $SkipBuild) {
     Write-Host "Publishing $($versionInfo.TagVersion) with dotnet (self-contained, $publishRuntimeIdentifier)"
@@ -147,7 +148,8 @@ if (Test-Path -LiteralPath $releaseDirectory) {
 }
 
 New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
-Copy-DirectoryContents -SourceDir $BuildOutputDir -DestinationDir $releaseDirectory
+New-Item -ItemType Directory -Path $releaseAppDirectory -Force | Out-Null
+Copy-DirectoryContents -SourceDir $BuildOutputDir -DestinationDir $releaseAppDirectory
 $packageTimestampUtc = [DateTime]::UtcNow
 Update-ReleaseArtifactTimestamps -ReleaseDirectory $releaseDirectory -TimestampUtc $packageTimestampUtc
 if ($SkipZip) {

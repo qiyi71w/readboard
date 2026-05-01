@@ -10,6 +10,17 @@ namespace readboard
                 return null;
 
             string trimmed = rawLine.Trim();
+            if (string.Equals(trimmed, ProtocolKeywords.ReadboardUpdateSupported, StringComparison.Ordinal))
+                return new ProtocolMessage { Kind = ProtocolMessageKind.ReadboardUpdateSupported, RawText = trimmed };
+            if (string.Equals(trimmed, ProtocolKeywords.ReadboardUpdateInstalling, StringComparison.Ordinal))
+                return new ProtocolMessage { Kind = ProtocolMessageKind.ReadboardUpdateInstalling, RawText = trimmed };
+            if (string.Equals(trimmed, ProtocolKeywords.ReadboardUpdateCancelled, StringComparison.Ordinal))
+                return new ProtocolMessage { Kind = ProtocolMessageKind.ReadboardUpdateCancelled, RawText = trimmed };
+            if (trimmed.StartsWith(ProtocolKeywords.ReadboardUpdateFailedPrefix, StringComparison.Ordinal)
+                && trimmed.Length > ProtocolKeywords.ReadboardUpdateFailedPrefix.Length)
+            {
+                return new ProtocolMessage { Kind = ProtocolMessageKind.ReadboardUpdateFailed, RawText = trimmed };
+            }
             if (trimmed.StartsWith(ProtocolKeywords.Place, StringComparison.Ordinal))
                 return CreatePlaceMessage(trimmed);
             if (trimmed.StartsWith(ProtocolKeywords.Loss, StringComparison.Ordinal))
@@ -193,6 +204,20 @@ namespace readboard
         public ProtocolMessage CreatePassMessage()
         {
             return CreateLegacyMessage(ProtocolKeywords.Pass);
+        }
+
+        public ProtocolMessage CreateReadboardUpdateReadyMessage(string tag, string absoluteZipPath)
+        {
+            if (string.IsNullOrWhiteSpace(tag))
+                throw new ArgumentException("Value cannot be null or whitespace.", nameof(tag));
+            if (string.IsNullOrWhiteSpace(absoluteZipPath))
+                throw new ArgumentException("Value cannot be null or whitespace.", nameof(absoluteZipPath));
+            if (tag.IndexOf('\t') >= 0)
+                throw new ArgumentException("Value cannot contain tabs.", nameof(tag));
+            if (absoluteZipPath.IndexOf('\t') >= 0)
+                throw new ArgumentException("Value cannot contain tabs.", nameof(absoluteZipPath));
+
+            return CreateLegacyMessage(ProtocolKeywords.ReadboardUpdateReadyPrefix + tag + "\t" + absoluteZipPath);
         }
 
         private static ProtocolMessage CreatePlaceMessage(string rawLine)

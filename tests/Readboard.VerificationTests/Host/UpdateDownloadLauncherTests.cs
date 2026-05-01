@@ -31,13 +31,48 @@ namespace Readboard.VerificationTests.Host
         public void DownloadClick_UsesShellLauncherAndLogsFailures()
         {
             string source = LoadReadboardSource("FormUpdate.cs");
-            string clickSlice = GetMethodSlice(source, "private void btnDownload_Click(object sender, EventArgs e)");
+            string clickSlice = GetMethodSlice(source, "private async void btnDownload_Click(object sender, EventArgs e)");
+            string manualSlice = GetMethodSlice(source, "private void OpenManualDownload()");
             string openSlice = GetMethodSlice(source, "internal static void OpenDownloadUri(Uri downloadUri)");
 
-            Assert.Contains("OpenDownloadUri(downloadUri);", clickSlice);
-            Assert.Contains("catch (Exception exception)", clickSlice);
-            Assert.Contains("Trace.TraceError(exception.ToString());", clickSlice);
+            Assert.Contains("if (CanUseHostedInstall())", clickSlice);
+            Assert.Contains("await BeginHostedInstallAsync();", clickSlice);
+            Assert.Contains("OpenManualDownload();", clickSlice);
+            Assert.Contains("OpenDownloadUri(downloadUri);", manualSlice);
+            Assert.Contains("catch (Exception exception)", manualSlice);
+            Assert.Contains("Trace.TraceError(exception.ToString());", manualSlice);
             Assert.Contains("using (Process process = Process.Start(CreateDownloadStartInfo(downloadUri)))", openSlice);
+        }
+
+        [Fact]
+        public void BuildHostedUpdateMessage_AppendsManualFallback()
+        {
+            string message = FormUpdate.BuildHostedUpdateMessage(
+                "Host installation failed.",
+                "bad zip",
+                "Falling back to manual download.",
+                "Default fallback");
+
+            Assert.Equal(
+                "Host installation failed." + Environment.NewLine +
+                "bad zip" + Environment.NewLine +
+                "Falling back to manual download.",
+                message);
+        }
+
+        [Fact]
+        public void ShowUpdateAvailable_WiresHostedInstallModelThroughPipeCapabilityAndAsset()
+        {
+            string source = LoadReadboardSource("Form1.cs");
+            string methodSlice = GetMethodSlice(source, "private void ShowUpdateAvailable(UpdateCheckResult result)");
+
+            Assert.Contains("launchOptions.TransportKind == TransportKind.Pipe", methodSlice);
+            Assert.Contains("sessionCoordinator.IsProtocolSessionActive", methodSlice);
+            Assert.Contains("hostedUpdateSupported", methodSlice);
+            Assert.Contains("HostedInstallAvailable = hostedInstallAvailable", methodSlice);
+            Assert.Contains("PrepareHostedUpdateAsync = PrepareHostedUpdatePackageAsync", methodSlice);
+            Assert.Contains("NotifyHostedUpdateReady = NotifyHostedUpdateReady", methodSlice);
+            Assert.Contains("activeHostedUpdateDialog = formUpdate;", methodSlice);
         }
 
         private static string LoadReadboardSource(string fileName)

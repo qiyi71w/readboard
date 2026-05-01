@@ -39,7 +39,10 @@ namespace readboard
                 CaptureService = new LegacyBoardCaptureService(new Win32BoardCapturePlatform()),
                 RecognitionService = new LegacyBoardRecognitionService(),
                 PlacementService = LegacyMovePlacementService.CreateDefault(),
-                OverlayService = new LegacyOverlayService()
+                OverlayService = new LegacyOverlayService(),
+                DebugDiagnostics = new BoardDebugDiagnosticsWriter(
+                    BoardDebugDiagnosticsPaths.GetRootDirectory(AppDomain.CurrentDomain.BaseDirectory),
+                    delegate { return Program.CurrentConfig.DebugDiagnosticsEnabled; })
             };
         }
     }

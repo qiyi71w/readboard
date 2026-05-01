@@ -10,5 +10,9 @@ namespace readboard
         void HandleStopInBoardRequest();
         void HandleVersionRequest();
         void HandleQuitRequest();
+        void HandleReadboardUpdateSupported();
+        void HandleReadboardUpdateInstalling();
+        void HandleReadboardUpdateCancelled();
+        void HandleReadboardUpdateFailed(string message);
     }
 }

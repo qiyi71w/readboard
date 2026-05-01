@@ -126,5 +126,31 @@ namespace readboard
         {
             shutdown();
         }
+
+        void IProtocolCommandHost.HandleReadboardUpdateSupported()
+        {
+            hostedUpdateSupported = true;
+        }
+
+        void IProtocolCommandHost.HandleReadboardUpdateInstalling()
+        {
+            FormUpdate dialog = activeHostedUpdateDialog;
+            if (dialog != null && !dialog.IsDisposed)
+                dialog.MarkHostedInstalling();
+        }
+
+        void IProtocolCommandHost.HandleReadboardUpdateCancelled()
+        {
+            FormUpdate dialog = activeHostedUpdateDialog;
+            if (dialog != null && !dialog.IsDisposed)
+                dialog.MarkHostedCancelled();
+        }
+
+        void IProtocolCommandHost.HandleReadboardUpdateFailed(string message)
+        {
+            FormUpdate dialog = activeHostedUpdateDialog;
+            if (dialog != null && !dialog.IsDisposed)
+                dialog.MarkHostedFailed(message ?? string.Empty);
+        }
     }
 }

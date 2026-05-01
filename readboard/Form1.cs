@@ -74,6 +74,8 @@ namespace readboard
         private bool isShuttingDown = false;
         private bool closeRequestedBeforeHandle = false;
         private bool isInitializingProtocolState = true;
+        private bool hostedUpdateSupported = false;
+        private FormUpdate activeHostedUpdateDialog = null;
         private static readonly System.Drawing.Size MainFormDefaultSize = new System.Drawing.Size(792, 374);
 
         private readonly struct MainHeaderLayoutMetrics
@@ -1625,8 +1627,11 @@ namespace readboard
 
         private void ApplyMainWindowTitle()
         {
-            string title = MainWindowTitleFormatter.Format(
+            string baseTitle = MainWindowTitleFormatter.FormatBaseTitle(
                 getLangStr("MainForm_title"),
+                AppReleaseVersion.GetCurrentVersion());
+            string title = MainWindowTitleFormatter.Format(
+                baseTitle,
                 ResolveMainWindowTitleDisplayMode(),
                 hwnd != IntPtr.Zero,
                 lastFoxWindowContext,
@@ -1802,6 +1807,11 @@ namespace readboard
             get { return isShuttingDown; }
         }
 
+        internal bool HostedUpdateSupported
+        {
+            get { return hostedUpdateSupported; }
+        }
+
         internal MainForm(
             LaunchOptions launchOptions,
             ISyncSessionCoordinator sessionCoordinator,
@@ -1922,7 +1932,6 @@ namespace readboard
             SetControlText(formUpdate, "lblLatestVersion", getLangStr("Update_latestVersion"));
             SetControlText(formUpdate, "lblReleaseDate", getLangStr("Update_releaseDate"));
             SetControlText(formUpdate, "lblReleaseNotes", getLangStr("Update_releaseNotes"));
-            SetControlText(formUpdate, "btnDownload", getLangStr("Update_download"));
             SetControlText(formUpdate, "btnClose", getLangStr("Update_close"));
         }
 
@@ -1952,6 +1961,14 @@ namespace readboard
 
         private void ShowUpdateAvailable(UpdateCheckResult result)
         {
+            string hostedReleaseTag = result.Tag;
+            bool hostedInstallAvailable =
+                launchOptions.TransportKind == TransportKind.Pipe &&
+                sessionCoordinator.IsProtocolSessionActive &&
+                hostedUpdateSupported &&
+                !string.IsNullOrWhiteSpace(result.AssetDownloadUrl) &&
+                !string.IsNullOrWhiteSpace(result.AssetName) &&
+                !string.IsNullOrWhiteSpace(hostedReleaseTag);
             UpdateDialogModel model = new UpdateDialogModel
             {
                 CurrentVersion = result.CurrentVersion,
@@ -1964,13 +1981,54 @@ namespace readboard
                 MissingDownloadUrlMessage = getLangStr("Update_missingDownloadUrl"),
                 InvalidDownloadUrlFormatMessage = getLangStr("Update_invalidDownloadUrlFormat"),
                 UnsupportedDownloadUrlSchemeMessage = getLangStr("Update_unsupportedDownloadUrlScheme"),
-                OpenDownloadUrlFailedMessage = getLangStr("Update_openDownloadFailed")
+                OpenDownloadUrlFailedMessage = getLangStr("Update_openDownloadFailed"),
+                HostedInstallAvailable = hostedInstallAvailable,
+                HostedReleaseTag = hostedReleaseTag,
+                HostedAssetName = result.AssetName,
+                HostedAssetDownloadUrl = result.AssetDownloadUrl,
+                DownloadButtonText = getLangStr("Update_download"),
+                DownloadAndInstallButtonText = getLangStr("Update_downloadAndInstall"),
+                DownloadingButtonText = getLangStr("Update_downloading"),
+                WaitingForHostInstallText = getLangStr("Update_waitingForHostInstall"),
+                HostCancelledText = getLangStr("Update_hostCancelled"),
+                HostFailedText = getLangStr("Update_hostFailed"),
+                HostTimedOutText = getLangStr("Update_hostTimedOut"),
+                ManualDownloadFallbackMessage = getLangStr("Update_manualDownloadFallback"),
+                PrepareHostedUpdateAsync = PrepareHostedUpdatePackageAsync,
+                NotifyHostedUpdateReady = NotifyHostedUpdateReady
             };
             using (FormUpdate formUpdate = new FormUpdate(model))
             {
+                activeHostedUpdateDialog = formUpdate;
+                formUpdate.FormClosed += delegate
+                {
+                    if (ReferenceEquals(activeHostedUpdateDialog, formUpdate))
+                        activeHostedUpdateDialog = null;
+                };
                 ApplyUpdateDialogLanguage(formUpdate);
                 formUpdate.ShowDialog(this);
+                if (ReferenceEquals(activeHostedUpdateDialog, formUpdate))
+                    activeHostedUpdateDialog = null;
             }
+        }
+
+        private async Task<string> PrepareHostedUpdatePackageAsync(UpdateDialogModel model)
+        {
+            if (model == null)
+                throw new ArgumentNullException("model");
+
+            HostedUpdatePackageDownloader downloader = new HostedUpdatePackageDownloader();
+            string zipPath = await downloader.DownloadAsync(
+                model.HostedReleaseTag,
+                model.HostedAssetName,
+                model.HostedAssetDownloadUrl);
+            new HostedUpdatePackageVerifier().Verify(model.HostedReleaseTag, zipPath);
+            return zipPath;
+        }
+
+        private void NotifyHostedUpdateReady(string tag, string absoluteZipPath)
+        {
+            sessionCoordinator.SendReadboardUpdateReady(tag, absoluteZipPath);
         }
 
         private void ShowUpdateUpToDate()

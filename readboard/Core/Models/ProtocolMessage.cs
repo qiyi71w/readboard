@@ -8,7 +8,11 @@ namespace readboard
         StopInBoard = 3,
         VersionRequest = 4,
         Quit = 5,
-        ForceRebuild = 6
+        ForceRebuild = 6,
+        ReadboardUpdateSupported = 7,
+        ReadboardUpdateInstalling = 8,
+        ReadboardUpdateCancelled = 9,
+        ReadboardUpdateFailed = 10
     }
 
     internal sealed class ProtocolMessage

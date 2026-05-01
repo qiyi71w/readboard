@@ -34,6 +34,8 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("TryResolveFoxWindowBinding(out foxWindowContext)", resolveSlice);
             Assert.DoesNotContain("FoxWindowContextResolver.Resolve(", resolveSlice);
             Assert.DoesNotContain("FoxWindowDescriptorFactory", resolveSlice);
+            Assert.Contains("AppReleaseVersion.GetCurrentVersion()", applyTitleSlice);
+            Assert.Contains("MainWindowTitleFormatter.FormatBaseTitle(", applyTitleSlice);
             Assert.Contains("string title = MainWindowTitleFormatter.Format(", applyTitleSlice);
             Assert.Contains("if (string.Equals(lastAppliedMainWindowTitle, title, StringComparison.Ordinal))", applyTitleSlice);
             Assert.Contains("lastAppliedMainWindowTitle = title;", applyTitleSlice);
