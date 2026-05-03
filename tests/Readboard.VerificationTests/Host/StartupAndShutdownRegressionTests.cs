@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Xml.Linq;
 using Xunit;
 
 namespace Readboard.VerificationTests.Host
@@ -714,6 +716,20 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Contains("return true;", methodSlice);
             Assert.Contains("return false;", methodSlice);
+        }
+
+        [Fact]
+        public void Manifest_UsesAsInvokerForHostLaunchedReadboard()
+        {
+            string content = LoadSource("readboard", "Properties", "app.manifest");
+            XDocument manifest = XDocument.Parse(content);
+
+            XElement requestedExecutionLevel = manifest
+                .Descendants()
+                .Single(element => element.Name.LocalName == "requestedExecutionLevel");
+
+            Assert.Equal("asInvoker", (string)requestedExecutionLevel.Attribute("level"));
+            Assert.Equal("false", (string)requestedExecutionLevel.Attribute("uiAccess"));
         }
 
         [Fact]
