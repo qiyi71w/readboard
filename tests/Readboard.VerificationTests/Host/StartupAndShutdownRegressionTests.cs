@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Xml.Linq;
 using Xunit;
 
 namespace Readboard.VerificationTests.Host
@@ -717,6 +719,35 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void Manifest_UsesAsInvokerForHostLaunchedReadboard()
+        {
+            string content = LoadSource("readboard", "Properties", "app.manifest");
+            XDocument manifest = XDocument.Parse(content);
+            XNamespace assemblyNamespace = "urn:schemas-microsoft-com:asm.v1";
+            XNamespace trustNamespace = "urn:schemas-microsoft-com:asm.v2";
+            XNamespace privilegesNamespace = "urn:schemas-microsoft-com:asm.v3";
+
+            XElement assembly = GetRequiredElement(
+                manifest,
+                assemblyNamespace + "assembly");
+            XElement trustInfo = GetRequiredElement(
+                assembly,
+                trustNamespace + "trustInfo");
+            XElement security = GetRequiredElement(
+                trustInfo,
+                trustNamespace + "security");
+            XElement requestedPrivileges = GetRequiredElement(
+                security,
+                privilegesNamespace + "requestedPrivileges");
+            XElement requestedExecutionLevel = GetRequiredSingleElement(
+                requestedPrivileges,
+                privilegesNamespace + "requestedExecutionLevel");
+
+            Assert.Equal("asInvoker", (string)requestedExecutionLevel.Attribute("level"));
+            Assert.Equal("false", (string)requestedExecutionLevel.Attribute("uiAccess"));
+        }
+
+        [Fact]
         public void MainForm_DispatchProtocolCommand_QueuesInboundCommandsUntilHandleExists()
         {
             string source = LoadSource("readboard", "MainForm.Protocol.cs");
@@ -755,6 +786,20 @@ namespace Readboard.VerificationTests.Host
             int index = source.IndexOf(value, startIndex, StringComparison.Ordinal);
             Assert.True(index >= 0, "Expected to find source fragment after index " + startIndex + ": " + value);
             return index;
+        }
+
+        private static XElement GetRequiredElement(XContainer parent, XName name)
+        {
+            XElement element = parent.Element(name);
+            Assert.NotNull(element);
+            return element;
+        }
+
+        private static XElement GetRequiredSingleElement(XContainer parent, XName name)
+        {
+            XElement element = parent.Elements(name).SingleOrDefault();
+            Assert.NotNull(element);
+            return element;
         }
 
         private static string GetMethodSlice(string source, string methodSignature)
