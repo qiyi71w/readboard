@@ -126,7 +126,7 @@ namespace Readboard.VerificationTests.Host
             string orchestrationSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
 
             Assert.Contains("BuildRecognizedSampleProtocolDispatch(", orchestrationSource);
-            Assert.Contains("DispatchRecognizedSampleProtocol(dispatch);", orchestrationSource);
+            Assert.Contains("DispatchRecognizedSampleProtocol(dispatch, isOperationCurrent);", orchestrationSource);
             Assert.DoesNotContain("ProcessRecognizedSample(snapshot, sample, firstSample);", orchestrationSource);
         }
 

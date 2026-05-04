@@ -59,7 +59,7 @@ namespace readboard
                 return false;
             }
 
-            DispatchRecognizedSampleProtocol(BuildRecognizedSampleProtocolDispatch(snapshot, sample, true));
+            DispatchRecognizedSampleProtocol(BuildRecognizedSampleProtocolDispatch(snapshot, sample, true), null);
             return true;
         }
 
@@ -414,7 +414,7 @@ namespace readboard
             }
             if (!IsOperationCurrent(isOperationCurrent))
                 return false;
-            DispatchRecognizedSampleProtocol(dispatch);
+            DispatchRecognizedSampleProtocol(dispatch, isOperationCurrent);
             return true;
         }
 
@@ -787,13 +787,17 @@ namespace readboard
             return dispatch;
         }
 
-        private void DispatchRecognizedSampleProtocol(RecognizedSampleProtocolDispatch dispatch)
+        private void DispatchRecognizedSampleProtocol(
+            RecognizedSampleProtocolDispatch dispatch,
+            Func<bool> isOperationCurrent)
         {
             if (dispatch == null)
                 return;
 
             outboundProtocolDispatcher.ExecuteBatch(delegate
             {
+                if (isOperationCurrent != null && !IsOperationCurrent(isOperationCurrent))
+                    return;
                 if (dispatch.ShouldSendClear)
                     outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateClearMessage());
                 if (!string.IsNullOrWhiteSpace(dispatch.OverlayProtocolLine))
