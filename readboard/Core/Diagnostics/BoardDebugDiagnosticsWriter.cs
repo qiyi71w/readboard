@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -21,15 +23,20 @@ namespace readboard
         public string FailureReason { get; set; }
     }
 
-    internal sealed class BoardDebugDiagnosticsWriter
+    internal sealed class BoardDebugDiagnosticsWriter : IDisposable
     {
         private readonly string rootDirectory;
         private readonly Func<bool> isEnabled;
         private readonly object syncRoot = new object();
+        private readonly Queue<PendingWrite> pendingWrites = new Queue<PendingWrite>();
+        private readonly AutoResetEvent pendingWriteSignal = new AutoResetEvent(false);
+        private readonly Thread workerThread;
         private int eventCounter;
         private ulong lastFrameSignature;
         private ulong lastSnapshotSignature;
         private bool hasLastSuccess;
+        private bool disposeRequested;
+        private bool disposed;
 
         public BoardDebugDiagnosticsWriter(string rootDirectory, Func<bool> isEnabled)
         {
@@ -40,13 +47,17 @@ namespace readboard
 
             this.rootDirectory = rootDirectory;
             this.isEnabled = isEnabled;
+            workerThread = new Thread(RunWriteLoop);
+            workerThread.IsBackground = true;
+            workerThread.Name = "ReadboardDebugDiagnosticsWriter";
+            workerThread.Start();
         }
 
         public void RecordCaptureFailure(BoardDebugDiagnosticRecord record)
         {
             lock (syncRoot)
             {
-                WriteEvent("capture-failure", record, false);
+                EnqueueEvent("capture-failure", record, false);
             }
         }
 
@@ -54,7 +65,7 @@ namespace readboard
         {
             lock (syncRoot)
             {
-                WriteEvent("recognition-failure", record, true);
+                EnqueueEvent("recognition-failure", record, true);
             }
         }
 
@@ -65,9 +76,26 @@ namespace readboard
                 if (IsDuplicateSuccess(record))
                     return;
 
-                WriteEvent("recognition-success", record, true);
-                RememberSuccess(record);
+                if (EnqueueEvent("recognition-success", record, true))
+                    RememberSuccess(record);
             }
+        }
+
+        public void Dispose()
+        {
+            lock (syncRoot)
+            {
+                if (disposed)
+                    return;
+
+                disposed = true;
+                disposeRequested = true;
+            }
+
+            pendingWriteSignal.Set();
+            if (workerThread != Thread.CurrentThread)
+                workerThread.Join();
+            pendingWriteSignal.Dispose();
         }
 
         private bool IsDuplicateSuccess(BoardDebugDiagnosticRecord record)
@@ -90,46 +118,112 @@ namespace readboard
             hasLastSuccess = lastFrameSignature != 0UL || lastSnapshotSignature != 0UL;
         }
 
-        private void WriteEvent(string eventName, BoardDebugDiagnosticRecord record, bool includeFrame)
+        private bool EnqueueEvent(string eventName, BoardDebugDiagnosticRecord record, bool includeFrame)
         {
-            if (!isEnabled())
-                return;
+            if (disposeRequested || !isEnabled())
+                return false;
 
             try
             {
-                Directory.CreateDirectory(rootDirectory);
                 DateTime timestampUtc = DateTime.UtcNow;
-                string eventDirectory = CreateEventDirectory(eventName, timestampUtc);
-                Directory.CreateDirectory(eventDirectory);
-
-                if (includeFrame)
-                    SaveFrame(record == null ? null : record.Frame, Path.Combine(eventDirectory, "frame.png"));
-
-                File.WriteAllText(
-                    Path.Combine(eventDirectory, "metadata.json"),
-                    JsonSerializer.Serialize(CreateMetadata(eventName, timestampUtc, record)),
-                    Encoding.UTF8);
-
-                if (record != null && record.Snapshot != null)
-                    File.WriteAllText(Path.Combine(eventDirectory, "recognition.txt"), FormatRecognition(record.Snapshot), Encoding.UTF8);
-
-                AppendLog(eventName, timestampUtc, record);
+                pendingWrites.Enqueue(CreatePendingWrite(eventName, timestampUtc, record, includeFrame));
+                pendingWriteSignal.Set();
+                return true;
             }
             catch (Exception ex)
             {
-                Trace.WriteLine("Failed to write readboard debug diagnostics: " + ex);
+                Trace.WriteLine("Failed to enqueue readboard debug diagnostics: " + ex);
+                return false;
             }
         }
 
-        private string CreateEventDirectory(string eventName, DateTime timestampUtc)
+        private PendingWrite CreatePendingWrite(
+            string eventName,
+            DateTime timestampUtc,
+            BoardDebugDiagnosticRecord record,
+            bool includeFrame)
+        {
+            string eventDirectoryName = CreateEventDirectoryName(eventName, timestampUtc);
+            string metadataJson = JsonSerializer.Serialize(CreateMetadata(eventName, timestampUtc, record));
+            string recognitionText = record != null && record.Snapshot != null
+                ? FormatRecognition(record.Snapshot)
+                : null;
+            string logLine = FormatLogLine(eventName, timestampUtc, record);
+            PendingFrame frame = includeFrame ? SnapshotFrame(record == null ? null : record.Frame) : null;
+            return new PendingWrite(eventDirectoryName, metadataJson, recognitionText, logLine, frame);
+        }
+
+        private void RunWriteLoop()
+        {
+            while (true)
+            {
+                PendingWrite pendingWrite = null;
+                lock (syncRoot)
+                {
+                    if (pendingWrites.Count > 0)
+                    {
+                        pendingWrite = pendingWrites.Dequeue();
+                    }
+                    else if (disposeRequested)
+                    {
+                        return;
+                    }
+                }
+
+                if (pendingWrite == null)
+                {
+                    pendingWriteSignal.WaitOne();
+                    continue;
+                }
+
+                try
+                {
+                    WritePendingWrite(pendingWrite);
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine("Failed to write readboard debug diagnostics: " + ex);
+                }
+                finally
+                {
+                    pendingWrite.Dispose();
+                }
+            }
+        }
+
+        private void WritePendingWrite(PendingWrite pendingWrite)
+        {
+            Directory.CreateDirectory(rootDirectory);
+            string eventDirectory = Path.Combine(rootDirectory, pendingWrite.EventDirectoryName);
+            Directory.CreateDirectory(eventDirectory);
+
+            if (pendingWrite.Frame != null)
+                SaveFrame(pendingWrite.Frame, Path.Combine(eventDirectory, "frame.png"));
+
+            File.WriteAllText(
+                Path.Combine(eventDirectory, "metadata.json"),
+                pendingWrite.MetadataJson,
+                Encoding.UTF8);
+
+            if (!string.IsNullOrWhiteSpace(pendingWrite.RecognitionText))
+            {
+                File.WriteAllText(
+                    Path.Combine(eventDirectory, "recognition.txt"),
+                    pendingWrite.RecognitionText,
+                    Encoding.UTF8);
+            }
+
+            File.AppendAllText(Path.Combine(rootDirectory, "debug.log"), pendingWrite.LogLine, Encoding.UTF8);
+        }
+
+        private string CreateEventDirectoryName(string eventName, DateTime timestampUtc)
         {
             int currentCounter = Interlocked.Increment(ref eventCounter);
-            string name = timestampUtc.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture)
+            return timestampUtc.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture)
                 + "-"
                 + currentCounter.ToString("0000", CultureInfo.InvariantCulture)
                 + "-"
                 + eventName;
-            return Path.Combine(rootDirectory, name);
         }
 
         private static object CreateMetadata(string eventName, DateTime timestampUtc, BoardDebugDiagnosticRecord record)
@@ -172,9 +266,9 @@ namespace readboard
             return builder.ToString();
         }
 
-        private void AppendLog(string eventName, DateTime timestampUtc, BoardDebugDiagnosticRecord record)
+        private static string FormatLogLine(string eventName, DateTime timestampUtc, BoardDebugDiagnosticRecord record)
         {
-            string line = timestampUtc.ToString("o", CultureInfo.InvariantCulture)
+            return timestampUtc.ToString("o", CultureInfo.InvariantCulture)
                 + " "
                 + eventName
                 + " mode="
@@ -182,7 +276,6 @@ namespace readboard
                 + " failure="
                 + (record == null ? string.Empty : record.FailureReason ?? string.Empty)
                 + Environment.NewLine;
-            File.AppendAllText(Path.Combine(rootDirectory, "debug.log"), line, Encoding.UTF8);
         }
 
         private static int ResolveFrameWidth(BoardFrame frame)
@@ -203,7 +296,31 @@ namespace readboard
             return frame.Image == null ? 0 : frame.Image.Height;
         }
 
-        private static void SaveFrame(BoardFrame frame, string path)
+        private static PendingFrame SnapshotFrame(BoardFrame frame)
+        {
+            if (frame == null)
+                return null;
+            if (frame.Image != null)
+                return PendingFrame.FromBitmap(new Bitmap(frame.Image));
+
+            PixelBuffer buffer = frame.PixelBuffer;
+            if (buffer == null
+                || buffer.Pixels == null
+                || buffer.Format != PixelBufferFormat.Rgb24
+                || buffer.Width <= 0
+                || buffer.Height <= 0
+                || buffer.Stride < buffer.Width * 3
+                || buffer.Pixels.Length < buffer.Stride * buffer.Height)
+            {
+                return null;
+            }
+
+            byte[] copiedPixels = new byte[buffer.Stride * buffer.Height];
+            Buffer.BlockCopy(buffer.Pixels, 0, copiedPixels, 0, copiedPixels.Length);
+            return PendingFrame.FromPixelBuffer(buffer.Width, buffer.Height, buffer.Stride, copiedPixels);
+        }
+
+        private static void SaveFrame(PendingFrame frame, string path)
         {
             Bitmap bitmap = CreateBitmap(frame);
             if (bitmap == null)
@@ -215,33 +332,51 @@ namespace readboard
             }
         }
 
-        private static Bitmap CreateBitmap(BoardFrame frame)
+        private static Bitmap CreateBitmap(PendingFrame frame)
         {
             if (frame == null)
                 return null;
-            if (frame.Image != null)
-                return new Bitmap(frame.Image);
-            return CreateBitmap(frame.PixelBuffer);
+            if (frame.Bitmap != null)
+                return frame.DetachBitmap();
+            return CreateBitmap(frame.Width, frame.Height, frame.Stride, frame.Pixels);
         }
 
-        private static Bitmap CreateBitmap(PixelBuffer buffer)
+        private static Bitmap CreateBitmap(int width, int height, int stride, byte[] pixels)
         {
-            if (buffer == null || buffer.Pixels == null || buffer.Format != PixelBufferFormat.Rgb24)
-                return null;
-            if (buffer.Width <= 0 || buffer.Height <= 0 || buffer.Stride < buffer.Width * 3)
-                return null;
-            if (buffer.Pixels.Length < buffer.Stride * buffer.Height)
+            if (pixels == null || width <= 0 || height <= 0 || stride < width * 3 || pixels.Length < stride * height)
                 return null;
 
-            Bitmap bitmap = new Bitmap(buffer.Width, buffer.Height, PixelFormat.Format24bppRgb);
-            for (int y = 0; y < buffer.Height; y++)
+            Bitmap bitmap = new Bitmap(width, height, PixelFormat.Format24bppRgb);
+            BitmapData bitmapData = bitmap.LockBits(
+                new Rectangle(0, 0, width, height),
+                ImageLockMode.WriteOnly,
+                PixelFormat.Format24bppRgb);
+            try
             {
-                int row = y * buffer.Stride;
-                for (int x = 0; x < buffer.Width; x++)
+                byte[] rowBuffer = new byte[bitmapData.Stride];
+                for (int y = 0; y < height; y++)
                 {
-                    int index = row + x * 3;
-                    bitmap.SetPixel(x, y, Color.FromArgb(buffer.Pixels[index], buffer.Pixels[index + 1], buffer.Pixels[index + 2]));
+                    int sourceRow = y * stride;
+                    Array.Clear(rowBuffer, 0, rowBuffer.Length);
+                    for (int x = 0; x < width; x++)
+                    {
+                        int sourceIndex = sourceRow + x * 3;
+                        int destinationIndex = x * 3;
+                        rowBuffer[destinationIndex] = pixels[sourceIndex + 2];
+                        rowBuffer[destinationIndex + 1] = pixels[sourceIndex + 1];
+                        rowBuffer[destinationIndex + 2] = pixels[sourceIndex];
+                    }
+
+                    Marshal.Copy(
+                        rowBuffer,
+                        0,
+                        IntPtr.Add(bitmapData.Scan0, y * bitmapData.Stride),
+                        rowBuffer.Length);
                 }
+            }
+            finally
+            {
+                bitmap.UnlockBits(bitmapData);
             }
 
             return bitmap;
@@ -261,6 +396,86 @@ namespace readboard
             if (snapshot == null)
                 return 0UL;
             return snapshot.StateSignature;
+        }
+
+        private sealed class PendingWrite : IDisposable
+        {
+            public PendingWrite(
+                string eventDirectoryName,
+                string metadataJson,
+                string recognitionText,
+                string logLine,
+                PendingFrame frame)
+            {
+                EventDirectoryName = eventDirectoryName;
+                MetadataJson = metadataJson;
+                RecognitionText = recognitionText;
+                LogLine = logLine;
+                Frame = frame;
+            }
+
+            public string EventDirectoryName { get; private set; }
+            public string MetadataJson { get; private set; }
+            public string RecognitionText { get; private set; }
+            public string LogLine { get; private set; }
+            public PendingFrame Frame { get; private set; }
+
+            public void Dispose()
+            {
+                if (Frame != null)
+                {
+                    Frame.Dispose();
+                    Frame = null;
+                }
+            }
+        }
+
+        private sealed class PendingFrame : IDisposable
+        {
+            private PendingFrame()
+            {
+            }
+
+            public Bitmap Bitmap { get; private set; }
+            public int Width { get; private set; }
+            public int Height { get; private set; }
+            public int Stride { get; private set; }
+            public byte[] Pixels { get; private set; }
+
+            public static PendingFrame FromBitmap(Bitmap bitmap)
+            {
+                return new PendingFrame
+                {
+                    Bitmap = bitmap
+                };
+            }
+
+            public static PendingFrame FromPixelBuffer(int width, int height, int stride, byte[] pixels)
+            {
+                return new PendingFrame
+                {
+                    Width = width,
+                    Height = height,
+                    Stride = stride,
+                    Pixels = pixels
+                };
+            }
+
+            public void Dispose()
+            {
+                if (Bitmap != null)
+                {
+                    Bitmap.Dispose();
+                    Bitmap = null;
+                }
+            }
+
+            public Bitmap DetachBitmap()
+            {
+                Bitmap bitmap = Bitmap;
+                Bitmap = null;
+                return bitmap;
+            }
         }
     }
 }

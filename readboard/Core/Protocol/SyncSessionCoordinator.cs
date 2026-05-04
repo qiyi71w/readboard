@@ -165,6 +165,7 @@ namespace readboard
             }
             finally
             {
+                DisposeRuntimeDependencies();
                 DisposeWaitHandles();
             }
         }
@@ -753,6 +754,16 @@ namespace readboard
             continuousSyncStoppedEvent.Dispose();
             syncIdleEvent.Dispose();
             keepSyncStopRequestedEvent.Dispose();
+        }
+
+        private void DisposeRuntimeDependencies()
+        {
+            SyncSessionRuntimeDependencies runtime = runtimeDependencies;
+            if (runtime == null || runtime.DebugDiagnostics == null)
+                return;
+
+            runtime.DebugDiagnostics.Dispose();
+            runtime.DebugDiagnostics = null;
         }
 
         private static bool IsPendingMoveAwaitingPlacementResult(PendingMoveState pendingMove)

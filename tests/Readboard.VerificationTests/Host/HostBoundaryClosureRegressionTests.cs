@@ -110,11 +110,14 @@ namespace Readboard.VerificationTests.Host
         {
             string dependenciesSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionRuntimeDependencies.cs");
             string orchestrationSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
+            string coordinatorSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.cs");
 
             Assert.Contains("public BoardDebugDiagnosticsWriter DebugDiagnostics { get; set; }", dependenciesSource);
             Assert.Contains("runtime.DebugDiagnostics.RecordCaptureFailure(", orchestrationSource);
             Assert.Contains("runtime.DebugDiagnostics.RecordRecognitionFailure(", orchestrationSource);
             Assert.Contains("runtime.DebugDiagnostics.RecordRecognitionSuccess(", orchestrationSource);
+            Assert.Contains("DisposeRuntimeDependencies();", coordinatorSource);
+            Assert.Contains("runtime.DebugDiagnostics.Dispose();", coordinatorSource);
         }
 
         [Fact]
