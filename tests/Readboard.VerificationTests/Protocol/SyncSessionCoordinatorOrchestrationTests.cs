@@ -683,8 +683,7 @@ namespace Readboard.VerificationTests.Protocol
                 Assert.True(outboundLockHeld.Wait(TimeSpan.FromSeconds(1)));
 
                 recognitionService.Release();
-                Assert.True(WaitForCondition(() => recognitionService.CallCount >= 2, TimeSpan.FromSeconds(1)));
-                Thread.Sleep(50);
+                Assert.True(WaitForCallCountToStabilizeAtLeast(() => recognitionService.CallCount, 2, TimeSpan.FromSeconds(1)));
 
                 Invoke(coordinator, "StopSyncSession");
 
@@ -967,6 +966,18 @@ namespace Readboard.VerificationTests.Protocol
             }
 
             return condition();
+        }
+
+        private static bool WaitForCallCountToStabilizeAtLeast(Func<int> readCallCount, int minimumCallCount, TimeSpan timeout)
+        {
+            int lastCallCount = -1;
+            return WaitForCondition(delegate
+            {
+                int currentCallCount = readCallCount();
+                bool isStable = currentCallCount == lastCallCount;
+                lastCallCount = currentCallCount;
+                return isStable && currentCallCount >= minimumCallCount;
+            }, timeout);
         }
 
         private class ReflectionProxy : DispatchProxy

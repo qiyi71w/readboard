@@ -65,6 +65,30 @@ namespace Readboard.VerificationTests.Protocol
                 transport.SentLines);
         }
 
+        [Fact]
+        public void Emit_DoesNothingWhenDispatcherIsClosed()
+        {
+            FakeTransport transport = new FakeTransport();
+            LegacyProtocolAdapter protocolAdapter = new LegacyProtocolAdapter();
+            OutboundProtocolDispatcher dispatcher = new OutboundProtocolDispatcher(transport, protocolAdapter);
+            OutboundBoardSnapshotEmitter emitter = new OutboundBoardSnapshotEmitter(dispatcher, protocolAdapter);
+
+            dispatcher.Open();
+            dispatcher.Close();
+
+            emitter.Emit(new OutboundBoardSnapshotBatch(
+                new[]
+                {
+                    protocolAdapter.CreateSyncPlatformMessage("fox"),
+                    protocolAdapter.CreateRoomTokenMessage("43581号")
+                },
+                false,
+                null,
+                new[] { "re=000" }));
+
+            Assert.Empty(transport.SentLines);
+        }
+
         private sealed class FakeTransport : IReadBoardTransport
         {
             public event EventHandler<string> MessageReceived

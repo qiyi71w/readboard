@@ -30,7 +30,7 @@ namespace readboard
         private readonly object syncRoot = new object();
         private readonly Queue<PendingWrite> pendingWrites = new Queue<PendingWrite>();
         private readonly AutoResetEvent pendingWriteSignal = new AutoResetEvent(false);
-        private readonly Thread workerThread;
+        private Thread workerThread;
         private int eventCounter;
         private ulong lastFrameSignature;
         private ulong lastSnapshotSignature;
@@ -47,10 +47,6 @@ namespace readboard
 
             this.rootDirectory = rootDirectory;
             this.isEnabled = isEnabled;
-            workerThread = new Thread(RunWriteLoop);
-            workerThread.IsBackground = true;
-            workerThread.Name = "ReadboardDebugDiagnosticsWriter";
-            workerThread.Start();
         }
 
         public void RecordCaptureFailure(BoardDebugDiagnosticRecord record)
@@ -93,8 +89,9 @@ namespace readboard
             }
 
             pendingWriteSignal.Set();
-            if (workerThread != Thread.CurrentThread)
-                workerThread.Join();
+            Thread workerToJoin = workerThread;
+            if (workerToJoin != null && workerToJoin != Thread.CurrentThread)
+                workerToJoin.Join();
             pendingWriteSignal.Dispose();
         }
 
@@ -126,7 +123,9 @@ namespace readboard
             try
             {
                 DateTime timestampUtc = DateTime.UtcNow;
-                pendingWrites.Enqueue(CreatePendingWrite(eventName, timestampUtc, record, includeFrame));
+                PendingWrite pendingWrite = CreatePendingWrite(eventName, timestampUtc, record, includeFrame);
+                EnsureWorkerStarted();
+                pendingWrites.Enqueue(pendingWrite);
                 pendingWriteSignal.Set();
                 return true;
             }
@@ -135,6 +134,17 @@ namespace readboard
                 Trace.WriteLine("Failed to enqueue readboard debug diagnostics: " + ex);
                 return false;
             }
+        }
+
+        private void EnsureWorkerStarted()
+        {
+            if (workerThread != null)
+                return;
+
+            workerThread = new Thread(RunWriteLoop);
+            workerThread.IsBackground = true;
+            workerThread.Name = "ReadboardDebugDiagnosticsWriter";
+            workerThread.Start();
         }
 
         private PendingWrite CreatePendingWrite(
