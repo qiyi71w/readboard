@@ -130,12 +130,6 @@ namespace readboard
             set { Config.SyncIntervalMs = value; }
         }
 
-        public static int grayOffset
-        {
-            get { return Config.GrayOffset; }
-            set { Config.GrayOffset = value; }
-        }
-
         public static bool useEnhanceScreen
         {
             get { return Config.UseEnhanceScreen; }
@@ -158,18 +152,6 @@ namespace readboard
         {
             get { return Config.UiThemeMode; }
             set { Config.UiThemeMode = value; }
-        }
-
-        public static double factor
-        {
-            get { return runtimeContext.DpiFactor; }
-            set { runtimeContext.DpiFactor = value; }
-        }
-
-        public static bool hasConfigFile
-        {
-            get { return runtimeContext.HasConfigFile; }
-            set { runtimeContext.HasConfigFile = value; }
         }
 
         public static Bitmap bitmap

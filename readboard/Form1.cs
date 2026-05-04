@@ -1842,7 +1842,6 @@ namespace readboard
             if (factor > 1.0f)
             {
                 Program.isScaled = true;
-                Program.factor = factor;
             }
             ApplyLoadedConfiguration();
             this.MaximizeBox = false;

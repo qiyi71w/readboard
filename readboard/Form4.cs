@@ -47,10 +47,6 @@ namespace readboard
             this.rdoColorLight.Text = getLangStr("SettingsForm_rdoColorLight");
             this.chkDebugDiagnostics.Text = getLangStr("SettingsForm_chkDebugDiagnostics");
             this.btnOpenDebugDiagnostics.Text = getLangStr("SettingsForm_btnOpenDebugDiagnostics");
-
-           // this.Size= new Size((int)(461 *Program.factor), (int)(270 * Program.factor));
-           
-
             var toolTip1 = new ToolTip();
             toolTip1.SetToolTip(this.chkEnhanceScreen, getLangStr("SettingsForm_chkEnhanceScreen_ToolTip"));
             var toolTip2 = new ToolTip();

@@ -31,6 +31,7 @@ namespace readboard
 
         private readonly UpdateDialogModel model;
         private readonly Timer hostedUpdateResponseTimer = new Timer();
+        private Font ownedTitleFont;
         private bool isApplyingUpdateLayout;
         private bool hostedInstallFallbackActive;
 
@@ -160,7 +161,8 @@ namespace readboard
             rootPanel.BackColor = UiTheme.WindowBackground;
             infoPanel.BackColor = UiTheme.SurfaceBackground;
             buttonPanel.BackColor = UiTheme.WindowBackground;
-            StyleUpdateTitle(UiTheme.PrimaryText, new Font(UiTheme.BodyFont.FontFamily, 12F, FontStyle.Bold, GraphicsUnit.Point));
+            SetOwnedTitleFont(new Font(UiTheme.BodyFont.FontFamily, 12F, FontStyle.Bold, GraphicsUnit.Point));
+            StyleUpdateTitle(UiTheme.PrimaryText);
             StyleUpdateFields(UiTheme.SecondaryText, UiTheme.PrimaryText, UiTheme.BodyFont);
             UiTheme.StyleInput(txtReleaseNotes);
             UiTheme.StyleSecondaryButton(btnClose);
@@ -175,7 +177,8 @@ namespace readboard
             rootPanel.BackColor = SystemColors.Control;
             infoPanel.BackColor = SystemColors.Control;
             buttonPanel.BackColor = SystemColors.Control;
-            StyleUpdateTitle(SystemColors.ControlText, new Font(Control.DefaultFont, FontStyle.Bold));
+            SetOwnedTitleFont(new Font(Control.DefaultFont, FontStyle.Bold));
+            StyleUpdateTitle(SystemColors.ControlText);
             StyleUpdateFields(SystemColors.ControlText, SystemColors.ControlText, Control.DefaultFont);
             txtReleaseNotes.BackColor = SystemColors.Window;
             txtReleaseNotes.ForeColor = SystemColors.WindowText;
@@ -185,11 +188,19 @@ namespace readboard
             ResetButtonTheme(btnDownload);
         }
 
-        private void StyleUpdateTitle(Color foreColor, Font font)
+        private void SetOwnedTitleFont(Font font)
+        {
+            Font previousFont = ownedTitleFont;
+            ownedTitleFont = font;
+            lblTitle.Font = font;
+            if (previousFont != null)
+                previousFont.Dispose();
+        }
+
+        private void StyleUpdateTitle(Color foreColor)
         {
             lblTitle.BackColor = Color.Transparent;
             lblTitle.ForeColor = foreColor;
-            lblTitle.Font = font;
         }
 
         private void StyleUpdateFields(Color labelColor, Color valueColor, Font font)
@@ -555,6 +566,11 @@ namespace readboard
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             hostedUpdateResponseTimer.Stop();
+            if (ownedTitleFont != null)
+            {
+                ownedTitleFont.Dispose();
+                ownedTitleFont = null;
+            }
             base.OnFormClosed(e);
         }
     }
