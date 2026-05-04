@@ -14,14 +14,13 @@ namespace readboard
         private readonly IReadBoardTransport transport;
         private readonly IReadBoardProtocolAdapter protocolAdapter;
         private readonly object stateLock = new object();
-        private readonly object outboundProtocolSyncRoot = new object();
+        private readonly OutboundProtocolDispatcher outboundProtocolDispatcher;
         private readonly AutoResetEvent pendingMoveEvent = new AutoResetEvent(false);
         private readonly ManualResetEventSlim pendingMoveAvailableEvent = new ManualResetEventSlim(false);
         private readonly ManualResetEventSlim continuousSyncStoppedEvent = new ManualResetEventSlim(true);
         private readonly ManualResetEventSlim syncIdleEvent = new ManualResetEventSlim(true);
         private int disposeState;
         private volatile bool acceptingInboundProtocolMessages;
-        private volatile bool outboundProtocolClosed;
         private string syncPlatform = "generic";
         private FoxWindowContext foxWindowContext = FoxWindowContext.Unknown();
         private bool forceRebuildArmed;
@@ -40,6 +39,7 @@ namespace readboard
 
             this.transport = transport;
             this.protocolAdapter = protocolAdapter;
+            outboundProtocolDispatcher = new OutboundProtocolDispatcher(transport, protocolAdapter);
             sessionState = new SessionState();
         }
 
@@ -65,7 +65,7 @@ namespace readboard
 
         public bool IsProtocolSessionActive
         {
-            get { return acceptingInboundProtocolMessages && !outboundProtocolClosed; }
+            get { return acceptingInboundProtocolMessages && !outboundProtocolDispatcher.IsClosed; }
         }
 
         private T GetLockedSessionState<T>(Func<SessionState, T> selector)
@@ -128,7 +128,7 @@ namespace readboard
 
         public void Start()
         {
-            outboundProtocolClosed = false;
+            outboundProtocolDispatcher.Open();
             acceptingInboundProtocolMessages = true;
             transport.MessageReceived += OnMessageReceived;
             transport.Start();
@@ -561,16 +561,10 @@ namespace readboard
 
         public void SendShutdownProtocol()
         {
-            lock (outboundProtocolSyncRoot)
-            {
-                if (outboundProtocolClosed)
-                    return;
-
-                SendProtocolMessageCore(protocolAdapter.CreateStopSyncMessage());
-                SendProtocolMessageCore(protocolAdapter.CreateBothSyncMessage(false));
-                SendProtocolMessageCore(protocolAdapter.CreateEndSyncMessage());
-                outboundProtocolClosed = true;
-            }
+            outboundProtocolDispatcher.SendShutdown(
+                protocolAdapter.CreateStopSyncMessage(),
+                protocolAdapter.CreateBothSyncMessage(false),
+                protocolAdapter.CreateEndSyncMessage());
         }
 
         public void SendLine(string line)
@@ -580,13 +574,7 @@ namespace readboard
 
         public void SendError(string message)
         {
-            lock (outboundProtocolSyncRoot)
-            {
-                if (outboundProtocolClosed)
-                    return;
-
-                transport.SendError(message);
-            }
+            outboundProtocolDispatcher.SendError(message);
         }
 
         private void OnMessageReceived(object sender, string rawLine)
@@ -809,35 +797,17 @@ namespace readboard
 
         private void SendProtocolLine(string line)
         {
-            if (string.IsNullOrWhiteSpace(line))
-                return;
-            SendProtocolMessage(ProtocolMessage.CreateLegacyLine(line));
+            outboundProtocolDispatcher.SendLegacyLine(line);
         }
 
         private void SendProtocolMessage(ProtocolMessage message)
         {
-            lock (outboundProtocolSyncRoot)
-            {
-                if (outboundProtocolClosed)
-                    return;
-
-                SendProtocolMessageCore(message);
-            }
+            outboundProtocolDispatcher.Send(message);
         }
 
         private void CloseOutboundProtocol()
         {
-            lock (outboundProtocolSyncRoot)
-                outboundProtocolClosed = true;
-        }
-
-        private void SendProtocolMessageCore(ProtocolMessage message)
-        {
-            string line = protocolAdapter.Serialize(message);
-            if (string.IsNullOrWhiteSpace(line))
-                return;
-
-            transport.Send(line);
+            outboundProtocolDispatcher.Close();
         }
 
         private OutboundWindowContext BuildOutboundWindowContextUnsafe()
