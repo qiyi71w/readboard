@@ -640,6 +640,72 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public async Task StopSyncSession_WhileDispatchBatchWaitsForOutboundLock_DoesNotSendStaleBoardProtocol()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Foreground, IntPtr.Zero);
+            SetProperty(snapshot, "SampleIntervalMs", 1000);
+            HostRecorder hostRecorder = new HostRecorder(snapshot);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            ScriptedBlockingRecognitionService recognitionService = new ScriptedBlockingRecognitionService(CreateResult("re=foreground"), 2);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", recognitionService);
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            ManualResetEventSlim releaseOutboundLock = new ManualResetEventSlim(false);
+            ManualResetEventSlim outboundLockHeld = new ManualResetEventSlim(false);
+            Task holdOutboundLockTask = null;
+
+            try
+            {
+                Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+                Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+                Assert.True(recognitionService.BlockedRecognizeStarted.Wait(TimeSpan.FromSeconds(1)));
+
+                holdOutboundLockTask = Task.Run(delegate
+                {
+                    object dispatcher = GetOutboundProtocolDispatcher(coordinator);
+                    Invoke(dispatcher, "ExecuteBatch", (Action)delegate
+                    {
+                        outboundLockHeld.Set();
+                        releaseOutboundLock.Wait();
+                    });
+                });
+                Assert.True(outboundLockHeld.Wait(TimeSpan.FromSeconds(1)));
+
+                recognitionService.Release();
+                Assert.True(WaitForCallCountToStabilizeAtLeast(() => recognitionService.CallCount, 2, TimeSpan.FromSeconds(1)));
+
+                Invoke(coordinator, "StopSyncSession");
+
+                releaseOutboundLock.Set();
+
+                Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+                Assert.DoesNotContain("start 19 19", transport.SentLines);
+                Assert.DoesNotContain("syncPlatform generic", transport.SentLines);
+                Assert.DoesNotContain("re=foreground", transport.SentLines);
+                Assert.DoesNotContain("end", transport.SentLines);
+                Assert.Equal(1, transport.CountLines("stopsync"));
+            }
+            finally
+            {
+                recognitionService.Release();
+                releaseOutboundLock.Set();
+                if (holdOutboundLockTask != null)
+                    await holdOutboundLockTask.WaitAsync(TimeSpan.FromSeconds(1));
+            }
+        }
+
+        [Fact]
         public void Stop_DoesNotWaitForBlockedWorkerThreadsDuringShutdown()
         {
             RecordingTransport transport = new RecordingTransport();
@@ -856,6 +922,17 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(runtimeState, "CurrentBoardPixelWidth", boardPixelWidth);
         }
 
+        private static object GetOutboundProtocolDispatcher(SyncSessionCoordinator coordinator)
+        {
+            FieldInfo dispatcherField = typeof(SyncSessionCoordinator).GetField(
+                "outboundProtocolDispatcher",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.True(dispatcherField != null, "Missing coordinator field: outboundProtocolDispatcher");
+            object dispatcher = dispatcherField.GetValue(coordinator);
+            Assert.NotNull(dispatcher);
+            return dispatcher;
+        }
+
         private static Thread WaitForWorkerThread(object target, string fieldName)
         {
             DateTime deadline = DateTime.UtcNow.AddSeconds(1);
@@ -889,6 +966,18 @@ namespace Readboard.VerificationTests.Protocol
             }
 
             return condition();
+        }
+
+        private static bool WaitForCallCountToStabilizeAtLeast(Func<int> readCallCount, int minimumCallCount, TimeSpan timeout)
+        {
+            int lastCallCount = -1;
+            return WaitForCondition(delegate
+            {
+                int currentCallCount = readCallCount();
+                bool isStable = currentCallCount == lastCallCount;
+                lastCallCount = currentCallCount;
+                return isStable && currentCallCount >= minimumCallCount;
+            }, timeout);
         }
 
         private class ReflectionProxy : DispatchProxy
@@ -1307,6 +1396,44 @@ namespace Readboard.VerificationTests.Protocol
             public BoardRecognitionResult Recognize(BoardRecognitionRequest request)
             {
                 return result;
+            }
+        }
+
+        private sealed class ScriptedBlockingRecognitionService : IBoardRecognitionService
+        {
+            private readonly BoardRecognitionResult result;
+            private readonly int blockedCallNumber;
+            private readonly ManualResetEventSlim releaseEvent = new ManualResetEventSlim(false);
+            private int callCount;
+
+            public ScriptedBlockingRecognitionService(BoardRecognitionResult result, int blockedCallNumber)
+            {
+                this.result = result;
+                this.blockedCallNumber = blockedCallNumber;
+            }
+
+            public ManualResetEventSlim BlockedRecognizeStarted { get; } = new ManualResetEventSlim(false);
+
+            public int CallCount
+            {
+                get { return Volatile.Read(ref callCount); }
+            }
+
+            public BoardRecognitionResult Recognize(BoardRecognitionRequest request)
+            {
+                int currentCall = Interlocked.Increment(ref callCount);
+                if (currentCall == blockedCallNumber)
+                {
+                    BlockedRecognizeStarted.Set();
+                    releaseEvent.Wait();
+                }
+
+                return result;
+            }
+
+            public void Release()
+            {
+                releaseEvent.Set();
             }
         }
 

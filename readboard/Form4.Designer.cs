@@ -346,7 +346,7 @@
             //
             // btnOpenDebugDiagnostics
             //
-            this.btnOpenDebugDiagnostics.Location = new System.Drawing.Point(140, 72);
+            this.btnOpenDebugDiagnostics.Location = new System.Drawing.Point(304, 12);
             this.btnOpenDebugDiagnostics.Name = "btnOpenDebugDiagnostics";
             this.btnOpenDebugDiagnostics.Size = new System.Drawing.Size(108, 23);
             this.btnOpenDebugDiagnostics.TabIndex = 35;

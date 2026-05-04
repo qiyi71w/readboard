@@ -329,6 +329,17 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void SettingsForm_WarnsWhenEnablingDebugDiagnostics()
+        {
+            string source = LoadSource("readboard", "Form4.cs");
+
+            Assert.Contains("chkDebugDiagnostics.CheckedChanged += chkDebugDiagnostics_CheckedChanged;", source);
+            Assert.Contains("if (suppressDebugDiagnosticsPrompt || !chkDebugDiagnostics.Checked)", source);
+            Assert.Contains("getLangStr(\"SettingsForm_debugDiagnosticsWarning\")", source);
+            Assert.Contains("MessageBoxIcon.Warning", source);
+        }
+
+        [Fact]
         public void SettingsForm_ArrangesShortcutToggleAlignedWithVerifyMove()
         {
             string source = LoadSource("readboard", "Form4.cs");
@@ -340,10 +351,11 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("ArrangeLegacySettingsLayout();", layoutSlice);
             Assert.Contains("ArrangeAdaptiveSettingsLayout();", layoutSlice);
             Assert.Contains("LayoutOptionRow(chkVerifyMove, chkDisableShowInBoardShortcut", adaptiveSlice);
-            Assert.Contains("LayoutOptionRow(chkDebugDiagnostics, btnOpenDebugDiagnostics", adaptiveSlice);
+            Assert.Contains("btnOpenDebugDiagnostics.SetBounds(openDebugButtonLeft, top, openDebugButtonWidth, buttonHeight);", adaptiveSlice);
+            Assert.Contains("currentTop = LayoutSingleOption(chkDebugDiagnostics, left, currentTop, optionRowGap);", adaptiveSlice);
             Assert.Contains("chkDisableShowInBoardShortcut.Location = new Point(ScaleValue(170), top + optionRowGap * 2);", legacySlice);
             Assert.Contains("chkDebugDiagnostics.Location = new Point(left, top + optionRowGap * 3);", legacySlice);
-            Assert.Contains("btnOpenDebugDiagnostics.SetBounds(ScaleValue(170), top + optionRowGap * 3", legacySlice);
+            Assert.Contains("btnOpenDebugDiagnostics.SetBounds(buttonLeft, top, buttonWidth, buttonHeight);", legacySlice);
         }
 
         [Fact]

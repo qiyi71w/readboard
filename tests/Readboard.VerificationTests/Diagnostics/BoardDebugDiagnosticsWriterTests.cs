@@ -2,7 +2,9 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
+using System.Threading;
 using Xunit;
 using readboard;
 
@@ -15,9 +17,10 @@ namespace Readboard.VerificationTests.Diagnostics
         {
             using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())
             {
-                BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => true);
-
-                writer.RecordRecognitionSuccess(CreateRecord());
+                using (BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => true))
+                {
+                    writer.RecordRecognitionSuccess(CreateRecord());
+                }
 
                 string eventDirectory = Assert.Single(Directory.GetDirectories(workspace.RootPath));
                 Assert.True(File.Exists(Path.Combine(eventDirectory, "frame.png")));
@@ -33,12 +36,14 @@ namespace Readboard.VerificationTests.Diagnostics
             using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())
             using (Bitmap image = new Bitmap(3, 2))
             {
-                BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => true);
-                BoardDebugDiagnosticRecord record = CreateRecord();
-                record.Frame.PixelBuffer = null;
-                record.Frame.Image = image;
+                using (BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => true))
+                {
+                    BoardDebugDiagnosticRecord record = CreateRecord();
+                    record.Frame.PixelBuffer = null;
+                    record.Frame.Image = image;
 
-                writer.RecordRecognitionSuccess(record);
+                    writer.RecordRecognitionSuccess(record);
+                }
 
                 string eventDirectory = Assert.Single(Directory.GetDirectories(workspace.RootPath));
                 using (JsonDocument metadata = JsonDocument.Parse(File.ReadAllText(Path.Combine(eventDirectory, "metadata.json"))))
@@ -50,15 +55,17 @@ namespace Readboard.VerificationTests.Diagnostics
         }
 
         [Fact]
-        public void RecordRecognitionSuccess_SkipsDuplicateFrameAndSnapshot()
+            public void RecordRecognitionSuccess_SkipsDuplicateFrameAndSnapshot()
         {
             using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())
             {
-                BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => true);
-                BoardDebugDiagnosticRecord record = CreateRecord();
+                using (BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => true))
+                {
+                    BoardDebugDiagnosticRecord record = CreateRecord();
 
-                writer.RecordRecognitionSuccess(record);
-                writer.RecordRecognitionSuccess(record);
+                    writer.RecordRecognitionSuccess(record);
+                    writer.RecordRecognitionSuccess(record);
+                }
 
                 Assert.Single(Directory.GetDirectories(workspace.RootPath));
             }
@@ -82,20 +89,69 @@ namespace Readboard.VerificationTests.Diagnostics
         {
             using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())
             {
-                BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => true);
-
-                writer.RecordCaptureFailure(new BoardDebugDiagnosticRecord
+                using (BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => true))
                 {
-                    SyncMode = SyncMode.Background,
-                    BoardWidth = 19,
-                    BoardHeight = 19,
-                    FailureReason = "Capture failed."
-                });
+                    writer.RecordCaptureFailure(CreateCaptureFailureRecord());
+                }
 
                 string eventDirectory = Assert.Single(Directory.GetDirectories(workspace.RootPath));
                 Assert.False(File.Exists(Path.Combine(eventDirectory, "frame.png")));
                 Assert.Contains("\"EventName\":\"capture-failure\"", File.ReadAllText(Path.Combine(eventDirectory, "metadata.json")));
                 Assert.Contains("Capture failed.", File.ReadAllText(Path.Combine(workspace.RootPath, "debug.log")));
+            }
+        }
+
+        [Fact]
+        public void Dispose_FlushesQueuedRecognitionSuccess()
+        {
+            using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())
+            {
+                string eventDirectory;
+                using (BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => true))
+                {
+                    writer.RecordRecognitionSuccess(CreateRecord());
+                }
+
+                eventDirectory = Assert.Single(Directory.GetDirectories(workspace.RootPath));
+                Assert.True(File.Exists(Path.Combine(eventDirectory, "frame.png")));
+                Assert.True(File.Exists(Path.Combine(eventDirectory, "metadata.json")));
+                Assert.True(File.Exists(Path.Combine(eventDirectory, "recognition.txt")));
+            }
+        }
+
+        [Fact]
+        public void DisabledWriter_DoesNotCreateArtifacts()
+        {
+            using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())
+            using (BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => false))
+            {
+                writer.RecordRecognitionSuccess(CreateRecord());
+
+                Assert.Empty(Directory.GetDirectories(workspace.RootPath));
+                Assert.False(File.Exists(Path.Combine(workspace.RootPath, "debug.log")));
+            }
+        }
+
+        [Fact]
+        public void DisabledWriter_DoesNotStartWorkerThread()
+        {
+            using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())
+            using (BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => false))
+            {
+                Assert.Null(ReadWorkerThread(writer));
+            }
+        }
+
+        [Fact]
+        public void DisabledWriter_RecordCaptureFailure_DoesNotCreateArtifacts()
+        {
+            using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())
+            using (BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => false))
+            {
+                writer.RecordCaptureFailure(CreateCaptureFailureRecord());
+
+                Assert.Empty(Directory.GetDirectories(workspace.RootPath));
+                Assert.False(File.Exists(Path.Combine(workspace.RootPath, "debug.log")));
             }
         }
 
@@ -136,6 +192,24 @@ namespace Readboard.VerificationTests.Diagnostics
                     StateSignature = 7
                 }
             };
+        }
+
+        private static BoardDebugDiagnosticRecord CreateCaptureFailureRecord()
+        {
+            return new BoardDebugDiagnosticRecord
+            {
+                SyncMode = SyncMode.Background,
+                BoardWidth = 19,
+                BoardHeight = 19,
+                FailureReason = "Capture failed."
+            };
+        }
+
+        private static Thread ReadWorkerThread(BoardDebugDiagnosticsWriter writer)
+        {
+            FieldInfo workerThreadField = typeof(BoardDebugDiagnosticsWriter).GetField("workerThread", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(workerThreadField);
+            return (Thread)workerThreadField.GetValue(writer);
         }
 
         private sealed class DiagnosticWorkspace : IDisposable
