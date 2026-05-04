@@ -15,6 +15,7 @@ namespace readboard
         private readonly IReadBoardProtocolAdapter protocolAdapter;
         private readonly object stateLock = new object();
         private readonly OutboundProtocolDispatcher outboundProtocolDispatcher;
+        private readonly OutboundBoardSnapshotEmitter outboundBoardSnapshotEmitter;
         private readonly AutoResetEvent pendingMoveEvent = new AutoResetEvent(false);
         private readonly ManualResetEventSlim pendingMoveAvailableEvent = new ManualResetEventSlim(false);
         private readonly ManualResetEventSlim continuousSyncStoppedEvent = new ManualResetEventSlim(true);
@@ -40,6 +41,7 @@ namespace readboard
             this.transport = transport;
             this.protocolAdapter = protocolAdapter;
             outboundProtocolDispatcher = new OutboundProtocolDispatcher(transport, protocolAdapter);
+            outboundBoardSnapshotEmitter = new OutboundBoardSnapshotEmitter(outboundProtocolDispatcher, protocolAdapter);
             sessionState = new SessionState();
         }
 
@@ -451,11 +453,11 @@ namespace readboard
                     forceRebuildArmed = false;
             }
 
-            SendWindowContext(outboundContext);
-            SendFoxMoveNumber(effectiveFoxMoveNumber);
-            for (int i = 0; i < protocolLines.Count; i++)
-                SendProtocolLine(protocolLines[i]);
-            SendProtocolMessage(protocolAdapter.CreateBoardEndMessage());
+            outboundBoardSnapshotEmitter.Emit(new OutboundBoardSnapshotBatch(
+                outboundContext == null ? null : outboundContext.Messages,
+                outboundContext != null && outboundContext.ShouldForceRebuild,
+                effectiveFoxMoveNumber,
+                protocolLines));
         }
 
         public void NotifyReady(bool playPonderEnabled)
@@ -647,30 +649,6 @@ namespace readboard
             {
                 return lastCapturedFoxMoveNumber;
             }
-        }
-
-        private void SendFoxMoveNumber(int? foxMoveNumber)
-        {
-            if (!foxMoveNumber.HasValue)
-                return;
-
-            SendProtocolMessage(protocolAdapter.CreateFoxMoveNumberMessage(foxMoveNumber.Value));
-        }
-
-        private void SendWindowContext(OutboundWindowContext outboundContext)
-        {
-            if (outboundContext == null)
-                return;
-
-            IList<ProtocolMessage> messages = outboundContext.Messages;
-            if (messages != null)
-            {
-                for (int i = 0; i < messages.Count; i++)
-                    SendProtocolMessage(messages[i]);
-            }
-
-            if (outboundContext.ShouldForceRebuild)
-                SendProtocolMessage(protocolAdapter.CreateForceRebuildMessage());
         }
 
         private void ResetSyncCachesCore()
