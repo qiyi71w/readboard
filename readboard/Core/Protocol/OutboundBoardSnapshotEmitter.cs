@@ -46,19 +46,30 @@ namespace readboard
             if (batch == null)
                 throw new ArgumentNullException("batch");
 
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                EmitWhileSynchronized(batch);
+            });
+        }
+
+        internal void EmitWhileSynchronized(OutboundBoardSnapshotBatch batch)
+        {
+            if (batch == null)
+                throw new ArgumentNullException("batch");
+
             IList<ProtocolMessage> windowContextMessages = batch.WindowContextMessages;
             if (windowContextMessages != null)
             {
                 for (int i = 0; i < windowContextMessages.Count; i++)
-                    outboundProtocolDispatcher.Send(windowContextMessages[i]);
+                    outboundProtocolDispatcher.SendMessageWhileSynchronized(windowContextMessages[i]);
             }
 
             if (batch.ShouldForceRebuild)
-                outboundProtocolDispatcher.Send(protocolAdapter.CreateForceRebuildMessage());
+                outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateForceRebuildMessage());
 
             if (batch.FoxMoveNumber.HasValue)
             {
-                outboundProtocolDispatcher.Send(
+                outboundProtocolDispatcher.SendMessageWhileSynchronized(
                     protocolAdapter.CreateFoxMoveNumberMessage(batch.FoxMoveNumber.Value));
             }
 
@@ -66,10 +77,10 @@ namespace readboard
             if (protocolLines != null)
             {
                 for (int i = 0; i < protocolLines.Count; i++)
-                    outboundProtocolDispatcher.SendLegacyLine(protocolLines[i]);
+                    outboundProtocolDispatcher.SendLegacyLineWhileSynchronized(protocolLines[i]);
             }
 
-            outboundProtocolDispatcher.Send(protocolAdapter.CreateBoardEndMessage());
+            outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateBoardEndMessage());
         }
     }
 }

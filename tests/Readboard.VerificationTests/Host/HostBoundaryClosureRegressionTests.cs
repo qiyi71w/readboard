@@ -121,6 +121,16 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void SyncSessionCoordinator_BuildsRecognizedSampleDispatchBeforeSendingProtocol()
+        {
+            string orchestrationSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
+
+            Assert.Contains("BuildRecognizedSampleProtocolDispatch(", orchestrationSource);
+            Assert.Contains("DispatchRecognizedSampleProtocol(dispatch);", orchestrationSource);
+            Assert.DoesNotContain("ProcessRecognizedSample(snapshot, sample, firstSample);", orchestrationSource);
+        }
+
+        [Fact]
         public void MainForm_SelectBoard_ShowsSelectionOverlayWithMainFormOwner()
         {
             string source = LoadSource("readboard", "Form1.cs");

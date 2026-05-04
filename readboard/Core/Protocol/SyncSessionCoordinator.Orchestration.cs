@@ -59,7 +59,7 @@ namespace readboard
                 return false;
             }
 
-            ProcessRecognizedSample(snapshot, sample, true);
+            DispatchRecognizedSampleProtocol(BuildRecognizedSampleProtocolDispatch(snapshot, sample, true));
             return true;
         }
 
@@ -326,12 +326,15 @@ namespace readboard
             };
             try
             {
+                bool shouldSendSync = false;
                 lock (workerLock)
                 {
                     if (!IsOperationCurrent(isOperationCurrent))
                         return;
-                    SendSync();
+                    shouldSendSync = true;
                 }
+                if (shouldSendSync)
+                    SendSync();
 
                 while (IsOperationCurrent(isOperationCurrent))
                 {
@@ -367,6 +370,7 @@ namespace readboard
         private void FinishKeepSyncLoop(SyncSessionRuntimeDependencies runtime)
         {
             bool notifyStop = false;
+            bool shouldSendStopSync = false;
             bool continuousSyncActive = false;
 
             lock (workerLock)
@@ -378,13 +382,15 @@ namespace readboard
                 EndKeepSync();
                 keepSyncStopRequestedEvent.Set();
                 ResetRuntimeSyncCaches(runtime);
-                SendStopSync();
+                shouldSendStopSync = true;
                 ClearRuntimeFrame();
                 keepSyncThread = null;
                 continuousSyncActive = IsContinuousSyncing;
                 notifyStop = true;
             }
 
+            if (shouldSendStopSync)
+                SendStopSync();
             if (notifyStop)
                 runtime.Host.OnKeepSyncStopped(continuousSyncActive);
         }
@@ -398,12 +404,17 @@ namespace readboard
             RecognizedSyncSample sample;
             if (!TryRecognizeSample(runtime, snapshot, false, out sample, isOperationCurrent))
                 return false;
+            RecognizedSampleProtocolDispatch dispatch;
             lock (workerLock)
             {
                 if (!IsOperationCurrent(isOperationCurrent))
                     return false;
-                ProcessRecognizedSample(snapshot, sample, firstSample);
+
+                dispatch = BuildRecognizedSampleProtocolDispatch(snapshot, sample, firstSample);
             }
+            if (!IsOperationCurrent(isOperationCurrent))
+                return false;
+            DispatchRecognizedSampleProtocol(dispatch);
             return true;
         }
 
@@ -750,33 +761,63 @@ namespace readboard
             return frame.Viewport.SourceBounds ?? frame.Viewport.ScreenBounds;
         }
 
-        private void ProcessRecognizedSample(
+        private RecognizedSampleProtocolDispatch BuildRecognizedSampleProtocolDispatch(
             SyncCoordinatorHostSnapshot snapshot,
             RecognizedSyncSample sample,
             bool firstSample)
         {
+            RecognizedSampleProtocolDispatch dispatch = new RecognizedSampleProtocolDispatch();
             if (!firstSample && sample.PreviousArea > 0 && sample.PreviousArea != (runtimeState.CurrentBoardPixelWidth * runtimeState.CurrentBoardPixelHeight))
-                SendClear();
-            SendOverlayIfNeeded(snapshot, sample.Frame);
+            {
+                ResetSyncCaches();
+                dispatch.ShouldSendClear = true;
+            }
+            dispatch.OverlayProtocolLine = ReserveOverlayProtocolLine(BuildOverlayProtocolLineIfNeeded(snapshot, sample.Frame));
             if (firstSample)
-                SendStart(snapshot.BoardWidth, snapshot.BoardHeight, ResolveSelectedWindowHandle(snapshot), IncludeWindowHandle(snapshot.SyncMode));
+            {
+                dispatch.StartMessage = protocolAdapter.CreateStartMessage(
+                    snapshot.BoardWidth,
+                    snapshot.BoardHeight,
+                    ResolveSelectedWindowHandle(snapshot),
+                    IncludeWindowHandle(snapshot.SyncMode));
+            }
             ResolvePendingMove(sample.Snapshot, snapshot.BoardWidth);
             if (sample.Snapshot != null && sample.Snapshot.IsValid)
-                SendBoardSnapshot(sample.Snapshot);
+                dispatch.BoardSnapshotBatch = TryBuildOutboundBoardSnapshotBatch(sample.Snapshot);
+            return dispatch;
         }
 
-        private void SendOverlayIfNeeded(SyncCoordinatorHostSnapshot snapshot, BoardFrame frame)
+        private void DispatchRecognizedSampleProtocol(RecognizedSampleProtocolDispatch dispatch)
+        {
+            if (dispatch == null)
+                return;
+
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                if (dispatch.ShouldSendClear)
+                    outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateClearMessage());
+                if (!string.IsNullOrWhiteSpace(dispatch.OverlayProtocolLine))
+                    outboundProtocolDispatcher.SendLegacyLineWhileSynchronized(dispatch.OverlayProtocolLine);
+                if (dispatch.StartMessage != null)
+                    outboundProtocolDispatcher.SendMessageWhileSynchronized(dispatch.StartMessage);
+                if (dispatch.BoardSnapshotBatch != null)
+                    outboundBoardSnapshotEmitter.EmitWhileSynchronized(dispatch.BoardSnapshotBatch);
+            });
+        }
+
+        private string BuildOverlayProtocolLineIfNeeded(SyncCoordinatorHostSnapshot snapshot, BoardFrame frame)
         {
             if (!snapshot.ShowInBoard || snapshot.SyncMode == SyncMode.Foreground)
-                return;
+                return null;
             OverlayUpdateResult update = GetRuntimeDependencies().OverlayService.BuildUpdate(new OverlayUpdateRequest
             {
                 Visibility = OverlayVisibility.Visible,
                 Frame = frame,
                 LegacyTypeToken = snapshot.LegacyTypeToken
             });
-            if (update != null && !string.IsNullOrWhiteSpace(update.ProtocolLine))
-                SendOverlayLine(update.ProtocolLine);
+            return update == null || string.IsNullOrWhiteSpace(update.ProtocolLine)
+                ? null
+                : update.ProtocolLine;
         }
 
         private static bool IncludeWindowHandle(SyncMode syncMode)
@@ -1024,6 +1065,14 @@ namespace readboard
             public int PreviousArea { get; private set; }
             public BoardFrame Frame { get; private set; }
             public BoardSnapshot Snapshot { get; private set; }
+        }
+
+        private sealed class RecognizedSampleProtocolDispatch
+        {
+            public bool ShouldSendClear { get; set; }
+            public string OverlayProtocolLine { get; set; }
+            public ProtocolMessage StartMessage { get; set; }
+            public OutboundBoardSnapshotBatch BoardSnapshotBatch { get; set; }
         }
     }
 }

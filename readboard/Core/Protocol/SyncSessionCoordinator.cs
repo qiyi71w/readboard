@@ -409,55 +409,20 @@ namespace readboard
 
         public void SendOverlayLine(string protocolLine)
         {
+            protocolLine = ReserveOverlayProtocolLine(protocolLine);
             if (string.IsNullOrWhiteSpace(protocolLine))
                 return;
-
-            lock (stateLock)
-            {
-                if (string.Equals(sessionState.LastOverlayProtocolLine, protocolLine, StringComparison.Ordinal))
-                    return;
-                sessionState.LastOverlayProtocolLine = protocolLine;
-            }
 
             SendProtocolLine(protocolLine);
         }
 
         public void SendBoardSnapshot(BoardSnapshot snapshot)
         {
-            if (snapshot == null || string.IsNullOrWhiteSpace(snapshot.Payload))
+            OutboundBoardSnapshotBatch batch = TryBuildOutboundBoardSnapshotBatch(snapshot);
+            if (batch == null)
                 return;
 
-            IList<string> protocolLines = snapshot.ProtocolLines;
-            if (protocolLines == null || protocolLines.Count == 0)
-                return;
-
-            int? effectiveFoxMoveNumber = ResolveEffectiveFoxMoveNumber(snapshot.FoxMoveNumber);
-            OutboundWindowContext outboundContext;
-            lock (stateLock)
-            {
-                outboundContext = BuildOutboundWindowContextUnsafe();
-                if (string.Equals(sessionState.LastBoardPayload, snapshot.Payload, StringComparison.Ordinal)
-                    && lastSentBoardFoxMoveNumber == effectiveFoxMoveNumber)
-                {
-                    if (string.Equals(lastSentWindowContextSignature, outboundContext.Signature, StringComparison.Ordinal)
-                        && !outboundContext.ShouldForceRebuild)
-                    {
-                        return;
-                    }
-                }
-
-                sessionState.LastBoardPayload = snapshot.Payload;
-                lastSentBoardFoxMoveNumber = effectiveFoxMoveNumber;
-                lastSentWindowContextSignature = outboundContext.Signature;
-                if (outboundContext.ShouldForceRebuild)
-                    forceRebuildArmed = false;
-            }
-
-            outboundBoardSnapshotEmitter.Emit(new OutboundBoardSnapshotBatch(
-                outboundContext == null ? null : outboundContext.Messages,
-                outboundContext != null && outboundContext.ShouldForceRebuild,
-                effectiveFoxMoveNumber,
-                protocolLines));
+            outboundBoardSnapshotEmitter.Emit(batch);
         }
 
         public void NotifyReady(bool playPonderEnabled)
@@ -649,6 +614,58 @@ namespace readboard
             {
                 return lastCapturedFoxMoveNumber;
             }
+        }
+
+        private string ReserveOverlayProtocolLine(string protocolLine)
+        {
+            if (string.IsNullOrWhiteSpace(protocolLine))
+                return null;
+
+            lock (stateLock)
+            {
+                if (string.Equals(sessionState.LastOverlayProtocolLine, protocolLine, StringComparison.Ordinal))
+                    return null;
+                sessionState.LastOverlayProtocolLine = protocolLine;
+                return protocolLine;
+            }
+        }
+
+        private OutboundBoardSnapshotBatch TryBuildOutboundBoardSnapshotBatch(BoardSnapshot snapshot)
+        {
+            if (snapshot == null || string.IsNullOrWhiteSpace(snapshot.Payload))
+                return null;
+
+            IList<string> protocolLines = snapshot.ProtocolLines;
+            if (protocolLines == null || protocolLines.Count == 0)
+                return null;
+
+            int? effectiveFoxMoveNumber = ResolveEffectiveFoxMoveNumber(snapshot.FoxMoveNumber);
+            OutboundWindowContext outboundContext;
+            lock (stateLock)
+            {
+                outboundContext = BuildOutboundWindowContextUnsafe();
+                if (string.Equals(sessionState.LastBoardPayload, snapshot.Payload, StringComparison.Ordinal)
+                    && lastSentBoardFoxMoveNumber == effectiveFoxMoveNumber)
+                {
+                    if (string.Equals(lastSentWindowContextSignature, outboundContext.Signature, StringComparison.Ordinal)
+                        && !outboundContext.ShouldForceRebuild)
+                    {
+                        return null;
+                    }
+                }
+
+                sessionState.LastBoardPayload = snapshot.Payload;
+                lastSentBoardFoxMoveNumber = effectiveFoxMoveNumber;
+                lastSentWindowContextSignature = outboundContext.Signature;
+                if (outboundContext.ShouldForceRebuild)
+                    forceRebuildArmed = false;
+            }
+
+            return new OutboundBoardSnapshotBatch(
+                outboundContext == null ? null : outboundContext.Messages,
+                outboundContext != null && outboundContext.ShouldForceRebuild,
+                effectiveFoxMoveNumber,
+                protocolLines);
         }
 
         private void ResetSyncCachesCore()

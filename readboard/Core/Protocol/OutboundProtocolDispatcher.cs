@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 
 namespace readboard
 {
@@ -47,24 +48,18 @@ namespace readboard
 
         public void Send(ProtocolMessage message)
         {
-            lock (syncRoot)
+            ExecuteBatch(delegate
             {
-                if (closed)
-                    return;
-
-                SendCore(message);
-            }
+                SendMessageWhileSynchronized(message);
+            });
         }
 
         public void SendError(string message)
         {
-            lock (syncRoot)
+            ExecuteBatch(delegate
             {
-                if (closed)
-                    return;
-
-                transport.SendError(message);
-            }
+                SendErrorWhileSynchronized(message);
+            });
         }
 
         public void SendShutdown(
@@ -72,16 +67,48 @@ namespace readboard
             ProtocolMessage bothSyncDisabledMessage,
             ProtocolMessage endSyncMessage)
         {
+            ExecuteBatch(delegate
+            {
+                SendMessageWhileSynchronized(stopSyncMessage);
+                SendMessageWhileSynchronized(bothSyncDisabledMessage);
+                SendMessageWhileSynchronized(endSyncMessage);
+                closed = true;
+            });
+        }
+
+        public void ExecuteBatch(Action batchAction)
+        {
+            if (batchAction == null)
+                throw new ArgumentNullException("batchAction");
+
             lock (syncRoot)
             {
                 if (closed)
                     return;
 
-                SendCore(stopSyncMessage);
-                SendCore(bothSyncDisabledMessage);
-                SendCore(endSyncMessage);
-                closed = true;
+                batchAction();
             }
+        }
+
+        internal void SendLegacyLineWhileSynchronized(string line)
+        {
+            Debug.Assert(System.Threading.Monitor.IsEntered(syncRoot), "syncRoot must be held when sending a synchronized legacy line.");
+            if (string.IsNullOrWhiteSpace(line))
+                return;
+
+            SendMessageWhileSynchronized(ProtocolMessage.CreateLegacyLine(line));
+        }
+
+        internal void SendMessageWhileSynchronized(ProtocolMessage message)
+        {
+            Debug.Assert(System.Threading.Monitor.IsEntered(syncRoot), "syncRoot must be held when sending a synchronized protocol message.");
+            SendCore(message);
+        }
+
+        internal void SendErrorWhileSynchronized(string message)
+        {
+            Debug.Assert(System.Threading.Monitor.IsEntered(syncRoot), "syncRoot must be held when sending a synchronized protocol error.");
+            transport.SendError(message);
         }
 
         private void SendCore(ProtocolMessage message)

@@ -57,6 +57,23 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal(new[] { "re=123" }, transport.SentLines);
         }
 
+        [Fact]
+        public void ExecuteBatch_SendsMultipleEntriesWithinOneSynchronizedWindow()
+        {
+            FakeTransport transport = new FakeTransport();
+            LegacyProtocolAdapter protocolAdapter = new LegacyProtocolAdapter();
+            OutboundProtocolDispatcher dispatcher = new OutboundProtocolDispatcher(transport, protocolAdapter);
+
+            dispatcher.Open();
+            dispatcher.ExecuteBatch(delegate
+            {
+                dispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateReadyMessage());
+                dispatcher.SendLegacyLineWhileSynchronized("re=123");
+            });
+
+            Assert.Equal(new[] { "ready", "re=123" }, transport.SentLines);
+        }
+
         private sealed class FakeTransport : IReadBoardTransport
         {
             public event EventHandler<string> MessageReceived
