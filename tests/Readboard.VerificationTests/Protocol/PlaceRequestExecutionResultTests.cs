@@ -1,5 +1,7 @@
 using System;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using readboard;
@@ -46,11 +48,30 @@ namespace Readboard.VerificationTests.Protocol
             coordinator.SetSyncBoth(true);
             SetRuntimeBoardPixelWidth(coordinator, 19);
 
-            Task<object> resultTask = Task.Run(() =>
-                method.Invoke(coordinator, new object[]
+            TaskCompletionSource<object> resultCompletion =
+                new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Thread placeRequestThread = new Thread(delegate()
+            {
+                try
                 {
-                    new MoveRequest { X = 1, Y = 1, VerifyMove = false }
-                }));
+                    resultCompletion.SetResult(
+                        method.Invoke(coordinator, new object[]
+                        {
+                            new MoveRequest { X = 1, Y = 1, VerifyMove = false }
+                        }));
+                }
+                catch (TargetInvocationException ex) when (ex.InnerException != null)
+                {
+                    resultCompletion.SetException(ExceptionDispatchInfo.Capture(ex.InnerException).SourceException);
+                }
+                catch (Exception ex)
+                {
+                    resultCompletion.SetException(ex);
+                }
+            });
+            placeRequestThread.IsBackground = true;
+            placeRequestThread.Name = "PlaceRequestExecutionResultTests.HandlePlaceRequest";
+            placeRequestThread.Start();
 
             Assert.True(coordinator.WaitForPendingMoveAvailability(TimeSpan.FromSeconds(1)));
             Assert.True(coordinator.TryTakePendingMove(out MoveRequest move));
@@ -60,7 +81,8 @@ namespace Readboard.VerificationTests.Protocol
 
             coordinator.HandlePendingMovePlacementResult(true);
 
-            object result = await resultTask.WaitAsync(TimeSpan.FromSeconds(1));
+            object result = await resultCompletion.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            Assert.True(placeRequestThread.Join(TimeSpan.FromSeconds(1)));
 
             Assert.NotNull(result);
             Assert.True(ReadBool(result, "ShouldSendResponse"));
