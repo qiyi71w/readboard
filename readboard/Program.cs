@@ -414,6 +414,7 @@ namespace readboard
             langItems["SettingsForm_chkDisableShowInBoardShortcut"] = "关闭显示选点快捷键";
             langItems["SettingsForm_chkDebugDiagnostics"] = "保存调试诊断";
             langItems["SettingsForm_btnOpenDebugDiagnostics"] = "打开调试目录";
+            langItems["SettingsForm_debugDiagnosticsWarning"] = "保存调试诊断会产生大量文件，仅在排查问题时开启；不需要时请务必关闭。";
             langItems["SettingsForm_chkEnhanceScreen_ToolTip"] = "勾选可获取桌面外的截图,通常不需要(可能导致刷新降低,无法实时切换棋局等问题)";
             langItems["SettingsForm_chkPonder_ToolTip"] = "双向同步自动落子时,引擎在对手的回合计算";
             langItems["SettingsForm_lblColorMode"] = "颜色模式:";

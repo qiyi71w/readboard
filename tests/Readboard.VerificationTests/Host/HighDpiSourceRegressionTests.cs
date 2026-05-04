@@ -51,6 +51,16 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void SettingsForm_PlacesOpenDebugDirectoryButtonInTopRightSlot()
+        {
+            string content = LoadSource("readboard", "Form4.cs");
+
+            Assert.Contains("btnOpenDebugDiagnostics.SetBounds(buttonLeft, top, buttonWidth, buttonHeight);", content);
+            Assert.Contains("currentTop = LayoutSingleOption(chkDebugDiagnostics, left, currentTop, optionRowGap);", content);
+            Assert.DoesNotContain("LayoutOptionRow(chkDebugDiagnostics, btnOpenDebugDiagnostics", content);
+        }
+
+        [Fact]
         public void SelectionOverlay_UsesVirtualDesktopAndMonitorAwareMagnifierPlacement()
         {
             string content = LoadSource("readboard", "Form2.cs");

@@ -14,12 +14,16 @@ namespace readboard
         private static readonly Size SettingsMinimumClientSize = new Size(420, 320);
         private readonly MainForm host;
         private bool isApplyingSettingsLayout;
+        private bool suppressDebugDiagnosticsPrompt;
 
         internal SettingsForm(MainForm host)
         {
             InitializeComponent();
             this.host = RequireHost(host);
+            suppressDebugDiagnosticsPrompt = true;
             LoadConfigValues(Program.CurrentConfig);
+            suppressDebugDiagnosticsPrompt = false;
+            chkDebugDiagnostics.CheckedChanged += chkDebugDiagnostics_CheckedChanged;
 
             this.Text = getLangStr("SettingsForm_title");
             this.chkPonder.Text = getLangStr("SettingsForm_chkPonder");
@@ -149,6 +153,9 @@ namespace readboard
             int inputWidth = ScaleValue(FieldInputWidth);
             int fieldGap = ScaleValue(8);
             int right = ClientSize.Width - left - labelWidth - fieldGap - inputWidth;
+            int buttonWidth = MeasureButtonWidth(btnOpenDebugDiagnostics, 124);
+            int buttonLeft = ClientSize.Width - left - buttonWidth;
+            btnOpenDebugDiagnostics.SetBounds(buttonLeft, top, buttonWidth, buttonHeight);
 
             ConfigureLegacyOptionCheckBox(chkAutoMin);
             ConfigureLegacyOptionCheckBox(chkPonder);
@@ -164,7 +171,6 @@ namespace readboard
             chkVerifyMove.Location = new Point(left, top + optionRowGap * 2);
             chkDisableShowInBoardShortcut.Location = new Point(ScaleValue(170), top + optionRowGap * 2);
             chkDebugDiagnostics.Location = new Point(left, top + optionRowGap * 3);
-            btnOpenDebugDiagnostics.SetBounds(ScaleValue(170), top + optionRowGap * 3 - ScaleValue(4), MeasureButtonWidth(btnOpenDebugDiagnostics, 124), buttonHeight);
             LayoutColorModeRow(left, top + optionRowGap * 4);
             int fieldsTop = LayoutWrappedLabel(lblBackForeOnly, left, ScaleValue(170), contentWidth, true) + ScaleValue(20);
             LayoutSettingsField(lblSyncInterval, txtSyncInterval, left, fieldsTop, labelWidth, inputWidth, fieldGap, ScaleValue(24));
@@ -201,12 +207,17 @@ namespace readboard
             int buttonGap = ScaleValue(12);
             int bottomPadding = ScaleValue(18);
             int contentWidth = ClientSize.Width - left * 2;
+            int openDebugButtonWidth = MeasureButtonWidth(btnOpenDebugDiagnostics, 124);
+            int openDebugButtonLeft = ClientSize.Width - left - openDebugButtonWidth;
+            int contentWidthAboveTopAction = Math.Max(ScaleValue(220), openDebugButtonLeft - left - optionGap);
+            btnOpenDebugDiagnostics.SetBounds(openDebugButtonLeft, top, openDebugButtonWidth, buttonHeight);
             int currentTop = top;
 
-            currentTop = LayoutOptionRow(chkAutoMin, chkPonder, left, currentTop, contentWidth, optionGap, optionRowGap);
-            currentTop = LayoutOptionRow(chkMag, chkEnhanceScreen, left, currentTop, contentWidth, optionGap, optionRowGap);
-            currentTop = LayoutOptionRow(chkVerifyMove, chkDisableShowInBoardShortcut, left, currentTop, contentWidth, optionGap, optionRowGap);
-            currentTop = LayoutOptionRow(chkDebugDiagnostics, btnOpenDebugDiagnostics, left, currentTop, contentWidth, optionGap, optionRowGap);
+            currentTop = LayoutOptionRow(chkAutoMin, chkPonder, left, currentTop, contentWidthAboveTopAction, optionGap, optionRowGap);
+            currentTop = LayoutOptionRow(chkMag, chkEnhanceScreen, left, currentTop, contentWidthAboveTopAction, optionGap, optionRowGap);
+            currentTop = LayoutOptionRow(chkVerifyMove, chkDisableShowInBoardShortcut, left, currentTop, contentWidthAboveTopAction, optionGap, optionRowGap);
+            currentTop = LayoutSingleOption(chkDebugDiagnostics, left, currentTop, optionRowGap);
+            currentTop = Math.Max(currentTop, btnOpenDebugDiagnostics.Bottom + optionRowGap);
 
             currentTop = LayoutColorModeRow(left, currentTop) + optionRowGap;
 
@@ -340,6 +351,13 @@ namespace readboard
             primary.Location = new Point(left, top);
             secondary.SetBounds(left, primary.Bottom + optionRowGap, Math.Min(secondaryWidth, contentWidth), buttonHeight);
             return secondary.Bottom + optionRowGap;
+        }
+
+        private int LayoutSingleOption(CheckBox checkBox, int left, int top, int optionRowGap)
+        {
+            ConfigureOptionCheckBox(checkBox);
+            checkBox.Location = new Point(left, top);
+            return checkBox.Bottom + optionRowGap;
         }
 
         private void ConfigureOptionCheckBox(CheckBox checkBox)
@@ -662,6 +680,19 @@ namespace readboard
                 return false;
             }
             return true;
+        }
+
+        private void chkDebugDiagnostics_CheckedChanged(object sender, EventArgs e)
+        {
+            if (suppressDebugDiagnosticsPrompt || !chkDebugDiagnostics.Checked)
+                return;
+
+            MessageBox.Show(
+                this,
+                getLangStr("SettingsForm_debugDiagnosticsWarning"),
+                getLangStr("SettingsForm_title"),
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
         }
 
         private void btnOpenDebugDiagnostics_Click(object sender, EventArgs e)

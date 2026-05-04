@@ -102,6 +102,7 @@ SettingsForm_chkEnhanceScreen=EnhScreen
 SettingsForm_chkDisableShowInBoardShortcut=Disable Show-Point Hotkey
 SettingsForm_chkDebugDiagnostics=Save debug diagnostics
 SettingsForm_btnOpenDebugDiagnostics=Open debug folder
+SettingsForm_debugDiagnosticsWarning=Saving debug diagnostics will create many files. Enable it only when troubleshooting, and be sure to turn it off when you no longer need it.
 SettingsForm_chkEnhanceScreen_ToolTip=For getting board outside of desktop,usually not needed(may lead to lag,unable to switch games in real time, etc.)
 SettingsForm_chkPonder_ToolTip=Engine thinking on opponent's turn when auto playing.
 SettingsForm_lblColorMode=Color Mode:

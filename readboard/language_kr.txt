@@ -102,6 +102,7 @@ SettingsForm_chkEnhanceScreen=화면 확장
 SettingsForm_chkDisableShowInBoardShortcut=후보수 단축키 끄기
 SettingsForm_chkDebugDiagnostics=디버그 진단 저장
 SettingsForm_btnOpenDebugDiagnostics=디버그 폴더 열기
+SettingsForm_debugDiagnosticsWarning=디버그 진단 저장을 켜면 많은 파일이 생성됩니다. 문제를 확인할 때만 켜고, 필요 없으면 반드시 다시 꺼 주세요.
 SettingsForm_chkEnhanceScreen_ToolTip=체크하지 않으면 화면 바깥의 정보를 가져올 수 없습니다. 원본 바둑판의 돌이 누락된다면 닫고 시도해 보세요.
 SettingsForm_chkPonder_ToolTip=자동 대국에서 AI가 상대편 시간에 생각하도록 합니다.
 SettingsForm_lblColorMode=색상 모드:
