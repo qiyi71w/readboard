@@ -14,7 +14,8 @@ namespace readboard
         private readonly IReadBoardTransport transport;
         private readonly IReadBoardProtocolAdapter protocolAdapter;
         private readonly object stateLock = new object();
-        private readonly object outboundProtocolSyncRoot = new object();
+        private readonly OutboundProtocolDispatcher outboundProtocolDispatcher;
+        private readonly OutboundBoardSnapshotEmitter outboundBoardSnapshotEmitter;
         private readonly AutoResetEvent pendingMoveEvent = new AutoResetEvent(false);
         private readonly ManualResetEventSlim pendingMoveAvailableEvent = new ManualResetEventSlim(false);
         private readonly ManualResetEventSlim continuousSyncStoppedEvent = new ManualResetEventSlim(true);
@@ -22,7 +23,6 @@ namespace readboard
         private int disposeState;
         private int inboundProtocolGeneration;
         private volatile bool acceptingInboundProtocolMessages;
-        private volatile bool outboundProtocolClosed;
         private string syncPlatform = "generic";
         private FoxWindowContext foxWindowContext = FoxWindowContext.Unknown();
         private bool forceRebuildArmed;
@@ -41,6 +41,8 @@ namespace readboard
 
             this.transport = transport;
             this.protocolAdapter = protocolAdapter;
+            outboundProtocolDispatcher = new OutboundProtocolDispatcher(transport, protocolAdapter);
+            outboundBoardSnapshotEmitter = new OutboundBoardSnapshotEmitter(outboundProtocolDispatcher, protocolAdapter);
             sessionState = new SessionState();
         }
 
@@ -62,6 +64,11 @@ namespace readboard
         public bool SyncBoth
         {
             get { return GetLockedSessionState(s => s.SyncBoth); }
+        }
+
+        public bool IsProtocolSessionActive
+        {
+            get { return acceptingInboundProtocolMessages && !outboundProtocolDispatcher.IsClosed; }
         }
 
         private T GetLockedSessionState<T>(Func<SessionState, T> selector)
@@ -132,8 +139,8 @@ namespace readboard
 
         public void Start()
         {
-            outboundProtocolClosed = false;
             Interlocked.Increment(ref inboundProtocolGeneration);
+            outboundProtocolDispatcher.Open();
             acceptingInboundProtocolMessages = true;
             transport.MessageReceived += OnMessageReceived;
             transport.Start();
@@ -171,6 +178,7 @@ namespace readboard
             }
             finally
             {
+                DisposeRuntimeDependencies();
                 DisposeWaitHandles();
             }
         }
@@ -409,59 +417,20 @@ namespace readboard
 
         public void SendOverlayLine(string protocolLine)
         {
+            protocolLine = ReserveOverlayProtocolLine(protocolLine);
             if (string.IsNullOrWhiteSpace(protocolLine))
                 return;
-
-            lock (stateLock)
-            {
-                if (string.Equals(sessionState.LastOverlayProtocolLine, protocolLine, StringComparison.Ordinal))
-                    return;
-                sessionState.LastOverlayProtocolLine = protocolLine;
-            }
 
             SendProtocolLine(protocolLine);
         }
 
         public void SendBoardSnapshot(BoardSnapshot snapshot)
         {
-            if (snapshot == null || string.IsNullOrWhiteSpace(snapshot.Payload))
+            OutboundBoardSnapshotBatch batch = TryBuildOutboundBoardSnapshotBatch(snapshot);
+            if (batch == null)
                 return;
 
-            IList<string> protocolLines = snapshot.ProtocolLines;
-            if (protocolLines == null || protocolLines.Count == 0)
-                return;
-
-            int? effectiveFoxMoveNumber = ResolveEffectiveFoxMoveNumber(snapshot.FoxMoveNumber);
-            OutboundWindowContext outboundContext;
-            string yikeSignature;
-            lock (stateLock)
-            {
-                outboundContext = BuildOutboundWindowContextUnsafe();
-                yikeSignature = ResolveYikeContextSignatureUnsafe();
-                if (string.Equals(sessionState.LastBoardPayload, snapshot.Payload, StringComparison.Ordinal)
-                    && lastSentBoardFoxMoveNumber == effectiveFoxMoveNumber)
-                {
-                    if (string.Equals(lastSentWindowContextSignature, outboundContext.Signature, StringComparison.Ordinal)
-                        && string.Equals(runtimeState.LastSentYikeContextSignature, yikeSignature, StringComparison.Ordinal)
-                        && !outboundContext.ShouldForceRebuild)
-                    {
-                        return;
-                    }
-                }
-
-                sessionState.LastBoardPayload = snapshot.Payload;
-                lastSentBoardFoxMoveNumber = effectiveFoxMoveNumber;
-                lastSentWindowContextSignature = outboundContext.Signature;
-                runtimeState.LastSentYikeContextSignature = yikeSignature;
-                if (outboundContext.ShouldForceRebuild)
-                    forceRebuildArmed = false;
-            }
-
-            SendWindowContext(outboundContext);
-            SendFoxMoveNumber(effectiveFoxMoveNumber);
-            for (int i = 0; i < protocolLines.Count; i++)
-                SendProtocolLine(protocolLines[i]);
-            SendProtocolMessage(protocolAdapter.CreateBoardEndMessage());
+            outboundBoardSnapshotEmitter.Emit(batch);
         }
 
         public void NotifyReady(bool playPonderEnabled)
@@ -478,6 +447,11 @@ namespace readboard
         public void SendVersion(string version)
         {
             SendProtocolMessage(protocolAdapter.CreateVersionMessage(version));
+        }
+
+        public void SendReadboardUpdateReady(string tag, string absoluteZipPath)
+        {
+            SendProtocolMessage(protocolAdapter.CreateReadboardUpdateReadyMessage(tag, absoluteZipPath));
         }
 
         public void SendSync()
@@ -562,16 +536,10 @@ namespace readboard
 
         public void SendShutdownProtocol()
         {
-            lock (outboundProtocolSyncRoot)
-            {
-                if (outboundProtocolClosed)
-                    return;
-
-                SendProtocolMessageCore(protocolAdapter.CreateStopSyncMessage());
-                SendProtocolMessageCore(protocolAdapter.CreateBothSyncMessage(false));
-                SendProtocolMessageCore(protocolAdapter.CreateEndSyncMessage());
-                outboundProtocolClosed = true;
-            }
+            outboundProtocolDispatcher.SendShutdown(
+                protocolAdapter.CreateStopSyncMessage(),
+                protocolAdapter.CreateBothSyncMessage(false),
+                protocolAdapter.CreateEndSyncMessage());
         }
 
         public void SendLine(string line)
@@ -581,13 +549,7 @@ namespace readboard
 
         public void SendError(string message)
         {
-            lock (outboundProtocolSyncRoot)
-            {
-                if (outboundProtocolClosed)
-                    return;
-
-                transport.SendError(message);
-            }
+            outboundProtocolDispatcher.SendError(message);
         }
 
         private void OnMessageReceived(object sender, string rawLine)
@@ -632,6 +594,15 @@ namespace readboard
                     return currentHost.HandleVersionRequest;
                 case ProtocolMessageKind.Quit:
                     return currentHost.HandleQuitRequest;
+                case ProtocolMessageKind.ReadboardUpdateSupported:
+                    return currentHost.HandleReadboardUpdateSupported;
+                case ProtocolMessageKind.ReadboardUpdateInstalling:
+                    return currentHost.HandleReadboardUpdateInstalling;
+                case ProtocolMessageKind.ReadboardUpdateCancelled:
+                    return currentHost.HandleReadboardUpdateCancelled;
+                case ProtocolMessageKind.ReadboardUpdateFailed:
+                    return () => currentHost.HandleReadboardUpdateFailed(
+                        message.RawText.Substring(ProtocolKeywords.ReadboardUpdateFailedPrefix.Length));
                 default:
                     return null;
             }
@@ -661,28 +632,56 @@ namespace readboard
             }
         }
 
-        private void SendFoxMoveNumber(int? foxMoveNumber)
+        private string ReserveOverlayProtocolLine(string protocolLine)
         {
-            if (!foxMoveNumber.HasValue)
-                return;
+            if (string.IsNullOrWhiteSpace(protocolLine))
+                return null;
 
-            SendProtocolMessage(protocolAdapter.CreateFoxMoveNumberMessage(foxMoveNumber.Value));
+            lock (stateLock)
+            {
+                if (string.Equals(sessionState.LastOverlayProtocolLine, protocolLine, StringComparison.Ordinal))
+                    return null;
+                sessionState.LastOverlayProtocolLine = protocolLine;
+                return protocolLine;
+            }
         }
 
-        private void SendWindowContext(OutboundWindowContext outboundContext)
+        private OutboundBoardSnapshotBatch TryBuildOutboundBoardSnapshotBatch(BoardSnapshot snapshot)
         {
-            if (outboundContext == null)
-                return;
+            if (snapshot == null || string.IsNullOrWhiteSpace(snapshot.Payload))
+                return null;
 
-            IList<ProtocolMessage> messages = outboundContext.Messages;
-            if (messages != null)
+            IList<string> protocolLines = snapshot.ProtocolLines;
+            if (protocolLines == null || protocolLines.Count == 0)
+                return null;
+
+            int? effectiveFoxMoveNumber = ResolveEffectiveFoxMoveNumber(snapshot.FoxMoveNumber);
+            OutboundWindowContext outboundContext;
+            lock (stateLock)
             {
-                for (int i = 0; i < messages.Count; i++)
-                    SendProtocolMessage(messages[i]);
+                outboundContext = BuildOutboundWindowContextUnsafe();
+                if (string.Equals(sessionState.LastBoardPayload, snapshot.Payload, StringComparison.Ordinal)
+                    && lastSentBoardFoxMoveNumber == effectiveFoxMoveNumber)
+                {
+                    if (string.Equals(lastSentWindowContextSignature, outboundContext.Signature, StringComparison.Ordinal)
+                        && !outboundContext.ShouldForceRebuild)
+                    {
+                        return null;
+                    }
+                }
+
+                sessionState.LastBoardPayload = snapshot.Payload;
+                lastSentBoardFoxMoveNumber = effectiveFoxMoveNumber;
+                lastSentWindowContextSignature = outboundContext.Signature;
+                if (outboundContext.ShouldForceRebuild)
+                    forceRebuildArmed = false;
             }
 
-            if (outboundContext.ShouldForceRebuild)
-                SendProtocolMessage(protocolAdapter.CreateForceRebuildMessage());
+            return new OutboundBoardSnapshotBatch(
+                outboundContext == null ? null : outboundContext.Messages,
+                outboundContext != null && outboundContext.ShouldForceRebuild,
+                effectiveFoxMoveNumber,
+                protocolLines);
         }
 
         private void ResetSyncCachesCore()
@@ -777,6 +776,16 @@ namespace readboard
             keepSyncStopRequestedEvent.Dispose();
         }
 
+        private void DisposeRuntimeDependencies()
+        {
+            SyncSessionRuntimeDependencies runtime = runtimeDependencies;
+            if (runtime == null || runtime.DebugDiagnostics == null)
+                return;
+
+            runtime.DebugDiagnostics.Dispose();
+            runtime.DebugDiagnostics = null;
+        }
+
         private static bool IsPendingMoveAwaitingPlacementResult(PendingMoveState pendingMove)
         {
             return pendingMove != null
@@ -820,35 +829,17 @@ namespace readboard
 
         private void SendProtocolLine(string line)
         {
-            if (string.IsNullOrWhiteSpace(line))
-                return;
-            SendProtocolMessage(ProtocolMessage.CreateLegacyLine(line));
+            outboundProtocolDispatcher.SendLegacyLine(line);
         }
 
         private void SendProtocolMessage(ProtocolMessage message)
         {
-            lock (outboundProtocolSyncRoot)
-            {
-                if (outboundProtocolClosed)
-                    return;
-
-                SendProtocolMessageCore(message);
-            }
+            outboundProtocolDispatcher.Send(message);
         }
 
         private void CloseOutboundProtocol()
         {
-            lock (outboundProtocolSyncRoot)
-                outboundProtocolClosed = true;
-        }
-
-        private void SendProtocolMessageCore(ProtocolMessage message)
-        {
-            string line = protocolAdapter.Serialize(message);
-            if (string.IsNullOrWhiteSpace(line))
-                return;
-
-            transport.Send(line);
+            outboundProtocolDispatcher.Close();
         }
 
         private OutboundWindowContext BuildOutboundWindowContextUnsafe()

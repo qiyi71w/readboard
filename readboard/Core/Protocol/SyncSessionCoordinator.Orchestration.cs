@@ -59,7 +59,7 @@ namespace readboard
                 return false;
             }
 
-            ProcessRecognizedSample(snapshot, sample, true);
+            DispatchRecognizedSampleProtocol(BuildRecognizedSampleProtocolDispatch(snapshot, sample, true), null);
             return true;
         }
 
@@ -326,12 +326,15 @@ namespace readboard
             };
             try
             {
+                bool shouldSendSync = false;
                 lock (workerLock)
                 {
                     if (!IsOperationCurrent(isOperationCurrent))
                         return;
-                    SendSync();
+                    shouldSendSync = true;
                 }
+                if (shouldSendSync)
+                    SendSync();
 
                 while (IsOperationCurrent(isOperationCurrent))
                 {
@@ -367,6 +370,7 @@ namespace readboard
         private void FinishKeepSyncLoop(SyncSessionRuntimeDependencies runtime)
         {
             bool notifyStop = false;
+            bool shouldSendStopSync = false;
             bool continuousSyncActive = false;
 
             lock (workerLock)
@@ -378,13 +382,15 @@ namespace readboard
                 EndKeepSync();
                 keepSyncStopRequestedEvent.Set();
                 ResetRuntimeSyncCaches(runtime);
-                SendStopSync();
+                shouldSendStopSync = true;
                 ClearRuntimeFrame();
                 keepSyncThread = null;
                 continuousSyncActive = IsContinuousSyncing;
                 notifyStop = true;
             }
 
+            if (shouldSendStopSync)
+                SendStopSync();
             if (notifyStop)
                 runtime.Host.OnKeepSyncStopped(continuousSyncActive);
         }
@@ -398,12 +404,17 @@ namespace readboard
             RecognizedSyncSample sample;
             if (!TryRecognizeSample(runtime, snapshot, false, out sample, isOperationCurrent))
                 return false;
+            RecognizedSampleProtocolDispatch dispatch;
             lock (workerLock)
             {
                 if (!IsOperationCurrent(isOperationCurrent))
                     return false;
-                ProcessRecognizedSample(snapshot, sample, firstSample);
+
+                dispatch = BuildRecognizedSampleProtocolDispatch(snapshot, sample, firstSample);
             }
+            if (!IsOperationCurrent(isOperationCurrent))
+                return false;
+            DispatchRecognizedSampleProtocol(dispatch, isOperationCurrent);
             return true;
         }
 
@@ -498,7 +509,7 @@ namespace readboard
                 if (frame == null)
                     return false;
 
-                BoardRecognitionResult recognition = RecognizeFrame(runtime, frame, isOperationCurrent);
+                BoardRecognitionResult recognition = RecognizeFrame(runtime, snapshot, frame, isOperationCurrent);
                 if (recognition == null)
                     return false;
 
@@ -510,7 +521,7 @@ namespace readboard
                         return false;
                     }
 
-                    sample = CompleteRecognizedSample(snapshot, frame, recognition);
+                    sample = CompleteRecognizedSample(runtime, snapshot, frame, recognition);
                 }
                 if (!NeedsBlackRetry(sample, allowBlackRetry))
                     return true;
@@ -532,14 +543,20 @@ namespace readboard
             }
             if (captureResult == null || !captureResult.Success || captureResult.Frame == null)
             {
-                SendError(captureResult == null ? "Capture returned no result." : captureResult.FailureReason);
+                string failureReason = captureResult == null ? "Capture returned no result." : captureResult.FailureReason;
+                RecordCaptureFailure(runtime, snapshot, captureResult, failureReason);
+                SendError(failureReason);
                 return null;
             }
-            return NormalizeCapturedFrame(captureResult.Frame, snapshot);
+            BoardFrame frame = NormalizeCapturedFrame(captureResult.Frame, snapshot);
+            if (frame != null)
+                frame.CapturePath = captureResult.CapturePath;
+            return frame;
         }
 
         private BoardRecognitionResult RecognizeFrame(
             SyncSessionRuntimeDependencies runtime,
+            SyncCoordinatorHostSnapshot snapshot,
             BoardFrame frame,
             Func<bool> isOperationCurrent)
         {
@@ -551,7 +568,9 @@ namespace readboard
             }
             if (recognition == null || !recognition.Success || recognition.Snapshot == null)
             {
-                SendError(recognition == null ? "Recognition returned no result." : recognition.FailureReason);
+                string failureReason = recognition == null ? "Recognition returned no result." : recognition.FailureReason;
+                RecordRecognitionFailure(runtime, snapshot, frame, failureReason);
+                SendError(failureReason);
                 DisposeBoardFrame(frame);
                 return null;
             }
@@ -559,16 +578,111 @@ namespace readboard
         }
 
         private RecognizedSyncSample CompleteRecognizedSample(
+            SyncSessionRuntimeDependencies runtime,
             SyncCoordinatorHostSnapshot snapshot,
             BoardFrame frame,
             BoardRecognitionResult recognition)
         {
             int previousArea = runtimeState.CurrentBoardPixelWidth * runtimeState.CurrentBoardPixelHeight;
             ApplyRecognizedFrame(frame, recognition);
+            RecordRecognitionSuccess(runtime, snapshot, frame, recognition.Snapshot);
             UpdateBoardGeometry(frame, snapshot);
             ReplaceRuntimeFrame(frame);
             runtimeState.InitialProbePending = false;
             return new RecognizedSyncSample(previousArea, frame, recognition.Snapshot);
+        }
+
+        private static void RecordCaptureFailure(
+            SyncSessionRuntimeDependencies runtime,
+            SyncCoordinatorHostSnapshot snapshot,
+            BoardCaptureResult captureResult,
+            string failureReason)
+        {
+            if (runtime == null || runtime.DebugDiagnostics == null)
+                return;
+
+            runtime.DebugDiagnostics.RecordCaptureFailure(CreateDebugDiagnosticRecord(
+                snapshot,
+                captureResult == null ? null : captureResult.Frame,
+                null,
+                captureResult == null ? CapturePathKind.Unknown : captureResult.CapturePath,
+                failureReason));
+        }
+
+        private static void RecordRecognitionFailure(
+            SyncSessionRuntimeDependencies runtime,
+            SyncCoordinatorHostSnapshot snapshot,
+            BoardFrame frame,
+            string failureReason)
+        {
+            if (runtime == null || runtime.DebugDiagnostics == null)
+                return;
+
+            runtime.DebugDiagnostics.RecordRecognitionFailure(CreateDebugDiagnosticRecord(
+                snapshot,
+                frame,
+                null,
+                ResolveCapturePath(frame),
+                failureReason));
+        }
+
+        private static void RecordRecognitionSuccess(
+            SyncSessionRuntimeDependencies runtime,
+            SyncCoordinatorHostSnapshot snapshot,
+            BoardFrame frame,
+            BoardSnapshot boardSnapshot)
+        {
+            if (runtime == null || runtime.DebugDiagnostics == null)
+                return;
+
+            runtime.DebugDiagnostics.RecordRecognitionSuccess(CreateDebugDiagnosticRecord(
+                snapshot,
+                frame,
+                boardSnapshot,
+                ResolveCapturePath(frame),
+                null));
+        }
+
+        private static BoardDebugDiagnosticRecord CreateDebugDiagnosticRecord(
+            SyncCoordinatorHostSnapshot snapshot,
+            BoardFrame frame,
+            BoardSnapshot boardSnapshot,
+            CapturePathKind capturePath,
+            string failureReason)
+        {
+            return new BoardDebugDiagnosticRecord
+            {
+                SyncMode = snapshot == null ? SyncMode.Foreground : snapshot.SyncMode,
+                BoardWidth = ResolveDebugBoardWidth(snapshot, frame),
+                BoardHeight = ResolveDebugBoardHeight(snapshot, frame),
+                CapturePath = capturePath,
+                Frame = frame,
+                Snapshot = boardSnapshot,
+                FailureReason = failureReason
+            };
+        }
+
+        private static CapturePathKind ResolveCapturePath(BoardFrame frame)
+        {
+            return frame == null ? CapturePathKind.Unknown : frame.CapturePath;
+        }
+
+        private static int ResolveDebugBoardWidth(SyncCoordinatorHostSnapshot snapshot, BoardFrame frame)
+        {
+            if (snapshot != null && snapshot.BoardWidth > 0)
+                return snapshot.BoardWidth;
+            if (frame != null && frame.BoardSize != null)
+                return frame.BoardSize.Width;
+            return 0;
+        }
+
+        private static int ResolveDebugBoardHeight(SyncCoordinatorHostSnapshot snapshot, BoardFrame frame)
+        {
+            if (snapshot != null && snapshot.BoardHeight > 0)
+                return snapshot.BoardHeight;
+            if (frame != null && frame.BoardSize != null)
+                return frame.BoardSize.Height;
+            return 0;
         }
 
         private bool NeedsBlackRetry(RecognizedSyncSample sample, bool allowBlackRetry)
@@ -647,33 +761,67 @@ namespace readboard
             return frame.Viewport.SourceBounds ?? frame.Viewport.ScreenBounds;
         }
 
-        private void ProcessRecognizedSample(
+        private RecognizedSampleProtocolDispatch BuildRecognizedSampleProtocolDispatch(
             SyncCoordinatorHostSnapshot snapshot,
             RecognizedSyncSample sample,
             bool firstSample)
         {
+            RecognizedSampleProtocolDispatch dispatch = new RecognizedSampleProtocolDispatch();
             if (!firstSample && sample.PreviousArea > 0 && sample.PreviousArea != (runtimeState.CurrentBoardPixelWidth * runtimeState.CurrentBoardPixelHeight))
-                SendClear();
-            SendOverlayIfNeeded(snapshot, sample.Frame);
+            {
+                ResetSyncCaches();
+                dispatch.ShouldSendClear = true;
+            }
+            dispatch.OverlayProtocolLine = ReserveOverlayProtocolLine(BuildOverlayProtocolLineIfNeeded(snapshot, sample.Frame));
             if (firstSample)
-                SendStart(snapshot.BoardWidth, snapshot.BoardHeight, ResolveSelectedWindowHandle(snapshot), IncludeWindowHandle(snapshot.SyncMode));
+            {
+                dispatch.StartMessage = protocolAdapter.CreateStartMessage(
+                    snapshot.BoardWidth,
+                    snapshot.BoardHeight,
+                    ResolveSelectedWindowHandle(snapshot),
+                    IncludeWindowHandle(snapshot.SyncMode));
+            }
             ResolvePendingMove(sample.Snapshot, snapshot.BoardWidth);
             if (sample.Snapshot != null && sample.Snapshot.IsValid)
-                SendBoardSnapshot(sample.Snapshot);
+                dispatch.BoardSnapshotBatch = TryBuildOutboundBoardSnapshotBatch(sample.Snapshot);
+            return dispatch;
         }
 
-        private void SendOverlayIfNeeded(SyncCoordinatorHostSnapshot snapshot, BoardFrame frame)
+        private void DispatchRecognizedSampleProtocol(
+            RecognizedSampleProtocolDispatch dispatch,
+            Func<bool> isOperationCurrent)
+        {
+            if (dispatch == null)
+                return;
+
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                if (isOperationCurrent != null && !IsOperationCurrent(isOperationCurrent))
+                    return;
+                if (dispatch.ShouldSendClear)
+                    outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateClearMessage());
+                if (!string.IsNullOrWhiteSpace(dispatch.OverlayProtocolLine))
+                    outboundProtocolDispatcher.SendLegacyLineWhileSynchronized(dispatch.OverlayProtocolLine);
+                if (dispatch.StartMessage != null)
+                    outboundProtocolDispatcher.SendMessageWhileSynchronized(dispatch.StartMessage);
+                if (dispatch.BoardSnapshotBatch != null)
+                    outboundBoardSnapshotEmitter.EmitWhileSynchronized(dispatch.BoardSnapshotBatch);
+            });
+        }
+
+        private string BuildOverlayProtocolLineIfNeeded(SyncCoordinatorHostSnapshot snapshot, BoardFrame frame)
         {
             if (!snapshot.ShowInBoard || snapshot.SyncMode == SyncMode.Foreground)
-                return;
+                return null;
             OverlayUpdateResult update = GetRuntimeDependencies().OverlayService.BuildUpdate(new OverlayUpdateRequest
             {
                 Visibility = OverlayVisibility.Visible,
                 Frame = frame,
                 LegacyTypeToken = snapshot.LegacyTypeToken
             });
-            if (update != null && !string.IsNullOrWhiteSpace(update.ProtocolLine))
-                SendOverlayLine(update.ProtocolLine);
+            return update == null || string.IsNullOrWhiteSpace(update.ProtocolLine)
+                ? null
+                : update.ProtocolLine;
         }
 
         private static bool IncludeWindowHandle(SyncMode syncMode)
@@ -922,6 +1070,14 @@ namespace readboard
             public int PreviousArea { get; private set; }
             public BoardFrame Frame { get; private set; }
             public BoardSnapshot Snapshot { get; private set; }
+        }
+
+        private sealed class RecognizedSampleProtocolDispatch
+        {
+            public bool ShouldSendClear { get; set; }
+            public string OverlayProtocolLine { get; set; }
+            public ProtocolMessage StartMessage { get; set; }
+            public OutboundBoardSnapshotBatch BoardSnapshotBatch { get; set; }
         }
     }
 }

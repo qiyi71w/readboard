@@ -59,6 +59,8 @@
             this.rdoColorSystem = new System.Windows.Forms.RadioButton();
             this.rdoColorDark = new System.Windows.Forms.RadioButton();
             this.rdoColorLight = new System.Windows.Forms.RadioButton();
+            this.chkDebugDiagnostics = new System.Windows.Forms.CheckBox();
+            this.btnOpenDebugDiagnostics = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // lblBlackOffsets
@@ -332,11 +334,33 @@
             this.rdoColorLight.Text = "浅色";
             this.rdoColorLight.UseVisualStyleBackColor = true;
             //
+            // chkDebugDiagnostics
+            //
+            this.chkDebugDiagnostics.AutoSize = true;
+            this.chkDebugDiagnostics.Location = new System.Drawing.Point(12, 75);
+            this.chkDebugDiagnostics.Name = "chkDebugDiagnostics";
+            this.chkDebugDiagnostics.Size = new System.Drawing.Size(120, 16);
+            this.chkDebugDiagnostics.TabIndex = 34;
+            this.chkDebugDiagnostics.Text = "保存调试诊断";
+            this.chkDebugDiagnostics.UseVisualStyleBackColor = true;
+            //
+            // btnOpenDebugDiagnostics
+            //
+            this.btnOpenDebugDiagnostics.Location = new System.Drawing.Point(304, 12);
+            this.btnOpenDebugDiagnostics.Name = "btnOpenDebugDiagnostics";
+            this.btnOpenDebugDiagnostics.Size = new System.Drawing.Size(108, 23);
+            this.btnOpenDebugDiagnostics.TabIndex = 35;
+            this.btnOpenDebugDiagnostics.Text = "打开调试目录";
+            this.btnOpenDebugDiagnostics.UseVisualStyleBackColor = true;
+            this.btnOpenDebugDiagnostics.Click += new System.EventHandler(this.btnOpenDebugDiagnostics_Click);
+            //
             // SettingsForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(424, 231);
+            this.Controls.Add(this.btnOpenDebugDiagnostics);
+            this.Controls.Add(this.chkDebugDiagnostics);
             this.Controls.Add(this.rdoColorLight);
             this.Controls.Add(this.rdoColorDark);
             this.Controls.Add(this.rdoColorSystem);
@@ -408,5 +432,7 @@
         private System.Windows.Forms.RadioButton rdoColorSystem;
         private System.Windows.Forms.RadioButton rdoColorDark;
         private System.Windows.Forms.RadioButton rdoColorLight;
+        private System.Windows.Forms.CheckBox chkDebugDiagnostics;
+        private System.Windows.Forms.Button btnOpenDebugDiagnostics;
     }
 }

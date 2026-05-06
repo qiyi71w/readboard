@@ -26,6 +26,7 @@ namespace readboard
         public bool UseEnhanceScreen { get; set; }
         public bool PlayPonder { get; set; }
         public bool DisableShowInBoardShortcut { get; set; }
+        public bool DebugDiagnosticsEnabled { get; set; }
         public int UiThemeMode { get; set; }
         public int ColorMode { get; set; }
         public SyncMode SyncMode { get; set; }
@@ -58,6 +59,7 @@ namespace readboard
                 UseEnhanceScreen = false,
                 PlayPonder = true,
                 DisableShowInBoardShortcut = false,
+                DebugDiagnosticsEnabled = false,
                 UiThemeMode = OptimizedUiThemeMode,
                 ColorMode = ColorModeSystem,
                 SyncMode = SyncMode.Fox,

@@ -9,7 +9,11 @@ namespace readboard
         VersionRequest = 4,
         Quit = 5,
         ForceRebuild = 6,
-        YikeContext = 7
+        ReadboardUpdateSupported = 7,
+        ReadboardUpdateInstalling = 8,
+        ReadboardUpdateCancelled = 9,
+        ReadboardUpdateFailed = 10,
+        YikeContext = 11
     }
 
     internal sealed class ProtocolMessage

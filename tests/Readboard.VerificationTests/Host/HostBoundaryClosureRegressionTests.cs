@@ -104,6 +104,34 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("new LegacyBoardRecognitionService", source);
             Assert.Contains("LegacyMovePlacementService.CreateDefault()", source);
             Assert.Contains("new LegacyOverlayService()", source);
+            Assert.Contains("new BoardDebugDiagnosticsWriter(", source);
+            Assert.Contains("BoardDebugDiagnosticsPaths.GetRootDirectory(AppDomain.CurrentDomain.BaseDirectory)", source);
+            Assert.Contains("Program.CurrentConfig.DebugDiagnosticsEnabled", source);
+        }
+
+        [Fact]
+        public void SyncSessionCoordinator_RecordsDebugDiagnosticsForCaptureAndRecognition()
+        {
+            string dependenciesSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionRuntimeDependencies.cs");
+            string orchestrationSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
+            string coordinatorSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.cs");
+
+            Assert.Contains("public BoardDebugDiagnosticsWriter DebugDiagnostics { get; set; }", dependenciesSource);
+            Assert.Contains("runtime.DebugDiagnostics.RecordCaptureFailure(", orchestrationSource);
+            Assert.Contains("runtime.DebugDiagnostics.RecordRecognitionFailure(", orchestrationSource);
+            Assert.Contains("runtime.DebugDiagnostics.RecordRecognitionSuccess(", orchestrationSource);
+            Assert.Contains("DisposeRuntimeDependencies();", coordinatorSource);
+            Assert.Contains("runtime.DebugDiagnostics.Dispose();", coordinatorSource);
+        }
+
+        [Fact]
+        public void SyncSessionCoordinator_BuildsRecognizedSampleDispatchBeforeSendingProtocol()
+        {
+            string orchestrationSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
+
+            Assert.Contains("BuildRecognizedSampleProtocolDispatch(", orchestrationSource);
+            Assert.Contains("DispatchRecognizedSampleProtocol(dispatch, isOperationCurrent);", orchestrationSource);
+            Assert.DoesNotContain("ProcessRecognizedSample(snapshot, sample, firstSample);", orchestrationSource);
         }
 
         [Fact]

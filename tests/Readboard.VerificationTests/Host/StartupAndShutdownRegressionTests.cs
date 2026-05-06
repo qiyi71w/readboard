@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Xml.Linq;
 using Xunit;
 
 namespace Readboard.VerificationTests.Host
@@ -299,12 +301,46 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void SettingsForm_LoadsPersistsAndOpensDebugDiagnostics()
+        {
+            string source = LoadSource("readboard", "Form4.cs");
+            string designerSource = LoadSource("readboard", "Form4.Designer.cs");
+            string programSource = LoadSource("readboard", "Program.cs");
+            string cnSource = LoadSource("readboard", "language_cn.txt");
+            string enSource = LoadSource("readboard", "language_en.txt");
+
+            Assert.Contains("chkDebugDiagnostics.Checked = config.DebugDiagnosticsEnabled;", source);
+            Assert.Contains("updatedConfig.DebugDiagnosticsEnabled = chkDebugDiagnostics.Checked;", source);
+            Assert.Contains("btnOpenDebugDiagnostics.Text = getLangStr(\"SettingsForm_btnOpenDebugDiagnostics\");", source);
+            Assert.Contains("OpenDebugDiagnosticsDirectory();", source);
+            Assert.Contains("this.chkDebugDiagnostics", designerSource);
+            Assert.Contains("this.btnOpenDebugDiagnostics", designerSource);
+            Assert.Contains("SettingsForm_chkDebugDiagnostics", programSource);
+            Assert.Contains("SettingsForm_btnOpenDebugDiagnostics", programSource);
+            Assert.Contains("SettingsForm_chkDebugDiagnostics=", cnSource);
+            Assert.Contains("SettingsForm_btnOpenDebugDiagnostics=", cnSource);
+            Assert.Contains("SettingsForm_chkDebugDiagnostics=", enSource);
+            Assert.Contains("SettingsForm_btnOpenDebugDiagnostics=", enSource);
+        }
+
+        [Fact]
         public void SettingsForm_RefreshesMainFormShortcutTooltipAfterSaving()
         {
             string source = LoadSource("readboard", "Form4.cs");
             string methodSlice = GetMethodSlice(source, "private void button1_Click(object sender, EventArgs e)");
 
             Assert.Contains("mainForm.RefreshShowInBoardShortcutToolTip();", methodSlice);
+        }
+
+        [Fact]
+        public void SettingsForm_WarnsWhenEnablingDebugDiagnostics()
+        {
+            string source = LoadSource("readboard", "Form4.cs");
+
+            Assert.Contains("chkDebugDiagnostics.CheckedChanged += chkDebugDiagnostics_CheckedChanged;", source);
+            Assert.Contains("if (suppressDebugDiagnosticsPrompt || !chkDebugDiagnostics.Checked)", source);
+            Assert.Contains("getLangStr(\"SettingsForm_debugDiagnosticsWarning\")", source);
+            Assert.Contains("MessageBoxIcon.Warning", source);
         }
 
         [Fact]
@@ -319,7 +355,11 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("ArrangeLegacySettingsLayout();", layoutSlice);
             Assert.Contains("ArrangeAdaptiveSettingsLayout();", layoutSlice);
             Assert.Contains("LayoutOptionRow(chkVerifyMove, chkDisableShowInBoardShortcut", adaptiveSlice);
+            Assert.Contains("btnOpenDebugDiagnostics.SetBounds(openDebugButtonLeft, top, openDebugButtonWidth, buttonHeight);", adaptiveSlice);
+            Assert.Contains("currentTop = LayoutSingleOption(chkDebugDiagnostics, left, currentTop, optionRowGap);", adaptiveSlice);
             Assert.Contains("chkDisableShowInBoardShortcut.Location = new Point(ScaleValue(170), top + optionRowGap * 2);", legacySlice);
+            Assert.Contains("chkDebugDiagnostics.Location = new Point(left, top + optionRowGap * 3);", legacySlice);
+            Assert.Contains("btnOpenDebugDiagnostics.SetBounds(buttonLeft, top, buttonWidth, buttonHeight);", legacySlice);
         }
 
         [Fact]
@@ -695,6 +735,35 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void Manifest_UsesAsInvokerForHostLaunchedReadboard()
+        {
+            string content = LoadSource("readboard", "Properties", "app.manifest");
+            XDocument manifest = XDocument.Parse(content);
+            XNamespace assemblyNamespace = "urn:schemas-microsoft-com:asm.v1";
+            XNamespace trustNamespace = "urn:schemas-microsoft-com:asm.v2";
+            XNamespace privilegesNamespace = "urn:schemas-microsoft-com:asm.v3";
+
+            XElement assembly = GetRequiredElement(
+                manifest,
+                assemblyNamespace + "assembly");
+            XElement trustInfo = GetRequiredElement(
+                assembly,
+                trustNamespace + "trustInfo");
+            XElement security = GetRequiredElement(
+                trustInfo,
+                trustNamespace + "security");
+            XElement requestedPrivileges = GetRequiredElement(
+                security,
+                privilegesNamespace + "requestedPrivileges");
+            XElement requestedExecutionLevel = GetRequiredSingleElement(
+                requestedPrivileges,
+                privilegesNamespace + "requestedExecutionLevel");
+
+            Assert.Equal("asInvoker", (string)requestedExecutionLevel.Attribute("level"));
+            Assert.Equal("false", (string)requestedExecutionLevel.Attribute("uiAccess"));
+        }
+
+        [Fact]
         public void MainForm_DispatchProtocolCommand_QueuesInboundCommandsUntilHandleExists()
         {
             string source = LoadSource("readboard", "MainForm.Protocol.cs");
@@ -733,6 +802,20 @@ namespace Readboard.VerificationTests.Host
             int index = source.IndexOf(value, startIndex, StringComparison.Ordinal);
             Assert.True(index >= 0, "Expected to find source fragment after index " + startIndex + ": " + value);
             return index;
+        }
+
+        private static XElement GetRequiredElement(XContainer parent, XName name)
+        {
+            XElement element = parent.Element(name);
+            Assert.NotNull(element);
+            return element;
+        }
+
+        private static XElement GetRequiredSingleElement(XContainer parent, XName name)
+        {
+            XElement element = parent.Elements(name).SingleOrDefault();
+            Assert.NotNull(element);
+            return element;
         }
 
         private static string GetMethodSlice(string source, string methodSignature)

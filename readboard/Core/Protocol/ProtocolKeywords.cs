@@ -44,6 +44,11 @@ namespace readboard
         internal const string StopAutoPlay = "stopAutoPlay";
         internal const string Pass = "pass";
         internal const string DefaultNumericValue = "0";
+        internal const string ReadboardUpdateSupported = "readboardUpdateSupported";
+        internal const string ReadboardUpdateReadyPrefix = "readboardUpdateReady\t";
+        internal const string ReadboardUpdateInstalling = "readboardUpdateInstalling";
+        internal const string ReadboardUpdateCancelled = "readboardUpdateCancelled";
+        internal const string ReadboardUpdateFailedPrefix = "readboardUpdateFailed\t";
         internal const string Yike = "yike";
         internal const string YikeRoomTokenPrefix = "yikeRoomToken ";
         internal const string YikeMoveNumberPrefix = "yikeMoveNumber ";

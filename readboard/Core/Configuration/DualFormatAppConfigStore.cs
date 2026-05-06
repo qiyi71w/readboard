@@ -141,6 +141,7 @@ namespace readboard
             config.UseEnhanceScreen = ReadBoolValue(values, "UseEnhanceScreen", config.UseEnhanceScreen);
             config.PlayPonder = ReadBoolValue(values, "PlayPonder", config.PlayPonder);
             config.DisableShowInBoardShortcut = ReadBoolValue(values, "DisableShowInBoardShortcut", config.DisableShowInBoardShortcut);
+            config.DebugDiagnosticsEnabled = ReadBoolValue(values, "DebugDiagnosticsEnabled", config.DebugDiagnosticsEnabled);
             config.UiThemeMode = ReadIntValue(values, "UiThemeMode", config.UiThemeMode);
             config.ColorMode = ReadIntValue(values, "ColorMode", config.ColorMode);
             config.SyncMode = (SyncMode)ReadIntValue(values, "SyncMode", (int)config.SyncMode);

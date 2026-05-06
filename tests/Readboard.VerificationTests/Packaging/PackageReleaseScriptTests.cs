@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using Xunit;
 
@@ -47,8 +48,18 @@ namespace Readboard.VerificationTests
 
                 Assert.True(result.ExitCode == 0, result.Output);
                 string releaseDirectory = Assert.Single(Directory.GetDirectories(workspace.ReleaseRoot));
-                Assert.False(File.Exists(Path.Combine(releaseDirectory, "config_readboard_others.txt")));
-                Assert.Single(Directory.GetFiles(workspace.ReleaseRoot, "*.zip"));
+                string releaseAppDirectory = Path.Combine(releaseDirectory, "readboard");
+                Assert.True(File.Exists(Path.Combine(releaseAppDirectory, "readboard.exe")));
+                Assert.False(File.Exists(Path.Combine(releaseDirectory, "readboard.exe")));
+                Assert.False(
+                    File.Exists(Path.Combine(releaseAppDirectory, "config_readboard_others.txt")));
+
+                string releaseZipPath = Assert.Single(Directory.GetFiles(workspace.ReleaseRoot, "*.zip"));
+                using (ZipArchive archive = ZipFile.OpenRead(releaseZipPath))
+                {
+                    Assert.Contains(archive.Entries, entry => entry.FullName == "readboard/readboard.exe");
+                    Assert.DoesNotContain(archive.Entries, entry => entry.FullName == "readboard.exe");
+                }
             }
         }
 
@@ -64,7 +75,7 @@ namespace Readboard.VerificationTests
 
                 Assert.True(result.ExitCode == 0, result.Output);
                 string releaseDirectory = Assert.Single(Directory.GetDirectories(workspace.ReleaseRoot));
-                Assert.True(File.Exists(Path.Combine(releaseDirectory, "readboard.exe")));
+                Assert.True(File.Exists(Path.Combine(releaseDirectory, "readboard", "readboard.exe")));
                 Assert.DoesNotContain(".zip", result.Output, StringComparison.OrdinalIgnoreCase);
                 Assert.Empty(Directory.GetFiles(workspace.ReleaseRoot, "*.zip"));
             }
@@ -82,7 +93,7 @@ namespace Readboard.VerificationTests
 
                 Assert.True(result.ExitCode == 0, result.Output);
                 string releaseDirectory = Assert.Single(Directory.GetDirectories(workspace.ReleaseRoot));
-                string releaseExePath = Path.Combine(releaseDirectory, "readboard.exe");
+                string releaseExePath = Path.Combine(releaseDirectory, "readboard", "readboard.exe");
                 DateTime releaseExeTimestampUtc = File.GetLastWriteTimeUtc(releaseExePath);
                 Assert.InRange(
                     releaseExeTimestampUtc,
@@ -102,10 +113,12 @@ namespace Readboard.VerificationTests
 
                 Assert.True(result.ExitCode == 0, result.Output);
                 string releaseDirectory = Assert.Single(Directory.GetDirectories(workspace.ReleaseRoot));
-                Assert.False(File.Exists(Path.Combine(releaseDirectory, "lw.dll")));
-                Assert.False(File.Exists(Path.Combine(releaseDirectory, "Interop.lw.dll")));
-                Assert.False(File.Exists(Path.Combine(releaseDirectory, "MouseKeyboardActivityMonitor.dll")));
-                Assert.False(File.Exists(Path.Combine(releaseDirectory, "readboard.exe.config")));
+                string releaseAppDirectory = Path.Combine(releaseDirectory, "readboard");
+                Assert.False(File.Exists(Path.Combine(releaseAppDirectory, "lw.dll")));
+                Assert.False(File.Exists(Path.Combine(releaseAppDirectory, "Interop.lw.dll")));
+                Assert.False(
+                    File.Exists(Path.Combine(releaseAppDirectory, "MouseKeyboardActivityMonitor.dll")));
+                Assert.False(File.Exists(Path.Combine(releaseAppDirectory, "readboard.exe.config")));
             }
         }
 

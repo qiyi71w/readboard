@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace readboard
@@ -14,12 +15,25 @@ namespace readboard
         private const string DefaultUnsupportedDownloadUrlSchemeMessage =
             "Download link must use http or https.";
         private const string DefaultOpenDownloadUrlFailedMessage = "Unable to open the download link.";
+        private const string DefaultDownloadButtonText = "Download";
+        private const string DefaultDownloadAndInstallButtonText = "Download and Install";
+        private const string DefaultDownloadingButtonText = "Downloading...";
+        private const string DefaultWaitingForHostInstallText = "Waiting for Host Install...";
+        private const string DefaultHostCancelledText = "Host installation was cancelled.";
+        private const string DefaultHostFailedText = "Host installation failed.";
+        private const string DefaultHostTimedOutText = "Host did not respond in time.";
+        private const string DefaultManualDownloadFallbackMessage =
+            "Falling back to manual download. Click Download to open the release page.";
         private const string DefaultDialogTitle = "Update";
+        private const int HostedUpdateResponseTimeoutMilliseconds = 15000;
         private static readonly Size UpdateDefaultClientSize = new Size(640, 419);
         private static readonly Size UpdateMinimumClientSize = new Size(560, 420);
 
         private readonly UpdateDialogModel model;
+        private readonly Timer hostedUpdateResponseTimer = new Timer();
+        private Font ownedTitleFont;
         private bool isApplyingUpdateLayout;
+        private bool hostedInstallFallbackActive;
 
         public FormUpdate(UpdateDialogModel model)
         {
@@ -32,6 +46,7 @@ namespace readboard
             InitializeComponent();
             ApplyModel();
             ApplyUpdateFormUi();
+            InitializeHostedUpdateState();
         }
 
         private void ApplyModel()
@@ -114,13 +129,40 @@ namespace readboard
             }
         }
 
+        private void InitializeHostedUpdateState()
+        {
+            hostedUpdateResponseTimer.Interval = HostedUpdateResponseTimeoutMilliseconds;
+            hostedUpdateResponseTimer.Tick += HostedUpdateResponseTimer_Tick;
+            btnDownload.Enabled = true;
+            btnDownload.Text = GetInitialDownloadButtonText();
+        }
+
+        private string GetInitialDownloadButtonText()
+        {
+            return CanUseHostedInstall()
+                ? NormalizeFallbackText(model.DownloadAndInstallButtonText, DefaultDownloadAndInstallButtonText)
+                : NormalizeFallbackText(model.DownloadButtonText, DefaultDownloadButtonText);
+        }
+
+        private bool CanUseHostedInstall()
+        {
+            return model.HostedInstallAvailable &&
+                !hostedInstallFallbackActive &&
+                model.PrepareHostedUpdateAsync != null &&
+                model.NotifyHostedUpdateReady != null &&
+                !string.IsNullOrWhiteSpace(model.HostedReleaseTag) &&
+                !string.IsNullOrWhiteSpace(model.HostedAssetName) &&
+                !string.IsNullOrWhiteSpace(model.HostedAssetDownloadUrl);
+        }
+
         private void ApplyOptimizedUpdateTheme()
         {
             UiTheme.ApplyWindow(this);
             rootPanel.BackColor = UiTheme.WindowBackground;
             infoPanel.BackColor = UiTheme.SurfaceBackground;
             buttonPanel.BackColor = UiTheme.WindowBackground;
-            StyleUpdateTitle(UiTheme.PrimaryText, new Font(UiTheme.BodyFont.FontFamily, 12F, FontStyle.Bold, GraphicsUnit.Point));
+            SetOwnedTitleFont(new Font(UiTheme.BodyFont.FontFamily, 12F, FontStyle.Bold, GraphicsUnit.Point));
+            StyleUpdateTitle(UiTheme.PrimaryText);
             StyleUpdateFields(UiTheme.SecondaryText, UiTheme.PrimaryText, UiTheme.BodyFont);
             UiTheme.StyleInput(txtReleaseNotes);
             UiTheme.StyleSecondaryButton(btnClose);
@@ -135,7 +177,8 @@ namespace readboard
             rootPanel.BackColor = SystemColors.Control;
             infoPanel.BackColor = SystemColors.Control;
             buttonPanel.BackColor = SystemColors.Control;
-            StyleUpdateTitle(SystemColors.ControlText, new Font(Control.DefaultFont, FontStyle.Bold));
+            SetOwnedTitleFont(new Font(Control.DefaultFont, FontStyle.Bold));
+            StyleUpdateTitle(SystemColors.ControlText);
             StyleUpdateFields(SystemColors.ControlText, SystemColors.ControlText, Control.DefaultFont);
             txtReleaseNotes.BackColor = SystemColors.Window;
             txtReleaseNotes.ForeColor = SystemColors.WindowText;
@@ -145,11 +188,19 @@ namespace readboard
             ResetButtonTheme(btnDownload);
         }
 
-        private void StyleUpdateTitle(Color foreColor, Font font)
+        private void SetOwnedTitleFont(Font font)
+        {
+            Font previousFont = ownedTitleFont;
+            ownedTitleFont = font;
+            lblTitle.Font = font;
+            if (previousFont != null)
+                previousFont.Dispose();
+        }
+
+        private void StyleUpdateTitle(Color foreColor)
         {
             lblTitle.BackColor = Color.Transparent;
             lblTitle.ForeColor = foreColor;
-            lblTitle.Font = font;
         }
 
         private void StyleUpdateFields(Color labelColor, Color valueColor, Font font)
@@ -243,7 +294,46 @@ namespace readboard
             return new Size(ScaleValue(logicalSize.Width), ScaleValue(logicalSize.Height));
         }
 
-        private void btnDownload_Click(object sender, EventArgs e)
+        private async void btnDownload_Click(object sender, EventArgs e)
+        {
+            if (CanUseHostedInstall())
+            {
+                await BeginHostedInstallAsync();
+                return;
+            }
+
+            OpenManualDownload();
+        }
+
+        private async Task BeginHostedInstallAsync()
+        {
+            UpdateDownloadButtonState(false, model.DownloadingButtonText, DefaultDownloadingButtonText);
+
+            try
+            {
+                string zipPath = await model.PrepareHostedUpdateAsync(model);
+                if (IsDisposed || Disposing)
+                    return;
+
+                model.NotifyHostedUpdateReady(model.HostedReleaseTag, zipPath);
+                UpdateDownloadButtonState(false, model.WaitingForHostInstallText, DefaultWaitingForHostInstallText);
+                hostedUpdateResponseTimer.Stop();
+                hostedUpdateResponseTimer.Start();
+            }
+            catch (Exception exception)
+            {
+                Trace.TraceError(exception.ToString());
+                ActivateManualDownloadFallback(
+                    BuildHostedUpdateMessage(
+                        exception.Message,
+                        null,
+                        model.ManualDownloadFallbackMessage,
+                        DefaultManualDownloadFallbackMessage),
+                    MessageBoxIcon.Error);
+            }
+        }
+
+        private void OpenManualDownload()
         {
             Uri downloadUri;
             string validationMessage;
@@ -260,10 +350,11 @@ namespace readboard
 
             try
             {
-                Process.Start(downloadUri.AbsoluteUri);
+                OpenDownloadUri(downloadUri);
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                Trace.TraceError(exception.ToString());
                 MessageBox.Show(
                     this,
                     NormalizeFallbackText(
@@ -273,6 +364,100 @@ namespace readboard
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
             }
+        }
+
+        internal void MarkHostedInstalling()
+        {
+            if (IsDisposed || Disposing || hostedInstallFallbackActive)
+                return;
+
+            hostedUpdateResponseTimer.Stop();
+            UpdateDownloadButtonState(false, model.WaitingForHostInstallText, DefaultWaitingForHostInstallText);
+        }
+
+        internal void MarkHostedCancelled()
+        {
+            if (IsDisposed || Disposing || hostedInstallFallbackActive)
+                return;
+
+            ActivateManualDownloadFallback(
+                BuildHostedUpdateMessage(
+                    model.HostCancelledText,
+                    null,
+                    model.ManualDownloadFallbackMessage,
+                    DefaultManualDownloadFallbackMessage),
+                MessageBoxIcon.Information);
+        }
+
+        internal void MarkHostedFailed(string message)
+        {
+            if (IsDisposed || Disposing || hostedInstallFallbackActive)
+                return;
+
+            ActivateManualDownloadFallback(
+                BuildHostedUpdateMessage(
+                    model.HostFailedText,
+                    SanitizeHostedDetail(message),
+                    model.ManualDownloadFallbackMessage,
+                    DefaultManualDownloadFallbackMessage),
+                MessageBoxIcon.Error);
+        }
+
+        private void MarkHostedTimedOut()
+        {
+            if (IsDisposed || Disposing)
+                return;
+
+            ActivateManualDownloadFallback(
+                BuildHostedUpdateMessage(
+                    model.HostTimedOutText,
+                    null,
+                    model.ManualDownloadFallbackMessage,
+                    DefaultManualDownloadFallbackMessage),
+                MessageBoxIcon.Warning);
+        }
+
+        private void HostedUpdateResponseTimer_Tick(object sender, EventArgs e)
+        {
+            hostedUpdateResponseTimer.Stop();
+            MarkHostedTimedOut();
+        }
+
+        private void ActivateManualDownloadFallback(string message, MessageBoxIcon icon)
+        {
+            hostedUpdateResponseTimer.Stop();
+            hostedInstallFallbackActive = true;
+            UpdateDownloadButtonState(true, model.DownloadButtonText, DefaultDownloadButtonText);
+
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                MessageBox.Show(
+                    this,
+                    message,
+                    GetDialogTitle(),
+                    MessageBoxButtons.OK,
+                    icon);
+            }
+        }
+
+        internal static void OpenDownloadUri(Uri downloadUri)
+        {
+            using (Process process = Process.Start(CreateDownloadStartInfo(downloadUri)))
+            {
+            }
+        }
+
+        internal static ProcessStartInfo CreateDownloadStartInfo(Uri downloadUri)
+        {
+            if (downloadUri == null)
+            {
+                throw new ArgumentNullException(nameof(downloadUri));
+            }
+
+            return new ProcessStartInfo(downloadUri.AbsoluteUri)
+            {
+                UseShellExecute = true
+            };
         }
 
         private bool TryCreateDownloadUri(out Uri downloadUri, out string validationMessage)
@@ -328,9 +513,65 @@ namespace readboard
                 : message + Environment.NewLine + detail.Trim();
         }
 
+        private void UpdateDownloadButtonState(bool enabled, string configuredText, string defaultText)
+        {
+            btnDownload.Enabled = enabled;
+            btnDownload.Text = NormalizeFallbackText(configuredText, defaultText);
+        }
+
+        internal static string BuildHostedUpdateMessage(
+            string headline,
+            string detail,
+            string fallbackMessage,
+            string defaultFallbackMessage)
+        {
+            string resolvedHeadline = NormalizeFallbackText(headline, string.Empty);
+            string resolvedFallback = NormalizeFallbackText(fallbackMessage, defaultFallbackMessage);
+            string resolvedDetail = NormalizeFallbackText(detail, string.Empty);
+
+            if (string.IsNullOrWhiteSpace(resolvedHeadline))
+                resolvedHeadline = resolvedDetail;
+
+            if (string.IsNullOrWhiteSpace(resolvedHeadline))
+                return resolvedFallback;
+
+            if (string.IsNullOrWhiteSpace(resolvedDetail) ||
+                string.Equals(resolvedHeadline, resolvedDetail, StringComparison.Ordinal))
+            {
+                return resolvedHeadline + Environment.NewLine + resolvedFallback;
+            }
+
+            return resolvedHeadline + Environment.NewLine +
+                resolvedDetail + Environment.NewLine +
+                resolvedFallback;
+        }
+
+        private static string SanitizeHostedDetail(string detail)
+        {
+            if (string.IsNullOrWhiteSpace(detail))
+                return string.Empty;
+
+            return detail
+                .Replace("\r", " ")
+                .Replace("\n", " ")
+                .Replace("\t", " ")
+                .Trim();
+        }
+
         private void btnClose_Click(object sender, EventArgs e)
         {
             Close();
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            hostedUpdateResponseTimer.Stop();
+            if (ownedTitleFont != null)
+            {
+                ownedTitleFont.Dispose();
+                ownedTitleFont = null;
+            }
+            base.OnFormClosed(e);
         }
     }
 }
