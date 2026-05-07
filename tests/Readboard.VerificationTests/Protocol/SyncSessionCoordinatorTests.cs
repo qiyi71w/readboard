@@ -537,6 +537,10 @@ namespace Readboard.VerificationTests
             {
             }
 
+            public void HandleYikeGeometry(YikeBoardGeometry geometry)
+            {
+            }
+
             public void HandleQuitRequest()
             {
             }

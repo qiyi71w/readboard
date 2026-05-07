@@ -100,6 +100,10 @@ namespace readboard
 
         public void StopSyncSession()
         {
+            lock (stateLock)
+            {
+                runtimeState.LastCapturedYikeGeometry = null;
+            }
             StopSyncSessionCore(false);
         }
 
@@ -829,6 +833,14 @@ namespace readboard
             return syncMode != SyncMode.Background && syncMode != SyncMode.Foreground;
         }
 
+        private bool IsYikeSyncPlatform()
+        {
+            return string.Equals(
+                NormalizeSyncPlatform(syncPlatform),
+                ProtocolKeywords.Yike,
+                StringComparison.Ordinal);
+        }
+
         private void DispatchPendingMove(
             SyncSessionRuntimeDependencies runtime,
             SyncCoordinatorHostSnapshot snapshot,
@@ -849,9 +861,13 @@ namespace readboard
             if (runtimeState.CurrentBoardFrame == null || !IsOperationCurrent(isOperationCurrent))
                 return false;
 
+            BoardFrame placementFrame = ResolvePlacementFrame(snapshot);
+            if (placementFrame == null)
+                return false;
+
             MovePlacementResult result = runtime.PlacementService.Place(new MovePlacementRequest
             {
-                Frame = runtimeState.CurrentBoardFrame,
+                Frame = placementFrame,
                 Move = new MoveRequest { X = request.X, Y = request.Y, VerifyMove = request.VerifyMove },
                 BringTargetToFront = snapshot.SyncMode == SyncMode.Foreground,
                 ShouldCancel = delegate { return !IsOperationCurrent(isOperationCurrent); }
@@ -864,6 +880,98 @@ namespace readboard
                 return false;
             runtime.Host.TrySendPlaceProtocolError(result == null ? "Move placement returned no result." : result.FailureReason);
             return false;
+        }
+
+        private BoardFrame ResolvePlacementFrame(SyncCoordinatorHostSnapshot snapshot)
+        {
+            BoardFrame frame = runtimeState.CurrentBoardFrame;
+            if (snapshot == null || snapshot.SyncMode != SyncMode.Yike)
+                return frame;
+
+            YikeBoardGeometry geometry = runtimeState.LastCapturedYikeGeometry;
+            if (geometry == null || !geometry.IsUsable)
+                return frame;
+
+            return CreateYikePlacementFrame(frame, geometry);
+        }
+
+        private BoardFrame CreateYikePlacementFrame(BoardFrame currentFrame, YikeBoardGeometry geometry)
+        {
+            if (geometry == null || !geometry.IsUsable)
+                return currentFrame;
+
+            WindowDescriptor window = currentFrame == null ? null : currentFrame.Window;
+            if (window == null)
+            {
+                window = new WindowDescriptor
+                {
+                    Handle = runtimeState.SelectedWindowHandle,
+                    ClassName = "SunAwtFrame",
+                    IsDpiAware = true,
+                    DpiScale = 1d,
+                    IsJavaWindow = true
+                };
+            }
+            else
+            {
+                window = CloneWindowDescriptor(window);
+                window.Handle = window.Handle == IntPtr.Zero ? runtimeState.SelectedWindowHandle : window.Handle;
+                window.IsJavaWindow = true;
+            }
+
+            return new BoardFrame
+            {
+                Window = window,
+                SyncMode = SyncMode.Yike,
+                BoardSize = new BoardDimensions(geometry.BoardSize, geometry.BoardSize),
+                Viewport = CreateYikeViewport(geometry)
+            };
+        }
+
+        private static BoardViewport CreateYikeViewport(YikeBoardGeometry geometry)
+        {
+            BoardViewport viewport = new BoardViewport
+            {
+                SourceBounds = CloneRect(geometry.Bounds)
+            };
+
+            if (geometry.FirstIntersectionX.HasValue
+                && geometry.FirstIntersectionY.HasValue
+                && geometry.CellWidth > 0d
+                && geometry.CellHeight > 0d)
+            {
+                viewport.FirstIntersectionX = geometry.FirstIntersectionX.Value;
+                viewport.FirstIntersectionY = geometry.FirstIntersectionY.Value;
+                viewport.CellWidth = geometry.CellWidth;
+                viewport.CellHeight = geometry.CellHeight;
+                return viewport;
+            }
+
+            viewport.CellWidth = geometry.Bounds.Width / (double)geometry.BoardSize;
+            viewport.CellHeight = geometry.Bounds.Height / (double)geometry.BoardSize;
+            return viewport;
+        }
+
+        private static WindowDescriptor CloneWindowDescriptor(WindowDescriptor window)
+        {
+            if (window == null)
+                return null;
+
+            return new WindowDescriptor
+            {
+                Handle = window.Handle,
+                ClassName = window.ClassName,
+                Title = window.Title,
+                Bounds = CloneRect(window.Bounds),
+                IsDpiAware = window.IsDpiAware,
+                DpiScale = window.DpiScale,
+                IsJavaWindow = window.IsJavaWindow
+            };
+        }
+
+        private static PixelRect CloneRect(PixelRect rect)
+        {
+            return rect == null ? null : new PixelRect(rect.X, rect.Y, rect.Width, rect.Height);
         }
 
         private Thread CreateContinuousSyncWorker(int lifecycleGeneration, int continuousSyncSessionId)

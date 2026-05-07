@@ -7,6 +7,7 @@ namespace readboard
         void DispatchProtocolCommand(Action command);
         void HandlePlaceRequest(MoveRequest request);
         void HandleYikeContext(YikeWindowContext context);
+        void HandleYikeGeometry(YikeBoardGeometry geometry);
         void HandleLossFocus();
         void HandleStopInBoardRequest();
         void HandleVersionRequest();

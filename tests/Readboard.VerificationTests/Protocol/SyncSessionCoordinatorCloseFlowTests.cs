@@ -212,6 +212,10 @@ namespace Readboard.VerificationTests.Protocol
             {
             }
 
+            public void HandleYikeGeometry(YikeBoardGeometry geometry)
+            {
+            }
+
             public void HandleQuitRequest()
             {
                 QuitCount++;
@@ -270,6 +274,10 @@ namespace Readboard.VerificationTests.Protocol
             }
 
             public void HandleYikeContext(YikeWindowContext context)
+            {
+            }
+
+            public void HandleYikeGeometry(YikeBoardGeometry geometry)
             {
             }
 

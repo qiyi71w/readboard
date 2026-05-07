@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 
 namespace readboard
@@ -126,6 +127,19 @@ namespace readboard
             lock (stateLock)
             {
                 runtimeState.LastCapturedYikeContext = YikeWindowContext.CopyOf(context);
+            }
+        }
+
+        public void SetYikeGeometry(YikeBoardGeometry geometry)
+        {
+            lock (stateLock)
+            {
+                runtimeState.LastCapturedYikeGeometry = YikeBoardGeometry.CopyOf(geometry);
+                if (runtimeState.LastCapturedYikeGeometry != null && runtimeState.LastCapturedYikeGeometry.IsUsable)
+                {
+                    runtimeState.CurrentBoardPixelWidth = runtimeState.LastCapturedYikeGeometry.Bounds.Width;
+                    runtimeState.CurrentBoardPixelHeight = runtimeState.LastCapturedYikeGeometry.Bounds.Height;
+                }
             }
         }
 
@@ -457,11 +471,39 @@ namespace readboard
         public void SendSync()
         {
             SendProtocolMessage(protocolAdapter.CreateSyncMessage());
+            if (IsYikeSyncPlatform())
+            {
+                LogYikeSyncDebug("SendSync sending yikeSyncStart");
+                SendYikeSyncStart();
+            }
+            else
+            {
+                LogYikeSyncDebug("SendSync platform=" + NormalizeSyncPlatform(syncPlatform));
+            }
         }
 
         public void SendStopSync()
         {
+            if (IsYikeSyncPlatform())
+            {
+                LogYikeSyncDebug("SendStopSync sending yikeSyncStop");
+                SendYikeSyncStop();
+            }
+            else
+            {
+                LogYikeSyncDebug("SendStopSync platform=" + NormalizeSyncPlatform(syncPlatform));
+            }
             SendProtocolMessage(protocolAdapter.CreateStopSyncMessage());
+        }
+
+        public void SendYikeSyncStart()
+        {
+            SendProtocolMessage(protocolAdapter.CreateYikeSyncStartMessage());
+        }
+
+        public void SendYikeSyncStop()
+        {
+            SendProtocolMessage(protocolAdapter.CreateYikeSyncStopMessage());
         }
 
         public void SendBothSync(bool enabled)
@@ -586,6 +628,15 @@ namespace readboard
                         RoomToken = message.YikeRoomToken,
                         MoveNumber = message.YikeMoveNumber
                     });
+                case ProtocolMessageKind.YikeGeometry:
+                    return () => currentHost.HandleYikeGeometry(YikeBoardGeometry.CopyOf(message.YikeGeometry));
+                case ProtocolMessageKind.YikeBrowserSyncStop:
+                    return () =>
+                    {
+                        LogYikeSyncDebug("Received yikeBrowserSyncStop platform=" + NormalizeSyncPlatform(syncPlatform));
+                        if (IsYikeSyncPlatform())
+                            StopSyncSession();
+                    };
                 case ProtocolMessageKind.LossFocus:
                     return currentHost.HandleLossFocus;
                 case ProtocolMessageKind.StopInBoard:
@@ -835,6 +886,20 @@ namespace readboard
         private void SendProtocolMessage(ProtocolMessage message)
         {
             outboundProtocolDispatcher.Send(message);
+        }
+
+        private static void LogYikeSyncDebug(string message)
+        {
+            try
+            {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "readboard-yike-sync-debug.log");
+                File.AppendAllText(
+                    path,
+                    "[" + DateTime.Now.ToString("HH:mm:ss.fff") + "] " + message + Environment.NewLine);
+            }
+            catch
+            {
+            }
         }
 
         private void CloseOutboundProtocol()

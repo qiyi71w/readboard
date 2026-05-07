@@ -27,6 +27,8 @@ namespace readboard
         ProtocolMessage CreateFoxMoveNumberMessage(int moveNumber);
         ProtocolMessage CreateYikeRoomTokenMessage(string roomToken);
         ProtocolMessage CreateYikeMoveNumberMessage(int moveNumber);
+        ProtocolMessage CreateYikeSyncStartMessage();
+        ProtocolMessage CreateYikeSyncStopMessage();
         ProtocolMessage CreateStartMessage(int boardWidth, int boardHeight, IntPtr windowHandle, bool includeWindowHandle);
         ProtocolMessage CreatePlayMessage(string color, string time, string playouts, string firstPolicy);
         ProtocolMessage CreateNoInBoardMessage();

@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 
 namespace readboard
@@ -11,6 +12,7 @@ namespace readboard
 
     internal sealed class LegacyMovePlacementService : IMovePlacementService
     {
+        private const string YikeRenderWidgetClassName = "Chrome_RenderWidgetHostHWND";
         private readonly IPlacementNativeMethods nativeMethods;
 
         internal LegacyMovePlacementService(IPlacementNativeMethods nativeMethods)
@@ -72,18 +74,20 @@ namespace readboard
         private static PlacementPathKind ResolvePath(MovePlacementRequest request)
         {
             SyncMode syncMode = request.Frame.SyncMode;
+            if (syncMode == SyncMode.Yike)
+                return PlacementPathKind.BackgroundSend;
             if (request.Frame.Window != null && request.Frame.Window.IsJavaWindow)
                 return PlacementPathKind.Foreground;
             if (syncMode == SyncMode.Foreground || syncMode == SyncMode.Fox)
                 return PlacementPathKind.Foreground;
-            if (syncMode == SyncMode.FoxBackgroundPlace || syncMode == SyncMode.Yike)
+            if (syncMode == SyncMode.FoxBackgroundPlace)
                 return PlacementPathKind.BackgroundSend;
             if (syncMode == SyncMode.Tygem || syncMode == SyncMode.Sina || syncMode == SyncMode.Background)
                 return PlacementPathKind.BackgroundPost;
             return PlacementPathKind.Unknown;
         }
 
-        private static bool TryResolvePlacementPoint(
+        private bool TryResolvePlacementPoint(
             MovePlacementRequest request,
             PlacementPathKind path,
             out PlacementPoint point,
@@ -105,7 +109,7 @@ namespace readboard
             return true;
         }
 
-        private static bool TryResolveBounds(BoardFrame frame, PlacementPathKind path, out PixelRect bounds)
+        private bool TryResolveBounds(BoardFrame frame, PlacementPathKind path, out PixelRect bounds)
         {
             if (path == PlacementPathKind.Foreground)
                 return TryResolveScreenBounds(frame, out bounds);
@@ -137,8 +141,11 @@ namespace readboard
             return true;
         }
 
-        private static bool TryResolveClientBounds(BoardFrame frame, out PixelRect bounds)
+        private bool TryResolveClientBounds(BoardFrame frame, out PixelRect bounds)
         {
+            if (frame != null && frame.SyncMode == SyncMode.Yike)
+                return TryResolveYikeRenderWidgetClientBounds(frame, out bounds);
+
             if (ShouldPreferScreenBoundsForBackground(frame) && TryResolveClientBoundsFromScreen(frame, out bounds))
                 return true;
 
@@ -166,11 +173,51 @@ namespace readboard
             return IsUsable(bounds);
         }
 
+        private bool TryResolveYikeRenderWidgetClientBounds(BoardFrame frame, out PixelRect bounds)
+        {
+            bounds = null;
+            if (frame == null || frame.Viewport == null || frame.Window == null)
+                return false;
+            if (!IsUsable(frame.Viewport.SourceBounds) || !IsUsable(frame.Window.Bounds))
+                return false;
+
+            IntPtr renderWidgetHandle = ResolveYikeRenderWidgetHandle(frame.Window.Handle);
+            if (renderWidgetHandle == IntPtr.Zero)
+                return false;
+
+            PixelRect renderWidgetScreenBounds;
+            if (!nativeMethods.TryGetWindowBounds(renderWidgetHandle, out renderWidgetScreenBounds)
+                || !IsUsable(renderWidgetScreenBounds))
+            {
+                return false;
+            }
+
+            bounds = new PixelRect(
+                frame.Viewport.SourceBounds.X,
+                frame.Viewport.SourceBounds.Y,
+                frame.Viewport.SourceBounds.Width,
+                frame.Viewport.SourceBounds.Height);
+            return IsUsable(bounds);
+        }
+
         private static PlacementPoint BuildPlacementPoint(
             MovePlacementRequest request,
             PlacementPathKind path,
             PixelRect bounds)
         {
+            PlacementPoint explicitPoint;
+            if (TryBuildExplicitPlacementPoint(request, bounds, out explicitPoint))
+            {
+                if (path != PlacementPathKind.BackgroundPost)
+                    return explicitPoint;
+
+                double explicitDpiScale = ResolveBackgroundDpiScale(request.Frame.Window);
+                bool explicitIsDpiAware = request.Frame.Window != null && request.Frame.Window.IsDpiAware;
+                return new PlacementPoint(
+                    DisplayScaling.ScaleClientCoordinateForPostMessage(explicitPoint.X, explicitIsDpiAware, explicitDpiScale),
+                    DisplayScaling.ScaleClientCoordinateForPostMessage(explicitPoint.Y, explicitIsDpiAware, explicitDpiScale));
+            }
+
             double cellWidth = ResolveCellSize(bounds.Width, request.Frame.Viewport.CellWidth, request.Frame.BoardSize.Width);
             double cellHeight = ResolveCellSize(bounds.Height, request.Frame.Viewport.CellHeight, request.Frame.BoardSize.Height);
             int x = (int)Math.Round(bounds.X + cellWidth * (request.Move.X + 0.5d));
@@ -184,6 +231,45 @@ namespace readboard
             return new PlacementPoint(
                 DisplayScaling.ScaleClientCoordinateForPostMessage(x, isDpiAware, dpiScale),
                 DisplayScaling.ScaleClientCoordinateForPostMessage(y, isDpiAware, dpiScale));
+        }
+
+        private static bool TryBuildExplicitPlacementPoint(
+            MovePlacementRequest request,
+            PixelRect bounds,
+            out PlacementPoint point)
+        {
+            point = PlacementPoint.Empty;
+            if (request == null
+                || request.Frame == null
+                || request.Frame.Viewport == null
+                || request.Move == null
+                || !IsUsable(bounds))
+            {
+                return false;
+            }
+
+            BoardViewport viewport = request.Frame.Viewport;
+            if (!viewport.FirstIntersectionX.HasValue
+                || !viewport.FirstIntersectionY.HasValue
+                || viewport.CellWidth <= 0d
+                || viewport.CellHeight <= 0d
+                || !IsUsable(viewport.SourceBounds))
+            {
+                return false;
+            }
+
+            double scaleX = bounds.Width / (double)viewport.SourceBounds.Width;
+            double scaleY = bounds.Height / (double)viewport.SourceBounds.Height;
+            double offsetX =
+                (viewport.FirstIntersectionX.Value - viewport.SourceBounds.X)
+                + (viewport.CellWidth * request.Move.X);
+            double offsetY =
+                (viewport.FirstIntersectionY.Value - viewport.SourceBounds.Y)
+                + (viewport.CellHeight * request.Move.Y);
+            point = new PlacementPoint(
+                (int)Math.Round(bounds.X + (offsetX * scaleX)),
+                (int)Math.Round(bounds.Y + (offsetY * scaleY)));
+            return true;
         }
 
         private static double ResolveCellSize(int boundsSize, double cellSize, int boardSize)
@@ -292,11 +378,32 @@ namespace readboard
             return Success(request, PlacementPathKind.BackgroundSend);
         }
 
-        private static IntPtr ResolveTargetHandle(MovePlacementRequest request)
+        private IntPtr ResolveTargetHandle(MovePlacementRequest request)
         {
             if (request.Frame.Window == null || request.Frame.Window.Handle == IntPtr.Zero)
                 throw new InvalidOperationException("Placement target window handle is required.");
-            return request.Frame.Window.Handle;
+            if (request.Frame.SyncMode != SyncMode.Yike)
+                return request.Frame.Window.Handle;
+
+            IntPtr renderWidgetHandle = ResolveYikeRenderWidgetHandle(request);
+            if (renderWidgetHandle == IntPtr.Zero)
+                throw new InvalidOperationException("Yike render widget handle is required.");
+            return renderWidgetHandle;
+        }
+
+        private IntPtr ResolveYikeRenderWidgetHandle(MovePlacementRequest request)
+        {
+            if (request == null || request.Frame == null || request.Frame.Window == null)
+                return IntPtr.Zero;
+
+            return ResolveYikeRenderWidgetHandle(request.Frame.Window.Handle);
+        }
+
+        private IntPtr ResolveYikeRenderWidgetHandle(IntPtr parentHandle)
+        {
+            return nativeMethods.FindChildWindowByClass(
+                parentHandle,
+                YikeRenderWidgetClassName);
         }
 
         private static int BuildMouseLParam(int x, int y)
@@ -354,6 +461,8 @@ namespace readboard
     internal interface IPlacementNativeMethods
     {
         IntPtr FindWindowByClass(string className);
+        IntPtr FindChildWindowByClass(IntPtr parentHandle, string className);
+        bool TryGetWindowBounds(IntPtr handle, out PixelRect bounds);
         void SwitchToWindow(IntPtr handle);
         bool TryForegroundLeftClick(int x, int y, bool holdButtonBeforeRelease);
         bool TryPostMouseMessage(IntPtr handle, uint message, int wParam, int lParam);
@@ -387,9 +496,40 @@ namespace readboard
             return FindWindow(className, string.Empty);
         }
 
+        public IntPtr FindChildWindowByClass(IntPtr parentHandle, string className)
+        {
+            if (parentHandle == IntPtr.Zero || string.IsNullOrWhiteSpace(className))
+                return IntPtr.Zero;
+
+            ChildWindowSearchState state = new ChildWindowSearchState(className);
+            GCHandle searchStateHandle = GCHandle.Alloc(state);
+            try
+            {
+                EnumChildWindows(parentHandle, ChildWindowSearchCallback, GCHandle.ToIntPtr(searchStateHandle));
+                return state.FoundHandle;
+            }
+            finally
+            {
+                searchStateHandle.Free();
+            }
+        }
+
         public void SwitchToWindow(IntPtr handle)
         {
             SwitchToThisWindow(handle, true);
+        }
+
+        public bool TryGetWindowBounds(IntPtr handle, out PixelRect bounds)
+        {
+            bounds = null;
+            RECT rect;
+            if (handle == IntPtr.Zero || !GetWindowRect(handle, out rect))
+                return false;
+            if (rect.Right <= rect.Left || rect.Bottom <= rect.Top)
+                return false;
+
+            bounds = new PixelRect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+            return true;
         }
 
         public bool TryForegroundLeftClick(int x, int y, bool holdButtonBeforeRelease)
@@ -433,11 +573,21 @@ namespace readboard
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool EnumChildWindows(IntPtr hWndParent, EnumChildProc lpEnumFunc, IntPtr lParam);
+
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetCursorPos(int x, int y);
@@ -447,6 +597,51 @@ namespace readboard
 
         [DllImport("user32.dll")]
         private static extern void mouse_event(int dwFlags, int dx, int dy, int dwData, IntPtr dwExtraInfo);
+
+        private static bool ChildWindowSearchCallback(IntPtr handle, IntPtr lParam)
+        {
+            GCHandle stateHandle = GCHandle.FromIntPtr(lParam);
+            ChildWindowSearchState state = stateHandle.Target as ChildWindowSearchState;
+            if (state == null)
+                return false;
+
+            string className = GetWindowClassName(handle);
+            if (!string.Equals(className, state.ClassName, StringComparison.Ordinal))
+                return true;
+
+            state.FoundHandle = handle;
+            return false;
+        }
+
+        private static string GetWindowClassName(IntPtr handle)
+        {
+            StringBuilder className = new StringBuilder(256);
+            return GetClassName(handle, className, className.Capacity) <= 0
+                ? string.Empty
+                : className.ToString();
+        }
+
+        private sealed class ChildWindowSearchState
+        {
+            public ChildWindowSearchState(string className)
+            {
+                ClassName = className;
+            }
+
+            public string ClassName { get; private set; }
+            public IntPtr FoundHandle { get; set; }
+        }
+
+        private delegate bool EnumChildProc(IntPtr handle, IntPtr lParam);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
     }
 
     internal sealed class BlockingPlacementDelay : IPlacementDelay

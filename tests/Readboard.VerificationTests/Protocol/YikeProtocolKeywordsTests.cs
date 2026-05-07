@@ -17,5 +17,19 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("yikeRoomToken ", ProtocolKeywords.YikeRoomTokenPrefix);
             Assert.Equal("yikeMoveNumber ", ProtocolKeywords.YikeMoveNumberPrefix);
         }
+
+        [Fact]
+        public void exposes_yike_geometry_inbound_prefix()
+        {
+            Assert.Equal("yikeGeometry", ProtocolKeywords.YikeGeometry);
+        }
+
+        [Fact]
+        public void exposes_yike_sync_control_commands()
+        {
+            Assert.Equal("yikeSyncStart", ProtocolKeywords.YikeSyncStart);
+            Assert.Equal("yikeSyncStop", ProtocolKeywords.YikeSyncStop);
+            Assert.Equal("yikeBrowserSyncStop", ProtocolKeywords.YikeBrowserSyncStop);
+        }
     }
 }

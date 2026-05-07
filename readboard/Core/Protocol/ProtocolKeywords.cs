@@ -50,7 +50,11 @@ namespace readboard
         internal const string ReadboardUpdateCancelled = "readboardUpdateCancelled";
         internal const string ReadboardUpdateFailedPrefix = "readboardUpdateFailed\t";
         internal const string Yike = "yike";
+        internal const string YikeGeometry = "yikeGeometry";
         internal const string YikeRoomTokenPrefix = "yikeRoomToken ";
         internal const string YikeMoveNumberPrefix = "yikeMoveNumber ";
+        internal const string YikeSyncStart = "yikeSyncStart";
+        internal const string YikeSyncStop = "yikeSyncStop";
+        internal const string YikeBrowserSyncStop = "yikeBrowserSyncStop";
     }
 }

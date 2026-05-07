@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace readboard
 {
@@ -31,6 +32,10 @@ namespace readboard
                 return new ProtocolMessage { Kind = ProtocolMessageKind.VersionRequest, RawText = trimmed };
             if (trimmed.StartsWith(ProtocolKeywords.Quit, StringComparison.Ordinal))
                 return new ProtocolMessage { Kind = ProtocolMessageKind.Quit, RawText = trimmed };
+            if (string.Equals(trimmed, ProtocolKeywords.YikeBrowserSyncStop, StringComparison.Ordinal))
+                return new ProtocolMessage { Kind = ProtocolMessageKind.YikeBrowserSyncStop, RawText = trimmed };
+            if (trimmed == ProtocolKeywords.YikeGeometry || trimmed.StartsWith(ProtocolKeywords.YikeGeometry + " ", StringComparison.Ordinal))
+                return ParseYikeGeometry(trimmed);
             if (trimmed == ProtocolKeywords.Yike || trimmed.StartsWith(ProtocolKeywords.Yike + " ", StringComparison.Ordinal))
                 return ParseYikeContext(trimmed);
             return ProtocolMessage.CreateLegacyLine(trimmed);
@@ -150,6 +155,16 @@ namespace readboard
         public ProtocolMessage CreateYikeMoveNumberMessage(int moveNumber)
         {
             return CreateLegacyMessage(ProtocolKeywords.YikeMoveNumberPrefix + moveNumber);
+        }
+
+        public ProtocolMessage CreateYikeSyncStartMessage()
+        {
+            return CreateLegacyMessage(ProtocolKeywords.YikeSyncStart);
+        }
+
+        public ProtocolMessage CreateYikeSyncStopMessage()
+        {
+            return CreateLegacyMessage(ProtocolKeywords.YikeSyncStop);
         }
 
         public ProtocolMessage CreateStartMessage(int boardWidth, int boardHeight, IntPtr windowHandle, bool includeWindowHandle)
@@ -286,6 +301,118 @@ namespace readboard
                 YikeRoomToken = roomToken,
                 YikeMoveNumber = moveNumber
             };
+        }
+
+        private static ProtocolMessage ParseYikeGeometry(string trimmed)
+        {
+            int? left = null;
+            int? top = null;
+            int? width = null;
+            int? height = null;
+            int? boardSize = null;
+            double? firstX = null;
+            double? firstY = null;
+            double? cellX = null;
+            double? cellY = null;
+            string[] parts = trimmed.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int index = 1; index < parts.Length; index++)
+            {
+                string part = parts[index];
+                if (part.StartsWith("left=", StringComparison.Ordinal))
+                {
+                    left = ParsePositiveInt(part.Substring("left=".Length));
+                    continue;
+                }
+
+                if (part.StartsWith("top=", StringComparison.Ordinal))
+                {
+                    top = ParsePositiveInt(part.Substring("top=".Length));
+                    continue;
+                }
+
+                if (part.StartsWith("width=", StringComparison.Ordinal))
+                {
+                    width = ParsePositiveInt(part.Substring("width=".Length));
+                    continue;
+                }
+
+                if (part.StartsWith("height=", StringComparison.Ordinal))
+                {
+                    height = ParsePositiveInt(part.Substring("height=".Length));
+                    continue;
+                }
+
+                if (part.StartsWith("board=", StringComparison.Ordinal))
+                {
+                    boardSize = ParsePositiveInt(part.Substring("board=".Length));
+                    continue;
+                }
+
+                if (part.StartsWith("firstX=", StringComparison.Ordinal))
+                {
+                    firstX = ParsePositiveDouble(part.Substring("firstX=".Length));
+                    continue;
+                }
+
+                if (part.StartsWith("firstY=", StringComparison.Ordinal))
+                {
+                    firstY = ParsePositiveDouble(part.Substring("firstY=".Length));
+                    continue;
+                }
+
+                if (part.StartsWith("cellX=", StringComparison.Ordinal))
+                {
+                    cellX = ParsePositiveDouble(part.Substring("cellX=".Length));
+                    continue;
+                }
+
+                if (part.StartsWith("cellY=", StringComparison.Ordinal))
+                    cellY = ParsePositiveDouble(part.Substring("cellY=".Length));
+            }
+
+            YikeBoardGeometry geometry = null;
+            if (left.HasValue && top.HasValue && width.HasValue && height.HasValue && boardSize.HasValue)
+            {
+                geometry = new YikeBoardGeometry
+                {
+                    Bounds = new PixelRect(left.Value, top.Value, width.Value, height.Value),
+                    BoardSize = boardSize.Value
+                };
+
+                if (firstX.HasValue && firstY.HasValue && cellX.HasValue && cellY.HasValue)
+                {
+                    geometry.FirstIntersectionX = firstX.Value;
+                    geometry.FirstIntersectionY = firstY.Value;
+                    geometry.CellWidth = cellX.Value;
+                    geometry.CellHeight = cellY.Value;
+                }
+            }
+
+            return new ProtocolMessage
+            {
+                Kind = ProtocolMessageKind.YikeGeometry,
+                RawText = trimmed,
+                YikeGeometry = geometry
+            };
+        }
+
+        private static int? ParsePositiveInt(string value)
+        {
+            return int.TryParse(value, out int parsed) && parsed > 0 ? parsed : (int?)null;
+        }
+
+        private static double? ParsePositiveDouble(string value)
+        {
+            return double.TryParse(
+                    value,
+                    NumberStyles.Float | NumberStyles.AllowThousands,
+                    CultureInfo.InvariantCulture,
+                    out double parsed)
+                && parsed > 0d
+                && !double.IsNaN(parsed)
+                && !double.IsInfinity(parsed)
+                ? parsed
+                : (double?)null;
         }
 
         private static string NormalizeNumericValue(string value)

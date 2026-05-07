@@ -123,6 +123,17 @@ namespace readboard
             ApplyMainWindowTitle();
         }
 
+        void IProtocolCommandHost.HandleYikeGeometry(YikeBoardGeometry geometry)
+        {
+            if (CurrentSyncType != TYPE_YIKE)
+            {
+                sessionCoordinator.SetYikeGeometry(null);
+                return;
+            }
+
+            sessionCoordinator.SetYikeGeometry(geometry);
+        }
+
         void IProtocolCommandHost.HandleLossFocus()
         {
             lossFocus();

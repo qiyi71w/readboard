@@ -2,12 +2,16 @@
 
 日期：2026-04-24
 
+更新：2026-05-05
+
+> 后续实现方向已按用户确认调整：弈客棋盘几何不再以 readboard 自己截图识别为唯一来源；`lizzieyzy-next` 会通过新增协议消息主动上报当前棋盘几何，readboard 主要用这份几何做后台落子。本文其余仍保留的"readboard 自己识别弈客棋盘"描述，以本更新说明为准。
+
 ## 目标
 
 为 readboard 增加新的同步平台 `弈客`（Yike），覆盖弈客大厅、弈客直播、对弈与个人直播房间，以及无房间号的比赛页。要求：
 
 - 在 readboard 侧引入一个新的 `SyncMode.Yike` 枚举值，行为对标 `SyncMode.FoxBackgroundPlace`（后台落子）。
-- 棋盘矩形通过图像处理自动检测，沿用 `LegacyBoardLocator` 既有的"按平台特征色锚点"骨架，不引入手动框选。
+- 棋盘矩形优先由 `lizzieyzy-next` 主动上报当前浏览器内棋盘几何；readboard 使用这份几何做后台落子，不引入手动框选。
 - 房间号与手数通过协议扩展由 `lizzieyzy-next` 主动告知 readboard，避免在 readboard 侧 OCR 网页内容。
 - 元数据（房间号、手数）必须像野狐一样进入 `SendBoardSnapshot` 的判重输入，否则下游恢复语义会退化。
 - 比赛页无房间号场景必须正确表达为"未知房间"，不能伪造或沿用旧值。
@@ -37,7 +41,7 @@
 - `BrowserFrame` 的 URL 来源于 `browser_.getURL()`；`OnlineDialog` 已实现房间号正则：`live/room/{roomId}` / `game/{gameId}` / 比赛页（无房间号）。
 - 当前手数在 `lizzieyzy-next` 通过 Socket.IO 实时同步获取，已有内部状态。
 - 弈客窗口地址栏是 Swing `JTextField`，不是原生 Win32 Edit 控件，外部 UI Automation 不能稳定读取。
-- 弈客棋盘由网页 HTML/CSS 渲染，外部和 `lizzieyzy-next` 都没有像素级位置信息，必须 readboard 自己做图像识别。
+- 弈客棋盘由网页 HTML/CSS 渲染，但 `lizzieyzy-next` 的 JCEF 注入能力可以直接读取房间页 DOM/canvas 几何，因此 readboard 不必再依赖截图猜测点击区域。
 - `LegacyBoardLocator` 已有按平台扫描特征色锚点定位棋盘矩形的实现：野狐找 (49,49,49)、Tygem 找米黄、Sina 找 (251,218,162)。
 - `BoardRecognitionResult.UsesAutoDetectedBounds` 当前白名单为 `Fox / FoxBackgroundPlace / Tygem / Sina`，需扩展加入 `Yike`。
 
@@ -53,16 +57,18 @@
 - 窗口枚举与句柄绑定沿用 `LegacySyncWindowLocator` 现有机制，仅新增弈客的标题判定分支。
 - 不为弈客新增 `WindowKind` 之类的细分枚举；弈客在 readboard 侧只有一种窗口形态。
 
-### 棋盘自动识别
+### 棋盘几何
 
-在 `LegacyBoardLocator` 增加 `TryResolveYikeBounds`，骨架与 `TryResolveFoxBounds` 一致：
+`lizzieyzy-next` 在弈客房间页通过 JCEF 注入读取当前棋盘 DOM/canvas 几何，并新增一条 host → readboard 协议消息：
 
-- 输入：弈客窗口客户区位图。
-- 通过扫描左上 / 右上特征色锚点定位棋盘上沿，假设方形棋盘按 `upRight.X - upLeft.X` 推导边长。
-- 特征色基于弈客棋盘木色背景与坐标栏边框，具体颜色阈值在实现期间通过用户提供的窗口截图调参确定，本设计不锁定具体 RGB。
-- 在 `BoardRecognitionResult.UsesAutoDetectedBounds` 中加入 `SyncMode.Yike`。
+```text
+yikeGeometry left=<x> top=<y> width=<w> height=<h> board=<size>
+```
 
-如果未来发现单一颜色锚点对网页缩放不鲁棒，允许后续在不改协议和 SyncMode 的前提下替换内部检测算法。
+- 坐标相对于 Chromium 渲染子窗口 client 区域。
+- `board` 为当前路数，允许 5 路等非 19 路房间。
+- readboard 在 Yike 后台落子时优先使用这份几何，并将点击目标收敛到 `Chrome_RenderWidgetHostHWND` 子窗口。
+- 当宿主暂时拿不到可靠棋盘时，可发送裸 `yikeGeometry` 清空旧几何，避免 readboard 沿用 stale 坐标。
 
 ### 协议扩展（host → readboard）
 
@@ -116,6 +122,23 @@ readboard 侧：
 - `yikeMoveNumber`：与野狐 `foxMoveNumber` 平行
 
 字段独立命名、不复用野狐字段，便于下游按平台分派。出现的具体行格式与协议常量在实现期间按 `ProtocolKeywords` 现有风格落地。
+
+readboard 在弈客同步会话启动和停止时还会向 `lizzieyzy-next` 发送两条弈客专用控制命令：
+
+```text
+yikeSyncStart
+yikeSyncStop
+```
+
+这两条只控制 `lizzieyzy-next` 内置弈客浏览器的网页同步任务，不替代旧的 `sync` / `stopsync`。旧命令继续表示 readboard 自身的棋盘同步状态。
+
+`lizzieyzy-next` 内置弈客浏览器的停止同步按钮会反向发送：
+
+```text
+yikeBrowserSyncStop
+```
+
+readboard 只在当前平台为弈客时响应该命令，用它停止当前 readboard 同步会话，让两边的同步开关状态保持一致。
 
 ### 主窗体标题
 

@@ -14,6 +14,7 @@ namespace readboard
         public int CurrentBoardPixelHeight { get; set; }
         public BoardFrame CurrentBoardFrame { get; set; }
         public YikeWindowContext LastCapturedYikeContext { get; set; }
+        public YikeBoardGeometry LastCapturedYikeGeometry { get; set; }
         public string LastSentYikeContextSignature { get; set; }
         public bool PreferPrintWindow { get; set; }
         public bool InitialProbePending { get; set; }
