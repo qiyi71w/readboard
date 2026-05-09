@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Threading;
 
 namespace readboard
@@ -473,12 +472,7 @@ namespace readboard
             SendProtocolMessage(protocolAdapter.CreateSyncMessage());
             if (IsYikeSyncPlatform())
             {
-                LogYikeSyncDebug("SendSync sending yikeSyncStart");
                 SendYikeSyncStart();
-            }
-            else
-            {
-                LogYikeSyncDebug("SendSync platform=" + NormalizeSyncPlatform(syncPlatform));
             }
         }
 
@@ -486,12 +480,7 @@ namespace readboard
         {
             if (IsYikeSyncPlatform())
             {
-                LogYikeSyncDebug("SendStopSync sending yikeSyncStop");
                 SendYikeSyncStop();
-            }
-            else
-            {
-                LogYikeSyncDebug("SendStopSync platform=" + NormalizeSyncPlatform(syncPlatform));
             }
             SendProtocolMessage(protocolAdapter.CreateStopSyncMessage());
         }
@@ -633,7 +622,6 @@ namespace readboard
                 case ProtocolMessageKind.YikeBrowserSyncStop:
                     return () =>
                     {
-                        LogYikeSyncDebug("Received yikeBrowserSyncStop platform=" + NormalizeSyncPlatform(syncPlatform));
                         if (IsYikeSyncPlatform())
                             StopSyncSession();
                     };
@@ -886,20 +874,6 @@ namespace readboard
         private void SendProtocolMessage(ProtocolMessage message)
         {
             outboundProtocolDispatcher.Send(message);
-        }
-
-        private static void LogYikeSyncDebug(string message)
-        {
-            try
-            {
-                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "readboard-yike-sync-debug.log");
-                File.AppendAllText(
-                    path,
-                    "[" + DateTime.Now.ToString("HH:mm:ss.fff") + "] " + message + Environment.NewLine);
-            }
-            catch
-            {
-            }
         }
 
         private void CloseOutboundProtocol()
