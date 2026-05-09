@@ -216,6 +216,46 @@ namespace Readboard.VerificationTests.Placement
             Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(BuildMouseLParam(175, 325), message.LParam));
         }
 
+        [Fact]
+        public void Place_YikeFrame_DpiUnawareWindow_DoesNotScalePostCoordinates()
+        {
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods
+            {
+                YikeRenderWidgetHandle = new IntPtr(6363),
+                YikeRenderWidgetBounds = new PixelRect(100, 200, 500, 500)
+            };
+            LegacyMovePlacementService service = new LegacyMovePlacementService(nativeMethods);
+
+            MovePlacementResult result = service.Place(new MovePlacementRequest
+            {
+                Frame = new BoardFrame
+                {
+                    SyncMode = SyncMode.Yike,
+                    BoardSize = new BoardDimensions(5, 5),
+                    Viewport = new BoardViewport
+                    {
+                        SourceBounds = new PixelRect(100, 200, 250, 250)
+                    },
+                    Window = new WindowDescriptor
+                    {
+                        Handle = new IntPtr(3003),
+                        Bounds = new PixelRect(0, 0, 800, 600),
+                        IsDpiAware = false,
+                        DpiScale = 1.5d,
+                        IsJavaWindow = true
+                    }
+                },
+                Move = new MoveRequest { X = 1, Y = 2 }
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(PlacementPathKind.BackgroundPost, result.PlacementPath);
+            Assert.Equal("Chrome_RenderWidgetHostHWND", nativeMethods.LastRequestedChildClassName);
+            Assert.Equal(3, nativeMethods.PostedMessages.Count);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(new IntPtr(6363), message.Handle));
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(BuildMouseLParam(175, 325), message.LParam));
+        }
+
         private static int BuildMouseLParam(int x, int y)
         {
             return (x & 0xFFFF) | ((y & 0xFFFF) << 16);

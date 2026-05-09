@@ -908,6 +908,95 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public void TryRunOneTimeSync_YikePlatformSendsStartAndStopCommands()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncPlatform("yike");
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            Type descriptorInterfaceType = RequireType(assembly, "readboard.IWindowDescriptorFactory");
+
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Yike, new IntPtr(5151));
+            HostRecorder hostRecorder = new HostRecorder(snapshot);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=yike")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            SetProperty(runtime, "WindowDescriptorFactory", CreateProxy(
+                descriptorInterfaceType,
+                new DescriptorFactoryRecorder().HandleCall));
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            coordinator.Start();
+            try
+            {
+                Assert.True((bool)Invoke(coordinator, "TryRunOneTimeSync"));
+            }
+            finally
+            {
+                coordinator.Stop();
+            }
+
+            int yikeStartIndex = transport.SentLines.IndexOf("yikeSyncStart");
+            int startIndex = transport.SentLines.IndexOf("start 19 19 5151");
+            int endIndex = transport.SentLines.LastIndexOf("end");
+            int yikeStopIndex = transport.SentLines.LastIndexOf("yikeSyncStop");
+            Assert.True(yikeStartIndex >= 0, "One-time yike sync should emit yikeSyncStart.");
+            Assert.True(startIndex > yikeStartIndex, "yikeSyncStart should be sent before one-time snapshot frame.");
+            Assert.True(yikeStopIndex > endIndex, "One-time yike sync should emit yikeSyncStop after snapshot frame.");
+        }
+
+        [Fact]
+        public void TryRunOneTimeSync_YikeFailureStillSendsStopCommand()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncPlatform("yike");
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            Type descriptorInterfaceType = RequireType(assembly, "readboard.IWindowDescriptorFactory");
+
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Yike, IntPtr.Zero);
+            HostRecorder hostRecorder = new HostRecorder(snapshot);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=yike")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            SetProperty(runtime, "WindowDescriptorFactory", CreateProxy(
+                descriptorInterfaceType,
+                new DescriptorFactoryRecorder().HandleCall));
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            coordinator.Start();
+            try
+            {
+                Assert.False((bool)Invoke(coordinator, "TryRunOneTimeSync"));
+            }
+            finally
+            {
+                coordinator.Stop();
+            }
+
+            int yikeStartIndex = transport.SentLines.IndexOf("yikeSyncStart");
+            int yikeStopIndex = transport.SentLines.LastIndexOf("yikeSyncStop");
+            Assert.True(yikeStartIndex >= 0, "Failed one-time yike sync should still emit yikeSyncStart before validation.");
+            Assert.True(yikeStopIndex > yikeStartIndex, "Failed one-time yike sync should still emit yikeSyncStop.");
+        }
+
+        [Fact]
         public void SendClear_NotifiesHostWhenSyncCachesReset()
         {
             RecordingTransport transport = new RecordingTransport();

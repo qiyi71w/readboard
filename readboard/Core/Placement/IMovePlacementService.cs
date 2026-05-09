@@ -210,6 +210,8 @@ namespace readboard
             {
                 if (path != PlacementPathKind.BackgroundPost)
                     return explicitPoint;
+                if (request.Frame != null && request.Frame.SyncMode == SyncMode.Yike)
+                    return explicitPoint;
 
                 double explicitDpiScale = ResolveBackgroundDpiScale(request.Frame.Window);
                 bool explicitIsDpiAware = request.Frame.Window != null && request.Frame.Window.IsDpiAware;
@@ -224,6 +226,8 @@ namespace readboard
             int y = (int)Math.Round(bounds.Y + cellHeight * (request.Move.Y + 0.5d));
 
             if (path != PlacementPathKind.BackgroundPost)
+                return new PlacementPoint(x, y);
+            if (request.Frame != null && request.Frame.SyncMode == SyncMode.Yike)
                 return new PlacementPoint(x, y);
 
             double dpiScale = ResolveBackgroundDpiScale(request.Frame.Window);

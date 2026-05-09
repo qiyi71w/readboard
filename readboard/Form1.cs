@@ -2343,8 +2343,6 @@ namespace readboard
         private void oneTimeSync()
         {
             hasRetainedFoxTitleSnapshot = false;
-            if (CurrentSyncType == TYPE_YIKE && sessionCoordinator.IsProtocolSessionActive)
-                sessionCoordinator.SendLine(ProtocolKeywords.YikeSyncStart);
             bool oneTimeSyncSucceeded = sessionCoordinator.TryRunOneTimeSync();
             if (!oneTimeSyncSucceeded)
             {
@@ -2375,8 +2373,6 @@ namespace readboard
             }
             if (!sessionCoordinator.StartedSync)
             {
-                if (CurrentSyncType == TYPE_YIKE && sessionCoordinator.IsProtocolSessionActive)
-                    sessionCoordinator.SendLine(ProtocolKeywords.YikeSyncStart);
                 sessionCoordinator.TryStartKeepSync();
             }
             else
@@ -2937,8 +2933,6 @@ namespace readboard
         {
             if (!sessionCoordinator.IsContinuousSyncing && !sessionCoordinator.StartedSync)
             {
-                if (CurrentSyncType == TYPE_YIKE && sessionCoordinator.IsProtocolSessionActive)
-                    sessionCoordinator.SendLine(ProtocolKeywords.YikeSyncStart);
                 sessionCoordinator.TryStartContinuousSync();
             }
             else

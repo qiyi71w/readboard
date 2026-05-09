@@ -43,24 +43,39 @@ namespace readboard
         public bool TryRunOneTimeSync()
         {
             SyncSessionRuntimeDependencies runtime = GetRuntimeDependencies();
-            ResetRuntimeSyncCaches(runtime);
-            SyncCoordinatorHostSnapshot snapshot;
-            if (!TryCaptureSnapshot(runtime, out snapshot))
-                return false;
-            runtimeState.SelectedWindowHandle = snapshot.SelectedWindowHandle;
-            runtimeState.ResetProbeState();
-            if (!EnsureSyncSourceSelected(runtime, snapshot, true))
-                return false;
-
-            RecognizedSyncSample sample;
-            if (!TryRecognizeSample(runtime, snapshot, true, out sample))
+            bool yikeBrowserSyncStarted = false;
+            if (IsYikeSyncPlatform() && IsProtocolSessionActive)
             {
-                runtime.Host.ShowRecognitionFailureMessage();
-                return false;
+                SendYikeSyncStart();
+                yikeBrowserSyncStarted = true;
             }
 
-            DispatchRecognizedSampleProtocol(BuildRecognizedSampleProtocolDispatch(snapshot, sample, true), null);
-            return true;
+            try
+            {
+                ResetRuntimeSyncCaches(runtime);
+                SyncCoordinatorHostSnapshot snapshot;
+                if (!TryCaptureSnapshot(runtime, out snapshot))
+                    return false;
+                runtimeState.SelectedWindowHandle = snapshot.SelectedWindowHandle;
+                runtimeState.ResetProbeState();
+                if (!EnsureSyncSourceSelected(runtime, snapshot, true))
+                    return false;
+
+                RecognizedSyncSample sample;
+                if (!TryRecognizeSample(runtime, snapshot, true, out sample))
+                {
+                    runtime.Host.ShowRecognitionFailureMessage();
+                    return false;
+                }
+
+                DispatchRecognizedSampleProtocol(BuildRecognizedSampleProtocolDispatch(snapshot, sample, true), null);
+                return true;
+            }
+            finally
+            {
+                if (yikeBrowserSyncStarted)
+                    SendYikeSyncStop();
+            }
         }
 
         public bool TryStartKeepSync()
