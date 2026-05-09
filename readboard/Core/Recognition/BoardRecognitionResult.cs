@@ -90,7 +90,8 @@ namespace readboard
             return syncMode == SyncMode.Fox
                 || syncMode == SyncMode.FoxBackgroundPlace
                 || syncMode == SyncMode.Tygem
-                || syncMode == SyncMode.Sina;
+                || syncMode == SyncMode.Sina
+                || syncMode == SyncMode.Yike;
         }
 
         private static PixelRect GetExistingBounds(BoardViewport viewport, LegacyPixelMap pixels)
@@ -160,6 +161,8 @@ namespace readboard
                     return TryResolveSinaBounds(pixels, out sourceBounds);
                 case SyncMode.Tygem:
                     return TryResolveTygemBounds(pixels, out sourceBounds);
+                case SyncMode.Yike:
+                    return TryResolveYikeBounds(pixels, out sourceBounds);
                 default:
                     sourceBounds = new PixelRect(0, 0, pixels.Width, pixels.Height);
                     return true;
@@ -225,6 +228,90 @@ namespace readboard
                 pixels.Width,
                 pixels.Height);
             return sourceBounds != null;
+        }
+
+        private static bool TryResolveYikeBounds(LegacyPixelMap pixels, out PixelRect sourceBounds)
+        {
+            sourceBounds = null;
+
+            int w = pixels.Width;
+            int h = pixels.Height;
+            int scanMaxX = w * 55 / 100;
+            int scanMaxY = h * 95 / 100;
+
+            // 1. 找棋盘外框线（格线色的首末位置）
+            int midX = scanMaxX / 2;
+            int midY = scanMaxY / 2;
+            int frameLeft = ScanForGridLine(pixels, 0, scanMaxX, 1, midY, true);
+            int frameRight = ScanForGridLine(pixels, scanMaxX - 1, -1, -1, midY, true);
+            int frameTop = ScanForGridLine(pixels, 0, scanMaxY, 1, midX, false);
+            int frameBottom = ScanForGridLine(pixels, scanMaxY - 1, -1, -1, midX, false);
+            if (frameLeft < 0 || frameRight < 0 || frameTop < 0 || frameBottom < 0) return false;
+
+            // 2. 从外框向内找第一、第二条内部格线，算出实际格间距
+            int firstInnerLeft = FindFirstInnerGridLine(pixels, frameLeft, scanMaxX, 1, midY, true);
+            int secondInnerLeft = firstInnerLeft >= 0 ? FindFirstInnerGridLine(pixels, firstInnerLeft, scanMaxX, 1, midY, true) : -1;
+            int firstInnerTop = FindFirstInnerGridLine(pixels, frameTop, scanMaxY, 1, midX, false);
+            int secondInnerTop = firstInnerTop >= 0 ? FindFirstInnerGridLine(pixels, firstInnerTop, scanMaxY, 1, midX, false) : -1;
+            if (secondInnerLeft < 0 || secondInnerTop < 0) return false;
+
+            // 3. 格间距 = 第二条内线 - 第一条内线
+            int spacingX = secondInnerLeft - firstInnerLeft;
+            int spacingY = secondInnerTop - firstInnerTop;
+            if (spacingX < 15 || spacingY < 15) return false;
+
+            // 4. 弈客棋盘有装饰外框线（颜色与格线相同），不是第一条格线。
+            //    第一条内线 (firstInner) 才是真正的 line 0。
+            //    19 条格线：line 0 = firstInner, line 18 = firstInner + 18*spacing
+            //    bounds = line 0 - 半格 到 line 18 + 半格 = firstInner - spacing/2, 宽 19*spacing
+            int boundsX = firstInnerLeft - spacingX / 2;
+            int boundsY = firstInnerTop - spacingY / 2;
+            int boundsW = 19 * spacingX;
+            int boundsH = 19 * spacingY;
+            int size = Math.Min(boundsW, boundsH);
+
+            sourceBounds = ClipBounds(new PixelRect(boundsX, boundsY, size, size), w, h);
+
+            return sourceBounds != null;
+        }
+
+        private static int FindFirstInnerGridLine(LegacyPixelMap pixels, int frameEdge, int limit, int step, int fixedCoord, bool horizontal)
+        {
+            // 从外框边缘向内走，先跳过外框的连续格线像素，再找下一段格线像素
+            bool passedFrame = false;
+            for (int i = frameEdge + step; i != limit; i += step)
+            {
+                LegacyRgbInfo rgb = horizontal ? pixels.GetPixel(i, fixedCoord) : pixels.GetPixel(fixedCoord, i);
+                if (!passedFrame)
+                {
+                    if (!IsYikeGridLine(rgb))
+                        passedFrame = true;
+                }
+                else
+                {
+                    if (IsYikeGridLine(rgb))
+                        return i;
+                }
+            }
+            return -1;
+        }
+
+        private static int ScanForGridLine(LegacyPixelMap pixels, int from, int to, int step, int fixedCoord, bool horizontal)
+        {
+            for (int i = from; i != to; i += step)
+            {
+                LegacyRgbInfo rgb = horizontal ? pixels.GetPixel(i, fixedCoord) : pixels.GetPixel(fixedCoord, i);
+                if (IsYikeGridLine(rgb))
+                    return i;
+            }
+            return -1;
+        }
+
+        private static bool IsYikeGridLine(LegacyRgbInfo rgb)
+        {
+            return rgb.Red >= 100 && rgb.Red <= 150
+                && rgb.Green >= 60 && rgb.Green <= 110
+                && rgb.Blue >= 25 && rgb.Blue <= 70;
         }
 
         private static bool TryFindPattern(

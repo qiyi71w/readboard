@@ -10,6 +10,7 @@ namespace readboard
         void OnKeepSyncStopped(bool continuousSyncActive);
         void OnContinuousSyncStarted();
         void OnContinuousSyncStopped();
+        void OnSyncCachesReset();
         void ShowMissingSyncSourceMessage();
         void ShowRecognitionFailureMessage();
         void MinimizeWindow();

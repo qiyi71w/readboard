@@ -21,6 +21,7 @@ namespace readboard
         private readonly ManualResetEventSlim continuousSyncStoppedEvent = new ManualResetEventSlim(true);
         private readonly ManualResetEventSlim syncIdleEvent = new ManualResetEventSlim(true);
         private int disposeState;
+        private int inboundProtocolGeneration;
         private volatile bool acceptingInboundProtocolMessages;
         private string syncPlatform = "generic";
         private FoxWindowContext foxWindowContext = FoxWindowContext.Unknown();
@@ -120,6 +121,27 @@ namespace readboard
             }
         }
 
+        public void SetYikeContext(YikeWindowContext context)
+        {
+            lock (stateLock)
+            {
+                runtimeState.LastCapturedYikeContext = YikeWindowContext.CopyOf(context);
+            }
+        }
+
+        public void SetYikeGeometry(YikeBoardGeometry geometry)
+        {
+            lock (stateLock)
+            {
+                runtimeState.LastCapturedYikeGeometry = YikeBoardGeometry.CopyOf(geometry);
+                if (runtimeState.LastCapturedYikeGeometry != null && runtimeState.LastCapturedYikeGeometry.IsUsable)
+                {
+                    runtimeState.CurrentBoardPixelWidth = runtimeState.LastCapturedYikeGeometry.Bounds.Width;
+                    runtimeState.CurrentBoardPixelHeight = runtimeState.LastCapturedYikeGeometry.Bounds.Height;
+                }
+            }
+        }
+
         public void ArmForceRebuild()
         {
             lock (stateLock)
@@ -130,6 +152,7 @@ namespace readboard
 
         public void Start()
         {
+            Interlocked.Increment(ref inboundProtocolGeneration);
             outboundProtocolDispatcher.Open();
             acceptingInboundProtocolMessages = true;
             transport.MessageReceived += OnMessageReceived;
@@ -148,6 +171,7 @@ namespace readboard
         {
             CloseOutboundProtocol();
             acceptingInboundProtocolMessages = false;
+            Interlocked.Increment(ref inboundProtocolGeneration);
             StopSyncSessionCore(waitForWorkers);
             transport.MessageReceived -= OnMessageReceived;
             CancelPendingMove();
@@ -395,10 +419,7 @@ namespace readboard
 
         public void ResetSyncCaches()
         {
-            lock (stateLock)
-            {
-                ResetSyncCachesCore();
-            }
+            ResetSyncCaches(true);
         }
 
         public void SendClear()
@@ -449,11 +470,29 @@ namespace readboard
         public void SendSync()
         {
             SendProtocolMessage(protocolAdapter.CreateSyncMessage());
+            if (IsYikeSyncPlatform())
+            {
+                SendYikeSyncStart();
+            }
         }
 
         public void SendStopSync()
         {
+            if (IsYikeSyncPlatform())
+            {
+                SendYikeSyncStop();
+            }
             SendProtocolMessage(protocolAdapter.CreateStopSyncMessage());
+        }
+
+        public void SendYikeSyncStart()
+        {
+            SendProtocolMessage(protocolAdapter.CreateYikeSyncStartMessage());
+        }
+
+        public void SendYikeSyncStop()
+        {
+            SendProtocolMessage(protocolAdapter.CreateYikeSyncStopMessage());
         }
 
         public void SendBothSync(bool enabled)
@@ -548,6 +587,7 @@ namespace readboard
         {
             if (!acceptingInboundProtocolMessages)
                 return;
+            int receivedGeneration = Volatile.Read(ref inboundProtocolGeneration);
             ProtocolMessage message = protocolAdapter.ParseInbound(rawLine);
             IProtocolCommandHost currentHost = host;
             Action command = CreateDispatchCommand(currentHost, message);
@@ -555,7 +595,8 @@ namespace readboard
                 return;
             currentHost.DispatchProtocolCommand(delegate
             {
-                if (!acceptingInboundProtocolMessages)
+                if (!acceptingInboundProtocolMessages
+                    || receivedGeneration != Volatile.Read(ref inboundProtocolGeneration))
                     return;
                 command();
             });
@@ -570,6 +611,20 @@ namespace readboard
             {
                 case ProtocolMessageKind.PlaceMove:
                     return () => currentHost.HandlePlaceRequest(message.MoveRequest);
+                case ProtocolMessageKind.YikeContext:
+                    return () => currentHost.HandleYikeContext(new YikeWindowContext
+                    {
+                        RoomToken = message.YikeRoomToken,
+                        MoveNumber = message.YikeMoveNumber
+                    });
+                case ProtocolMessageKind.YikeGeometry:
+                    return () => currentHost.HandleYikeGeometry(YikeBoardGeometry.CopyOf(message.YikeGeometry));
+                case ProtocolMessageKind.YikeBrowserSyncStop:
+                    return () =>
+                    {
+                        if (IsYikeSyncPlatform())
+                            StopSyncSession();
+                    };
                 case ProtocolMessageKind.LossFocus:
                     return currentHost.HandleLossFocus;
                 case ProtocolMessageKind.StopInBoard:
@@ -674,6 +729,27 @@ namespace readboard
             sessionState.LastOverlayProtocolLine = null;
             lastSentBoardFoxMoveNumber = null;
             lastSentWindowContextSignature = null;
+            runtimeState.LastCapturedYikeContext = null;
+            runtimeState.LastSentYikeContextSignature = null;
+        }
+
+        private void ResetSyncCaches(bool notifyHost)
+        {
+            lock (stateLock)
+            {
+                ResetSyncCachesCore();
+            }
+
+            if (notifyHost)
+                NotifySyncCachesReset();
+        }
+
+        private void NotifySyncCachesReset()
+        {
+            SyncSessionRuntimeDependencies runtime = runtimeDependencies;
+            if (runtime == null || runtime.Host == null)
+                return;
+            runtime.Host.OnSyncCachesReset();
         }
 
         private bool TryCompletePendingMove(bool success)
@@ -814,6 +890,24 @@ namespace readboard
             messages.Add(protocolAdapter.CreateSyncPlatformMessage(normalizedPlatform));
             signatureParts.Add("platform=" + normalizedPlatform);
 
+            if (string.Equals(normalizedPlatform, ProtocolKeywords.Yike, StringComparison.Ordinal))
+            {
+                YikeWindowContext yikeContext = YikeWindowContext.CopyOf(runtimeState.LastCapturedYikeContext);
+                string yikeSignature = yikeContext.ContextSignature;
+                signatureParts.Add("yike=" + yikeSignature);
+
+                if (!string.IsNullOrWhiteSpace(yikeContext.RoomToken))
+                {
+                    string roomToken = yikeContext.RoomToken.Trim();
+                    messages.Add(protocolAdapter.CreateYikeRoomTokenMessage(roomToken));
+                }
+
+                if (yikeContext.MoveNumber.HasValue)
+                    messages.Add(protocolAdapter.CreateYikeMoveNumberMessage(yikeContext.MoveNumber.Value));
+
+                return new OutboundWindowContext(messages, string.Join("|", signatureParts), forceRebuildArmed);
+            }
+
             FoxWindowContext context = FoxWindowContext.CopyOf(foxWindowContext);
             signatureParts.Add("kind=" + (int)context.Kind);
 
@@ -858,6 +952,14 @@ namespace readboard
             }
 
             return new OutboundWindowContext(messages, string.Join("|", signatureParts), forceRebuildArmed);
+        }
+
+        private string ResolveYikeContextSignatureUnsafe()
+        {
+            if (!string.Equals(NormalizeSyncPlatform(syncPlatform), ProtocolKeywords.Yike, StringComparison.Ordinal))
+                return null;
+
+            return (runtimeState.LastCapturedYikeContext ?? YikeWindowContext.Unknown()).ContextSignature;
         }
 
         private static string NormalizeSyncPlatform(string platform)

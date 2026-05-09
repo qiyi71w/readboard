@@ -34,8 +34,8 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("btnKomi65.SetBounds(settingsLeft, top + buttonHeight + utilityGap, utilityRight - settingsLeft, buttonHeight);", legacyHeader);
             Assert.Contains("return new MainHeaderLayoutMetrics(groupBox1.Bottom, btnCheckUpdate.Bottom, groupBox1.Width, true);", legacyHeader);
 
-            Assert.Contains("int minimumPlatformWidth = Math.Min(contentWidth, MeasureOptionsWidth(new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore }, optionGap) + ScaleValue(28));", adaptiveHeader);
-            Assert.Contains("int groupBottom = LayoutOptionsRow(new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore }, groupBox1, optionLeft, optionTop, optionGap, rowGap);", adaptiveHeader);
+            Assert.Contains("int minimumPlatformWidth = Math.Min(contentWidth, MeasureOptionsWidth(new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore }, optionGap) + ScaleValue(28));", adaptiveHeader);
+            Assert.Contains("int groupBottom = LayoutOptionsRow(new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore }, groupBox1, optionLeft, optionTop, optionGap, rowGap);", adaptiveHeader);
             Assert.Contains("return new MainHeaderLayoutMetrics(groupBox1.Bottom, btnCheckUpdate.Bottom, groupBox1.Width, true);", adaptiveHeader);
             Assert.Contains("return new MainHeaderLayoutMetrics(groupBox1.Bottom, btnCheckUpdate.Bottom, contentWidth, false);", adaptiveHeader);
 

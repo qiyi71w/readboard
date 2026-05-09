@@ -43,24 +43,39 @@ namespace readboard
         public bool TryRunOneTimeSync()
         {
             SyncSessionRuntimeDependencies runtime = GetRuntimeDependencies();
-            ResetRuntimeSyncCaches(runtime);
-            SyncCoordinatorHostSnapshot snapshot;
-            if (!TryCaptureSnapshot(runtime, out snapshot))
-                return false;
-            runtimeState.SelectedWindowHandle = snapshot.SelectedWindowHandle;
-            runtimeState.ResetProbeState();
-            if (!EnsureSyncSourceSelected(runtime, snapshot, true))
-                return false;
-
-            RecognizedSyncSample sample;
-            if (!TryRecognizeSample(runtime, snapshot, true, out sample))
+            bool yikeBrowserSyncStarted = false;
+            if (IsYikeSyncPlatform() && IsProtocolSessionActive)
             {
-                runtime.Host.ShowRecognitionFailureMessage();
-                return false;
+                SendYikeSyncStart();
+                yikeBrowserSyncStarted = true;
             }
 
-            DispatchRecognizedSampleProtocol(BuildRecognizedSampleProtocolDispatch(snapshot, sample, true), null);
-            return true;
+            try
+            {
+                ResetRuntimeSyncCaches(runtime);
+                SyncCoordinatorHostSnapshot snapshot;
+                if (!TryCaptureSnapshot(runtime, out snapshot))
+                    return false;
+                runtimeState.SelectedWindowHandle = snapshot.SelectedWindowHandle;
+                runtimeState.ResetProbeState();
+                if (!EnsureSyncSourceSelected(runtime, snapshot, true))
+                    return false;
+
+                RecognizedSyncSample sample;
+                if (!TryRecognizeSample(runtime, snapshot, true, out sample))
+                {
+                    runtime.Host.ShowRecognitionFailureMessage();
+                    return false;
+                }
+
+                DispatchRecognizedSampleProtocol(BuildRecognizedSampleProtocolDispatch(snapshot, sample, true), null);
+                return true;
+            }
+            finally
+            {
+                if (yikeBrowserSyncStarted)
+                    SendYikeSyncStop();
+            }
         }
 
         public bool TryStartKeepSync()
@@ -100,6 +115,10 @@ namespace readboard
 
         public void StopSyncSession()
         {
+            lock (stateLock)
+            {
+                runtimeState.LastCapturedYikeGeometry = null;
+            }
             StopSyncSessionCore(false);
         }
 
@@ -353,10 +372,15 @@ namespace readboard
                         return;
                     if (!TryProcessKeepSyncSample(runtime, snapshot, firstSample, isOperationCurrent))
                     {
-                        if (firstSample || !IsOperationCurrent(isOperationCurrent))
+                        if (!IsOperationCurrent(isOperationCurrent))
+                            return;
+                        if (firstSample && snapshot.SyncMode != SyncMode.Yike)
                             return;
                     }
-                    firstSample = false;
+                    else
+                    {
+                        firstSample = false;
+                    }
                     if (WaitForNextSample(snapshot.SampleIntervalMs))
                         return;
                 }
@@ -426,8 +450,11 @@ namespace readboard
         {
             if (!IsOperationCurrent(isOperationCurrent))
                 return false;
+            runtimeState.SelectedWindowHandle = ResolveSelectedWindowHandle(snapshot);
             if (!EnsureSyncSourceSelected(runtime, snapshot, showMessages))
                 return false;
+            if (snapshot.SyncMode == SyncMode.Yike)
+                return true;
 
             RecognizedSyncSample sample;
             if (!TryRecognizeSample(runtime, snapshot, true, out sample, isOperationCurrent))
@@ -829,6 +856,14 @@ namespace readboard
             return syncMode != SyncMode.Background && syncMode != SyncMode.Foreground;
         }
 
+        private bool IsYikeSyncPlatform()
+        {
+            return string.Equals(
+                NormalizeSyncPlatform(syncPlatform),
+                ProtocolKeywords.Yike,
+                StringComparison.Ordinal);
+        }
+
         private void DispatchPendingMove(
             SyncSessionRuntimeDependencies runtime,
             SyncCoordinatorHostSnapshot snapshot,
@@ -846,12 +881,16 @@ namespace readboard
             MoveRequest request,
             Func<bool> isOperationCurrent)
         {
-            if (runtimeState.CurrentBoardFrame == null || !IsOperationCurrent(isOperationCurrent))
+            if (!IsOperationCurrent(isOperationCurrent))
+                return false;
+
+            BoardFrame placementFrame = ResolvePlacementFrame(snapshot);
+            if (placementFrame == null)
                 return false;
 
             MovePlacementResult result = runtime.PlacementService.Place(new MovePlacementRequest
             {
-                Frame = runtimeState.CurrentBoardFrame,
+                Frame = placementFrame,
                 Move = new MoveRequest { X = request.X, Y = request.Y, VerifyMove = request.VerifyMove },
                 BringTargetToFront = snapshot.SyncMode == SyncMode.Foreground,
                 ShouldCancel = delegate { return !IsOperationCurrent(isOperationCurrent); }
@@ -864,6 +903,110 @@ namespace readboard
                 return false;
             runtime.Host.TrySendPlaceProtocolError(result == null ? "Move placement returned no result." : result.FailureReason);
             return false;
+        }
+
+        private BoardFrame ResolvePlacementFrame(SyncCoordinatorHostSnapshot snapshot)
+        {
+            BoardFrame frame = runtimeState.CurrentBoardFrame;
+            if (snapshot == null || snapshot.SyncMode != SyncMode.Yike)
+                return frame;
+
+            YikeBoardGeometry geometry = runtimeState.LastCapturedYikeGeometry;
+            if (geometry == null || !geometry.IsUsable)
+                return frame;
+
+            return CreateYikePlacementFrame(frame, geometry, snapshot.SelectedWindowHandle);
+        }
+
+        private BoardFrame CreateYikePlacementFrame(BoardFrame currentFrame, YikeBoardGeometry geometry, IntPtr snapshotSelectedWindowHandle)
+        {
+            if (geometry == null || !geometry.IsUsable)
+                return currentFrame;
+
+            IntPtr selectedHandle = runtimeState.SelectedWindowHandle != IntPtr.Zero
+                ? runtimeState.SelectedWindowHandle
+                : snapshotSelectedWindowHandle;
+
+            WindowDescriptor window = currentFrame == null ? null : currentFrame.Window;
+            if (window == null)
+            {
+                window = new WindowDescriptor
+                {
+                    Handle = selectedHandle,
+                    ClassName = "SunAwtFrame",
+                    Bounds = CloneRect(geometry.Bounds),
+                    IsDpiAware = true,
+                    DpiScale = 1d,
+                    IsJavaWindow = true
+                };
+            }
+            else
+            {
+                window = CloneWindowDescriptor(window);
+                window.Handle = window.Handle == IntPtr.Zero ? selectedHandle : window.Handle;
+                if (!IsUsableWindowBounds(window.Bounds))
+                    window.Bounds = CloneRect(geometry.Bounds);
+                window.IsJavaWindow = true;
+            }
+
+            return new BoardFrame
+            {
+                Window = window,
+                SyncMode = SyncMode.Yike,
+                BoardSize = new BoardDimensions(geometry.BoardSize, geometry.BoardSize),
+                Viewport = CreateYikeViewport(geometry)
+            };
+        }
+
+        private static BoardViewport CreateYikeViewport(YikeBoardGeometry geometry)
+        {
+            BoardViewport viewport = new BoardViewport
+            {
+                SourceBounds = CloneRect(geometry.Bounds)
+            };
+
+            if (geometry.FirstIntersectionX.HasValue
+                && geometry.FirstIntersectionY.HasValue
+                && geometry.CellWidth > 0d
+                && geometry.CellHeight > 0d)
+            {
+                viewport.FirstIntersectionX = geometry.FirstIntersectionX.Value;
+                viewport.FirstIntersectionY = geometry.FirstIntersectionY.Value;
+                viewport.CellWidth = geometry.CellWidth;
+                viewport.CellHeight = geometry.CellHeight;
+                return viewport;
+            }
+
+            viewport.CellWidth = geometry.Bounds.Width / (double)geometry.BoardSize;
+            viewport.CellHeight = geometry.Bounds.Height / (double)geometry.BoardSize;
+            return viewport;
+        }
+
+        private static WindowDescriptor CloneWindowDescriptor(WindowDescriptor window)
+        {
+            if (window == null)
+                return null;
+
+            return new WindowDescriptor
+            {
+                Handle = window.Handle,
+                ClassName = window.ClassName,
+                Title = window.Title,
+                Bounds = CloneRect(window.Bounds),
+                IsDpiAware = window.IsDpiAware,
+                DpiScale = window.DpiScale,
+                IsJavaWindow = window.IsJavaWindow
+            };
+        }
+
+        private static PixelRect CloneRect(PixelRect rect)
+        {
+            return rect == null ? null : new PixelRect(rect.X, rect.Y, rect.Width, rect.Height);
+        }
+
+        private static bool IsUsableWindowBounds(PixelRect bounds)
+        {
+            return bounds != null && !bounds.IsEmpty;
         }
 
         private Thread CreateContinuousSyncWorker(int lifecycleGeneration, int continuousSyncSessionId)
@@ -995,8 +1138,9 @@ namespace readboard
 
         private void ResetRuntimeSyncCaches(SyncSessionRuntimeDependencies runtime)
         {
-            ResetSyncCaches();
+            ResetSyncCaches(false);
             runtime.OverlayService.Reset();
+            runtime.Host.OnSyncCachesReset();
         }
 
         private SyncCoordinatorHostSnapshot CaptureSnapshot(SyncSessionRuntimeDependencies runtime)

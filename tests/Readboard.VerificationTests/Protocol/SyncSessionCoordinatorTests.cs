@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Xunit;
 using readboard;
 
@@ -69,6 +70,17 @@ namespace Readboard.VerificationTests
             coordinator.SendError("boom");
 
             Assert.Equal(new[] { "boom" }, transport.ErrorMessages);
+        }
+
+        [Fact]
+        public void runtime_state_carries_yike_context()
+        {
+            SyncSessionRuntimeState state = new SyncSessionRuntimeState();
+
+            state.LastCapturedYikeContext = new YikeWindowContext { RoomToken = "x", MoveNumber = 1 };
+
+            Assert.Equal("x", state.LastCapturedYikeContext.RoomToken);
+            Assert.Null(state.LastSentYikeContextSignature);
         }
 
         [Fact]
@@ -318,6 +330,122 @@ namespace Readboard.VerificationTests
                 transport.SentLines);
         }
 
+        [Fact]
+        public void SendBoardSnapshot_ResendsFullFrameWhenYikeRoomChangesWithoutPayloadChange()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SetSyncPlatform("yike");
+            coordinator.SetYikeContext(new YikeWindowContext { RoomToken = "65191829", MoveNumber = 16 });
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", null));
+            coordinator.SetYikeContext(new YikeWindowContext { RoomToken = "65191830", MoveNumber = 16 });
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", null));
+
+            Assert.Equal(
+                new[]
+                {
+                    "syncPlatform yike",
+                    "yikeRoomToken 65191829",
+                    "yikeMoveNumber 16",
+                    "re=000",
+                    "re=111",
+                    "end",
+                    "syncPlatform yike",
+                    "yikeRoomToken 65191830",
+                    "yikeMoveNumber 16",
+                    "re=000",
+                    "re=111",
+                    "end"
+                },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_ResendsFullFrameWhenYikeMoveChangesWithoutPayloadChange()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SetSyncPlatform("yike");
+            coordinator.SetYikeContext(new YikeWindowContext { RoomToken = "65191829", MoveNumber = 16 });
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", null));
+            coordinator.SetYikeContext(new YikeWindowContext { RoomToken = "65191829", MoveNumber = 17 });
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", null));
+
+            Assert.Equal(
+                new[]
+                {
+                    "syncPlatform yike",
+                    "yikeRoomToken 65191829",
+                    "yikeMoveNumber 16",
+                    "re=000",
+                    "re=111",
+                    "end",
+                    "syncPlatform yike",
+                    "yikeRoomToken 65191829",
+                    "yikeMoveNumber 17",
+                    "re=000",
+                    "re=111",
+                    "end"
+                },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_EmitsYikeRoomTokenAndMoveNumberLinesWhenPresent()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SetSyncPlatform("yike");
+            coordinator.SetYikeContext(new YikeWindowContext { RoomToken = "65191829", MoveNumber = 16 });
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", null));
+
+            Assert.Equal(
+                new[]
+                {
+                    "syncPlatform yike",
+                    "yikeRoomToken 65191829",
+                    "yikeMoveNumber 16",
+                    "re=000",
+                    "re=111",
+                    "end"
+                },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_OmitsYikeLinesInNonYikeMode()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SetSyncPlatform("fox");
+            coordinator.SetYikeContext(new YikeWindowContext { RoomToken = "65191829", MoveNumber = 16 });
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", null));
+
+            Assert.DoesNotContain("yikeRoomToken 65191829", transport.SentLines);
+            Assert.DoesNotContain("yikeMoveNumber 16", transport.SentLines);
+        }
+
+        [Fact]
+        public void ResetSyncCaches_ClearsYikeContextState()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SetSyncPlatform("yike");
+            coordinator.SetYikeContext(new YikeWindowContext { RoomToken = "65191829", MoveNumber = 16 });
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", null));
+
+            coordinator.ResetSyncCaches();
+
+            SyncSessionRuntimeState runtimeState = GetRuntimeState(coordinator);
+            Assert.Null(runtimeState.LastCapturedYikeContext);
+            Assert.Null(runtimeState.LastSentYikeContextSignature);
+        }
+
         private static BoardSnapshot CreateSnapshot(string payload, int? foxMoveNumber)
         {
             return new BoardSnapshot
@@ -326,6 +454,15 @@ namespace Readboard.VerificationTests
                 FoxMoveNumber = foxMoveNumber,
                 ProtocolLines = new[] { "re=000", "re=111" }
             };
+        }
+
+        private static SyncSessionRuntimeState GetRuntimeState(SyncSessionCoordinator coordinator)
+        {
+            FieldInfo field = typeof(SyncSessionCoordinator).GetField("runtimeState", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(field);
+            SyncSessionRuntimeState runtimeState = field.GetValue(coordinator) as SyncSessionRuntimeState;
+            Assert.NotNull(runtimeState);
+            return runtimeState;
         }
 
         private sealed class FakeTransport : IReadBoardTransport
@@ -380,6 +517,7 @@ namespace Readboard.VerificationTests
             public int ReadboardUpdateCancelledCount { get; private set; }
             public string LastReadboardUpdateFailedMessage { get; private set; }
 
+
             public void DispatchProtocolCommand(Action command)
             {
                 DispatchCount++;
@@ -393,6 +531,14 @@ namespace Readboard.VerificationTests
             public void HandlePlaceRequest(MoveRequest request)
             {
                 LastMoveRequest = request;
+            }
+
+            public void HandleYikeContext(YikeWindowContext context)
+            {
+            }
+
+            public void HandleYikeGeometry(YikeBoardGeometry geometry)
+            {
             }
 
             public void HandleQuitRequest()

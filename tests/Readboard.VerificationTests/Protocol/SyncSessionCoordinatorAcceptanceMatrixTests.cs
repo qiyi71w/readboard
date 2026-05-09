@@ -70,6 +70,42 @@ namespace Readboard.VerificationTests.Protocol
                 transport.SentLines);
         }
 
+        [Fact]
+        public void SendSync_YikePlatformControlsBrowserSync()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncPlatform("yike");
+
+            coordinator.SendSync();
+
+            Assert.Equal(
+                new[]
+                {
+                    "sync",
+                    "yikeSyncStart"
+                },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void SendStopSync_YikePlatformControlsBrowserSyncBeforeLegacyStop()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncPlatform("yike");
+
+            coordinator.SendStopSync();
+
+            Assert.Equal(
+                new[]
+                {
+                    "yikeSyncStop",
+                    "stopsync"
+                },
+                transport.SentLines);
+        }
+
         private static MoveRequest CreateMove(int boardWidth, int boardHeight)
         {
             return new MoveRequest
@@ -136,6 +172,7 @@ namespace Readboard.VerificationTests.Protocol
         {
             public int LossFocusCount { get; private set; }
 
+
             public void DispatchProtocolCommand(Action command)
             {
                 command();
@@ -147,6 +184,14 @@ namespace Readboard.VerificationTests.Protocol
             }
 
             public void HandlePlaceRequest(MoveRequest request)
+            {
+            }
+
+            public void HandleYikeContext(YikeWindowContext context)
+            {
+            }
+
+            public void HandleYikeGeometry(YikeBoardGeometry geometry)
             {
             }
 

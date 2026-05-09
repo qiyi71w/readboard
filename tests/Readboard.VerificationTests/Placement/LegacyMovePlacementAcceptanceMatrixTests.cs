@@ -12,6 +12,7 @@ namespace Readboard.VerificationTests.Placement
             yield return new object[] { (int)SyncMode.Tygem, (int)PlacementPathKind.BackgroundPost };
             yield return new object[] { (int)SyncMode.Sina, (int)PlacementPathKind.BackgroundPost };
             yield return new object[] { (int)SyncMode.FoxBackgroundPlace, (int)PlacementPathKind.BackgroundSend };
+            yield return new object[] { (int)SyncMode.Yike, (int)PlacementPathKind.BackgroundPost };
         }
 
         public static IEnumerable<object[]> CancellationCases()
@@ -19,6 +20,7 @@ namespace Readboard.VerificationTests.Placement
             yield return new object[] { (int)SyncMode.Foreground };
             yield return new object[] { (int)SyncMode.Background };
             yield return new object[] { (int)SyncMode.FoxBackgroundPlace };
+            yield return new object[] { (int)SyncMode.Yike };
             yield return new object[] { (int)SyncMode.Fox };
         }
 
@@ -38,7 +40,7 @@ namespace Readboard.VerificationTests.Placement
             Assert.True(result.Success);
             Assert.Equal(expectedPath, result.PlacementPath);
             Assert.Empty(nativeMethods.ForegroundClicks);
-            AssertPlacementMessages(expectedPath, nativeMethods);
+            AssertPlacementMessages(syncMode, expectedPath, nativeMethods);
         }
 
         [Theory]
@@ -61,21 +63,29 @@ namespace Readboard.VerificationTests.Placement
         }
 
         private static void AssertPlacementMessages(
+            SyncMode syncMode,
             PlacementPathKind expectedPath,
             RecordingNativeMethods nativeMethods)
         {
             int expectedLParam = BuildMouseLParam(35, 55);
             if (expectedPath == PlacementPathKind.BackgroundPost)
             {
-                Assert.Equal(2, nativeMethods.PostedMessages.Count);
+                int expectedCount = syncMode == SyncMode.Yike ? 3 : 2;
+                Assert.Equal(expectedCount, nativeMethods.PostedMessages.Count);
                 Assert.Empty(nativeMethods.SentMessages);
                 Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(expectedLParam, message.LParam));
+                if (syncMode == SyncMode.Yike)
+                {
+                    Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(new IntPtr(5005), message.Handle));
+                    Assert.Equal("Chrome_RenderWidgetHostHWND", nativeMethods.LastRequestedChildClassName);
+                }
                 return;
             }
 
             Assert.Empty(nativeMethods.PostedMessages);
             Assert.Equal(3, nativeMethods.SentMessages.Count);
             Assert.All(nativeMethods.SentMessages, message => Assert.Equal(expectedLParam, message.LParam));
+            Assert.All(nativeMethods.SentMessages, message => Assert.Equal(new IntPtr(3003), message.Handle));
         }
 
         private static int BuildMouseLParam(int x, int y)
@@ -112,10 +122,25 @@ namespace Readboard.VerificationTests.Placement
             public List<(int X, int Y, bool Hold)> ForegroundClicks { get; } = new List<(int X, int Y, bool Hold)>();
             public List<MouseMessage> PostedMessages { get; } = new List<MouseMessage>();
             public List<MouseMessage> SentMessages { get; } = new List<MouseMessage>();
+            public string LastRequestedChildClassName { get; private set; }
 
             public IntPtr FindWindowByClass(string className)
             {
                 return IntPtr.Zero;
+            }
+
+            public IntPtr FindChildWindowByClass(IntPtr parentHandle, string className)
+            {
+                LastRequestedChildClassName = className;
+                return new IntPtr(5005);
+            }
+
+            public bool TryGetWindowBounds(IntPtr handle, out PixelRect bounds)
+            {
+                bounds = handle == new IntPtr(5005)
+                    ? new PixelRect(100, 200, 800, 600)
+                    : null;
+                return bounds != null;
             }
 
             public void SwitchToWindow(IntPtr handle)

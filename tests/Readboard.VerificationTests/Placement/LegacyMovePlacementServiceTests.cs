@@ -136,6 +136,126 @@ namespace Readboard.VerificationTests.Placement
             Assert.Equal(0, nativeMethods.ForegroundClickCount);
         }
 
+        [Fact]
+        public void Place_YikeFrame_PostsBackgroundClickToChromiumRenderWidget()
+        {
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods
+            {
+                YikeRenderWidgetHandle = new IntPtr(6161),
+                YikeRenderWidgetBounds = new PixelRect(0, 0, 800, 600)
+            };
+            LegacyMovePlacementService service = new LegacyMovePlacementService(nativeMethods);
+
+            MovePlacementResult result = service.Place(new MovePlacementRequest
+            {
+                Frame = new BoardFrame
+                {
+                    SyncMode = SyncMode.Yike,
+                    BoardSize = new BoardDimensions(5, 5),
+                    Viewport = new BoardViewport
+                    {
+                        SourceBounds = new PixelRect(100, 200, 250, 250)
+                    },
+                    Window = new WindowDescriptor
+                    {
+                        Handle = new IntPtr(3003),
+                        Bounds = new PixelRect(0, 0, 800, 600),
+                        IsDpiAware = true,
+                        DpiScale = 1d,
+                        IsJavaWindow = true
+                    }
+                },
+                Move = new MoveRequest { X = 1, Y = 2 }
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(PlacementPathKind.BackgroundPost, result.PlacementPath);
+            Assert.Equal("Chrome_RenderWidgetHostHWND", nativeMethods.LastRequestedChildClassName);
+            Assert.Equal(3, nativeMethods.PostedMessages.Count);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(new IntPtr(6161), message.Handle));
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(BuildMouseLParam(175, 325), message.LParam));
+        }
+
+        [Fact]
+        public void Place_YikeFrame_ConvertsBoardBoundsToRenderWidgetClientCoordinate()
+        {
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods
+            {
+                YikeRenderWidgetHandle = new IntPtr(6262),
+                YikeRenderWidgetBounds = new PixelRect(100, 200, 500, 500)
+            };
+            LegacyMovePlacementService service = new LegacyMovePlacementService(nativeMethods);
+
+            MovePlacementResult result = service.Place(new MovePlacementRequest
+            {
+                Frame = new BoardFrame
+                {
+                    SyncMode = SyncMode.Yike,
+                    BoardSize = new BoardDimensions(5, 5),
+                    Viewport = new BoardViewport
+                    {
+                        SourceBounds = new PixelRect(100, 200, 250, 250)
+                    },
+                    Window = new WindowDescriptor
+                    {
+                        Handle = new IntPtr(3003),
+                        Bounds = new PixelRect(0, 0, 800, 600),
+                        IsDpiAware = true,
+                        DpiScale = 1d,
+                        IsJavaWindow = true
+                    }
+                },
+                Move = new MoveRequest { X = 1, Y = 2 }
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(PlacementPathKind.BackgroundPost, result.PlacementPath);
+            Assert.Equal("Chrome_RenderWidgetHostHWND", nativeMethods.LastRequestedChildClassName);
+            Assert.Equal(3, nativeMethods.PostedMessages.Count);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(new IntPtr(6262), message.Handle));
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(BuildMouseLParam(175, 325), message.LParam));
+        }
+
+        [Fact]
+        public void Place_YikeFrame_DpiUnawareWindow_DoesNotScalePostCoordinates()
+        {
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods
+            {
+                YikeRenderWidgetHandle = new IntPtr(6363),
+                YikeRenderWidgetBounds = new PixelRect(100, 200, 500, 500)
+            };
+            LegacyMovePlacementService service = new LegacyMovePlacementService(nativeMethods);
+
+            MovePlacementResult result = service.Place(new MovePlacementRequest
+            {
+                Frame = new BoardFrame
+                {
+                    SyncMode = SyncMode.Yike,
+                    BoardSize = new BoardDimensions(5, 5),
+                    Viewport = new BoardViewport
+                    {
+                        SourceBounds = new PixelRect(100, 200, 250, 250)
+                    },
+                    Window = new WindowDescriptor
+                    {
+                        Handle = new IntPtr(3003),
+                        Bounds = new PixelRect(0, 0, 800, 600),
+                        IsDpiAware = false,
+                        DpiScale = 1.5d,
+                        IsJavaWindow = true
+                    }
+                },
+                Move = new MoveRequest { X = 1, Y = 2 }
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(PlacementPathKind.BackgroundPost, result.PlacementPath);
+            Assert.Equal("Chrome_RenderWidgetHostHWND", nativeMethods.LastRequestedChildClassName);
+            Assert.Equal(3, nativeMethods.PostedMessages.Count);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(new IntPtr(6363), message.Handle));
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(BuildMouseLParam(175, 325), message.LParam));
+        }
+
         private static int BuildMouseLParam(int x, int y)
         {
             return (x & 0xFFFF) | ((y & 0xFFFF) << 16);
@@ -183,12 +303,33 @@ namespace Readboard.VerificationTests.Placement
         {
             public PlacementClick ForegroundClick { get; private set; }
             public List<PostedMouseMessage> PostedMessages { get; } = new List<PostedMouseMessage>();
+            public List<PostedMouseMessage> SentMessages { get; } = new List<PostedMouseMessage>();
             public int ForegroundClickCount { get; private set; }
             public Action OnSwitchToWindow { get; set; }
+            public IntPtr YikeRenderWidgetHandle { get; set; }
+            public PixelRect YikeRenderWidgetBounds { get; set; }
+            public string LastRequestedChildClassName { get; private set; }
 
             public IntPtr FindWindowByClass(string className)
             {
                 return IntPtr.Zero;
+            }
+
+            public IntPtr FindChildWindowByClass(IntPtr parentHandle, string className)
+            {
+                LastRequestedChildClassName = className;
+                return YikeRenderWidgetHandle;
+            }
+
+            public bool TryGetWindowBounds(IntPtr handle, out PixelRect bounds)
+            {
+                bounds = null;
+                if (handle == YikeRenderWidgetHandle && YikeRenderWidgetBounds != null)
+                {
+                    bounds = YikeRenderWidgetBounds;
+                    return true;
+                }
+                return false;
             }
 
             public void SwitchToWindow(IntPtr handle)
@@ -212,6 +353,7 @@ namespace Readboard.VerificationTests.Placement
 
             public void SendMouseMessage(IntPtr handle, uint message, int wParam, int lParam)
             {
+                SentMessages.Add(new PostedMouseMessage(handle, message, wParam, lParam));
             }
         }
 

@@ -6,6 +6,12 @@ namespace Readboard.VerificationTests.Recognition
 {
     public sealed class SyncModeViewportAcceptanceTests
     {
+        [Fact]
+        public void Yike_enum_value_is_six()
+        {
+            Assert.Equal(6, (int)SyncMode.Yike);
+        }
+
         [Theory]
         [InlineData((int)SyncMode.Fox, 2, 3, 12, 12)]
         [InlineData((int)SyncMode.FoxBackgroundPlace, 2, 3, 12, 12)]

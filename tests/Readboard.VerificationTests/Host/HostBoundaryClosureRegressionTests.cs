@@ -39,13 +39,17 @@ namespace Readboard.VerificationTests.Host
         public void MainForm_ReportsSyncPlatformAndFoxWindowContextThroughCoordinatorInterface()
         {
             string formSource = LoadSource("readboard", "Form1.cs");
+            string protocolSource = LoadSource("readboard", "MainForm.Protocol.cs");
             string coordinatorSource = LoadSource("readboard", "Core", "Protocol", "ISyncSessionCoordinator.cs");
 
             Assert.Contains("void SetSyncPlatform(string platform);", coordinatorSource);
             Assert.Contains("void SetFoxWindowContext(FoxWindowContext context);", coordinatorSource);
+            Assert.Contains("void SetYikeContext(YikeWindowContext context);", coordinatorSource);
             Assert.Contains("void ArmForceRebuild();", coordinatorSource);
             Assert.Contains("sessionCoordinator.SetSyncPlatform(syncPlatform);", formSource);
             Assert.Contains("sessionCoordinator.SetFoxWindowContext(foxWindowContext);", formSource);
+            Assert.Contains("sessionCoordinator.SetYikeContext(lastYikeWindowContext);", protocolSource);
+            Assert.DoesNotContain("sessionCoordinator.SetYikeContext(yikeWindowContext);", formSource);
             Assert.Contains("sessionCoordinator.ArmForceRebuild();", formSource);
             Assert.DoesNotContain("((SyncSessionCoordinator)sessionCoordinator)", formSource);
         }

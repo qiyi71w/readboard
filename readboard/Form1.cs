@@ -32,6 +32,7 @@ namespace readboard
         private const int TYPE_BACKGROUND = 3;
         private const int TYPE_FOX_BACKGROUND_PLACE = 4;
         private const int TYPE_FOREGROUND = 5;
+        private const int TYPE_YIKE = 6;
         private const int ContinuousSyncPollIntervalMs = 100;
         private int currentSyncType = TYPE_FOX;
         // Boolean isQTYC = false;
@@ -58,6 +59,8 @@ namespace readboard
         private const int MainFormMinimumLogicalWidth = 360;
         private const int MainFormScreenLogicalPadding = 40;
         private FoxWindowContext lastFoxWindowContext = FoxWindowContext.Unknown();
+        private YikeWindowContext lastYikeWindowContext = YikeWindowContext.Unknown();
+        private IntPtr lastYikeContextWindowHandle = IntPtr.Zero;
         private FoxWindowBinding foxWindowBinding = null;
         private bool hasRetainedFoxTitleSnapshot = false;
         private string lastAppliedMainWindowTitle = string.Empty;
@@ -76,7 +79,7 @@ namespace readboard
         private bool isInitializingProtocolState = true;
         private bool hostedUpdateSupported = false;
         private FormUpdate activeHostedUpdateDialog = null;
-        private static readonly System.Drawing.Size MainFormDefaultSize = new System.Drawing.Size(792, 374);
+        private static readonly System.Drawing.Size MainFormDefaultSize = new System.Drawing.Size(852, 374);
 
         private readonly struct MainHeaderLayoutMetrics
         {
@@ -109,7 +112,7 @@ namespace readboard
 
         private static Boolean SupportsFastSyncType(int syncType)
         {
-            return IsFoxSyncType(syncType) || syncType == TYPE_TYGEM || syncType == TYPE_SINA;
+            return IsFoxSyncType(syncType) || syncType == TYPE_TYGEM || syncType == TYPE_SINA || syncType == TYPE_YIKE;
         }
 
         private bool SupportsShowInBoard()
@@ -205,7 +208,7 @@ namespace readboard
 
         private IEnumerable<ButtonBase> MainThemeOptions()
         {
-            return new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite };
+            return new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite };
         }
 
         private IEnumerable<TextBox> MainThemeInputs()
@@ -495,7 +498,8 @@ namespace readboard
             groupBox1.SetBounds(left, top, settingsLeft - left - utilityGap, ScaleValue(72));
             rdoFox.Location = new Point(optionLeft, optionTop);
             rdoFoxBack.Location = new Point(rdoFox.Right + optionGap, optionTop);
-            rdoTygem.Location = new Point(rdoFoxBack.Right + optionGap, optionTop);
+            rdoYike.Location = new Point(rdoFoxBack.Right + optionGap, optionTop);
+            rdoTygem.Location = new Point(rdoYike.Right + optionGap, optionTop);
             rdoSina.Location = new Point(rdoTygem.Right + optionGap, optionTop);
             rdoBack.Location = new Point(rdoSina.Right + optionGap, optionTop);
             rdoFore.Location = new Point(rdoBack.Right + optionGap, optionTop);
@@ -526,12 +530,12 @@ namespace readboard
             int updateWidth = MeasureButtonWidth(btnCheckUpdate, 170);
             int utilityRowWidth = settingsWidth + helpWidth + themeWidth + buttonGap * 2;
             int utilityColumnWidth = Math.Max(utilityRowWidth, Math.Max(komiWidth, updateWidth));
-            int minimumPlatformWidth = Math.Min(contentWidth, MeasureOptionsWidth(new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore }, optionGap) + ScaleValue(28));
+            int minimumPlatformWidth = Math.Min(contentWidth, MeasureOptionsWidth(new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore }, optionGap) + ScaleValue(28));
             bool canUseSideBySide = contentWidth >= minimumPlatformWidth + buttonGap + utilityColumnWidth + ScaleValue(24);
 
             int groupWidth = canUseSideBySide ? contentWidth - utilityColumnWidth - buttonGap : contentWidth;
             groupBox1.SetBounds(left, top, groupWidth, 0);
-            int groupBottom = LayoutOptionsRow(new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore }, groupBox1, optionLeft, optionTop, optionGap, rowGap);
+            int groupBottom = LayoutOptionsRow(new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore }, groupBox1, optionLeft, optionTop, optionGap, rowGap);
             groupBox1.Height = groupBottom + groupPaddingBottom;
 
             if (canUseSideBySide)
@@ -961,7 +965,7 @@ namespace readboard
                 settingsWidth + helpWidth + themeWidth + buttonGap * 2,
                 Math.Max(MeasureButtonWidth(btnKomi65, 170), MeasureButtonWidth(btnCheckUpdate, 170)));
             int platformWidth = optionLeft + MeasureOptionsWidth(
-                new ButtonBase[] { rdoFox, rdoFoxBack, rdoTygem, rdoSina, rdoBack, rdoFore },
+                new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore },
                 optionGap) + ScaleValue(20);
             return left * 2 + platformWidth + utilityGap + utilityColumnWidth;
         }
@@ -1138,6 +1142,8 @@ namespace readboard
         private void ApplySyncModeControlState()
         {
             bool manualSelectionMode = UsesManualSelectionType(CurrentSyncType);
+            if (CurrentSyncType != TYPE_YIKE)
+                ClearYikeContext();
             btnCircleBoard.Enabled = manualSelectionMode;
             btnCircleRow1.Enabled = manualSelectionMode;
             btnClickBoard.Enabled = !manualSelectionMode;
@@ -1161,6 +1167,7 @@ namespace readboard
         {
             rdoFox.Enabled = enabled;
             rdoFoxBack.Enabled = enabled;
+            rdoYike.Enabled = enabled;
             rdoTygem.Enabled = enabled;
             rdoBack.Enabled = enabled;
             rdoSina.Enabled = enabled;
@@ -1359,6 +1366,8 @@ namespace readboard
                     return SyncMode.FoxBackgroundPlace;
                 case TYPE_FOREGROUND:
                     return SyncMode.Foreground;
+                case TYPE_YIKE:
+                    return SyncMode.Yike;
                 default:
                     return SyncMode.Fox;
             }
@@ -1542,7 +1551,25 @@ namespace readboard
 
         private string ResolveSyncPlatform()
         {
-            return IsFoxSyncType(CurrentSyncType) ? "fox" : "generic";
+            if (IsFoxSyncType(CurrentSyncType))
+                return "fox";
+            if (CurrentSyncType == TYPE_YIKE)
+                return ProtocolKeywords.Yike;
+            return "generic";
+        }
+
+        private YikeWindowContext ResolveYikeWindowContext()
+        {
+            if (CurrentSyncType != TYPE_YIKE)
+                return YikeWindowContext.Unknown();
+            return YikeWindowContext.CopyOf(lastYikeWindowContext);
+        }
+
+        private void ClearYikeContext()
+        {
+            lastYikeWindowContext = YikeWindowContext.Unknown();
+            lastYikeContextWindowHandle = IntPtr.Zero;
+            sessionCoordinator.SetYikeContext(lastYikeWindowContext);
         }
 
         private FoxWindowContext ResolveFoxWindowContext()
@@ -1610,13 +1637,17 @@ namespace readboard
         {
             hasRetainedFoxTitleSnapshot = false;
             lastFoxWindowContext = FoxWindowContext.Unknown();
+            if (CurrentSyncType != TYPE_YIKE)
+                lastYikeWindowContext = YikeWindowContext.Unknown();
+            if (CurrentSyncType != TYPE_YIKE || lastYikeContextWindowHandle != hwnd)
+                lastYikeContextWindowHandle = IntPtr.Zero;
             InvalidateFoxWindowBinding();
             ApplyMainWindowTitle();
         }
 
         private MainWindowTitleDisplayMode ResolveMainWindowTitleDisplayMode()
         {
-            if (isShuttingDown || !IsFoxSyncType(CurrentSyncType))
+            if (isShuttingDown || (!IsFoxSyncType(CurrentSyncType) && CurrentSyncType != TYPE_YIKE))
                 return MainWindowTitleDisplayMode.Hidden;
             if (HasActiveSyncOperation())
                 return MainWindowTitleDisplayMode.Syncing;
@@ -1630,6 +1661,24 @@ namespace readboard
             string baseTitle = MainWindowTitleFormatter.FormatBaseTitle(
                 getLangStr("MainForm_title"),
                 AppReleaseVersion.GetCurrentVersion());
+
+            if (CurrentSyncType == TYPE_YIKE)
+            {
+                YikeWindowContext yikeWindowContext = ResolveYikeWindowContext();
+                string yikeTitle = MainWindowTitleFormatter.FormatYike(
+                    baseTitle,
+                    ResolveMainWindowTitleDisplayMode(),
+                    IsSelectedYikeWindowHandleValid(),
+                    yikeWindowContext,
+                    getLangStr("MainForm_titleTagYike"),
+                    "号",
+                    getLangStr("MainForm_titleMoveFormatSingle"),
+                    getLangStr("MainForm_titleTagTitleMissing"),
+                    getLangStr("MainForm_titleTagSyncing"));
+                ApplyMainWindowTitleText(yikeTitle);
+                return;
+            }
+
             string title = MainWindowTitleFormatter.Format(
                 baseTitle,
                 ResolveMainWindowTitleDisplayMode(),
@@ -1643,6 +1692,11 @@ namespace readboard
                 getLangStr("MainForm_titleTagRecordEnd"),
                 getLangStr("MainForm_titleMoveFormatSingle"),
                 getLangStr("MainForm_titleMoveFormatRecord"));
+            ApplyMainWindowTitleText(title);
+        }
+
+        private void ApplyMainWindowTitleText(string title)
+        {
             if (string.Equals(lastAppliedMainWindowTitle, title, StringComparison.Ordinal))
                 return;
             this.Text = title;
@@ -1668,7 +1722,7 @@ namespace readboard
         {
             InvokeHostAction(delegate
             {
-                hwnd = handle;
+                SetSelectedWindowHandle(handle);
                 hasRetainedFoxTitleSnapshot = false;
                 lastFoxWindowContext = FoxWindowContext.Unknown();
                 InvalidateFoxWindowBinding();
@@ -1679,6 +1733,18 @@ namespace readboard
                 }
                 ApplyMainWindowTitle();
             });
+        }
+
+        private void SetSelectedWindowHandle(IntPtr handle)
+        {
+            if (CurrentSyncType == TYPE_YIKE && hwnd != handle)
+                ClearYikeContext();
+            hwnd = handle;
+        }
+
+        private bool IsSelectedYikeWindowHandleValid()
+        {
+            return hwnd != IntPtr.Zero && IsWindow(hwnd);
         }
 
         void ISyncCoordinatorHost.OnKeepSyncStarted()
@@ -1702,6 +1768,14 @@ namespace readboard
         void ISyncCoordinatorHost.OnContinuousSyncStopped()
         {
             InvokeUiHostAction(ApplyContinuousSyncStoppedUi);
+        }
+
+        void ISyncCoordinatorHost.OnSyncCachesReset()
+        {
+            InvokeUiHostAction(delegate
+            {
+                ApplyMainWindowTitle();
+            });
         }
 
         void ISyncCoordinatorHost.ShowMissingSyncSourceMessage()
@@ -1868,6 +1942,7 @@ namespace readboard
             }
             this.rdoFox.Text = getLangStr("MainForm_rdoFox");
             this.rdoFoxBack.Text = getLangStr("MainForm_rdoFoxBack");
+            this.rdoYike.Text = getLangStr("MainForm_rdoYike");
             this.rdoTygem.Text = getLangStr("MainForm_rdoTygem");
             this.rdoSina.Text = getLangStr("MainForm_rdoSina");
             this.rdoBack.Text = getLangStr("MainForm_rdoBack");
@@ -2195,7 +2270,7 @@ namespace readboard
                 WindowFromPoint,
                 delegate(IntPtr handle)
                 {
-                    hwnd = handle;
+                    SetSelectedWindowHandle(handle);
                     ResetMainWindowTitle();
                 },
                 delegate
@@ -2229,7 +2304,7 @@ namespace readboard
                 //if (!isKuangxuan)
                 //     mouseHook.Enabled = false;
                 clicked = false;
-                hwnd = getMousePointHwnd();
+                SetSelectedWindowHandle(getMousePointHwnd());
                 ResetMainWindowTitle();
             }
 
@@ -2356,6 +2431,12 @@ namespace readboard
         {
             if (this.rdoFoxBack.Checked)
                 setNativeBoardMode(TYPE_FOX_BACKGROUND_PLACE);
+        }
+
+        private void radioButtonYike_CheckedChanged(object sender, EventArgs e)
+        {
+            if (this.rdoYike.Checked)
+                setNativeBoardMode(TYPE_YIKE);
         }
 
         public void saveOtherConfig()
@@ -2563,6 +2644,9 @@ namespace readboard
 
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindow(IntPtr handle);
 
         [DllImport("user32.dll", SetLastError = true)]
         static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);

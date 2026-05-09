@@ -37,8 +37,13 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("AppReleaseVersion.GetCurrentVersion()", applyTitleSlice);
             Assert.Contains("MainWindowTitleFormatter.FormatBaseTitle(", applyTitleSlice);
             Assert.Contains("string title = MainWindowTitleFormatter.Format(", applyTitleSlice);
-            Assert.Contains("if (string.Equals(lastAppliedMainWindowTitle, title, StringComparison.Ordinal))", applyTitleSlice);
-            Assert.Contains("lastAppliedMainWindowTitle = title;", applyTitleSlice);
+            Assert.Contains("ApplyMainWindowTitleText(title);", applyTitleSlice);
+            Assert.Contains(
+                "if (string.Equals(lastAppliedMainWindowTitle, title, StringComparison.Ordinal))",
+                GetMethodSlice(source, "private void ApplyMainWindowTitleText(string title)"));
+            Assert.Contains(
+                "lastAppliedMainWindowTitle = title;",
+                GetMethodSlice(source, "private void ApplyMainWindowTitleText(string title)"));
         }
 
         [Fact]

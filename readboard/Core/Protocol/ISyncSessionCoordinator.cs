@@ -18,6 +18,8 @@ namespace readboard
         void SetSyncPlatform(string platform);
         void SetCapturedFoxMoveNumber(int? foxMoveNumber);
         void SetFoxWindowContext(FoxWindowContext context);
+        void SetYikeContext(YikeWindowContext context);
+        void SetYikeGeometry(YikeBoardGeometry geometry);
         void ArmForceRebuild();
         void BeginContinuousSync();
         void EndContinuousSync();

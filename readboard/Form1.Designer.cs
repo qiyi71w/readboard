@@ -37,6 +37,7 @@
             this.btnClearBoard = new System.Windows.Forms.Button();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.rdoFoxBack = new System.Windows.Forms.RadioButton();
+            this.rdoYike = new System.Windows.Forms.RadioButton();
             this.rdoFore = new System.Windows.Forms.RadioButton();
             this.rdoSina = new System.Windows.Forms.RadioButton();
             this.rdoBack = new System.Windows.Forms.RadioButton();
@@ -153,6 +154,7 @@
             // groupBox1
             // 
             this.groupBox1.Controls.Add(this.rdoFoxBack);
+            this.groupBox1.Controls.Add(this.rdoYike);
             this.groupBox1.Controls.Add(this.rdoFore);
             this.groupBox1.Controls.Add(this.rdoSina);
             this.groupBox1.Controls.Add(this.rdoBack);
@@ -176,8 +178,20 @@
             this.rdoFoxBack.UseVisualStyleBackColor = true;
             this.rdoFoxBack.CheckedChanged += new System.EventHandler(this.radioButtonFoxBack_CheckedChanged);
             // 
-            // rdoFore
+            // rdoYike
             // 
+            this.rdoYike.AutoSize = true;
+            this.rdoYike.Location = new System.Drawing.Point(490, 11);
+            this.rdoYike.Name = "rdoYike";
+            this.rdoYike.Size = new System.Drawing.Size(47, 16);
+            this.rdoYike.TabIndex = 16;
+            this.rdoYike.TabStop = true;
+            this.rdoYike.Text = "弈客";
+            this.rdoYike.UseVisualStyleBackColor = true;
+            this.rdoYike.CheckedChanged += new System.EventHandler(this.radioButtonYike_CheckedChanged);
+            // 
+            // rdoFore
+            //
             this.rdoFore.AutoSize = true;
             this.rdoFore.Location = new System.Drawing.Point(402, 11);
             this.rdoFore.Name = "rdoFore";
@@ -187,9 +201,9 @@
             this.rdoFore.Text = "其他(前台)";
             this.rdoFore.UseVisualStyleBackColor = true;
             this.rdoFore.CheckedChanged += new System.EventHandler(this.rdoqiantai_CheckedChanged);
-            // 
+            //
             // rdoSina
-            // 
+            //
             this.rdoSina.AutoSize = true;
             this.rdoSina.Location = new System.Drawing.Point(228, 11);
             this.rdoSina.Name = "rdoSina";
@@ -199,9 +213,9 @@
             this.rdoSina.Text = "新浪";
             this.rdoSina.UseVisualStyleBackColor = true;
             this.rdoSina.CheckedChanged += new System.EventHandler(this.radioButton4_CheckedChanged);
-            // 
+            //
             // rdoBack
-            // 
+            //
             this.rdoBack.AutoSize = true;
             this.rdoBack.Location = new System.Drawing.Point(287, 11);
             this.rdoBack.Name = "rdoBack";
@@ -211,9 +225,9 @@
             this.rdoBack.Text = "其他(后台)";
             this.rdoBack.UseVisualStyleBackColor = true;
             this.rdoBack.CheckedChanged += new System.EventHandler(this.radioButton3_CheckedChanged);
-            // 
+            //
             // rdoTygem
-            // 
+            //
             this.rdoTygem.AutoSize = true;
             this.rdoTygem.Location = new System.Drawing.Point(174, 11);
             this.rdoTygem.Name = "rdoTygem";
@@ -676,6 +690,7 @@
         private System.Windows.Forms.Button btnClearBoard;
         private System.Windows.Forms.GroupBox groupBox1;
         private System.Windows.Forms.RadioButton rdoFoxBack;
+        private System.Windows.Forms.RadioButton rdoYike;
         private System.Windows.Forms.RadioButton rdoSina;
         private System.Windows.Forms.RadioButton rdoBack;
         private System.Windows.Forms.RadioButton rdoTygem;

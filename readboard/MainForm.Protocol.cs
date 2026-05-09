@@ -107,6 +107,33 @@ namespace readboard
             });
         }
 
+        void IProtocolCommandHost.HandleYikeContext(YikeWindowContext context)
+        {
+            if (CurrentSyncType != TYPE_YIKE)
+            {
+                ClearYikeContext();
+                ApplyMainWindowTitle();
+                return;
+            }
+
+            lastYikeWindowContext = YikeWindowContext.CopyOf(context);
+            if (hwnd != IntPtr.Zero)
+                lastYikeContextWindowHandle = hwnd;
+            sessionCoordinator.SetYikeContext(lastYikeWindowContext);
+            ApplyMainWindowTitle();
+        }
+
+        void IProtocolCommandHost.HandleYikeGeometry(YikeBoardGeometry geometry)
+        {
+            if (CurrentSyncType != TYPE_YIKE)
+            {
+                sessionCoordinator.SetYikeGeometry(null);
+                return;
+            }
+
+            sessionCoordinator.SetYikeGeometry(geometry);
+        }
+
         void IProtocolCommandHost.HandleLossFocus()
         {
             lossFocus();

@@ -71,4 +71,7 @@
 | outbound command | `noponder` |
 | outbound command | `stopAutoPlay` |
 | outbound command | `pass` |
+| outbound command | `yikeSyncStart` |
+| outbound command | `yikeSyncStop` |
+| inbound command | `yikeBrowserSyncStop` |
 | outbound fallback | `0` |
