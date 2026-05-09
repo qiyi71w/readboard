@@ -4,6 +4,14 @@
 
 Windows 棋盘同步工具，为 [LizzieYzy-Next](https://github.com/wimi321/lizzieyzy-next) 提供截图取棋、棋子识别、棋盘状态回传与模拟落子能力。
 
+<p>
+  <img alt=".NET" src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white" />
+  <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white" />
+  <img alt="UI" src="https://img.shields.io/badge/UI-WinForms-0C7CD5" />
+  <img alt="Release" src="https://img.shields.io/github/v/release/qiyi71w/readboard?label=Release" />
+  <img alt="Downloads" src="https://img.shields.io/github/downloads/qiyi71w/readboard/total?label=Downloads" />
+</p>
+
 <a href="readme.md">简体中文</a> ｜
 <a href="readme_en.md">English</a>
 
