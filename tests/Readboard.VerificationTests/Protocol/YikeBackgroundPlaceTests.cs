@@ -9,7 +9,7 @@ namespace Readboard.VerificationTests.Protocol
     public sealed class YikeBackgroundPlaceTests
     {
         [Fact]
-        public void place_request_in_yike_mode_uses_background_send_path()
+        public void place_request_in_yike_mode_uses_background_post_path()
         {
             IntPtr handle = new IntPtr(5151);
             IntPtr childHandle = new IntPtr(6161);
@@ -51,9 +51,9 @@ namespace Readboard.VerificationTests.Protocol
             }
 
             Assert.Empty(nativeMethods.ForegroundClicks);
-            Assert.Empty(nativeMethods.PostedMessages);
-            Assert.Equal(3, nativeMethods.SentMessages.Count);
-            Assert.All(nativeMethods.SentMessages, message => Assert.Equal(childHandle, message.Handle));
+            Assert.Empty(nativeMethods.SentMessages);
+            Assert.Equal(3, nativeMethods.PostedMessages.Count);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(childHandle, message.Handle));
         }
 
         [Fact]
@@ -100,13 +100,13 @@ namespace Readboard.VerificationTests.Protocol
             }
 
             Assert.Equal("Chrome_RenderWidgetHostHWND", nativeMethods.LastRequestedChildClassName);
-            Assert.Equal(3, nativeMethods.SentMessages.Count);
-            Assert.All(nativeMethods.SentMessages, message => Assert.Equal(childHandle, message.Handle));
-            Assert.All(nativeMethods.SentMessages, message => Assert.Equal(BuildMouseLParam(175, 325), message.LParam));
+            Assert.Equal(3, nativeMethods.PostedMessages.Count);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(childHandle, message.Handle));
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(BuildMouseLParam(175, 325), message.LParam));
         }
 
         [Fact]
-        public void yike_geometry_explicit_grid_controls_background_send_coordinate()
+        public void yike_geometry_explicit_grid_controls_background_post_coordinate()
         {
             IntPtr handle = new IntPtr(5151);
             IntPtr childHandle = new IntPtr(7272);
@@ -148,9 +148,58 @@ namespace Readboard.VerificationTests.Protocol
                 coordinator.Stop();
             }
 
-            Assert.Equal(3, nativeMethods.SentMessages.Count);
-            Assert.All(nativeMethods.SentMessages, message => Assert.Equal(childHandle, message.Handle));
-            Assert.All(nativeMethods.SentMessages, message => Assert.Equal(BuildMouseLParam(113, 159), message.LParam));
+            Assert.Equal(3, nativeMethods.PostedMessages.Count);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(childHandle, message.Handle));
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(BuildMouseLParam(113, 159), message.LParam));
+        }
+
+        [Fact]
+        public void yike_place_can_succeed_with_geometry_even_when_capture_keeps_failing()
+        {
+            IntPtr handle = new IntPtr(5151);
+            IntPtr childHandle = new IntPtr(8383);
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods
+            {
+                YikeRenderWidgetHandle = childHandle,
+                YikeRenderWidgetBounds = new PixelRect(100, 200, 800, 600)
+            };
+            RecordingHost host = new RecordingHost(CreateSnapshot(handle));
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            host.AttachCoordinator(coordinator);
+            coordinator.AttachHost(host);
+            coordinator.SetSyncBoth(true);
+            coordinator.AttachRuntime(new SyncSessionRuntimeDependencies
+            {
+                Host = host,
+                CaptureService = new AlwaysFailCaptureService(),
+                RecognitionService = new StaticRecognitionService(),
+                PlacementService = new LegacyMovePlacementService(nativeMethods),
+                OverlayService = new PassiveOverlayService(),
+                WindowDescriptorFactory = new StaticWindowDescriptorFactory(handle)
+            });
+
+            try
+            {
+                coordinator.Start();
+                Assert.True(coordinator.TryStartKeepSync());
+                Assert.True(host.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+
+                transport.Emit("yikeGeometry left=45 top=60 width=656 height=640 board=19 firstX=81 firstY=97 cellX=32 cellY=31");
+                transport.Emit("place 1 2");
+
+                Assert.True(
+                    transport.WaitForLine("placeComplete", TimeSpan.FromSeconds(1)),
+                    "Expected placeComplete, got lines: " + string.Join(", ", transport.SnapshotSentLines()));
+            }
+            finally
+            {
+                coordinator.Stop();
+            }
+
+            Assert.Equal(3, nativeMethods.PostedMessages.Count);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(childHandle, message.Handle));
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(BuildMouseLParam(113, 159), message.LParam));
         }
 
         private static int BuildMouseLParam(int x, int y)
@@ -318,6 +367,18 @@ namespace Readboard.VerificationTests.Protocol
             }
         }
 
+        private sealed class AlwaysFailCaptureService : IBoardCaptureService
+        {
+            public BoardCaptureResult Capture(BoardCaptureRequest request)
+            {
+                return new BoardCaptureResult
+                {
+                    Success = false,
+                    FailureReason = "capture-failed-for-test"
+                };
+            }
+        }
+
         private sealed class StaticRecognitionService : IBoardRecognitionService
         {
             public BoardRecognitionResult Recognize(BoardRecognitionRequest request)
@@ -437,6 +498,12 @@ namespace Readboard.VerificationTests.Protocol
 
                 lock (SentLines)
                     return SentLines.Contains(line);
+            }
+
+            public string[] SnapshotSentLines()
+            {
+                lock (SentLines)
+                    return SentLines.ToArray();
             }
         }
 

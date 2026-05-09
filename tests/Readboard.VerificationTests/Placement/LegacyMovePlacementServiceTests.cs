@@ -137,7 +137,7 @@ namespace Readboard.VerificationTests.Placement
         }
 
         [Fact]
-        public void Place_YikeFrame_SendsBackgroundClickToChromiumRenderWidget()
+        public void Place_YikeFrame_PostsBackgroundClickToChromiumRenderWidget()
         {
             RecordingNativeMethods nativeMethods = new RecordingNativeMethods
             {
@@ -169,11 +169,11 @@ namespace Readboard.VerificationTests.Placement
             });
 
             Assert.True(result.Success);
-            Assert.Equal(PlacementPathKind.BackgroundSend, result.PlacementPath);
+            Assert.Equal(PlacementPathKind.BackgroundPost, result.PlacementPath);
             Assert.Equal("Chrome_RenderWidgetHostHWND", nativeMethods.LastRequestedChildClassName);
-            Assert.Equal(3, nativeMethods.SentMessages.Count);
-            Assert.All(nativeMethods.SentMessages, message => Assert.Equal(new IntPtr(6161), message.Handle));
-            Assert.All(nativeMethods.SentMessages, message => Assert.Equal(BuildMouseLParam(175, 325), message.LParam));
+            Assert.Equal(3, nativeMethods.PostedMessages.Count);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(new IntPtr(6161), message.Handle));
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(BuildMouseLParam(175, 325), message.LParam));
         }
 
         [Fact]
@@ -209,11 +209,11 @@ namespace Readboard.VerificationTests.Placement
             });
 
             Assert.True(result.Success);
-            Assert.Equal(PlacementPathKind.BackgroundSend, result.PlacementPath);
+            Assert.Equal(PlacementPathKind.BackgroundPost, result.PlacementPath);
             Assert.Equal("Chrome_RenderWidgetHostHWND", nativeMethods.LastRequestedChildClassName);
-            Assert.Equal(3, nativeMethods.SentMessages.Count);
-            Assert.All(nativeMethods.SentMessages, message => Assert.Equal(new IntPtr(6262), message.Handle));
-            Assert.All(nativeMethods.SentMessages, message => Assert.Equal(BuildMouseLParam(175, 325), message.LParam));
+            Assert.Equal(3, nativeMethods.PostedMessages.Count);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(new IntPtr(6262), message.Handle));
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(BuildMouseLParam(175, 325), message.LParam));
         }
 
         private static int BuildMouseLParam(int x, int y)

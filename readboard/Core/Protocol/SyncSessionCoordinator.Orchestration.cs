@@ -357,10 +357,15 @@ namespace readboard
                         return;
                     if (!TryProcessKeepSyncSample(runtime, snapshot, firstSample, isOperationCurrent))
                     {
-                        if (firstSample || !IsOperationCurrent(isOperationCurrent))
+                        if (!IsOperationCurrent(isOperationCurrent))
+                            return;
+                        if (firstSample && snapshot.SyncMode != SyncMode.Yike)
                             return;
                     }
-                    firstSample = false;
+                    else
+                    {
+                        firstSample = false;
+                    }
                     if (WaitForNextSample(snapshot.SampleIntervalMs))
                         return;
                 }
@@ -430,8 +435,11 @@ namespace readboard
         {
             if (!IsOperationCurrent(isOperationCurrent))
                 return false;
+            runtimeState.SelectedWindowHandle = ResolveSelectedWindowHandle(snapshot);
             if (!EnsureSyncSourceSelected(runtime, snapshot, showMessages))
                 return false;
+            if (snapshot.SyncMode == SyncMode.Yike)
+                return true;
 
             RecognizedSyncSample sample;
             if (!TryRecognizeSample(runtime, snapshot, true, out sample, isOperationCurrent))
@@ -858,7 +866,7 @@ namespace readboard
             MoveRequest request,
             Func<bool> isOperationCurrent)
         {
-            if (runtimeState.CurrentBoardFrame == null || !IsOperationCurrent(isOperationCurrent))
+            if (!IsOperationCurrent(isOperationCurrent))
                 return false;
 
             BoardFrame placementFrame = ResolvePlacementFrame(snapshot);
@@ -892,21 +900,26 @@ namespace readboard
             if (geometry == null || !geometry.IsUsable)
                 return frame;
 
-            return CreateYikePlacementFrame(frame, geometry);
+            return CreateYikePlacementFrame(frame, geometry, snapshot.SelectedWindowHandle);
         }
 
-        private BoardFrame CreateYikePlacementFrame(BoardFrame currentFrame, YikeBoardGeometry geometry)
+        private BoardFrame CreateYikePlacementFrame(BoardFrame currentFrame, YikeBoardGeometry geometry, IntPtr snapshotSelectedWindowHandle)
         {
             if (geometry == null || !geometry.IsUsable)
                 return currentFrame;
+
+            IntPtr selectedHandle = runtimeState.SelectedWindowHandle != IntPtr.Zero
+                ? runtimeState.SelectedWindowHandle
+                : snapshotSelectedWindowHandle;
 
             WindowDescriptor window = currentFrame == null ? null : currentFrame.Window;
             if (window == null)
             {
                 window = new WindowDescriptor
                 {
-                    Handle = runtimeState.SelectedWindowHandle,
+                    Handle = selectedHandle,
                     ClassName = "SunAwtFrame",
+                    Bounds = CloneRect(geometry.Bounds),
                     IsDpiAware = true,
                     DpiScale = 1d,
                     IsJavaWindow = true
@@ -915,7 +928,9 @@ namespace readboard
             else
             {
                 window = CloneWindowDescriptor(window);
-                window.Handle = window.Handle == IntPtr.Zero ? runtimeState.SelectedWindowHandle : window.Handle;
+                window.Handle = window.Handle == IntPtr.Zero ? selectedHandle : window.Handle;
+                if (!IsUsableWindowBounds(window.Bounds))
+                    window.Bounds = CloneRect(geometry.Bounds);
                 window.IsJavaWindow = true;
             }
 
@@ -972,6 +987,11 @@ namespace readboard
         private static PixelRect CloneRect(PixelRect rect)
         {
             return rect == null ? null : new PixelRect(rect.X, rect.Y, rect.Width, rect.Height);
+        }
+
+        private static bool IsUsableWindowBounds(PixelRect bounds)
+        {
+            return bounds != null && !bounds.IsEmpty;
         }
 
         private Thread CreateContinuousSyncWorker(int lifecycleGeneration, int continuousSyncSessionId)

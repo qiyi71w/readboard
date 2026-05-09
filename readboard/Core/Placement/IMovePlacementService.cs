@@ -75,7 +75,7 @@ namespace readboard
         {
             SyncMode syncMode = request.Frame.SyncMode;
             if (syncMode == SyncMode.Yike)
-                return PlacementPathKind.BackgroundSend;
+                return PlacementPathKind.BackgroundPost;
             if (request.Frame.Window != null && request.Frame.Window.IsJavaWindow)
                 return PlacementPathKind.Foreground;
             if (syncMode == SyncMode.Foreground || syncMode == SyncMode.Fox)
@@ -358,7 +358,11 @@ namespace readboard
                 return cancellationFailure;
             IntPtr handle = ResolveTargetHandle(request);
             int lParam = BuildMouseLParam(point.X, point.Y);
-            bool downPosted = nativeMethods.TryPostMouseMessage(handle, NativePlacementConstants.WmLButtonDown, 0, lParam);
+            if (request.Frame.SyncMode == SyncMode.Yike)
+            {
+                nativeMethods.TryPostMouseMessage(handle, NativePlacementConstants.WmMouseMove, 0, lParam);
+            }
+            bool downPosted = nativeMethods.TryPostMouseMessage(handle, NativePlacementConstants.WmLButtonDown, NativePlacementConstants.MkLButton, lParam);
             bool upPosted = nativeMethods.TryPostMouseMessage(handle, NativePlacementConstants.WmLButtonUp, 0, lParam);
             if (!downPosted || !upPosted)
                 return Failure(request, PlacementPathKind.BackgroundPost, MovePlacementFailureKind.PlacementFailed, "PostMessage placement failed.");
