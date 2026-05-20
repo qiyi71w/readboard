@@ -4,7 +4,7 @@
 
 **Goal:** Add a safe Fox-only `执黑 / 执白 / 自动` auto-play color mode so readboard can decide whether to send `play black ...` or `play white ...` after the user saves their Fox identity.
 
-**Architecture:** Keep the wire protocol unchanged and resolve auto color before `SyncCoordinatorHostSnapshot.PlayColor` is populated. Manual black/white stays in `MainForm`; Fox auto mode stores a remembered nickname plus a visual row signature, then uses a small, testable analyzer to match the current Fox player row and read the row's black/white icon. If the result is not reliable, the resolver returns unknown and no `play` command is sent.
+**Architecture:** Keep the wire protocol unchanged and resolve auto color before `SyncCoordinatorHostSnapshot.PlayColor` is populated. Manual black/white stays in `MainForm`; Fox auto mode stores a remembered nickname plus a nickname glyph signature captured from the user-confirmed row. The analyzer first rejects non-Fox and Fox `观战中` titles, then matches the current Fox player row by readable text when available, otherwise by the saved glyph signature, and finally reads the row's black/white icon. If any step is not reliable, the resolver returns unknown and no `play` command is sent.
 
 **Tech Stack:** WinForms, .NET 10, System.Drawing bitmap/pixel analysis, xUnit verification tests, existing readboard text protocol.
 
@@ -13,7 +13,9 @@
 ## Assumptions
 
 - Do not add OCR or a new external runtime dependency in the first implementation.
-- The saved Fox nickname is for user-facing clarity and settings; actual automatic matching uses the visual signature captured from the user-confirmed row.
+- Real Fox probing on 2026-05-20 showed the player list text is not exposed through `GetWindowText`, UI Automation, MSAA, or standard `SysListView32` item messages. Keep those probes as cheap preferred paths, but expect glyph signature matching to be the first practical implementation.
+- The saved Fox nickname is for user-facing clarity, settings, and a future text-readable path. Actual first-version automatic matching uses the nickname glyph signature captured from the user-confirmed row.
+- Fox titles parsed as `观战中` must return unknown even when the nickname matches; auto-play is allowed only for Fox `对弈中`.
 - Auto mode applies only to `SyncMode.Fox` and `SyncMode.FoxBackgroundPlace`.
 - The first implementation may need real Fox screenshots for final tuning, but unit tests should cover the resolver and image heuristics with synthetic bitmaps.
 - The current root worktree has an unrelated untracked `main-wip-backup.patch`; keep all implementation work inside `.claude/worktrees/fox-auto-color-detection`.
@@ -35,17 +37,21 @@
 - Create: `readboard/Core/AutoPlay/AutoPlayColorMode.cs`
   - Define `ManualBlack`, `ManualWhite`, `FoxAuto`.
 - Create: `readboard/Core/AutoPlay/AutoPlayColorStatus.cs`
-  - Define UI/logic statuses such as `ManualBlack`, `ManualWhite`, `Unconfigured`, `RecognizedBlack`, `RecognizedWhite`, `NicknameNotMatched`, `ColorUnknown`, `UnsupportedPlatform`.
+  - Define UI/logic statuses such as `ManualBlack`, `ManualWhite`, `Unconfigured`, `RecognizedBlack`, `RecognizedWhite`, `NicknameNotMatched`, `ColorUnknown`, `UnsupportedPlatform`, `Spectating`.
 - Create: `readboard/Core/AutoPlay/AutoPlayColorResolution.cs`
   - Immutable result with `PlayColor`, `Status`, and `IsKnown`.
 - Create: `readboard/Core/AutoPlay/FoxPlayerRowCandidate.cs`
-  - Holds row bounds, stone icon bounds, optional row signature.
-- Create: `readboard/Core/AutoPlay/FoxPlayerRowSignature.cs`
-  - Build and compare normalized visual signatures from row snippets.
+  - Holds row bounds, nickname bounds, stone icon bounds, optional nickname signature score.
+- Create: `readboard/Core/AutoPlay/FoxPlayerNicknameSignature.cs`
+  - Build and compare compact glyph signatures from nickname snippets.
 - Create: `readboard/Core/AutoPlay/FoxPlayerStoneIconDetector.cs`
   - Pure black/white/unknown detector for row icon snippets.
 - Create: `readboard/Core/AutoPlay/FoxAutoPlayColorResolver.cs`
   - Applies manual/auto priority and returns `AutoPlayColorResolution`.
+- Modify: `readboard/Core/Protocol/FoxWindowContext.cs`
+  - Preserve live-room state such as `Playing` vs `Watching` for auto-play safety.
+- Modify: `readboard/Core/Protocol/FoxWindowContextParser.cs`
+  - Parse Fox title status without changing existing room/move protocol fields.
 - Modify: `readboard/Form1.Designer.cs`
   - Add `radioAutoPlayColor` and `lblAutoPlayColorStatus`.
 - Modify: `readboard/Form1.cs`
@@ -68,7 +74,8 @@
 - Test: `tests/Readboard.VerificationTests/Configuration/DualFormatAppConfigStoreTests.cs`
 - Test: `tests/Readboard.VerificationTests/AutoPlay/FoxAutoPlayColorResolverTests.cs`
 - Test: `tests/Readboard.VerificationTests/AutoPlay/FoxPlayerStoneIconDetectorTests.cs`
-- Test: `tests/Readboard.VerificationTests/AutoPlay/FoxPlayerRowSignatureTests.cs`
+- Test: `tests/Readboard.VerificationTests/AutoPlay/FoxPlayerNicknameSignatureTests.cs`
+- Test: `tests/Readboard.VerificationTests/Protocol/FoxWindowContextTitleParsingTests.cs`
 - Test: `tests/Readboard.VerificationTests/Host/StartupAndShutdownRegressionTests.cs`
 - Test: `tests/Readboard.VerificationTests/Host/HighDpiSourceRegressionTests.cs`
 
@@ -88,7 +95,7 @@ Add assertions:
 ```csharp
 Assert.Equal(AutoPlayColorMode.ManualBlack, config.AutoPlayColorMode);
 Assert.True(string.IsNullOrEmpty(config.FoxAutoPlayNickname));
-Assert.True(string.IsNullOrEmpty(config.FoxAutoPlayRowSignature));
+Assert.True(string.IsNullOrEmpty(config.FoxAutoPlayNicknameSignature));
 ```
 
 - [ ] **Step 2: Run default config test and verify it fails**
@@ -122,7 +129,7 @@ Add to `AppConfig`:
 ```csharp
 public AutoPlayColorMode AutoPlayColorMode { get; set; }
 public string FoxAutoPlayNickname { get; set; }
-public string FoxAutoPlayRowSignature { get; set; }
+public string FoxAutoPlayNicknameSignature { get; set; }
 ```
 
 In `CreateDefault(...)`, set:
@@ -130,7 +137,7 @@ In `CreateDefault(...)`, set:
 ```csharp
 AutoPlayColorMode = AutoPlayColorMode.ManualBlack,
 FoxAutoPlayNickname = string.Empty,
-FoxAutoPlayRowSignature = string.Empty,
+FoxAutoPlayNicknameSignature = string.Empty,
 ```
 
 - [ ] **Step 4: Run default config test and verify it passes**
@@ -144,7 +151,7 @@ In `DualFormatAppConfigStoreTests.Save_WritesJsonAndLegacyMirrorWithUpdatedMetad
 ```csharp
 config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
 config.FoxAutoPlayNickname = "野狐高段9D";
-config.FoxAutoPlayRowSignature = "sig-abc";
+config.FoxAutoPlayNicknameSignature = "sig-abc";
 ```
 
 Assert JSON contains all three property names and update the legacy other mirror to append the new fields at the end:
@@ -172,7 +179,7 @@ In `ApplyJsonOverrides(...)`, add:
 ```csharp
 config.AutoPlayColorMode = (AutoPlayColorMode)ReadIntValue(values, "AutoPlayColorMode", (int)config.AutoPlayColorMode);
 config.FoxAutoPlayNickname = ReadStringValue(values, "FoxAutoPlayNickname", config.FoxAutoPlayNickname);
-config.FoxAutoPlayRowSignature = ReadStringValue(values, "FoxAutoPlayRowSignature", config.FoxAutoPlayRowSignature);
+config.FoxAutoPlayNicknameSignature = ReadStringValue(values, "FoxAutoPlayNicknameSignature", config.FoxAutoPlayNicknameSignature);
 ```
 
 In `ApplyLegacyOtherConfig(...)`, extend the layout comment with length 18 and read indexes 15-17 only when present.
@@ -182,7 +189,7 @@ In `WriteLegacyOtherConfig(...)`, append:
 ```csharp
 builder.Append('_').Append((int)config.AutoPlayColorMode);
 builder.Append('_').Append(EscapeLegacyToken(config.FoxAutoPlayNickname));
-builder.Append('_').Append(EscapeLegacyToken(config.FoxAutoPlayRowSignature));
+builder.Append('_').Append(EscapeLegacyToken(config.FoxAutoPlayNicknameSignature));
 ```
 
 Use a small helper that replaces `_`, `\r`, and `\n` with spaces, matching the existing underscore-delimited legacy format.
@@ -205,7 +212,10 @@ Expected: tests PASS.
 - Create: `readboard/Core/AutoPlay/AutoPlayColorStatus.cs`
 - Create: `readboard/Core/AutoPlay/AutoPlayColorResolution.cs`
 - Create: `readboard/Core/AutoPlay/FoxAutoPlayColorResolver.cs`
+- Modify: `readboard/Core/Protocol/FoxWindowContext.cs`
+- Modify: `readboard/Core/Protocol/FoxWindowContextParser.cs`
 - Test: `tests/Readboard.VerificationTests/AutoPlay/FoxAutoPlayColorResolverTests.cs`
+- Test: `tests/Readboard.VerificationTests/Protocol/FoxWindowContextTitleParsingTests.cs`
 
 - [ ] **Step 1: Write failing resolver tests**
 
@@ -214,6 +224,7 @@ Cover:
 - manual black returns `PlayColor = "black"`;
 - manual white returns `PlayColor = "white"`;
 - auto on non-Fox returns null and `UnsupportedPlatform`;
+- auto on Fox `观战中` returns null and `Spectating`;
 - auto with empty signature returns null and `Unconfigured`;
 - auto with recognized black returns `"black"`;
 - auto with recognized white returns `"white"`;
@@ -229,7 +240,20 @@ C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboa
 
 Expected: FAIL because files do not exist.
 
-- [ ] **Step 3: Implement resolver types**
+- [ ] **Step 3: Parse Fox live-room play state and implement resolver types**
+
+Extend `FoxWindowContext` with a lightweight live-room state, for example:
+
+```csharp
+internal enum FoxLiveRoomState
+{
+    Unknown = 0,
+    Playing = 1,
+    Watching = 2
+}
+```
+
+`FoxWindowContextParser.Parse(...)` should set `Playing` when the title contains `对弈中`, `Watching` when it contains `观战中`, and keep existing room token / move number behavior unchanged. Add parser tests for both title forms.
 
 Keep dependencies small:
 
@@ -239,7 +263,8 @@ internal static class FoxAutoPlayColorResolver
     public static AutoPlayColorResolution Resolve(
         AutoPlayColorMode mode,
         SyncMode syncMode,
-        string savedRowSignature,
+        string savedNicknameSignature,
+        FoxWindowContext foxWindowContext,
         AutoPlayColorResolution detected)
     {
         if (mode == AutoPlayColorMode.ManualBlack)
@@ -248,7 +273,9 @@ internal static class FoxAutoPlayColorResolver
             return AutoPlayColorResolution.Known("white", AutoPlayColorStatus.ManualWhite);
         if (!IsFoxMode(syncMode))
             return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.UnsupportedPlatform);
-        if (string.IsNullOrWhiteSpace(savedRowSignature))
+        if (IsSpectating(foxWindowContext))
+            return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.Spectating);
+        if (string.IsNullOrWhiteSpace(savedNicknameSignature))
             return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.Unconfigured);
         return detected ?? AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
     }
@@ -262,20 +289,20 @@ The final implementation can adjust names, but keep the resolver pure and testab
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxAutoPlayColorResolverTests" -c Debug
-git add readboard\Core\AutoPlay tests\Readboard.VerificationTests\AutoPlay
+C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxAutoPlayColorResolverTests|FullyQualifiedName~FoxWindowContextTitleParsingTests" -c Debug
+git add readboard\Core\AutoPlay readboard\Core\Protocol\FoxWindowContext.cs readboard\Core\Protocol\FoxWindowContextParser.cs tests\Readboard.VerificationTests\AutoPlay tests\Readboard.VerificationTests\Protocol\FoxWindowContextTitleParsingTests.cs
 git commit -m "feat(readboard): 增加自动落子棋色解析器"
 ```
 
 Expected: tests PASS.
 
-## Task 3: Detect Fox Player Row Signature And Stone Color
+## Task 3: Detect Fox Player Nickname Signature And Stone Color
 
 **Files:**
 - Create: `readboard/Core/AutoPlay/FoxPlayerRowCandidate.cs`
-- Create: `readboard/Core/AutoPlay/FoxPlayerRowSignature.cs`
+- Create: `readboard/Core/AutoPlay/FoxPlayerNicknameSignature.cs`
 - Create: `readboard/Core/AutoPlay/FoxPlayerStoneIconDetector.cs`
-- Test: `tests/Readboard.VerificationTests/AutoPlay/FoxPlayerRowSignatureTests.cs`
+- Test: `tests/Readboard.VerificationTests/AutoPlay/FoxPlayerNicknameSignatureTests.cs`
 - Test: `tests/Readboard.VerificationTests/AutoPlay/FoxPlayerStoneIconDetectorTests.cs`
 
 - [ ] **Step 1: Write failing stone icon detector tests**
@@ -287,21 +314,22 @@ Use synthetic bitmaps:
 - flat background returns unknown;
 - mixed ambiguous sample returns unknown.
 
-- [ ] **Step 2: Write failing row signature tests**
+- [ ] **Step 2: Write failing nickname signature tests**
 
-Use synthetic row snippets:
+Use synthetic nickname snippets:
 
 - identical snippets match;
 - same text-like pixels with small brightness variation match;
 - different text-like pixels do not match;
-- blank rows return empty/invalid signature.
+- blank snippets return empty/invalid signature;
+- one matching candidate beats three unrelated candidates with enough score margin.
 
 - [ ] **Step 3: Run auto-play image tests and verify failure**
 
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxPlayerStoneIconDetectorTests|FullyQualifiedName~FoxPlayerRowSignatureTests" -c Debug
+C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxPlayerStoneIconDetectorTests|FullyQualifiedName~FoxPlayerNicknameSignatureTests" -c Debug
 ```
 
 Expected: FAIL until implementation exists.
@@ -321,14 +349,15 @@ Rules:
 - require a minimum colored-pixel ratio so panel background is not classified as white;
 - return unknown when both ratios pass or neither passes.
 
-- [ ] **Step 5: Implement row signature**
+- [ ] **Step 5: Implement nickname signature**
 
-Use a deterministic compact signature:
+Use a deterministic compact glyph signature:
 
-- crop only the nickname area, not the stone icon;
-- normalize to a small grayscale grid, such as 48 by 12;
-- threshold relative to the row's average brightness;
+- crop only the nickname text area, not the row icon, stone icon, gender icon, flag, rank, or wealth columns;
+- threshold saturated nickname glyph pixels and darker antialiasing while rejecting the pale row background;
+- allow small x/y shifts when matching current candidates;
 - serialize as a short hex or base64 string.
+- return a match only when the best score reaches a conservative threshold and leads the second-best score by a clear margin.
 
 Do not use OCR. Do not store full screenshots in config.
 
@@ -337,7 +366,7 @@ Do not use OCR. Do not store full screenshots in config.
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxPlayerStoneIconDetectorTests|FullyQualifiedName~FoxPlayerRowSignatureTests" -c Debug
+C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxPlayerStoneIconDetectorTests|FullyQualifiedName~FoxPlayerNicknameSignatureTests" -c Debug
 git add readboard\Core\AutoPlay tests\Readboard.VerificationTests\AutoPlay
 git commit -m "feat(readboard): 识别野狐玩家行棋色"
 ```
@@ -441,7 +470,7 @@ Assert:
 
 - dialog files exist and expose selected nickname/signature properties;
 - `Form1.cs` opens the dialog only when auto mode is selected and no saved signature exists;
-- `Form4.cs` loads and clears `FoxAutoPlayNickname` and `FoxAutoPlayRowSignature`;
+- `Form4.cs` loads and clears `FoxAutoPlayNickname` and `FoxAutoPlayNicknameSignature`;
 - settings layout includes a nickname text box and clear/reselect button;
 - all language files contain the new keys.
 
@@ -459,8 +488,8 @@ Expected: FAIL.
 
 The first version should not need live OCR:
 
-- show two row preview boxes when row snippets are available;
-- allow `上方玩家是我` / `下方玩家是我`;
+- show visible row preview boxes when nickname snippets are available;
+- allow selecting exactly one current player row as the saved identity;
 - allow manual nickname entry;
 - include `记住这个昵称，以后自动使用`;
 - if no row preview is available, still allow nickname entry but do not create a signature.
@@ -509,7 +538,7 @@ Expected: tests PASS.
 
 Use synthetic scaled Fox-like right-panel bitmaps. Cover:
 
-- two candidate rows are found;
+- visible candidate rows are found, including a 2-row playing list and a 4-row watching list;
 - row icon rectangles are inside each row;
 - unrelated blank bitmap returns no candidates;
 - scaled bitmap keeps candidate proportions.
@@ -530,7 +559,7 @@ Use the full Fox window bitmap captured through the existing selected window pat
 
 - operate only on Fox modes;
 - scan the right-side list panel region, not the board;
-- return exactly two row candidates only when both rows are plausible;
+- return plausible visible row candidates; do not assume the list always has exactly two rows;
 - return no candidates when layout is ambiguous.
 
 Do not read titles or enumerate global windows here.
