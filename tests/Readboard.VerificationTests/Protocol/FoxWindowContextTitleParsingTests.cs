@@ -23,6 +23,18 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal(expectedMove, context.LiveTitleMove);
         }
 
+        [Theory]
+        [InlineData("> [高级房1] > 43581号对弈房 观战中[第89手] - 升降级", (int)FoxLiveRoomState.Watching)]
+        [InlineData("> [高级房1] > 23|890号房间 对弈中[第03手] - 友谊赛 - 数子规则", (int)FoxLiveRoomState.Playing)]
+        [InlineData("> [高级房1] > 43838号对弈房 对局结束 (白 中盘胜) - 升降级 - 数子规则 - [第308手]", (int)FoxLiveRoomState.Unknown)]
+        public void ParseLiveRoom_DetectsLiveRoomState(string title, int expectedState)
+        {
+            FoxWindowContext context = FoxWindowContextParser.Parse(title);
+
+            Assert.Equal(FoxWindowKind.LiveRoom, context.Kind);
+            Assert.Equal((FoxLiveRoomState)expectedState, context.LiveRoomState);
+        }
+
         [Fact]
         public void ParseRecordView_UsesTotalMoveAsCurrentMoveWhenOnlyTotalMoveIsPresent()
         {

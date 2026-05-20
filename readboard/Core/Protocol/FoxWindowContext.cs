@@ -7,9 +7,17 @@ namespace readboard
         RecordView = 2
     }
 
+    internal enum FoxLiveRoomState
+    {
+        Unknown = 0,
+        Playing = 1,
+        Watching = 2
+    }
+
     internal sealed class FoxWindowContext
     {
         public FoxWindowKind Kind { get; set; }
+        public FoxLiveRoomState LiveRoomState { get; set; }
         public string RoomToken { get; set; }
         public int? LiveTitleMove { get; set; }
         public int? RecordCurrentMove { get; set; }
@@ -30,6 +38,7 @@ namespace readboard
             return new FoxWindowContext
             {
                 Kind = context.Kind,
+                LiveRoomState = context.LiveRoomState,
                 RoomToken = context.RoomToken,
                 LiveTitleMove = context.LiveTitleMove,
                 RecordCurrentMove = context.RecordCurrentMove,
