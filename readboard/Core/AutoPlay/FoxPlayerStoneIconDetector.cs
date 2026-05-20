@@ -7,7 +7,7 @@ namespace readboard
     {
         private const double MinimumCenterStoneRatio = 0.45d;
         private const double MaximumOppositeCenterRatio = 0.25d;
-        private const double MaximumOuterLightRatioForWhite = 0.70d;
+        private const double MaximumOuterLightRatioForWhite = 0.95d;
 
         public static AutoPlayColorResolution Detect(Bitmap iconBitmap)
         {

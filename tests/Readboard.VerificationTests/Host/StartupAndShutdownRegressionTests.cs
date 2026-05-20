@@ -386,8 +386,10 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("lastFoxAutoPlayColorDetectionContextSignature", source);
             Assert.Contains("lastFoxAutoPlayColorDetectionTimestampUtc", source);
             Assert.Contains("ResolveDetectedFoxAutoPlayColor(foxWindowContext)", resolveSlice);
-            Assert.Contains("FoxAutoPlayColorDetector.Detect(", detectionSlice);
-            Assert.Contains("foxAutoPlayCapturePlatform.CaptureWindow(hwnd)", detectionSlice);
+            Assert.Contains("IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(hwnd);", detectionSlice);
+            Assert.Contains("FoxAutoPlayColorDetector.DetectPlayerListPanel(", detectionSlice);
+            Assert.Contains("foxAutoPlayCapturePlatform.CaptureWindow(captureHandle)", detectionSlice);
+            Assert.Contains("FindFoxPlayerListPanelHandle", source);
             Assert.Contains("lastFoxAutoPlayColorDetection = null;", clearSlice);
             Assert.Contains("ClearFoxAutoPlayColorDetectionState();", handleSlice);
         }

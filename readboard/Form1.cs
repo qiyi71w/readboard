@@ -1474,23 +1474,27 @@ namespace readboard
                 || string.IsNullOrWhiteSpace(nicknameSignature))
                 return null;
 
+            IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(hwnd);
+            if (captureHandle == IntPtr.Zero)
+                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
+
             string contextSignature = foxWindowContext == null ? string.Empty : foxWindowContext.TitleFingerprint ?? string.Empty;
             DateTime now = DateTime.UtcNow;
             if (lastFoxAutoPlayColorDetection != null
-                && lastFoxAutoPlayColorDetectionWindowHandle == hwnd
+                && lastFoxAutoPlayColorDetectionWindowHandle == captureHandle
                 && string.Equals(lastFoxAutoPlayColorDetectionContextSignature, contextSignature, StringComparison.Ordinal)
                 && string.Equals(lastFoxAutoPlayColorDetectionNicknameSignature, nicknameSignature, StringComparison.Ordinal)
                 && (now - lastFoxAutoPlayColorDetectionTimestampUtc).TotalMilliseconds < FoxAutoPlayColorDetectionCacheMs)
                 return lastFoxAutoPlayColorDetection;
 
             AutoPlayColorResolution detection;
-            using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(hwnd))
+            using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(captureHandle))
             {
-                detection = FoxAutoPlayColorDetector.Detect(bitmap, GetCurrentSyncMode(), nicknameSignature);
+                detection = FoxAutoPlayColorDetector.DetectPlayerListPanel(bitmap, nicknameSignature);
             }
 
             lastFoxAutoPlayColorDetection = detection;
-            lastFoxAutoPlayColorDetectionWindowHandle = hwnd;
+            lastFoxAutoPlayColorDetectionWindowHandle = captureHandle;
             lastFoxAutoPlayColorDetectionContextSignature = contextSignature;
             lastFoxAutoPlayColorDetectionNicknameSignature = nicknameSignature;
             lastFoxAutoPlayColorDetectionTimestampUtc = now;
@@ -1553,9 +1557,13 @@ namespace readboard
             if (!IsFoxSyncType(CurrentSyncType) || hwnd == IntPtr.Zero)
                 return candidates;
 
-            using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(hwnd))
+            IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(hwnd);
+            if (captureHandle == IntPtr.Zero)
+                return candidates;
+
+            using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(captureHandle))
             {
-                IList<FoxPlayerRowCandidate> rows = FoxPlayerRowLocator.Locate(bitmap, GetCurrentSyncMode());
+                IList<FoxPlayerRowCandidate> rows = FoxPlayerRowLocator.LocatePlayerListPanel(bitmap);
                 for (int i = 0; i < rows.Count; i++)
                 {
                     using (Bitmap nicknameSnippet = CropBitmap(bitmap, rows[i].NicknameBounds))
@@ -1568,6 +1576,45 @@ namespace readboard
             }
 
             return candidates;
+        }
+
+        private IntPtr ResolveFoxAutoPlayCaptureHandle(IntPtr boardHandle)
+        {
+            return FindFoxPlayerListPanelHandle(boardHandle);
+        }
+
+        private static IntPtr FindFoxPlayerListPanelHandle(IntPtr boardHandle)
+        {
+            if (boardHandle == IntPtr.Zero || !IsWindow(boardHandle))
+                return IntPtr.Zero;
+
+            IntPtr rootHandle = boardHandle;
+            IntPtr parent = GetParent(rootHandle);
+            while (parent != IntPtr.Zero)
+            {
+                rootHandle = parent;
+                parent = GetParent(rootHandle);
+            }
+
+            IntPtr playerListHandle = IntPtr.Zero;
+            EnumChildWindows(rootHandle, delegate(IntPtr childHandle, IntPtr parameter)
+            {
+                if (!IsWindowVisible(childHandle))
+                    return true;
+                if (!string.Equals(GetWindowText(childHandle), "CRoomPlayerListPanel", StringComparison.Ordinal))
+                    return true;
+
+                playerListHandle = childHandle;
+                return false;
+            }, IntPtr.Zero);
+            return playerListHandle;
+        }
+
+        private static string GetWindowText(IntPtr handle)
+        {
+            StringBuilder builder = new StringBuilder(256);
+            GetWindowText(handle, builder, builder.Capacity);
+            return builder.ToString();
         }
 
         private static Bitmap CropBitmap(Bitmap source, PixelRect bounds)
@@ -2833,6 +2880,17 @@ namespace readboard
 
         [DllImport("USER32.DLL")]
         public static extern IntPtr GetParent(IntPtr hwnd);
+
+        private delegate bool EnumChildWindowProc(IntPtr handle, IntPtr parameter);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumChildWindows(IntPtr window, EnumChildWindowProc callback, IntPtr parameter);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr handle);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowText(IntPtr handle, StringBuilder title, int maxCount);
 
         public void placeMove(int x, int y)
         {

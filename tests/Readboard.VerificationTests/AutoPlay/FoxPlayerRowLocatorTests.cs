@@ -71,6 +71,20 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
+        public void LocatePlayerListPanel_ReturnsVisibleRowsFromRoomPlayerPanel()
+        {
+            using (Bitmap bitmap = CreateFoxPlayerListPanel())
+            {
+                IList<FoxPlayerRowCandidate> rows = FoxPlayerRowLocator.LocatePlayerListPanel(bitmap);
+
+                Assert.Equal(2, rows.Count);
+                AssertRowsAreInsidePanel(bitmap, rows);
+                Assert.InRange(rows[0].NicknameBounds.X, 28, 48);
+                Assert.InRange(rows[0].StoneIconBounds.X, 120, 152);
+            }
+        }
+
+        [Fact]
         public void Detect_ReturnsStoneColorForMatchedNicknameSignature()
         {
             using (Bitmap bitmap = CreateFoxLikeWindow(2, 1.0f))
@@ -81,6 +95,25 @@ namespace Readboard.VerificationTests.AutoPlay
                     string signature = FoxPlayerNicknameSignature.FromBitmap(nicknameSnippet).Serialize();
 
                     AutoPlayColorResolution resolution = FoxAutoPlayColorDetector.Detect(bitmap, SyncMode.Fox, signature);
+
+                    Assert.True(resolution.IsKnown);
+                    Assert.Equal("white", resolution.PlayColor);
+                    Assert.Equal(AutoPlayColorStatus.RecognizedWhite, resolution.Status);
+                }
+            }
+        }
+
+        [Fact]
+        public void DetectPlayerListPanel_ReturnsStoneColorForMatchedNicknameSignature()
+        {
+            using (Bitmap bitmap = CreateFoxPlayerListPanel())
+            {
+                IList<FoxPlayerRowCandidate> rows = FoxPlayerRowLocator.LocatePlayerListPanel(bitmap);
+                using (Bitmap nicknameSnippet = Crop(bitmap, rows[1].NicknameBounds))
+                {
+                    string signature = FoxPlayerNicknameSignature.FromBitmap(nicknameSnippet).Serialize();
+
+                    AutoPlayColorResolution resolution = FoxAutoPlayColorDetector.DetectPlayerListPanel(bitmap, signature);
 
                     Assert.True(resolution.IsKnown);
                     Assert.Equal("white", resolution.PlayColor);
@@ -100,6 +133,25 @@ namespace Readboard.VerificationTests.AutoPlay
                 Assert.True(row.NicknameBounds.X + row.NicknameBounds.Width <= row.RowBounds.X + row.RowBounds.Width);
                 Assert.True(row.NicknameBounds.Y + row.NicknameBounds.Height <= row.RowBounds.Y + row.RowBounds.Height);
                 Assert.True(row.StoneIconBounds.X > row.RowBounds.X);
+                Assert.True(row.StoneIconBounds.Y >= row.RowBounds.Y);
+                Assert.True(row.StoneIconBounds.X + row.StoneIconBounds.Width <= row.RowBounds.X + row.RowBounds.Width);
+                Assert.True(row.StoneIconBounds.Y + row.StoneIconBounds.Height <= row.RowBounds.Y + row.RowBounds.Height);
+            }
+        }
+
+        private static void AssertRowsAreInsidePanel(Bitmap bitmap, IList<FoxPlayerRowCandidate> rows)
+        {
+            foreach (FoxPlayerRowCandidate row in rows)
+            {
+                Assert.True(row.RowBounds.X >= 0);
+                Assert.True(row.RowBounds.Y >= 0);
+                Assert.True(row.RowBounds.X + row.RowBounds.Width <= bitmap.Width);
+                Assert.True(row.RowBounds.Y + row.RowBounds.Height <= bitmap.Height);
+                Assert.True(row.NicknameBounds.X > row.RowBounds.X);
+                Assert.True(row.NicknameBounds.Y >= row.RowBounds.Y);
+                Assert.True(row.NicknameBounds.X + row.NicknameBounds.Width <= row.RowBounds.X + row.RowBounds.Width);
+                Assert.True(row.NicknameBounds.Y + row.NicknameBounds.Height <= row.RowBounds.Y + row.RowBounds.Height);
+                Assert.True(row.StoneIconBounds.X > row.NicknameBounds.X);
                 Assert.True(row.StoneIconBounds.Y >= row.RowBounds.Y);
                 Assert.True(row.StoneIconBounds.X + row.StoneIconBounds.Width <= row.RowBounds.X + row.RowBounds.Width);
                 Assert.True(row.StoneIconBounds.Y + row.StoneIconBounds.Height <= row.RowBounds.Y + row.RowBounds.Height);
@@ -142,6 +194,51 @@ namespace Readboard.VerificationTests.AutoPlay
                 }
             }
             return bitmap;
+        }
+
+        private static Bitmap CreateFoxPlayerListPanel()
+        {
+            Bitmap bitmap = new Bitmap(350, 150);
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            using (Pen borderPen = new Pen(Color.FromArgb(185, 188, 190)))
+            using (Pen separatorPen = new Pen(Color.FromArgb(205, 208, 208)))
+            using (Brush panelBrush = new SolidBrush(Color.FromArgb(242, 242, 238)))
+            using (Brush alternateRowBrush = new SolidBrush(Color.FromArgb(233, 235, 235)))
+            using (Brush purpleGlyphBrush = new SolidBrush(Color.FromArgb(190, 50, 220)))
+            using (Brush redGlyphBrush = new SolidBrush(Color.FromArgb(230, 40, 35)))
+            using (Brush darkStoneBrush = new SolidBrush(Color.FromArgb(20, 20, 20)))
+            using (Brush whiteStoneBrush = new SolidBrush(Color.FromArgb(248, 248, 242)))
+            using (Brush whiteStoneShadowBrush = new SolidBrush(Color.FromArgb(150, 156, 160)))
+            using (Brush flagBrush = new SolidBrush(Color.FromArgb(222, 42, 30)))
+            {
+                graphics.Clear(Color.FromArgb(242, 242, 238));
+                graphics.FillRectangle(panelBrush, 0, 0, bitmap.Width, bitmap.Height);
+                graphics.DrawLine(borderPen, 0, 27, bitmap.Width, 27);
+                graphics.DrawLine(separatorPen, 32, 0, 32, 84);
+                graphics.DrawLine(separatorPen, 206, 0, 206, 84);
+                DrawPanelRow(graphics, 28, panelBrush, purpleGlyphBrush, darkStoneBrush, null, flagBrush, false);
+                DrawPanelRow(graphics, 56, alternateRowBrush, redGlyphBrush, whiteStoneBrush, whiteStoneShadowBrush, flagBrush, true);
+            }
+            return bitmap;
+        }
+
+        private static void DrawPanelRow(
+            Graphics graphics,
+            int y,
+            Brush rowBrush,
+            Brush glyphBrush,
+            Brush stoneBrush,
+            Brush stoneShadowBrush,
+            Brush flagBrush,
+            bool alternateGlyphShape)
+        {
+            graphics.FillRectangle(rowBrush, 0, y, 350, 28);
+            graphics.FillRectangle(glyphBrush, 38, y + 8, alternateGlyphShape ? 92 : 72, 4);
+            graphics.FillRectangle(glyphBrush, alternateGlyphShape ? 52 : 38, y + 16, alternateGlyphShape ? 62 : 84, 4);
+            if (stoneShadowBrush != null)
+                graphics.FillEllipse(stoneShadowBrush, 138, y + 5, 23, 23);
+            graphics.FillEllipse(stoneBrush, 140, y + 6, 20, 20);
+            graphics.FillRectangle(flagBrush, 207, y + 7, 22, 14);
         }
 
         private static Bitmap Crop(Bitmap source, PixelRect bounds)

@@ -33,6 +33,19 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
+        public void Detect_ReturnsWhiteForLightStoneOnLightPlayerRowBackground()
+        {
+            using (Bitmap bitmap = CreateLightRowWhiteStoneIcon())
+            {
+                AutoPlayColorResolution resolution = FoxPlayerStoneIconDetector.Detect(bitmap);
+
+                Assert.True(resolution.IsKnown);
+                Assert.Equal("white", resolution.PlayColor);
+                Assert.Equal(AutoPlayColorStatus.RecognizedWhite, resolution.Status);
+            }
+        }
+
+        [Fact]
         public void Detect_ReturnsUnknownForFlatBackground()
         {
             using (Bitmap bitmap = new Bitmap(32, 32))
@@ -78,6 +91,20 @@ namespace Readboard.VerificationTests.AutoPlay
             {
                 graphics.Clear(background);
                 graphics.FillEllipse(brush, 6, 5, 20, 20);
+            }
+            return bitmap;
+        }
+
+        private static Bitmap CreateLightRowWhiteStoneIcon()
+        {
+            Bitmap bitmap = new Bitmap(32, 32);
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            using (Brush shadowBrush = new SolidBrush(Color.FromArgb(150, 156, 160)))
+            using (Brush stoneBrush = new SolidBrush(Color.FromArgb(248, 248, 242)))
+            {
+                graphics.Clear(Color.FromArgb(242, 242, 238));
+                graphics.FillEllipse(shadowBrush, 4, 4, 24, 24);
+                graphics.FillEllipse(stoneBrush, 6, 5, 20, 20);
             }
             return bitmap;
         }

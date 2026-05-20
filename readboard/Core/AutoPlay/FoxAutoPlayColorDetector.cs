@@ -38,6 +38,39 @@ namespace readboard
             }
         }
 
+        public static AutoPlayColorResolution DetectPlayerListPanel(Bitmap panelBitmap, string nicknameSignature)
+        {
+            FoxPlayerNicknameSignature signature = FoxPlayerNicknameSignature.FromString(nicknameSignature);
+            if (!signature.IsValid)
+                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.Unconfigured);
+
+            IList<FoxPlayerRowCandidate> rows = FoxPlayerRowLocator.LocatePlayerListPanel(panelBitmap);
+            if (rows.Count == 0)
+                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
+
+            List<Bitmap> nicknameSnippets = new List<Bitmap>();
+            try
+            {
+                foreach (FoxPlayerRowCandidate row in rows)
+                    nicknameSnippets.Add(Crop(panelBitmap, row.NicknameBounds));
+
+                FoxPlayerNicknameMatch match = signature.Match(nicknameSnippets);
+                if (!match.IsReliable || match.Index < 0 || match.Index >= rows.Count)
+                    return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
+
+                using (Bitmap icon = Crop(panelBitmap, rows[match.Index].StoneIconBounds))
+                    return FoxPlayerStoneIconDetector.Detect(icon);
+            }
+            finally
+            {
+                foreach (Bitmap bitmap in nicknameSnippets)
+                {
+                    if (bitmap != null)
+                        bitmap.Dispose();
+                }
+            }
+        }
+
         private static Bitmap Crop(Bitmap source, PixelRect bounds)
         {
             if (source == null || bounds == null || bounds.IsEmpty)
