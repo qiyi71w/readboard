@@ -431,6 +431,17 @@ namespace readboard
             langItems["SettingsForm_rdoColorDark"] = "深色";
             langItems["SettingsForm_rdoColorLight"] = "浅色";
             langItems["SettingsForm_colorModeRestartTip"] = "颜色模式已更改，重启后生效。";
+            langItems["SettingsForm_lblFoxAutoPlayNickname"] = "自动模式昵称";
+            langItems["SettingsForm_btnClearFoxAutoPlayIdentity"] = "清除自动身份";
+            langItems["FoxAutoPlayIdentityDialog_title"] = "野狐自动模式";
+            langItems["FoxAutoPlayIdentityDialog_lblPrompt"] = "请选择你在野狐当前房间里的昵称。";
+            langItems["FoxAutoPlayIdentityDialog_lblDetectedNicknames"] = "识别到的昵称";
+            langItems["FoxAutoPlayIdentityDialog_lblManualNickname"] = "手动昵称";
+            langItems["FoxAutoPlayIdentityDialog_chkRememberNickname"] = "记住这个昵称，以后自动使用";
+            langItems["FoxAutoPlayIdentityDialog_btnConfirm"] = "确定";
+            langItems["FoxAutoPlayIdentityDialog_btnCancel"] = "取消";
+            langItems["FoxAutoPlayIdentityDialog_noDetectedNicknames"] = "暂未识别到可选昵称";
+            langItems["FoxAutoPlayIdentityDialog_emptyNickname"] = "昵称不能为空。";
             langItems["SettingsForm_mustBeInteger"] = "必须输入整数";
             langItems["SettingsForm_outOfRange"] = "输入的值超过范围";
             langItems["SettingsForm_resetDefaultTip"] = "已恢复默认设置,请重新打开";

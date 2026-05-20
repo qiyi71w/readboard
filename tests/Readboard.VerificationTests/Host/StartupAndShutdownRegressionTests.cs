@@ -311,6 +311,49 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void FoxAutoPlayIdentityDialogAndSettings_PersistNicknameIdentity()
+        {
+            string dialogSource = LoadSource("readboard", "FoxAutoPlayIdentityDialog.cs");
+            string dialogDesignerSource = LoadSource("readboard", "FoxAutoPlayIdentityDialog.Designer.cs");
+            string mainFormSource = LoadSource("readboard", "Form1.cs");
+            string settingsSource = LoadSource("readboard", "Form4.cs");
+            string settingsDesignerSource = LoadSource("readboard", "Form4.Designer.cs");
+            string programSource = LoadSource("readboard", "Program.cs");
+            string cnSource = LoadSource("readboard", "language_cn.txt");
+            string enSource = LoadSource("readboard", "language_en.txt");
+            string jpSource = LoadSource("readboard", "language_jp.txt");
+            string krSource = LoadSource("readboard", "language_kr.txt");
+            string autoRadioSlice = GetMethodSlice(mainFormSource, "private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)");
+
+            Assert.Contains("internal string SelectedNickname", dialogSource);
+            Assert.Contains("internal string SelectedNicknameSignature", dialogSource);
+            Assert.Contains("this.txtNickname", dialogDesignerSource);
+            Assert.Contains("this.lstDetectedNicknames", dialogDesignerSource);
+            Assert.Contains("string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNicknameSignature)", autoRadioSlice);
+            Assert.Contains("TryConfigureFoxAutoPlayIdentity();", autoRadioSlice);
+            Assert.Contains("using (FoxAutoPlayIdentityDialog dialog = new FoxAutoPlayIdentityDialog", mainFormSource);
+            Assert.Contains("updatedConfig.FoxAutoPlayNickname = dialog.SelectedNickname;", mainFormSource);
+            Assert.Contains("updatedConfig.FoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;", mainFormSource);
+            Assert.Contains("ClearFoxAutoPlayColorDetectionState();", mainFormSource);
+            Assert.Contains("txtFoxAutoPlayNickname.Text = config.FoxAutoPlayNickname;", settingsSource);
+            Assert.Contains("updatedConfig.FoxAutoPlayNickname = foxAutoPlayNickname;", settingsSource);
+            Assert.Contains("updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;", settingsSource);
+            Assert.Contains("btnClearFoxAutoPlayIdentity_Click", settingsSource);
+            Assert.Contains("this.txtFoxAutoPlayNickname", settingsDesignerSource);
+            Assert.Contains("this.btnClearFoxAutoPlayIdentity", settingsDesignerSource);
+            Assert.Contains("SettingsForm_lblFoxAutoPlayNickname", programSource);
+            Assert.Contains("FoxAutoPlayIdentityDialog_title", programSource);
+            Assert.Contains("SettingsForm_lblFoxAutoPlayNickname=", cnSource);
+            Assert.Contains("SettingsForm_lblFoxAutoPlayNickname=", enSource);
+            Assert.Contains("SettingsForm_lblFoxAutoPlayNickname=", jpSource);
+            Assert.Contains("SettingsForm_lblFoxAutoPlayNickname=", krSource);
+            Assert.Contains("FoxAutoPlayIdentityDialog_title=", cnSource);
+            Assert.Contains("FoxAutoPlayIdentityDialog_title=", enSource);
+            Assert.Contains("FoxAutoPlayIdentityDialog_title=", jpSource);
+            Assert.Contains("FoxAutoPlayIdentityDialog_title=", krSource);
+        }
+
+        [Fact]
         public void ShowInBoardToggle_ReplaysForegroundFoxProtocolStateImmediately()
         {
             string source = LoadSource("readboard", "Form1.cs");

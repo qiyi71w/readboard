@@ -81,6 +81,29 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void SettingsForm_FoxAutoPlayIdentityControls_AreMeasuredAndThemed()
+        {
+            string content = LoadSource("readboard", "Form4.cs");
+            string designerSource = LoadSource("readboard", "Form4.Designer.cs");
+            string themeSlice = GetMethodSlice(content, "private void ApplySettingsTheme()");
+            string classicThemeSlice = GetMethodSlice(content, "private void ApplyClassicSettingsTheme()");
+            string legacySlice = GetMethodSlice(content, "private void ArrangeLegacySettingsLayout()");
+            string adaptiveSlice = GetMethodSlice(content, "private void ArrangeAdaptiveSettingsLayout()");
+            string decisionSlice = GetMethodSlice(content, "private bool CanUseLegacySettingsDesktopLayout()");
+
+            Assert.Contains("lblFoxAutoPlayNickname", designerSource);
+            Assert.Contains("txtFoxAutoPlayNickname", designerSource);
+            Assert.Contains("btnClearFoxAutoPlayIdentity", designerSource);
+            Assert.Contains("UiTheme.StyleInput(txtFoxAutoPlayNickname);", themeSlice);
+            Assert.Contains("UiTheme.StyleSecondaryButton(btnClearFoxAutoPlayIdentity);", themeSlice);
+            Assert.Contains("txtFoxAutoPlayNickname", classicThemeSlice);
+            Assert.Contains("btnClearFoxAutoPlayIdentity", classicThemeSlice);
+            Assert.Contains("LayoutFoxAutoPlayIdentityRow(left, identityTop, contentWidth, buttonHeight);", legacySlice);
+            Assert.Contains("currentTop = LayoutFoxAutoPlayIdentityRow(left, currentTop, contentWidth, buttonHeight) + optionRowGap;", adaptiveSlice);
+            Assert.Contains("MeasureButtonWidth(btnClearFoxAutoPlayIdentity, 84)", decisionSlice);
+        }
+
+        [Fact]
         public void SelectionOverlay_UsesVirtualDesktopAndMonitorAwareMagnifierPlacement()
         {
             string content = LoadSource("readboard", "Form2.cs");

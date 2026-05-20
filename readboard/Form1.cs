@@ -79,6 +79,8 @@ namespace readboard
         private bool isInitializingProtocolState = true;
         private bool hostedUpdateSupported = false;
         private FormUpdate activeHostedUpdateDialog = null;
+        private bool suppressAutoPlayColorModeEvents = false;
+        private AutoPlayColorMode lastManualAutoPlayColorMode = AutoPlayColorMode.ManualBlack;
         private static readonly System.Drawing.Size MainFormDefaultSize = new System.Drawing.Size(852, 374);
 
         private readonly struct MainHeaderLayoutMetrics
@@ -1403,9 +1405,22 @@ namespace readboard
 
         private void ApplyAutoPlayColorMode(AutoPlayColorMode mode)
         {
-            radioBlack.Checked = mode == AutoPlayColorMode.ManualBlack;
-            radioWhite.Checked = mode == AutoPlayColorMode.ManualWhite;
-            radioAutoPlayColor.Checked = mode == AutoPlayColorMode.FoxAuto;
+            suppressAutoPlayColorModeEvents = true;
+            try
+            {
+                radioBlack.Checked = mode == AutoPlayColorMode.ManualBlack;
+                radioWhite.Checked = mode == AutoPlayColorMode.ManualWhite;
+                radioAutoPlayColor.Checked = mode == AutoPlayColorMode.FoxAuto;
+                if (mode == AutoPlayColorMode.ManualBlack || mode == AutoPlayColorMode.ManualWhite)
+                    lastManualAutoPlayColorMode = mode;
+            }
+            finally
+            {
+                suppressAutoPlayColorModeEvents = false;
+            }
+
+            if (mode != AutoPlayColorMode.FoxAuto)
+                UpdateAutoPlayColorStatus(null);
         }
 
         private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)
@@ -1455,6 +1470,28 @@ namespace readboard
                     lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusWaiting");
                     return;
             }
+        }
+
+        private bool TryConfigureFoxAutoPlayIdentity()
+        {
+            using (FoxAutoPlayIdentityDialog dialog = new FoxAutoPlayIdentityDialog(
+                Program.CurrentConfig.FoxAutoPlayNickname,
+                Program.CurrentConfig.FoxAutoPlayNicknameSignature))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                    return false;
+
+                AppConfig updatedConfig = Program.CurrentConfig.Clone();
+                updatedConfig.FoxAutoPlayNickname = dialog.SelectedNickname;
+                updatedConfig.FoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;
+                Program.SaveAppConfig(updatedConfig);
+                ClearFoxAutoPlayColorDetectionState();
+                return true;
+            }
+        }
+
+        private void ClearFoxAutoPlayColorDetectionState()
+        {
         }
 
         private void InvokeHostAction(Action action)
@@ -2923,10 +2960,13 @@ namespace readboard
 
         private void radioBlack_CheckedChanged(object sender, EventArgs e)
         {
+            if (suppressAutoPlayColorModeEvents)
+                return;
             if (radioBlack.Checked)
             {
                 radioWhite.Checked = false;
                 radioAutoPlayColor.Checked = false;
+                lastManualAutoPlayColorMode = AutoPlayColorMode.ManualBlack;
             }
             if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
                 SendPlayCommandIfSelected();
@@ -2934,10 +2974,13 @@ namespace readboard
 
         private void radioWhite_CheckedChanged(object sender, EventArgs e)
         {
+            if (suppressAutoPlayColorModeEvents)
+                return;
             if (radioWhite.Checked)
             {
                 radioBlack.Checked = false;
                 radioAutoPlayColor.Checked = false;
+                lastManualAutoPlayColorMode = AutoPlayColorMode.ManualWhite;
             }
             if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
                 SendPlayCommandIfSelected();
@@ -2945,10 +2988,25 @@ namespace readboard
 
         private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)
         {
+            if (suppressAutoPlayColorModeEvents)
+                return;
             if (radioAutoPlayColor.Checked)
             {
                 radioBlack.Checked = false;
                 radioWhite.Checked = false;
+                if (isInitializingProtocolState)
+                    return;
+                if (IsFoxSyncType(CurrentSyncType)
+                    && string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNicknameSignature)
+                    && string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNickname))
+                {
+                    bool configured = TryConfigureFoxAutoPlayIdentity();
+                    if (!configured)
+                    {
+                        ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);
+                        return;
+                    }
+                }
                 ResolveCurrentAutoPlayColor(ResolveFoxWindowContext());
             }
             else

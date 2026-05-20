@@ -59,6 +59,9 @@
             this.rdoColorSystem = new System.Windows.Forms.RadioButton();
             this.rdoColorDark = new System.Windows.Forms.RadioButton();
             this.rdoColorLight = new System.Windows.Forms.RadioButton();
+            this.lblFoxAutoPlayNickname = new System.Windows.Forms.Label();
+            this.txtFoxAutoPlayNickname = new System.Windows.Forms.TextBox();
+            this.btnClearFoxAutoPlayIdentity = new System.Windows.Forms.Button();
             this.chkDebugDiagnostics = new System.Windows.Forms.CheckBox();
             this.btnOpenDebugDiagnostics = new System.Windows.Forms.Button();
             this.SuspendLayout();
@@ -334,13 +337,39 @@
             this.rdoColorLight.Text = "浅色";
             this.rdoColorLight.UseVisualStyleBackColor = true;
             //
+            // lblFoxAutoPlayNickname
+            //
+            this.lblFoxAutoPlayNickname.AutoSize = true;
+            this.lblFoxAutoPlayNickname.Location = new System.Drawing.Point(10, 78);
+            this.lblFoxAutoPlayNickname.Name = "lblFoxAutoPlayNickname";
+            this.lblFoxAutoPlayNickname.Size = new System.Drawing.Size(77, 12);
+            this.lblFoxAutoPlayNickname.TabIndex = 34;
+            this.lblFoxAutoPlayNickname.Text = "自动模式昵称";
+            //
+            // txtFoxAutoPlayNickname
+            //
+            this.txtFoxAutoPlayNickname.Location = new System.Drawing.Point(119, 74);
+            this.txtFoxAutoPlayNickname.Name = "txtFoxAutoPlayNickname";
+            this.txtFoxAutoPlayNickname.Size = new System.Drawing.Size(179, 21);
+            this.txtFoxAutoPlayNickname.TabIndex = 35;
+            //
+            // btnClearFoxAutoPlayIdentity
+            //
+            this.btnClearFoxAutoPlayIdentity.Location = new System.Drawing.Point(304, 72);
+            this.btnClearFoxAutoPlayIdentity.Name = "btnClearFoxAutoPlayIdentity";
+            this.btnClearFoxAutoPlayIdentity.Size = new System.Drawing.Size(108, 23);
+            this.btnClearFoxAutoPlayIdentity.TabIndex = 36;
+            this.btnClearFoxAutoPlayIdentity.Text = "清除自动身份";
+            this.btnClearFoxAutoPlayIdentity.UseVisualStyleBackColor = true;
+            this.btnClearFoxAutoPlayIdentity.Click += new System.EventHandler(this.btnClearFoxAutoPlayIdentity_Click);
+            //
             // chkDebugDiagnostics
             //
             this.chkDebugDiagnostics.AutoSize = true;
-            this.chkDebugDiagnostics.Location = new System.Drawing.Point(12, 75);
+            this.chkDebugDiagnostics.Location = new System.Drawing.Point(12, 103);
             this.chkDebugDiagnostics.Name = "chkDebugDiagnostics";
             this.chkDebugDiagnostics.Size = new System.Drawing.Size(120, 16);
-            this.chkDebugDiagnostics.TabIndex = 34;
+            this.chkDebugDiagnostics.TabIndex = 37;
             this.chkDebugDiagnostics.Text = "保存调试诊断";
             this.chkDebugDiagnostics.UseVisualStyleBackColor = true;
             //
@@ -349,7 +378,7 @@
             this.btnOpenDebugDiagnostics.Location = new System.Drawing.Point(304, 12);
             this.btnOpenDebugDiagnostics.Name = "btnOpenDebugDiagnostics";
             this.btnOpenDebugDiagnostics.Size = new System.Drawing.Size(108, 23);
-            this.btnOpenDebugDiagnostics.TabIndex = 35;
+            this.btnOpenDebugDiagnostics.TabIndex = 38;
             this.btnOpenDebugDiagnostics.Text = "打开调试目录";
             this.btnOpenDebugDiagnostics.UseVisualStyleBackColor = true;
             this.btnOpenDebugDiagnostics.Click += new System.EventHandler(this.btnOpenDebugDiagnostics_Click);
@@ -365,6 +394,9 @@
             this.Controls.Add(this.rdoColorDark);
             this.Controls.Add(this.rdoColorSystem);
             this.Controls.Add(this.lblColorMode);
+            this.Controls.Add(this.btnClearFoxAutoPlayIdentity);
+            this.Controls.Add(this.txtFoxAutoPlayNickname);
+            this.Controls.Add(this.lblFoxAutoPlayNickname);
             this.Controls.Add(this.chkDisableShowInBoardShortcut);
             this.Controls.Add(this.chkPonder);
             this.Controls.Add(this.chkEnhanceScreen);
@@ -432,6 +464,9 @@
         private System.Windows.Forms.RadioButton rdoColorSystem;
         private System.Windows.Forms.RadioButton rdoColorDark;
         private System.Windows.Forms.RadioButton rdoColorLight;
+        private System.Windows.Forms.Label lblFoxAutoPlayNickname;
+        private System.Windows.Forms.TextBox txtFoxAutoPlayNickname;
+        private System.Windows.Forms.Button btnClearFoxAutoPlayIdentity;
         private System.Windows.Forms.CheckBox chkDebugDiagnostics;
         private System.Windows.Forms.Button btnOpenDebugDiagnostics;
     }
