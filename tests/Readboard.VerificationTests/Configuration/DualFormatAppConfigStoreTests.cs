@@ -44,6 +44,9 @@ namespace Readboard.VerificationTests
                 config.DebugDiagnosticsEnabled = true;
                 config.UiThemeMode = 7;
                 config.ColorMode = AppConfig.ColorModeDark;
+                config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
+                config.FoxAutoPlayNickname = "野狐高段9D";
+                config.FoxAutoPlayNicknameSignature = "sig-abc";
 
                 store.Save(config);
 
@@ -56,8 +59,11 @@ namespace Readboard.VerificationTests
                 Assert.Contains("\"MachineKey\"", json);
                 Assert.Contains("SECONDARY-HOST", json);
                 Assert.Contains("\"DebugDiagnosticsEnabled\"", json);
+                Assert.Contains("\"AutoPlayColorMode\"", json);
+                Assert.Contains("\"FoxAutoPlayNickname\"", json);
+                Assert.Contains("\"FoxAutoPlayNicknameSignature\"", json);
                 Assert.Equal("96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5", legacyMain);
-                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1", legacyOther);
+                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc", legacyOther);
             }
         }
 
@@ -150,7 +156,7 @@ namespace Readboard.VerificationTests
             {
                 File.WriteAllText(
                     workspace.PathFor("config.readboard.json"),
-                    "{\"MachineKey\":\"MACHINE-001\",\"BoardWidth\":9,\"VerifyMove\":false,\"SyncMode\":4}");
+                    "{\"MachineKey\":\"MACHINE-001\",\"BoardWidth\":9,\"VerifyMove\":false,\"SyncMode\":4,\"AutoPlayColorMode\":2,\"FoxAutoPlayNickname\":\"鳕鱼の让子\",\"FoxAutoPlayNicknameSignature\":\"sig-xyz\"}");
                 DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
 
                 AppConfigLoadResult result = store.Load();
@@ -167,6 +173,9 @@ namespace Readboard.VerificationTests
                 Assert.True(result.Config.UseMagnifier);
                 Assert.Equal(-1, result.Config.WindowPosX);
                 Assert.Equal(-1, result.Config.WindowPosY);
+                Assert.Equal(AutoPlayColorMode.FoxAuto, result.Config.AutoPlayColorMode);
+                Assert.Equal("鳕鱼の让子", result.Config.FoxAutoPlayNickname);
+                Assert.Equal("sig-xyz", result.Config.FoxAutoPlayNicknameSignature);
             }
         }
 
@@ -192,6 +201,28 @@ namespace Readboard.VerificationTests
                 Assert.Contains("\"WindowPosX\"", json);
                 Assert.Contains("-1", json);
                 Assert.Contains("\"WindowPosY\"", json);
+            }
+        }
+
+        [Fact]
+        public void Load_ImportsLegacyAutoPlayIdentityFields()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard.txt"),
+                    "101_42_77_18_1_0_1_0_1_1_MACHINE-001_4");
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard_others.txt"),
+                    "220430_13_13_15_16_150_1_61_320_240_1_0_1_1_0_2_鳕鱼の让子_sig-xyz");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.True(result.HasExistingConfig);
+                Assert.Equal(AutoPlayColorMode.FoxAuto, result.Config.AutoPlayColorMode);
+                Assert.Equal("鳕鱼の让子", result.Config.FoxAutoPlayNickname);
+                Assert.Equal("sig-xyz", result.Config.FoxAutoPlayNicknameSignature);
             }
         }
 
@@ -326,7 +357,7 @@ namespace Readboard.VerificationTests
                     Assert.True(doc.RootElement.GetProperty("DebugDiagnosticsEnabled").GetBoolean());
                 }
                 Assert.True(loaded.DebugDiagnosticsEnabled);
-                Assert.Equal(15, legacyOther.Split('_').Length);
+                Assert.Equal(18, legacyOther.Split('_').Length);
             }
         }
     }

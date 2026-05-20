@@ -152,6 +152,9 @@ namespace readboard
             config.CustomBoardHeight = ReadIntValue(values, "CustomBoardHeight", config.CustomBoardHeight);
             config.WindowPosX = ReadIntValue(values, "WindowPosX", config.WindowPosX);
             config.WindowPosY = ReadIntValue(values, "WindowPosY", config.WindowPosY);
+            config.AutoPlayColorMode = (AutoPlayColorMode)ReadIntValue(values, "AutoPlayColorMode", (int)config.AutoPlayColorMode);
+            config.FoxAutoPlayNickname = ReadStringValue(values, "FoxAutoPlayNickname", config.FoxAutoPlayNickname);
+            config.FoxAutoPlayNicknameSignature = ReadStringValue(values, "FoxAutoPlayNicknameSignature", config.FoxAutoPlayNicknameSignature);
         }
 
         private LegacyMainConfigStatus ApplyLegacyMainConfig(AppConfig config)
@@ -183,6 +186,7 @@ namespace readboard
         //   13: + UiThemeMode @ 12 (legacy v2 — no DisableShowInBoardShortcut)
         //   14: + DisableShowInBoardShortcut @ 12, UiThemeMode @ 13
         //   15: + ColorMode @ 14
+        //   18: + AutoPlayColorMode @ 15, FoxAutoPlayNickname @ 16, FoxAutoPlayNicknameSignature @ 17
         private bool ApplyLegacyOtherConfig(AppConfig config)
         {
             string[] parts = ReadLegacyParts(LegacyOtherFileName);
@@ -215,6 +219,12 @@ namespace readboard
             {
                 config.UiThemeMode = ReadInt(parts[12], config.UiThemeMode);
             }
+            if (parts.Length >= 16)
+                config.AutoPlayColorMode = (AutoPlayColorMode)ReadInt(parts[15], (int)config.AutoPlayColorMode);
+            if (parts.Length >= 17)
+                config.FoxAutoPlayNickname = ReadString(parts[16], config.FoxAutoPlayNickname);
+            if (parts.Length >= 18)
+                config.FoxAutoPlayNicknameSignature = ReadString(parts[17], config.FoxAutoPlayNicknameSignature);
             return true;
         }
 
@@ -285,6 +295,9 @@ namespace readboard
             builder.Append('_').Append(ToLegacyBool(config.DisableShowInBoardShortcut));
             builder.Append('_').Append(config.UiThemeMode);
             builder.Append('_').Append(config.ColorMode);
+            builder.Append('_').Append((int)config.AutoPlayColorMode);
+            builder.Append('_').Append(EscapeLegacyToken(config.FoxAutoPlayNickname));
+            builder.Append('_').Append(EscapeLegacyToken(config.FoxAutoPlayNicknameSignature));
             File.WriteAllText(GetPath(LegacyOtherFileName), builder.ToString(), Encoding.UTF8);
         }
 
@@ -383,6 +396,11 @@ namespace readboard
             return int.TryParse(value, out parsed) ? parsed == 1 : fallback;
         }
 
+        private static string ReadString(string value, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(value) ? fallback : value;
+        }
+
         private static bool ReadBoolValue(IDictionary<string, object> values, string key, bool fallback)
         {
             object value = ReadJsonValue(values, key);
@@ -411,6 +429,13 @@ namespace readboard
         private static string ToLegacyBool(bool value)
         {
             return value ? "1" : "0";
+        }
+
+        private static string EscapeLegacyToken(string value)
+        {
+            return string.IsNullOrEmpty(value)
+                ? string.Empty
+                : value.Replace('_', ' ').Replace('\r', ' ').Replace('\n', ' ');
         }
     }
 }

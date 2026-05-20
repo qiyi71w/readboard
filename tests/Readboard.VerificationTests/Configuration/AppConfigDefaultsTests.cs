@@ -24,6 +24,9 @@ namespace Readboard.VerificationTests
             Assert.Equal(0, config.ColorMode);
             Assert.Equal(-1, config.WindowPosX);
             Assert.Equal(-1, config.WindowPosY);
+            Assert.Equal(AutoPlayColorMode.ManualBlack, config.AutoPlayColorMode);
+            Assert.True(string.IsNullOrEmpty(config.FoxAutoPlayNickname));
+            Assert.True(string.IsNullOrEmpty(config.FoxAutoPlayNicknameSignature));
         }
     }
 }

@@ -37,6 +37,9 @@ namespace readboard
         public int CustomBoardHeight { get; set; }
         public int WindowPosX { get; set; }
         public int WindowPosY { get; set; }
+        public AutoPlayColorMode AutoPlayColorMode { get; set; }
+        public string FoxAutoPlayNickname { get; set; }
+        public string FoxAutoPlayNicknameSignature { get; set; }
 
         public static AppConfig CreateDefault(string protocolVersion, string machineKey)
         {
@@ -69,7 +72,10 @@ namespace readboard
                 CustomBoardWidth = -1,
                 CustomBoardHeight = -1,
                 WindowPosX = -1,
-                WindowPosY = -1
+                WindowPosY = -1,
+                AutoPlayColorMode = AutoPlayColorMode.ManualBlack,
+                FoxAutoPlayNickname = string.Empty,
+                FoxAutoPlayNicknameSignature = string.Empty
             };
         }
 
