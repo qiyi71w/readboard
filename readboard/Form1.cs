@@ -1554,10 +1554,14 @@ namespace readboard
         private IList<FoxAutoPlayIdentityCandidate> BuildFoxAutoPlayIdentityCandidates()
         {
             List<FoxAutoPlayIdentityCandidate> candidates = new List<FoxAutoPlayIdentityCandidate>();
-            if (!IsFoxSyncType(CurrentSyncType) || hwnd == IntPtr.Zero)
+            if (!IsFoxSyncType(CurrentSyncType))
                 return candidates;
 
-            IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(hwnd);
+            IntPtr boardHandle = ResolveFoxAutoPlayIdentityBoardHandle();
+            if (boardHandle == IntPtr.Zero)
+                return candidates;
+
+            IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(boardHandle);
             if (captureHandle == IntPtr.Zero)
                 return candidates;
 
@@ -1576,6 +1580,15 @@ namespace readboard
             }
 
             return candidates;
+        }
+
+        private IntPtr ResolveFoxAutoPlayIdentityBoardHandle()
+        {
+            if (!IsFoxSyncType(CurrentSyncType))
+                return IntPtr.Zero;
+            if (hwnd != IntPtr.Zero && IsWindow(hwnd))
+                return hwnd;
+            return new LegacySyncWindowLocator().FindWindowHandle(GetCurrentSyncMode());
         }
 
         private IntPtr ResolveFoxAutoPlayCaptureHandle(IntPtr boardHandle)

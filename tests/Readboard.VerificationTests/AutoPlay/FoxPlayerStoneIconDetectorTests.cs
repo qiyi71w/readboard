@@ -46,6 +46,19 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
+        public void Detect_ReturnsBlackForGlossyBlackStoneOnLightPlayerRowBackground()
+        {
+            using (Bitmap bitmap = CreateGlossyBlackStoneIcon())
+            {
+                AutoPlayColorResolution resolution = FoxPlayerStoneIconDetector.Detect(bitmap);
+
+                Assert.True(resolution.IsKnown);
+                Assert.Equal("black", resolution.PlayColor);
+                Assert.Equal(AutoPlayColorStatus.RecognizedBlack, resolution.Status);
+            }
+        }
+
+        [Fact]
         public void Detect_ReturnsUnknownForFlatBackground()
         {
             using (Bitmap bitmap = new Bitmap(32, 32))
@@ -91,6 +104,22 @@ namespace Readboard.VerificationTests.AutoPlay
             {
                 graphics.Clear(background);
                 graphics.FillEllipse(brush, 6, 5, 20, 20);
+            }
+            return bitmap;
+        }
+
+        private static Bitmap CreateGlossyBlackStoneIcon()
+        {
+            Bitmap bitmap = new Bitmap(32, 32);
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            using (Brush shadowBrush = new SolidBrush(Color.FromArgb(28, 28, 28)))
+            using (Brush stoneBrush = new SolidBrush(Color.FromArgb(84, 86, 88)))
+            using (Brush highlightBrush = new SolidBrush(Color.FromArgb(232, 232, 224)))
+            {
+                graphics.Clear(Color.FromArgb(210, 210, 205));
+                graphics.FillEllipse(shadowBrush, 4, 4, 24, 24);
+                graphics.FillEllipse(stoneBrush, 5, 4, 22, 22);
+                graphics.FillEllipse(highlightBrush, 6, 4, 16, 16);
             }
             return bitmap;
         }

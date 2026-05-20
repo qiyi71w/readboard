@@ -7,6 +7,11 @@ namespace readboard
     {
         private const double MinimumCenterStoneRatio = 0.45d;
         private const double MaximumOppositeCenterRatio = 0.25d;
+        private const double MinimumGlossyBlackDarkRatio = 0.06d;
+        private const double MinimumGlossyBlackCenterDarkRatio = 0.04d;
+        private const double MaximumGlossyBlackLightRatio = 0.75d;
+        private const double MaximumGlossyBlackAverageBrightness = 205d;
+        private const double MaximumDarkRatioForWhite = 0.05d;
         private const double MaximumOuterLightRatioForWhite = 0.95d;
 
         public static AutoPlayColorResolution Detect(Bitmap iconBitmap)
@@ -19,6 +24,10 @@ namespace readboard
             int centerLight = 0;
             int outerTotal = 0;
             int outerLight = 0;
+            int total = 0;
+            int totalDark = 0;
+            int totalLight = 0;
+            int totalBrightness = 0;
             double centerX = (iconBitmap.Width - 1) / 2d;
             double centerY = (iconBitmap.Height - 1) / 2d;
             double radiusX = Math.Max(1d, iconBitmap.Width * 0.34d);
@@ -29,19 +38,28 @@ namespace readboard
                 for (int x = 0; x < iconBitmap.Width; x++)
                 {
                     Color color = iconBitmap.GetPixel(x, y);
+                    total++;
+                    totalBrightness += (color.R + color.G + color.B) / 3;
+                    bool dark = IsDark(color);
+                    bool light = IsLight(color);
+                    if (dark)
+                        totalDark++;
+                    else if (light)
+                        totalLight++;
+
                     bool inCenter = IsInsideEllipse(x, y, centerX, centerY, radiusX, radiusY);
                     if (inCenter)
                     {
                         centerTotal++;
-                        if (IsDark(color))
+                        if (dark)
                             centerDark++;
-                        else if (IsLight(color))
+                        else if (light)
                             centerLight++;
                     }
                     else
                     {
                         outerTotal++;
-                        if (IsLight(color))
+                        if (light)
                             outerLight++;
                     }
                 }
@@ -53,10 +71,19 @@ namespace readboard
             double centerDarkRatio = centerDark / (double)centerTotal;
             double centerLightRatio = centerLight / (double)centerTotal;
             double outerLightRatio = outerTotal == 0 ? 0d : outerLight / (double)outerTotal;
-            bool black = centerDarkRatio >= MinimumCenterStoneRatio
+            double totalDarkRatio = totalDark / (double)total;
+            double totalLightRatio = totalLight / (double)total;
+            double averageBrightness = totalBrightness / (double)total;
+            bool matteBlack = centerDarkRatio >= MinimumCenterStoneRatio
                 && centerLightRatio <= MaximumOppositeCenterRatio;
+            bool glossyBlack = totalDarkRatio >= MinimumGlossyBlackDarkRatio
+                && centerDarkRatio >= MinimumGlossyBlackCenterDarkRatio
+                && totalLightRatio <= MaximumGlossyBlackLightRatio
+                && averageBrightness <= MaximumGlossyBlackAverageBrightness;
+            bool black = matteBlack || glossyBlack;
             bool white = centerLightRatio >= MinimumCenterStoneRatio
                 && centerDarkRatio <= MaximumOppositeCenterRatio
+                && totalDarkRatio <= MaximumDarkRatioForWhite
                 && outerLightRatio <= MaximumOuterLightRatioForWhite;
 
             if (black == white)

@@ -342,6 +342,7 @@ namespace Readboard.VerificationTests.Host
             string jpSource = LoadSource("readboard", "language_jp.txt");
             string krSource = LoadSource("readboard", "language_kr.txt");
             string autoRadioSlice = GetMethodSlice(mainFormSource, "private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)");
+            string candidatesSlice = GetMethodSlice(mainFormSource, "private IList<FoxAutoPlayIdentityCandidate> BuildFoxAutoPlayIdentityCandidates()");
 
             Assert.Contains("internal string SelectedNickname", dialogSource);
             Assert.Contains("internal string SelectedNicknameSignature", dialogSource);
@@ -351,6 +352,9 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNicknameSignature)", autoRadioSlice);
             Assert.Contains("TryConfigureFoxAutoPlayIdentity();", autoRadioSlice);
             Assert.Contains("using (FoxAutoPlayIdentityDialog dialog = new FoxAutoPlayIdentityDialog", mainFormSource);
+            Assert.Contains("ResolveFoxAutoPlayIdentityBoardHandle()", candidatesSlice);
+            Assert.DoesNotContain("|| hwnd == IntPtr.Zero", candidatesSlice);
+            Assert.Contains("new LegacySyncWindowLocator().FindWindowHandle(GetCurrentSyncMode())", mainFormSource);
             Assert.Contains("updatedConfig.FoxAutoPlayNickname = dialog.SelectedNickname;", mainFormSource);
             Assert.Contains("updatedConfig.FoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;", mainFormSource);
             Assert.Contains("ClearFoxAutoPlayColorDetectionState();", mainFormSource);
