@@ -1171,6 +1171,7 @@ namespace readboard
                 rdo19x19.Checked = true;
             rdoOtherBoard.Enabled = manualSelectionMode;
             ApplyShowInBoardControlState();
+            ApplyAutoPlayColorAvailability();
             ResetMainWindowTitle();
         }
 
@@ -1180,6 +1181,15 @@ namespace readboard
             chkShowInBoard.Enabled = supportsShowInBoard;
             if (!supportsShowInBoard && chkShowInBoard.Checked)
                 chkShowInBoard.Checked = false;
+        }
+
+        private void ApplyAutoPlayColorAvailability()
+        {
+            radioAutoPlayColor.Enabled = chkAutoPlay.Checked && IsFoxSyncType(CurrentSyncType);
+            if (!IsFoxSyncType(CurrentSyncType) && radioAutoPlayColor.Checked)
+                ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);
+            if (!radioAutoPlayColor.Enabled)
+                UpdateAutoPlayColorStatus(null);
         }
 
         private void SetSyncConfigurationControlsEnabled(bool enabled)
@@ -2953,9 +2963,9 @@ namespace readboard
             {
                 radioWhite.Enabled = true;
                 radioBlack.Enabled = true;
-                radioAutoPlayColor.Enabled = true;
                 if (!radioBlack.Checked && !radioWhite.Checked && !radioAutoPlayColor.Checked)
                     ApplyAutoPlayColorMode(Program.CurrentContext.Config.AutoPlayColorMode);
+                ApplyAutoPlayColorAvailability();
                 textBox1.Enabled = true;
                 textBox2.Enabled = true;
                 textBox3.Enabled = true;
@@ -2965,7 +2975,7 @@ namespace readboard
             {
                 radioWhite.Enabled = false;
                 radioBlack.Enabled = false;
-                radioAutoPlayColor.Enabled = false;
+                ApplyAutoPlayColorAvailability();
                 textBox1.Enabled = false;
                 textBox2.Enabled = false;
                 textBox3.Enabled = false;
@@ -3093,6 +3103,11 @@ namespace readboard
                 return;
             if (radioAutoPlayColor.Checked)
             {
+                if (!IsFoxSyncType(CurrentSyncType))
+                {
+                    ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);
+                    return;
+                }
                 radioBlack.Checked = false;
                 radioWhite.Checked = false;
                 if (isInitializingProtocolState)

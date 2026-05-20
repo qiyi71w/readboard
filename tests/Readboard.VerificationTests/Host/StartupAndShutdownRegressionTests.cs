@@ -296,6 +296,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("PlayColor = autoPlayColor.PlayColor,", captureSlice);
             Assert.Contains("private AutoPlayColorMode GetSelectedAutoPlayColorMode()", source);
             Assert.Contains("private void ApplyAutoPlayColorMode(AutoPlayColorMode mode)", source);
+            Assert.Contains("private void ApplyAutoPlayColorAvailability()", source);
             Assert.Contains("ApplyAutoPlayColorMode(config.AutoPlayColorMode);", configSource);
             Assert.Contains("config.AutoPlayColorMode = GetSelectedAutoPlayColorMode();", configSource);
             Assert.Contains("MainForm_radioAutoPlayColor", programSource);
@@ -308,6 +309,23 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("MainForm_autoPlayColorStatusUnconfigured=", enSource);
             Assert.Contains("MainForm_autoPlayColorStatusUnconfigured=", jpSource);
             Assert.Contains("MainForm_autoPlayColorStatusUnconfigured=", krSource);
+        }
+
+        [Fact]
+        public void MainForm_AutoPlayColorMode_IsEnabledOnlyForFoxSyncTypes()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string availabilitySlice = GetMethodSlice(source, "private void ApplyAutoPlayColorAvailability()");
+            string syncModeControlSlice = GetMethodSlice(source, "private void ApplySyncModeControlState()");
+            string autoPlayCheckSlice = GetMethodSlice(source, "private void chkAutoPlay_CheckedChanged(object sender, EventArgs e)");
+            string autoRadioSlice = GetMethodSlice(source, "private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)");
+
+            Assert.Contains("radioAutoPlayColor.Enabled = chkAutoPlay.Checked && IsFoxSyncType(CurrentSyncType);", availabilitySlice);
+            Assert.Contains("if (!IsFoxSyncType(CurrentSyncType) && radioAutoPlayColor.Checked)", availabilitySlice);
+            Assert.Contains("ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);", availabilitySlice);
+            Assert.Contains("ApplyAutoPlayColorAvailability();", syncModeControlSlice);
+            Assert.Contains("ApplyAutoPlayColorAvailability();", autoPlayCheckSlice);
+            Assert.Contains("if (!IsFoxSyncType(CurrentSyncType))", autoRadioSlice);
         }
 
         [Fact]
@@ -327,6 +345,7 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Contains("internal string SelectedNickname", dialogSource);
             Assert.Contains("internal string SelectedNicknameSignature", dialogSource);
+            Assert.Contains("this.TopMost = true;", dialogDesignerSource);
             Assert.Contains("this.txtNickname", dialogDesignerSource);
             Assert.Contains("this.lstDetectedNicknames", dialogDesignerSource);
             Assert.Contains("string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNicknameSignature)", autoRadioSlice);

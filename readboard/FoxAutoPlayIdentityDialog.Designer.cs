@@ -119,6 +119,7 @@ namespace readboard
             this.Name = "FoxAutoPlayIdentityDialog";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "野狐自动模式";
+            this.TopMost = true;
             this.ResumeLayout(false);
             this.PerformLayout();
         }
