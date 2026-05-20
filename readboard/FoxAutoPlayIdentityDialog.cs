@@ -117,9 +117,6 @@ namespace readboard
                 return string.Empty;
 
             FoxAutoPlayIdentityCandidate candidate = detectedCandidates[lstDetectedNicknames.SelectedIndex];
-            if (!string.Equals(candidate.Nickname, nickname, StringComparison.Ordinal))
-                return string.Empty;
-
             return candidate.NicknameSignature ?? string.Empty;
         }
 

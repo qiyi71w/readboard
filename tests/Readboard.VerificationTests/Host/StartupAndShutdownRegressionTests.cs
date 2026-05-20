@@ -354,6 +354,26 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void MainForm_FoxAutoPlayColorDetection_UsesCachedWindowBitmapDetector()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string resolveSlice = GetMethodSlice(source, "private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)");
+            string detectionSlice = GetMethodSlice(source, "private AutoPlayColorResolution ResolveDetectedFoxAutoPlayColor(FoxWindowContext foxWindowContext)");
+            string clearSlice = GetMethodSlice(source, "private void ClearFoxAutoPlayColorDetectionState()");
+            string handleSlice = GetMethodSlice(source, "private void SetSelectedWindowHandle(IntPtr handle)");
+
+            Assert.Contains("lastFoxAutoPlayColorDetection", source);
+            Assert.Contains("lastFoxAutoPlayColorDetectionWindowHandle", source);
+            Assert.Contains("lastFoxAutoPlayColorDetectionContextSignature", source);
+            Assert.Contains("lastFoxAutoPlayColorDetectionTimestampUtc", source);
+            Assert.Contains("ResolveDetectedFoxAutoPlayColor(foxWindowContext)", resolveSlice);
+            Assert.Contains("FoxAutoPlayColorDetector.Detect(", detectionSlice);
+            Assert.Contains("foxAutoPlayCapturePlatform.CaptureWindow(hwnd)", detectionSlice);
+            Assert.Contains("lastFoxAutoPlayColorDetection = null;", clearSlice);
+            Assert.Contains("ClearFoxAutoPlayColorDetectionState();", handleSlice);
+        }
+
+        [Fact]
         public void ShowInBoardToggle_ReplaysForegroundFoxProtocolStateImmediately()
         {
             string source = LoadSource("readboard", "Form1.cs");

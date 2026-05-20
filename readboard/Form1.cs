@@ -64,6 +64,13 @@ namespace readboard
         private FoxWindowBinding foxWindowBinding = null;
         private bool hasRetainedFoxTitleSnapshot = false;
         private string lastAppliedMainWindowTitle = string.Empty;
+        private readonly IBoardCapturePlatform foxAutoPlayCapturePlatform = new Win32BoardCapturePlatform();
+        private AutoPlayColorResolution lastFoxAutoPlayColorDetection = null;
+        private IntPtr lastFoxAutoPlayColorDetectionWindowHandle = IntPtr.Zero;
+        private string lastFoxAutoPlayColorDetectionContextSignature = string.Empty;
+        private string lastFoxAutoPlayColorDetectionNicknameSignature = string.Empty;
+        private DateTime lastFoxAutoPlayColorDetectionTimestampUtc = DateTime.MinValue;
+        private const int FoxAutoPlayColorDetectionCacheMs = 1000;
 
         int posX = -1;
         int posY = -1;
@@ -129,6 +136,8 @@ namespace readboard
 
         private void SetCurrentSyncType(int syncType)
         {
+            if (currentSyncType != syncType)
+                ClearFoxAutoPlayColorDetectionState();
             currentSyncType = syncType;
         }
 
@@ -1420,7 +1429,10 @@ namespace readboard
             }
 
             if (mode != AutoPlayColorMode.FoxAuto)
+            {
+                ClearFoxAutoPlayColorDetectionState();
                 UpdateAutoPlayColorStatus(null);
+            }
         }
 
         private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)
@@ -1431,14 +1443,48 @@ namespace readboard
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
             }
 
+            AutoPlayColorResolution detected = GetSelectedAutoPlayColorMode() == AutoPlayColorMode.FoxAuto
+                ? ResolveDetectedFoxAutoPlayColor(foxWindowContext)
+                : null;
             AutoPlayColorResolution resolution = FoxAutoPlayColorResolver.Resolve(
                 GetSelectedAutoPlayColorMode(),
                 GetCurrentSyncMode(),
                 Program.CurrentContext.Config.FoxAutoPlayNicknameSignature,
                 foxWindowContext,
-                null);
+                detected);
             UpdateAutoPlayColorStatus(resolution);
             return resolution;
+        }
+
+        private AutoPlayColorResolution ResolveDetectedFoxAutoPlayColor(FoxWindowContext foxWindowContext)
+        {
+            string nicknameSignature = Program.CurrentContext.Config.FoxAutoPlayNicknameSignature;
+            if (!IsFoxSyncType(CurrentSyncType)
+                || hwnd == IntPtr.Zero
+                || string.IsNullOrWhiteSpace(nicknameSignature))
+                return null;
+
+            string contextSignature = foxWindowContext == null ? string.Empty : foxWindowContext.TitleFingerprint ?? string.Empty;
+            DateTime now = DateTime.UtcNow;
+            if (lastFoxAutoPlayColorDetection != null
+                && lastFoxAutoPlayColorDetectionWindowHandle == hwnd
+                && string.Equals(lastFoxAutoPlayColorDetectionContextSignature, contextSignature, StringComparison.Ordinal)
+                && string.Equals(lastFoxAutoPlayColorDetectionNicknameSignature, nicknameSignature, StringComparison.Ordinal)
+                && (now - lastFoxAutoPlayColorDetectionTimestampUtc).TotalMilliseconds < FoxAutoPlayColorDetectionCacheMs)
+                return lastFoxAutoPlayColorDetection;
+
+            AutoPlayColorResolution detection;
+            using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(hwnd))
+            {
+                detection = FoxAutoPlayColorDetector.Detect(bitmap, GetCurrentSyncMode(), nicknameSignature);
+            }
+
+            lastFoxAutoPlayColorDetection = detection;
+            lastFoxAutoPlayColorDetectionWindowHandle = hwnd;
+            lastFoxAutoPlayColorDetectionContextSignature = contextSignature;
+            lastFoxAutoPlayColorDetectionNicknameSignature = nicknameSignature;
+            lastFoxAutoPlayColorDetectionTimestampUtc = now;
+            return detection;
         }
 
         private void UpdateAutoPlayColorStatus(AutoPlayColorResolution resolution)
@@ -1476,7 +1522,8 @@ namespace readboard
         {
             using (FoxAutoPlayIdentityDialog dialog = new FoxAutoPlayIdentityDialog(
                 Program.CurrentConfig.FoxAutoPlayNickname,
-                Program.CurrentConfig.FoxAutoPlayNicknameSignature))
+                Program.CurrentConfig.FoxAutoPlayNicknameSignature,
+                BuildFoxAutoPlayIdentityCandidates()))
             {
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                     return false;
@@ -1490,8 +1537,53 @@ namespace readboard
             }
         }
 
+        private IList<FoxAutoPlayIdentityCandidate> BuildFoxAutoPlayIdentityCandidates()
+        {
+            List<FoxAutoPlayIdentityCandidate> candidates = new List<FoxAutoPlayIdentityCandidate>();
+            if (!IsFoxSyncType(CurrentSyncType) || hwnd == IntPtr.Zero)
+                return candidates;
+
+            using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(hwnd))
+            {
+                IList<FoxPlayerRowCandidate> rows = FoxPlayerRowLocator.Locate(bitmap, GetCurrentSyncMode());
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    using (Bitmap nicknameSnippet = CropBitmap(bitmap, rows[i].NicknameBounds))
+                    {
+                        string signature = FoxPlayerNicknameSignature.FromBitmap(nicknameSnippet).Serialize();
+                        if (!string.IsNullOrWhiteSpace(signature))
+                            candidates.Add(new FoxAutoPlayIdentityCandidate("玩家行 " + (i + 1), signature));
+                    }
+                }
+            }
+
+            return candidates;
+        }
+
+        private static Bitmap CropBitmap(Bitmap source, PixelRect bounds)
+        {
+            if (source == null || bounds == null || bounds.IsEmpty)
+                return null;
+
+            Bitmap bitmap = new Bitmap(bounds.Width, bounds.Height);
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.DrawImage(
+                    source,
+                    new Rectangle(0, 0, bounds.Width, bounds.Height),
+                    new Rectangle(bounds.X, bounds.Y, bounds.Width, bounds.Height),
+                    GraphicsUnit.Pixel);
+            }
+            return bitmap;
+        }
+
         private void ClearFoxAutoPlayColorDetectionState()
         {
+            lastFoxAutoPlayColorDetection = null;
+            lastFoxAutoPlayColorDetectionWindowHandle = IntPtr.Zero;
+            lastFoxAutoPlayColorDetectionContextSignature = string.Empty;
+            lastFoxAutoPlayColorDetectionNicknameSignature = string.Empty;
+            lastFoxAutoPlayColorDetectionTimestampUtc = DateTime.MinValue;
         }
 
         private void InvokeHostAction(Action action)
@@ -1715,10 +1807,15 @@ namespace readboard
         private void InvalidateFoxWindowBinding()
         {
             foxWindowBinding = null;
+            ClearFoxAutoPlayColorDetectionState();
         }
 
         private void UpdateMainWindowTitle(FoxWindowContext foxWindowContext)
         {
+            string previousContextSignature = lastFoxWindowContext == null ? string.Empty : lastFoxWindowContext.TitleFingerprint ?? string.Empty;
+            string nextContextSignature = foxWindowContext == null ? string.Empty : foxWindowContext.TitleFingerprint ?? string.Empty;
+            if (!string.Equals(previousContextSignature, nextContextSignature, StringComparison.Ordinal))
+                ClearFoxAutoPlayColorDetectionState();
             lastFoxWindowContext = FoxWindowContext.CopyOf(foxWindowContext);
             ApplyMainWindowTitle();
         }
@@ -1834,6 +1931,8 @@ namespace readboard
         {
             if (CurrentSyncType == TYPE_YIKE && hwnd != handle)
                 ClearYikeContext();
+            if (hwnd != handle)
+                ClearFoxAutoPlayColorDetectionState();
             hwnd = handle;
         }
 
@@ -2967,6 +3066,7 @@ namespace readboard
                 radioWhite.Checked = false;
                 radioAutoPlayColor.Checked = false;
                 lastManualAutoPlayColorMode = AutoPlayColorMode.ManualBlack;
+                ClearFoxAutoPlayColorDetectionState();
             }
             if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
                 SendPlayCommandIfSelected();
@@ -2981,6 +3081,7 @@ namespace readboard
                 radioBlack.Checked = false;
                 radioAutoPlayColor.Checked = false;
                 lastManualAutoPlayColorMode = AutoPlayColorMode.ManualWhite;
+                ClearFoxAutoPlayColorDetectionState();
             }
             if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
                 SendPlayCommandIfSelected();
@@ -3011,6 +3112,7 @@ namespace readboard
             }
             else
             {
+                ClearFoxAutoPlayColorDetectionState();
                 UpdateAutoPlayColorStatus(null);
             }
             if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
