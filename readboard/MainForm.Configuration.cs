@@ -16,6 +16,7 @@ namespace readboard
             posY = config.WindowPosY;
             SetCurrentSyncType((int)config.SyncMode);
             ApplyBoardSelection(config);
+            ApplyAutoPlayColorMode(config.AutoPlayColorMode);
             ApplySyncModeSelection();
             ApplySyncModeControlState();
             chkShowInBoard.Checked = Program.showInBoard;
@@ -43,6 +44,7 @@ namespace readboard
             config.SyncMode = (SyncMode)CurrentSyncType;
             config.WindowPosX = persistedWindowLocation.X;
             config.WindowPosY = persistedWindowLocation.Y;
+            config.AutoPlayColorMode = GetSelectedAutoPlayColorMode();
             return config;
         }
 

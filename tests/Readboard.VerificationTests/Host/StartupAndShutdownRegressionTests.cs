@@ -274,6 +274,43 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void MainForm_AutoPlayColorMode_UsesThreeWaySelectorAndPersistsMode()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string designerSource = LoadSource("readboard", "Form1.Designer.cs");
+            string configSource = LoadSource("readboard", "MainForm.Configuration.cs");
+            string programSource = LoadSource("readboard", "Program.cs");
+            string cnSource = LoadSource("readboard", "language_cn.txt");
+            string enSource = LoadSource("readboard", "language_en.txt");
+            string jpSource = LoadSource("readboard", "language_jp.txt");
+            string krSource = LoadSource("readboard", "language_kr.txt");
+            string captureSlice = GetMethodSlice(source, "private SyncCoordinatorHostSnapshot CaptureSnapshotCore()");
+
+            Assert.Contains("private System.Windows.Forms.RadioButton radioAutoPlayColor;", designerSource);
+            Assert.Contains("private System.Windows.Forms.Label lblAutoPlayColorStatus;", designerSource);
+            int whiteIndex = IndexOfRequired(designerSource, "this.flowLayoutPanel2.Controls.Add(this.radioWhite);");
+            int autoIndex = IndexOfRequired(designerSource, "this.flowLayoutPanel2.Controls.Add(this.radioAutoPlayColor);", whiteIndex);
+            IndexOfRequired(designerSource, "this.flowLayoutPanel2.Controls.Add(this.lblAutoPlayColorStatus);", autoIndex);
+            Assert.Contains("this.radioAutoPlayColor.Text = getLangStr(\"MainForm_radioAutoPlayColor\");", source);
+            Assert.Contains("AutoPlayColorResolution autoPlayColor = ResolveCurrentAutoPlayColor(foxWindowContext);", captureSlice);
+            Assert.Contains("PlayColor = autoPlayColor.PlayColor,", captureSlice);
+            Assert.Contains("private AutoPlayColorMode GetSelectedAutoPlayColorMode()", source);
+            Assert.Contains("private void ApplyAutoPlayColorMode(AutoPlayColorMode mode)", source);
+            Assert.Contains("ApplyAutoPlayColorMode(config.AutoPlayColorMode);", configSource);
+            Assert.Contains("config.AutoPlayColorMode = GetSelectedAutoPlayColorMode();", configSource);
+            Assert.Contains("MainForm_radioAutoPlayColor", programSource);
+            Assert.Contains("MainForm_autoPlayColorStatusUnconfigured", programSource);
+            Assert.Contains("MainForm_radioAutoPlayColor=", cnSource);
+            Assert.Contains("MainForm_radioAutoPlayColor=", enSource);
+            Assert.Contains("MainForm_radioAutoPlayColor=", jpSource);
+            Assert.Contains("MainForm_radioAutoPlayColor=", krSource);
+            Assert.Contains("MainForm_autoPlayColorStatusUnconfigured=", cnSource);
+            Assert.Contains("MainForm_autoPlayColorStatusUnconfigured=", enSource);
+            Assert.Contains("MainForm_autoPlayColorStatusUnconfigured=", jpSource);
+            Assert.Contains("MainForm_autoPlayColorStatusUnconfigured=", krSource);
+        }
+
+        [Fact]
         public void ShowInBoardToggle_ReplaysForegroundFoxProtocolStateImmediately()
         {
             string source = LoadSource("readboard", "Form1.cs");

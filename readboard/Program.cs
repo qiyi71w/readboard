@@ -340,6 +340,13 @@ namespace readboard
             langItems["MainForm_chkAutoPlay"] = "自动落子";
             langItems["MainForm_radioBlack"] = "执黑";
             langItems["MainForm_radioWhite"] = "执白";
+            langItems["MainForm_radioAutoPlayColor"] = "自动";
+            langItems["MainForm_autoPlayColorStatusUnconfigured"] = "未配置";
+            langItems["MainForm_autoPlayColorStatusWaiting"] = "待识别";
+            langItems["MainForm_autoPlayColorStatusBlack"] = "识别:黑";
+            langItems["MainForm_autoPlayColorStatusWhite"] = "识别:白";
+            langItems["MainForm_autoPlayColorStatusUnsupported"] = "仅野狐";
+            langItems["MainForm_autoPlayColorStatusSpectating"] = "观战禁用";
             langItems["MainForm_lblPlayCondition"] = "引擎自动落子条件:";
             langItems["MainForm_lblTime"] = "每手用时";
             langItems["MainForm_lblTotalVisits"] = "最大计算量(选填)";

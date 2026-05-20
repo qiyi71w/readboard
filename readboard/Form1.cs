@@ -208,7 +208,7 @@ namespace readboard
 
         private IEnumerable<ButtonBase> MainThemeOptions()
         {
-            return new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite };
+            return new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite, radioAutoPlayColor };
         }
 
         private IEnumerable<TextBox> MainThemeInputs()
@@ -218,7 +218,7 @@ namespace readboard
 
         private IEnumerable<Label> MainThemeLabels()
         {
-            return new[] { lblBoardSize, lblPlayCondition, lblTime, lblTotalVisits, lblBestMoveVisits, label6 };
+            return new[] { lblBoardSize, lblPlayCondition, lblTime, lblTotalVisits, lblBestMoveVisits, lblAutoPlayColorStatus, label6 };
         }
 
         private IEnumerable<Button> MainPrimaryButtons()
@@ -668,6 +668,8 @@ namespace readboard
             radioBlack.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             chkAutoPlay.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             radioWhite.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            radioAutoPlayColor.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            lblAutoPlayColorStatus.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             panel1.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel2.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel3.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
@@ -729,6 +731,8 @@ namespace readboard
             radioBlack.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             chkAutoPlay.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             radioWhite.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            radioAutoPlayColor.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            lblAutoPlayColorStatus.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             panel1.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel2.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel3.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
@@ -1022,6 +1026,10 @@ namespace readboard
                 + buttonGap
                 + GetLayoutOptionPreferredSize(radioWhite).Width
                 + buttonGap
+                + GetLayoutOptionPreferredSize(radioAutoPlayColor).Width
+                + buttonGap
+                + lblAutoPlayColorStatus.PreferredSize.Width
+                + buttonGap
                 + Math.Max(ScaleValue(61), lblTime.PreferredSize.Width + ScaleValue(8))
                 + timeFieldGap
                 + ScaleValue(68)
@@ -1210,25 +1218,18 @@ namespace readboard
 
         private void SendPlayCommandIfSelected()
         {
-            if (!sessionCoordinator.SyncBoth)
+            if (!sessionCoordinator.SyncBoth || !chkAutoPlay.Checked)
                 return;
-            if (radioBlack.Checked)
-            {
-                sessionCoordinator.SendPlay(
-                    "black",
-                    GetProtocolNumericValue(textBox1),
-                    GetProtocolNumericValue(textBox2),
-                    GetProtocolNumericValue(textBox3));
+            AutoPlayColorResolution autoPlayColor = ResolveCurrentAutoPlayColor(
+                GetSelectedAutoPlayColorMode() == AutoPlayColorMode.FoxAuto ? ResolveFoxWindowContext() : FoxWindowContext.Unknown());
+            if (!autoPlayColor.IsKnown)
                 return;
-            }
-            if (radioWhite.Checked)
-            {
-                sessionCoordinator.SendPlay(
-                    "white",
-                    GetProtocolNumericValue(textBox1),
-                    GetProtocolNumericValue(textBox2),
-                    GetProtocolNumericValue(textBox3));
-            }
+
+            sessionCoordinator.SendPlay(
+                autoPlayColor.PlayColor,
+                GetProtocolNumericValue(textBox1),
+                GetProtocolNumericValue(textBox2),
+                GetProtocolNumericValue(textBox3));
         }
 
         private void SendPonderStatusCommand()
@@ -1391,13 +1392,69 @@ namespace readboard
             return new PixelRect(selectionX1, selectionY1, ox2 - selectionX1, oy2 - selectionY1);
         }
 
-        private string GetSelectedPlayColor()
+        private AutoPlayColorMode GetSelectedAutoPlayColorMode()
         {
-            if (radioBlack.Checked)
-                return "black";
             if (radioWhite.Checked)
-                return "white";
-            return null;
+                return AutoPlayColorMode.ManualWhite;
+            if (radioAutoPlayColor.Checked)
+                return AutoPlayColorMode.FoxAuto;
+            return AutoPlayColorMode.ManualBlack;
+        }
+
+        private void ApplyAutoPlayColorMode(AutoPlayColorMode mode)
+        {
+            radioBlack.Checked = mode == AutoPlayColorMode.ManualBlack;
+            radioWhite.Checked = mode == AutoPlayColorMode.ManualWhite;
+            radioAutoPlayColor.Checked = mode == AutoPlayColorMode.FoxAuto;
+        }
+
+        private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)
+        {
+            if (!chkAutoPlay.Checked)
+            {
+                UpdateAutoPlayColorStatus(null);
+                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
+            }
+
+            AutoPlayColorResolution resolution = FoxAutoPlayColorResolver.Resolve(
+                GetSelectedAutoPlayColorMode(),
+                GetCurrentSyncMode(),
+                Program.CurrentContext.Config.FoxAutoPlayNicknameSignature,
+                foxWindowContext,
+                null);
+            UpdateAutoPlayColorStatus(resolution);
+            return resolution;
+        }
+
+        private void UpdateAutoPlayColorStatus(AutoPlayColorResolution resolution)
+        {
+            if (!radioAutoPlayColor.Checked || resolution == null)
+            {
+                lblAutoPlayColorStatus.Text = string.Empty;
+                return;
+            }
+
+            switch (resolution.Status)
+            {
+                case AutoPlayColorStatus.Unconfigured:
+                    lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusUnconfigured");
+                    return;
+                case AutoPlayColorStatus.RecognizedBlack:
+                    lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusBlack");
+                    return;
+                case AutoPlayColorStatus.RecognizedWhite:
+                    lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusWhite");
+                    return;
+                case AutoPlayColorStatus.UnsupportedPlatform:
+                    lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusUnsupported");
+                    return;
+                case AutoPlayColorStatus.Spectating:
+                    lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusSpectating");
+                    return;
+                default:
+                    lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusWaiting");
+                    return;
+            }
         }
 
         private void InvokeHostAction(Action action)
@@ -1521,6 +1578,7 @@ namespace readboard
             FoxWindowContext foxWindowContext = ResolveFoxWindowContext();
             int? foxMoveNumber = foxWindowContext.ResolveDisplayedMoveNumber();
             UpdateMainWindowTitle(foxWindowContext);
+            AutoPlayColorResolution autoPlayColor = ResolveCurrentAutoPlayColor(foxWindowContext);
 
             SyncCoordinatorHostSnapshot snapshot = new SyncCoordinatorHostSnapshot
             {
@@ -1537,7 +1595,7 @@ namespace readboard
                 SampleIntervalMs = Program.timeinterval,
                 UseEnhancedCapture = Program.useEnhanceScreen,
                 FoxMoveNumber = foxMoveNumber,
-                PlayColor = GetSelectedPlayColor(),
+                PlayColor = autoPlayColor.PlayColor,
                 AiTimeValue = GetProtocolNumericValue(textBox1),
                 PlayoutsValue = GetProtocolNumericValue(textBox2),
                 FirstPolicyValue = GetProtocolNumericValue(textBox3)
@@ -1927,6 +1985,7 @@ namespace readboard
                 textBox3.Text = launchOptions.FirstPolicy;
             radioWhite.Enabled = false;
             radioBlack.Enabled = false;
+            radioAutoPlayColor.Enabled = false;
             textBox1.Enabled = false;
             textBox2.Enabled = false;
             textBox3.Enabled = false;
@@ -1957,6 +2016,8 @@ namespace readboard
             this.chkAutoPlay.Text = getLangStr("MainForm_chkAutoPlay");
             this.radioBlack.Text = getLangStr("MainForm_radioBlack");
             this.radioWhite.Text = getLangStr("MainForm_radioWhite");
+            this.radioAutoPlayColor.Text = getLangStr("MainForm_radioAutoPlayColor");
+            this.lblAutoPlayColorStatus.Text = string.Empty;
             this.lblPlayCondition.Text = getLangStr("MainForm_lblPlayCondition");
             this.lblTime.Text = getLangStr("MainForm_lblTime");
             this.lblTotalVisits.Text = getLangStr("MainForm_lblTotalVisits");
@@ -2756,19 +2817,23 @@ namespace readboard
             {
                 radioWhite.Enabled = true;
                 radioBlack.Enabled = true;
+                radioAutoPlayColor.Enabled = true;
+                if (!radioBlack.Checked && !radioWhite.Checked && !radioAutoPlayColor.Checked)
+                    ApplyAutoPlayColorMode(Program.CurrentContext.Config.AutoPlayColorMode);
                 textBox1.Enabled = true;
                 textBox2.Enabled = true;
                 textBox3.Enabled = true;
+                ResolveCurrentAutoPlayColor(radioAutoPlayColor.Checked ? ResolveFoxWindowContext() : FoxWindowContext.Unknown());
             }
             else
             {
-                radioWhite.Checked = false;
-                radioBlack.Checked = false;
                 radioWhite.Enabled = false;
                 radioBlack.Enabled = false;
+                radioAutoPlayColor.Enabled = false;
                 textBox1.Enabled = false;
                 textBox2.Enabled = false;
                 textBox3.Enabled = false;
+                UpdateAutoPlayColorStatus(null);
                 SendStopAutoPlayCommand();
             }
         }
@@ -2859,16 +2924,38 @@ namespace readboard
         private void radioBlack_CheckedChanged(object sender, EventArgs e)
         {
             if (radioBlack.Checked)
+            {
                 radioWhite.Checked = false;
-            if (sessionCoordinator.KeepSync)
+                radioAutoPlayColor.Checked = false;
+            }
+            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
                 SendPlayCommandIfSelected();
         }
 
         private void radioWhite_CheckedChanged(object sender, EventArgs e)
         {
             if (radioWhite.Checked)
+            {
                 radioBlack.Checked = false;
-            if (sessionCoordinator.KeepSync)
+                radioAutoPlayColor.Checked = false;
+            }
+            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
+                SendPlayCommandIfSelected();
+        }
+
+        private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)
+        {
+            if (radioAutoPlayColor.Checked)
+            {
+                radioBlack.Checked = false;
+                radioWhite.Checked = false;
+                ResolveCurrentAutoPlayColor(ResolveFoxWindowContext());
+            }
+            else
+            {
+                UpdateAutoPlayColorStatus(null);
+            }
+            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
                 SendPlayCommandIfSelected();
         }
 

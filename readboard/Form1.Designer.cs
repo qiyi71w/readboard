@@ -53,6 +53,8 @@
             this.rdo13x13 = new System.Windows.Forms.RadioButton();
             this.rdo19x19 = new System.Windows.Forms.RadioButton();
             this.radioWhite = new System.Windows.Forms.RadioButton();
+            this.radioAutoPlayColor = new System.Windows.Forms.RadioButton();
+            this.lblAutoPlayColorStatus = new System.Windows.Forms.Label();
             this.radioBlack = new System.Windows.Forms.RadioButton();
             this.chkBothSync = new System.Windows.Forms.CheckBox();
             this.textBox1 = new System.Windows.Forms.TextBox();
@@ -362,7 +364,27 @@
             this.radioWhite.Text = "执白";
             this.radioWhite.UseVisualStyleBackColor = true;
             this.radioWhite.CheckedChanged += new System.EventHandler(this.radioWhite_CheckedChanged);
-            // 
+            //
+            // radioAutoPlayColor
+            //
+            this.radioAutoPlayColor.AutoSize = true;
+            this.radioAutoPlayColor.Location = new System.Drawing.Point(134, 3);
+            this.radioAutoPlayColor.Name = "radioAutoPlayColor";
+            this.radioAutoPlayColor.Size = new System.Drawing.Size(47, 16);
+            this.radioAutoPlayColor.TabIndex = 24;
+            this.radioAutoPlayColor.TabStop = true;
+            this.radioAutoPlayColor.Text = "自动";
+            this.radioAutoPlayColor.UseVisualStyleBackColor = true;
+            this.radioAutoPlayColor.CheckedChanged += new System.EventHandler(this.radioAutoPlayColor_CheckedChanged);
+            //
+            // lblAutoPlayColorStatus
+            //
+            this.lblAutoPlayColorStatus.AutoSize = true;
+            this.lblAutoPlayColorStatus.Location = new System.Drawing.Point(187, 5);
+            this.lblAutoPlayColorStatus.Name = "lblAutoPlayColorStatus";
+            this.lblAutoPlayColorStatus.Size = new System.Drawing.Size(0, 12);
+            this.lblAutoPlayColorStatus.TabIndex = 25;
+            //
             // radioBlack
             // 
             this.radioBlack.AutoSize = true;
@@ -493,6 +515,8 @@
             // 
             this.flowLayoutPanel2.Controls.Add(this.chkAutoPlay);
             this.flowLayoutPanel2.Controls.Add(this.radioWhite);
+            this.flowLayoutPanel2.Controls.Add(this.radioAutoPlayColor);
+            this.flowLayoutPanel2.Controls.Add(this.lblAutoPlayColorStatus);
             this.flowLayoutPanel2.Controls.Add(this.panel3);
             this.flowLayoutPanel2.Controls.Add(this.textBox1);
             this.flowLayoutPanel2.Controls.Add(this.panel4);
@@ -701,6 +725,8 @@
         private System.Windows.Forms.RadioButton rdo13x13;
         private System.Windows.Forms.RadioButton rdo19x19;
         private System.Windows.Forms.RadioButton radioWhite;
+        private System.Windows.Forms.RadioButton radioAutoPlayColor;
+        private System.Windows.Forms.Label lblAutoPlayColorStatus;
         private System.Windows.Forms.RadioButton radioBlack;
         private System.Windows.Forms.Button btnTogglePonder;
         private System.Windows.Forms.CheckBox chkBothSync;
