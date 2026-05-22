@@ -55,6 +55,7 @@ namespace Readboard.VerificationTests
                 Assert.Contains("220430", json);
                 Assert.Contains("\"MachineKey\"", json);
                 Assert.Contains("SECONDARY-HOST", json);
+                Assert.Contains("\"MoveVerifyMaxAttempts\"", json);
                 Assert.Contains("\"DebugDiagnosticsEnabled\"", json);
                 Assert.Equal("96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5", legacyMain);
                 Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1", legacyOther);
@@ -161,12 +162,33 @@ namespace Readboard.VerificationTests
                 Assert.Equal(9, result.Config.BoardWidth);
                 Assert.Equal(19, result.Config.BoardHeight);
                 Assert.False(result.Config.VerifyMove);
+                Assert.Equal(AppConfig.DefaultMoveVerifyMaxAttempts, result.Config.MoveVerifyMaxAttempts);
                 Assert.Equal(SyncMode.FoxBackgroundPlace, result.Config.SyncMode);
                 Assert.Equal(200, result.Config.SyncIntervalMs);
                 Assert.True(result.Config.PlayPonder);
                 Assert.True(result.Config.UseMagnifier);
                 Assert.Equal(-1, result.Config.WindowPosX);
                 Assert.Equal(-1, result.Config.WindowPosY);
+            }
+        }
+
+        [Theory]
+        [InlineData(-1, AppConfig.MinMoveVerifyMaxAttempts)]
+        [InlineData(0, 0)]
+        [InlineData(2, 2)]
+        [InlineData(99, AppConfig.MaxMoveVerifyMaxAttempts)]
+        public void Load_ClampsMoveVerifyMaxAttemptsFromJson(int configuredValue, int expectedValue)
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config.readboard.json"),
+                    "{\"MachineKey\":\"MACHINE-001\",\"MoveVerifyMaxAttempts\":" + configuredValue + "}");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.Equal(expectedValue, result.Config.MoveVerifyMaxAttempts);
             }
         }
 
@@ -221,6 +243,7 @@ namespace Readboard.VerificationTests
             Assert.Equal(18, config.WhitePercent);
             Assert.True(config.UseMagnifier);
             Assert.False(config.VerifyMove);
+            Assert.Equal(AppConfig.DefaultMoveVerifyMaxAttempts, config.MoveVerifyMaxAttempts);
             Assert.Equal(SyncMode.FoxBackgroundPlace, config.SyncMode);
             Assert.Equal(13, config.BoardWidth);
             Assert.Equal(13, config.BoardHeight);
@@ -252,6 +275,7 @@ namespace Readboard.VerificationTests
             Assert.Contains("\"BoardWidth\"", json);
             Assert.Contains("\"SyncBoth\"", json);
             Assert.Contains("\"PlayPonder\"", json);
+            Assert.Contains("\"MoveVerifyMaxAttempts\"", json);
             Assert.Contains("\"DisableShowInBoardShortcut\"", json);
         }
 
@@ -263,6 +287,7 @@ namespace Readboard.VerificationTests
             Assert.Equal(33, config.WhitePercent);
             Assert.True(config.UseMagnifier);
             Assert.True(config.VerifyMove);
+            Assert.Equal(AppConfig.DefaultMoveVerifyMaxAttempts, config.MoveVerifyMaxAttempts);
             Assert.Equal(SyncMode.Fox, config.SyncMode);
             Assert.Equal(19, config.BoardWidth);
             Assert.Equal(19, config.BoardHeight);

@@ -1,3 +1,5 @@
+using System;
+
 namespace readboard
 {
     internal sealed class AppConfig
@@ -9,6 +11,10 @@ namespace readboard
         internal const int ColorModeDark = 1;
         internal const int ColorModeLight = 2;
 
+        internal const int MinMoveVerifyMaxAttempts = 0;
+        internal const int MaxMoveVerifyMaxAttempts = 10;
+        internal const int DefaultMoveVerifyMaxAttempts = 10;
+
         public string ProtocolVersion { get; set; }
         public string MachineKey { get; set; }
         public int BlackOffset { get; set; }
@@ -17,6 +23,7 @@ namespace readboard
         public int WhitePercent { get; set; }
         public bool UseMagnifier { get; set; }
         public bool VerifyMove { get; set; }
+        public int MoveVerifyMaxAttempts { get; set; }
         public bool ShowScaleHint { get; set; }
         public bool ShowInBoard { get; set; }
         public bool ShowInBoardHint { get; set; }
@@ -50,6 +57,7 @@ namespace readboard
                 WhitePercent = 33,
                 UseMagnifier = true,
                 VerifyMove = true,
+                MoveVerifyMaxAttempts = DefaultMoveVerifyMaxAttempts,
                 ShowScaleHint = true,
                 ShowInBoard = false,
                 ShowInBoardHint = true,
@@ -76,6 +84,21 @@ namespace readboard
         public AppConfig Clone()
         {
             return (AppConfig)MemberwiseClone();
+        }
+
+        internal static int NormalizeMoveVerifyMaxAttempts(int value)
+        {
+            if (value < MinMoveVerifyMaxAttempts)
+                return MinMoveVerifyMaxAttempts;
+            if (value > MaxMoveVerifyMaxAttempts)
+                return MaxMoveVerifyMaxAttempts;
+            return value;
+        }
+
+        internal static int ResolveMoveVerifyPlacementAttempts(int value)
+        {
+            // Zero disables extra retries but still allows the initial placement attempt.
+            return Math.Max(1, NormalizeMoveVerifyMaxAttempts(value));
         }
     }
 }

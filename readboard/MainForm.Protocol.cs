@@ -38,7 +38,8 @@ namespace readboard
             {
                 X = request.X,
                 Y = request.Y,
-                VerifyMove = Program.verifyMove
+                VerifyMove = Program.verifyMove,
+                MoveVerifyMaxAttempts = Program.CurrentConfig.MoveVerifyMaxAttempts
             };
             EnqueuePlaceRequest(protocolMove);
         }
