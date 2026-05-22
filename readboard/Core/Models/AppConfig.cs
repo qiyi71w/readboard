@@ -100,5 +100,10 @@ namespace readboard
             // Zero disables extra retries but still allows the initial placement attempt.
             return Math.Max(1, NormalizeMoveVerifyMaxAttempts(value));
         }
+
+        internal static int ResolveMoveVerifyPlacementAttempts(int? value)
+        {
+            return ResolveMoveVerifyPlacementAttempts(value ?? DefaultMoveVerifyMaxAttempts);
+        }
     }
 }

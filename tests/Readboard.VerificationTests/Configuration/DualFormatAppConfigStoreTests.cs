@@ -55,8 +55,13 @@ namespace Readboard.VerificationTests
                 Assert.Contains("220430", json);
                 Assert.Contains("\"MachineKey\"", json);
                 Assert.Contains("SECONDARY-HOST", json);
-                Assert.Contains("\"MoveVerifyMaxAttempts\"", json);
                 Assert.Contains("\"DebugDiagnosticsEnabled\"", json);
+                using (JsonDocument doc = JsonDocument.Parse(json))
+                {
+                    Assert.Equal(
+                        AppConfig.DefaultMoveVerifyMaxAttempts,
+                        doc.RootElement.GetProperty("MoveVerifyMaxAttempts").GetInt32());
+                }
                 Assert.Equal("96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5", legacyMain);
                 Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1", legacyOther);
             }

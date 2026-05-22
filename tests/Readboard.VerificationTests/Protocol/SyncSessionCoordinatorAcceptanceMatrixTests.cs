@@ -73,59 +73,43 @@ namespace Readboard.VerificationTests.Protocol
         [Fact]
         public async Task VerifiedPendingMove_WithZeroConfiguredRetriesFailsAfterFirstUnconfirmedSnapshot()
         {
-            SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator();
-
-            Assert.True(coordinator.TryQueuePendingMove(
-                new MoveRequest
-                {
-                    X = 1,
-                    Y = 1,
-                    VerifyMove = true,
-                    MoveVerifyMaxAttempts = 0
-                },
-                19,
-                19));
-            Assert.True(coordinator.TryTakePendingMove(out MoveRequest dispatched));
-            Assert.Equal(1, dispatched.X);
-            Assert.Equal(1, dispatched.Y);
-
-            Task<bool> waitTask = Task.Run(() => coordinator.WaitForPendingMoveResult());
-            coordinator.HandlePendingMovePlacementResult(true);
-            coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
-
-            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(1));
-
-            Assert.False(result);
-            Assert.False(coordinator.TryTakePendingMove(out _));
+            await AssertVerifiedPendingMoveFailsAfterAttempts(0, 1);
         }
 
         [Fact]
         public async Task VerifiedPendingMove_UsesConfiguredAttemptsBeforeFailing()
         {
-            SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator();
+            await AssertVerifiedPendingMoveFailsAfterAttempts(2, 2);
+        }
 
+        [Fact]
+        public async Task VerifiedPendingMove_WithoutConfiguredAttemptsUsesDefaultBeforeFailing()
+        {
+            await AssertVerifiedPendingMoveFailsAfterAttempts(
+                null,
+                AppConfig.DefaultMoveVerifyMaxAttempts);
+        }
+
+        [Fact]
+        public async Task UnverifiedPendingMove_IgnoresConfiguredAttempts()
+        {
+            SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator();
             Assert.True(coordinator.TryQueuePendingMove(
                 new MoveRequest
                 {
                     X = 1,
                     Y = 1,
-                    VerifyMove = true,
-                    MoveVerifyMaxAttempts = 2
+                    VerifyMove = false,
+                    MoveVerifyMaxAttempts = 5
                 },
                 19,
                 19));
-            Assert.True(coordinator.TryTakePendingMove(out MoveRequest firstAttempt));
-
             Task<bool> waitTask = Task.Run(() => coordinator.WaitForPendingMoveResult());
-            coordinator.HandlePendingMovePlacementResult(true);
-            coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
 
-            Assert.True(coordinator.TryTakePendingMove(out MoveRequest secondAttempt));
-            Assert.Equal(firstAttempt.X, secondAttempt.X);
-            Assert.Equal(firstAttempt.Y, secondAttempt.Y);
-
-            coordinator.HandlePendingMovePlacementResult(true);
-            coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
+            Assert.True(coordinator.TryTakePendingMove(out MoveRequest attempt));
+            Assert.Equal(1, attempt.X);
+            Assert.Equal(1, attempt.Y);
+            coordinator.HandlePendingMovePlacementResult(false);
 
             bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(1));
 
@@ -177,6 +161,39 @@ namespace Readboard.VerificationTests.Protocol
                 Y = Math.Min(3, boardHeight - 1),
                 VerifyMove = true
             };
+        }
+
+        private static async Task AssertVerifiedPendingMoveFailsAfterAttempts(
+            int? configuredAttempts,
+            int expectedPlacementAttempts)
+        {
+            SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator();
+
+            Assert.True(coordinator.TryQueuePendingMove(
+                new MoveRequest
+                {
+                    X = 1,
+                    Y = 1,
+                    VerifyMove = true,
+                    MoveVerifyMaxAttempts = configuredAttempts
+                },
+                19,
+                19));
+            Task<bool> waitTask = Task.Run(() => coordinator.WaitForPendingMoveResult());
+
+            for (int attemptNumber = 0; attemptNumber < expectedPlacementAttempts; attemptNumber++)
+            {
+                Assert.True(coordinator.TryTakePendingMove(out MoveRequest attempt));
+                Assert.Equal(1, attempt.X);
+                Assert.Equal(1, attempt.Y);
+                coordinator.HandlePendingMovePlacementResult(true);
+                coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
+            }
+
+            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(1));
+
+            Assert.False(result);
+            Assert.False(coordinator.TryTakePendingMove(out _));
         }
 
         private static SyncSessionCoordinator CreateActiveBidirectionalCoordinator()
