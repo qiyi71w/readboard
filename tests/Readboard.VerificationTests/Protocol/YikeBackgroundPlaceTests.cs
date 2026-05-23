@@ -554,9 +554,10 @@ namespace Readboard.VerificationTests.Protocol
                 return true;
             }
 
-            public void SendMouseMessage(IntPtr handle, uint message, int wParam, int lParam)
+            public bool TrySendMouseMessage(IntPtr handle, uint message, int wParam, int lParam)
             {
                 SentMessages.Add(new MouseMessage(handle, message, wParam, lParam));
+                return true;
             }
         }
 
