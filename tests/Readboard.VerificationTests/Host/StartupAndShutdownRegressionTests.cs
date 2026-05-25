@@ -329,7 +329,7 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void FoxAutoPlayIdentityDialogAndSettings_PersistNicknameIdentity()
+        public void FoxAutoPlayIdentityDialogAndSettings_UsePlayerRowPreviewIdentity()
         {
             string dialogSource = LoadSource("readboard", "FoxAutoPlayIdentityDialog.cs");
             string dialogDesignerSource = LoadSource("readboard", "FoxAutoPlayIdentityDialog.Designer.cs");
@@ -343,26 +343,40 @@ namespace Readboard.VerificationTests.Host
             string krSource = LoadSource("readboard", "language_kr.txt");
             string autoRadioSlice = GetMethodSlice(mainFormSource, "private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)");
             string candidatesSlice = GetMethodSlice(mainFormSource, "private IList<FoxAutoPlayIdentityCandidate> BuildFoxAutoPlayIdentityCandidates()");
+            string settingsBuildSlice = GetMethodSlice(settingsSource, "private bool TryBuildUpdatedConfig(out AppConfig updatedConfig)");
+            string settingsClearSlice = GetMethodSlice(settingsSource, "private void btnClearFoxAutoPlayIdentity_Click(object sender, EventArgs e)");
 
             Assert.Contains("internal string SelectedNickname", dialogSource);
             Assert.Contains("internal string SelectedNicknameSignature", dialogSource);
             Assert.Contains("this.TopMost = true;", dialogDesignerSource);
-            Assert.Contains("this.txtNickname", dialogDesignerSource);
-            Assert.Contains("this.lstDetectedNicknames", dialogDesignerSource);
+            Assert.Contains("this.pnlDetectedPlayerRows", dialogDesignerSource);
+            Assert.Contains("this.pnlDetectedPlayerRows.AutoScroll = true;", dialogDesignerSource);
+            Assert.Contains("PictureBox", dialogSource);
+            Assert.Contains("candidate.PreviewImage", dialogSource);
+            Assert.Contains("public Bitmap PreviewImage", dialogSource);
+            Assert.DoesNotContain("txtNickname", dialogDesignerSource);
+            Assert.DoesNotContain("lblManualNickname", dialogDesignerSource);
+            Assert.DoesNotContain("chkRememberNickname", dialogDesignerSource);
+            Assert.DoesNotContain("lstDetectedNicknames", dialogDesignerSource);
             Assert.Contains("string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNicknameSignature)", autoRadioSlice);
+            Assert.DoesNotContain("string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNickname)", autoRadioSlice);
             Assert.Contains("TryConfigureFoxAutoPlayIdentity();", autoRadioSlice);
             Assert.Contains("using (FoxAutoPlayIdentityDialog dialog = new FoxAutoPlayIdentityDialog", mainFormSource);
             Assert.Contains("ResolveFoxAutoPlayIdentityBoardHandle()", candidatesSlice);
+            Assert.Contains("Bitmap rowPreview = CropBitmap(bitmap, rows[i].RowBounds);", candidatesSlice);
+            Assert.Contains("new FoxAutoPlayIdentityCandidate(\"玩家行 \" + (i + 1), signature, rowPreview)", candidatesSlice);
             Assert.DoesNotContain("|| hwnd == IntPtr.Zero", candidatesSlice);
             Assert.Contains("new LegacySyncWindowLocator().FindWindowHandle(GetCurrentSyncMode())", mainFormSource);
-            Assert.Contains("updatedConfig.FoxAutoPlayNickname = dialog.SelectedNickname;", mainFormSource);
+            Assert.Contains("updatedConfig.FoxAutoPlayNickname = string.Empty;", mainFormSource);
             Assert.Contains("updatedConfig.FoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;", mainFormSource);
             Assert.Contains("ClearFoxAutoPlayColorDetectionState();", mainFormSource);
-            Assert.Contains("txtFoxAutoPlayNickname.Text = config.FoxAutoPlayNickname;", settingsSource);
-            Assert.Contains("updatedConfig.FoxAutoPlayNickname = foxAutoPlayNickname;", settingsSource);
-            Assert.Contains("updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;", settingsSource);
+            Assert.DoesNotContain("txtFoxAutoPlayNickname", settingsSource);
+            Assert.DoesNotContain("this.txtFoxAutoPlayNickname", settingsDesignerSource);
+            Assert.Contains("clearFoxAutoPlayIdentity", settingsBuildSlice);
+            Assert.Contains("updatedConfig.FoxAutoPlayNickname = string.Empty;", settingsBuildSlice);
+            Assert.Contains("updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;", settingsBuildSlice);
+            Assert.Contains("clearFoxAutoPlayIdentity = true;", settingsClearSlice);
             Assert.Contains("btnClearFoxAutoPlayIdentity_Click", settingsSource);
-            Assert.Contains("this.txtFoxAutoPlayNickname", settingsDesignerSource);
             Assert.Contains("this.btnClearFoxAutoPlayIdentity", settingsDesignerSource);
             Assert.Contains("SettingsForm_lblFoxAutoPlayNickname", programSource);
             Assert.Contains("FoxAutoPlayIdentityDialog_title", programSource);
@@ -374,6 +388,9 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("FoxAutoPlayIdentityDialog_title=", enSource);
             Assert.Contains("FoxAutoPlayIdentityDialog_title=", jpSource);
             Assert.Contains("FoxAutoPlayIdentityDialog_title=", krSource);
+            Assert.DoesNotContain("FoxAutoPlayIdentityDialog_lblManualNickname", programSource);
+            Assert.DoesNotContain("FoxAutoPlayIdentityDialog_chkRememberNickname", programSource);
+            Assert.DoesNotContain("FoxAutoPlayIdentityDialog_emptyNickname", programSource);
         }
 
         [Fact]

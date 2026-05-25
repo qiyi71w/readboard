@@ -60,7 +60,6 @@
             this.rdoColorDark = new System.Windows.Forms.RadioButton();
             this.rdoColorLight = new System.Windows.Forms.RadioButton();
             this.lblFoxAutoPlayNickname = new System.Windows.Forms.Label();
-            this.txtFoxAutoPlayNickname = new System.Windows.Forms.TextBox();
             this.btnClearFoxAutoPlayIdentity = new System.Windows.Forms.Button();
             this.chkDebugDiagnostics = new System.Windows.Forms.CheckBox();
             this.btnOpenDebugDiagnostics = new System.Windows.Forms.Button();
@@ -344,22 +343,15 @@
             this.lblFoxAutoPlayNickname.Name = "lblFoxAutoPlayNickname";
             this.lblFoxAutoPlayNickname.Size = new System.Drawing.Size(77, 12);
             this.lblFoxAutoPlayNickname.TabIndex = 34;
-            this.lblFoxAutoPlayNickname.Text = "自动模式昵称";
-            //
-            // txtFoxAutoPlayNickname
-            //
-            this.txtFoxAutoPlayNickname.Location = new System.Drawing.Point(119, 74);
-            this.txtFoxAutoPlayNickname.Name = "txtFoxAutoPlayNickname";
-            this.txtFoxAutoPlayNickname.Size = new System.Drawing.Size(179, 21);
-            this.txtFoxAutoPlayNickname.TabIndex = 35;
+            this.lblFoxAutoPlayNickname.Text = "野狐自动身份";
             //
             // btnClearFoxAutoPlayIdentity
             //
-            this.btnClearFoxAutoPlayIdentity.Location = new System.Drawing.Point(304, 72);
+            this.btnClearFoxAutoPlayIdentity.Location = new System.Drawing.Point(119, 72);
             this.btnClearFoxAutoPlayIdentity.Name = "btnClearFoxAutoPlayIdentity";
             this.btnClearFoxAutoPlayIdentity.Size = new System.Drawing.Size(108, 23);
             this.btnClearFoxAutoPlayIdentity.TabIndex = 36;
-            this.btnClearFoxAutoPlayIdentity.Text = "清除自动身份";
+            this.btnClearFoxAutoPlayIdentity.Text = "清除已保存身份";
             this.btnClearFoxAutoPlayIdentity.UseVisualStyleBackColor = true;
             this.btnClearFoxAutoPlayIdentity.Click += new System.EventHandler(this.btnClearFoxAutoPlayIdentity_Click);
             //
@@ -395,7 +387,6 @@
             this.Controls.Add(this.rdoColorSystem);
             this.Controls.Add(this.lblColorMode);
             this.Controls.Add(this.btnClearFoxAutoPlayIdentity);
-            this.Controls.Add(this.txtFoxAutoPlayNickname);
             this.Controls.Add(this.lblFoxAutoPlayNickname);
             this.Controls.Add(this.chkDisableShowInBoardShortcut);
             this.Controls.Add(this.chkPonder);
@@ -465,7 +456,6 @@
         private System.Windows.Forms.RadioButton rdoColorDark;
         private System.Windows.Forms.RadioButton rdoColorLight;
         private System.Windows.Forms.Label lblFoxAutoPlayNickname;
-        private System.Windows.Forms.TextBox txtFoxAutoPlayNickname;
         private System.Windows.Forms.Button btnClearFoxAutoPlayIdentity;
         private System.Windows.Forms.CheckBox chkDebugDiagnostics;
         private System.Windows.Forms.Button btnOpenDebugDiagnostics;

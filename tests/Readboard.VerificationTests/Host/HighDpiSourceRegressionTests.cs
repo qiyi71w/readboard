@@ -92,11 +92,10 @@ namespace Readboard.VerificationTests.Host
             string decisionSlice = GetMethodSlice(content, "private bool CanUseLegacySettingsDesktopLayout()");
 
             Assert.Contains("lblFoxAutoPlayNickname", designerSource);
-            Assert.Contains("txtFoxAutoPlayNickname", designerSource);
+            Assert.DoesNotContain("txtFoxAutoPlayNickname", designerSource);
             Assert.Contains("btnClearFoxAutoPlayIdentity", designerSource);
-            Assert.Contains("UiTheme.StyleInput(txtFoxAutoPlayNickname);", themeSlice);
             Assert.Contains("UiTheme.StyleSecondaryButton(btnClearFoxAutoPlayIdentity);", themeSlice);
-            Assert.Contains("txtFoxAutoPlayNickname", classicThemeSlice);
+            Assert.DoesNotContain("txtFoxAutoPlayNickname", classicThemeSlice);
             Assert.Contains("btnClearFoxAutoPlayIdentity", classicThemeSlice);
             Assert.Contains("LayoutFoxAutoPlayIdentityRow(left, identityTop, contentWidth, buttonHeight);", legacySlice);
             Assert.Contains("currentTop = LayoutFoxAutoPlayIdentityRow(left, currentTop, contentWidth, buttonHeight) + optionRowGap;", adaptiveSlice);

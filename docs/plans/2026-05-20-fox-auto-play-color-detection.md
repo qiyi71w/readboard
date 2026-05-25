@@ -490,9 +490,8 @@ The first version should not need live OCR:
 
 - show visible row preview boxes when nickname snippets are available;
 - allow selecting exactly one current player row as the saved identity;
-- allow manual nickname entry;
-- include `记住这个昵称，以后自动使用`;
-- if no row preview is available, still allow nickname entry but do not create a signature.
+- do not show a manual nickname field because typed text is not used for matching;
+- require selecting one row preview before saving.
 
 - [ ] **Step 4: Wire first-run behavior**
 
@@ -508,10 +507,8 @@ In `radioAutoPlayColor_CheckedChanged(...)`:
 
 In `SettingsForm`:
 
-- show current nickname in `txtFoxAutoPlayNickname`;
 - add `btnClearFoxAutoPlayIdentity`;
-- clearing empties both nickname and signature;
-- saving writes nickname changes and clears signature if nickname text changed manually.
+- clearing marks both the legacy nickname field and signature for removal on confirm.
 
 - [ ] **Step 6: Run source tests and commit**
 

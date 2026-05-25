@@ -15,6 +15,7 @@ namespace readboard
         private readonly MainForm host;
         private bool isApplyingSettingsLayout;
         private bool suppressDebugDiagnosticsPrompt;
+        private bool clearFoxAutoPlayIdentity;
 
         internal SettingsForm(MainForm host)
         {
@@ -113,8 +114,6 @@ namespace readboard
                 UiTheme.StyleInput(textBox);
                 textBox.TextAlign = HorizontalAlignment.Center;
             }
-
-            UiTheme.StyleInput(txtFoxAutoPlayNickname);
 
             foreach (Label label in new[] { lblSyncInterval, lblGrayOffsets, lblBlackOffsets, lblBlackPercents, lblWhiteOffsets, lblWhitePercents })
             {
@@ -396,23 +395,19 @@ namespace readboard
         {
             int labelWidth = Math.Max(ScaleValue(FieldLabelWidth), lblFoxAutoPlayNickname.PreferredSize.Width);
             int fieldGap = ScaleValue(8);
-            int buttonGap = ScaleValue(8);
             int clearButtonWidth = Math.Min(MeasureButtonWidth(btnClearFoxAutoPlayIdentity, 84), contentWidth);
             lblFoxAutoPlayNickname.AutoSize = false;
             lblFoxAutoPlayNickname.TextAlign = ContentAlignment.MiddleLeft;
             lblFoxAutoPlayNickname.SetBounds(left, top + ScaleValue(4), labelWidth, ScaleValue(20));
 
-            int inputLeft = lblFoxAutoPlayNickname.Right + fieldGap;
-            int inputWidth = contentWidth - labelWidth - fieldGap - buttonGap - clearButtonWidth;
-            if (inputWidth >= ScaleValue(120))
+            int buttonLeft = lblFoxAutoPlayNickname.Right + fieldGap;
+            if (buttonLeft + clearButtonWidth <= left + contentWidth)
             {
-                txtFoxAutoPlayNickname.SetBounds(inputLeft, top, inputWidth, buttonHeight);
-                btnClearFoxAutoPlayIdentity.SetBounds(txtFoxAutoPlayNickname.Right + buttonGap, top, clearButtonWidth, buttonHeight);
-                return Math.Max(txtFoxAutoPlayNickname.Bottom, btnClearFoxAutoPlayIdentity.Bottom);
+                btnClearFoxAutoPlayIdentity.SetBounds(buttonLeft, top, clearButtonWidth, buttonHeight);
+                return Math.Max(lblFoxAutoPlayNickname.Bottom, btnClearFoxAutoPlayIdentity.Bottom);
             }
 
-            txtFoxAutoPlayNickname.SetBounds(left, lblFoxAutoPlayNickname.Bottom + ScaleValue(4), contentWidth, buttonHeight);
-            btnClearFoxAutoPlayIdentity.SetBounds(left, txtFoxAutoPlayNickname.Bottom + ScaleValue(8), contentWidth, buttonHeight);
+            btnClearFoxAutoPlayIdentity.SetBounds(left, lblFoxAutoPlayNickname.Bottom + ScaleValue(4), contentWidth, buttonHeight);
             return btnClearFoxAutoPlayIdentity.Bottom;
         }
 
@@ -491,7 +486,7 @@ namespace readboard
             lblColorMode.ForeColor = SystemColors.ControlText;
             lblColorMode.Font = Control.DefaultFont;
 
-            foreach (TextBox textBox in new[] { txtSyncInterval, txtGrayOffsets, txtBlackOffsets, txtBlackPercents, txtWhiteOffsets, txtWhitePercents, txtFoxAutoPlayNickname })
+            foreach (TextBox textBox in new[] { txtSyncInterval, txtGrayOffsets, txtBlackOffsets, txtBlackPercents, txtWhiteOffsets, txtWhitePercents })
             {
                 textBox.BackColor = SystemColors.Window;
                 textBox.ForeColor = SystemColors.WindowText;
@@ -673,7 +668,8 @@ namespace readboard
             rdoColorSystem.Checked = config.ColorMode == AppConfig.ColorModeSystem;
             rdoColorDark.Checked = config.ColorMode == AppConfig.ColorModeDark;
             rdoColorLight.Checked = config.ColorMode == AppConfig.ColorModeLight;
-            txtFoxAutoPlayNickname.Text = config.FoxAutoPlayNickname;
+            clearFoxAutoPlayIdentity = false;
+            btnClearFoxAutoPlayIdentity.Enabled = HasFoxAutoPlayIdentity(config);
         }
 
         private bool TryBuildUpdatedConfig(out AppConfig updatedConfig)
@@ -712,12 +708,11 @@ namespace readboard
             updatedConfig.ColorMode = rdoColorDark.Checked ? AppConfig.ColorModeDark
                 : rdoColorLight.Checked ? AppConfig.ColorModeLight
                 : AppConfig.ColorModeSystem;
-            string foxAutoPlayNickname = txtFoxAutoPlayNickname.Text.Trim();
-            if (!string.Equals(foxAutoPlayNickname, updatedConfig.FoxAutoPlayNickname, StringComparison.Ordinal))
+            if (clearFoxAutoPlayIdentity)
+            {
+                updatedConfig.FoxAutoPlayNickname = string.Empty;
                 updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;
-            updatedConfig.FoxAutoPlayNickname = foxAutoPlayNickname;
-            if (foxAutoPlayNickname.Length == 0)
-                updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;
+            }
             if (IsOffsetOrPercentOutOfRange(updatedConfig))
             {
                 MessageBox.Show(getLangStr("SettingsForm_outOfRange"));
@@ -728,7 +723,15 @@ namespace readboard
 
         private void btnClearFoxAutoPlayIdentity_Click(object sender, EventArgs e)
         {
-            txtFoxAutoPlayNickname.Text = string.Empty;
+            clearFoxAutoPlayIdentity = true;
+            btnClearFoxAutoPlayIdentity.Enabled = false;
+        }
+
+        private static bool HasFoxAutoPlayIdentity(AppConfig config)
+        {
+            return config != null
+                && (!string.IsNullOrWhiteSpace(config.FoxAutoPlayNickname)
+                    || !string.IsNullOrWhiteSpace(config.FoxAutoPlayNicknameSignature));
         }
 
         private void chkDebugDiagnostics_CheckedChanged(object sender, EventArgs e)

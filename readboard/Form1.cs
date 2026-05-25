@@ -1535,7 +1535,6 @@ namespace readboard
         private bool TryConfigureFoxAutoPlayIdentity()
         {
             using (FoxAutoPlayIdentityDialog dialog = new FoxAutoPlayIdentityDialog(
-                Program.CurrentConfig.FoxAutoPlayNickname,
                 Program.CurrentConfig.FoxAutoPlayNicknameSignature,
                 BuildFoxAutoPlayIdentityCandidates()))
             {
@@ -1543,7 +1542,7 @@ namespace readboard
                     return false;
 
                 AppConfig updatedConfig = Program.CurrentConfig.Clone();
-                updatedConfig.FoxAutoPlayNickname = dialog.SelectedNickname;
+                updatedConfig.FoxAutoPlayNickname = string.Empty;
                 updatedConfig.FoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;
                 Program.SaveAppConfig(updatedConfig);
                 ClearFoxAutoPlayColorDetectionState();
@@ -1574,7 +1573,10 @@ namespace readboard
                     {
                         string signature = FoxPlayerNicknameSignature.FromBitmap(nicknameSnippet).Serialize();
                         if (!string.IsNullOrWhiteSpace(signature))
-                            candidates.Add(new FoxAutoPlayIdentityCandidate("玩家行 " + (i + 1), signature));
+                        {
+                            Bitmap rowPreview = CropBitmap(bitmap, rows[i].RowBounds);
+                            candidates.Add(new FoxAutoPlayIdentityCandidate("玩家行 " + (i + 1), signature, rowPreview));
+                        }
                     }
                 }
             }
@@ -3184,8 +3186,7 @@ namespace readboard
                 if (isInitializingProtocolState)
                     return;
                 if (IsFoxSyncType(CurrentSyncType)
-                    && string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNicknameSignature)
-                    && string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNickname))
+                    && string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNicknameSignature))
                 {
                     bool configured = TryConfigureFoxAutoPlayIdentity();
                     if (!configured)
