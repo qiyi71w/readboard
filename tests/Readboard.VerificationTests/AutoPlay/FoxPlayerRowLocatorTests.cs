@@ -155,6 +155,25 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
+        public void DetectPlayerListPanel_FindsEarlyStoneIconInWideRoomPlayerPanel()
+        {
+            using (Bitmap bitmap = CreateFoxPlayerListPanelWithEarlyStone(500, 249))
+            {
+                IList<FoxPlayerRowCandidate> rows = FoxPlayerRowLocator.LocatePlayerListPanel(bitmap);
+                using (Bitmap nicknameSnippet = Crop(bitmap, rows[1].NicknameBounds))
+                {
+                    string signature = FoxPlayerNicknameSignature.FromBitmap(nicknameSnippet).Serialize();
+
+                    AutoPlayColorResolution resolution = FoxAutoPlayColorDetector.DetectPlayerListPanel(bitmap, signature);
+
+                    Assert.True(resolution.IsKnown);
+                    Assert.Equal("black", resolution.PlayColor);
+                    Assert.Equal(AutoPlayColorStatus.RecognizedBlack, resolution.Status);
+                }
+            }
+        }
+
+        [Fact]
         public void Detect_ReturnsStoneColorForMatchedNicknameSignature()
         {
             using (Bitmap bitmap = CreateFoxLikeWindow(2, 1.0f))
@@ -331,6 +350,32 @@ namespace Readboard.VerificationTests.AutoPlay
             return bitmap;
         }
 
+        private static Bitmap CreateFoxPlayerListPanelWithEarlyStone(int width, int height)
+        {
+            Bitmap bitmap = new Bitmap(width, height);
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            using (Pen borderPen = new Pen(Color.FromArgb(185, 188, 190)))
+            using (Pen separatorPen = new Pen(Color.FromArgb(205, 208, 208)))
+            using (Brush panelBrush = new SolidBrush(Color.FromArgb(242, 242, 238)))
+            using (Brush alternateRowBrush = new SolidBrush(Color.FromArgb(233, 235, 235)))
+            using (Brush purpleGlyphBrush = new SolidBrush(Color.FromArgb(190, 50, 220)))
+            using (Brush redGlyphBrush = new SolidBrush(Color.FromArgb(230, 40, 35)))
+            using (Brush darkStoneBrush = new SolidBrush(Color.FromArgb(20, 20, 20)))
+            using (Brush whiteStoneBrush = new SolidBrush(Color.FromArgb(248, 248, 242)))
+            using (Brush whiteStoneShadowBrush = new SolidBrush(Color.FromArgb(150, 156, 160)))
+            using (Brush flagBrush = new SolidBrush(Color.FromArgb(222, 42, 30)))
+            {
+                graphics.Clear(Color.FromArgb(242, 242, 238));
+                graphics.FillRectangle(panelBrush, 0, 0, bitmap.Width, bitmap.Height);
+                graphics.DrawLine(borderPen, 0, 27, bitmap.Width, 27);
+                graphics.DrawLine(separatorPen, 32, 0, 32, 84);
+                graphics.DrawLine(separatorPen, 206, 0, 206, 84);
+                DrawFixedPanelRow(graphics, 28, width, panelBrush, purpleGlyphBrush, whiteStoneBrush, whiteStoneShadowBrush, flagBrush, 140, false);
+                DrawFixedPanelRow(graphics, 56, width, alternateRowBrush, redGlyphBrush, darkStoneBrush, null, flagBrush, 140, true);
+            }
+            return bitmap;
+        }
+
         private static void DrawScaledPanelRow(
             Graphics graphics,
             float y,
@@ -349,6 +394,32 @@ namespace Readboard.VerificationTests.AutoPlay
                 graphics.FillEllipse(stoneShadowBrush, 138 * scale, y + 5 * scale, 23 * scale, 23 * scale);
             graphics.FillEllipse(stoneBrush, 140 * scale, y + 6 * scale, 20 * scale, 20 * scale);
             graphics.FillRectangle(flagBrush, 207 * scale, y + 7 * scale, 22 * scale, 14 * scale);
+        }
+
+        private static void DrawFixedPanelRow(
+            Graphics graphics,
+            int y,
+            int width,
+            Brush rowBrush,
+            Brush glyphBrush,
+            Brush stoneBrush,
+            Brush stoneShadowBrush,
+            Brush flagBrush,
+            int stoneLeft,
+            bool alternateGlyphShape)
+        {
+            int nicknameLeft = Math.Max(38, width / 10 + 3);
+            int firstGlyphWidth = Math.Min(alternateGlyphShape ? 84 : 72, Math.Max(20, stoneLeft - nicknameLeft - 10));
+            int secondGlyphLeft = alternateGlyphShape ? nicknameLeft + 14 : nicknameLeft;
+            int secondGlyphWidth = Math.Min(alternateGlyphShape ? 62 : 84, Math.Max(20, stoneLeft - secondGlyphLeft - 10));
+
+            graphics.FillRectangle(rowBrush, 0, y, width, 28);
+            graphics.FillRectangle(glyphBrush, nicknameLeft, y + 8, firstGlyphWidth, 4);
+            graphics.FillRectangle(glyphBrush, secondGlyphLeft, y + 16, secondGlyphWidth, 4);
+            if (stoneShadowBrush != null)
+                graphics.FillEllipse(stoneShadowBrush, stoneLeft - 2, y + 5, 23, 23);
+            graphics.FillEllipse(stoneBrush, stoneLeft, y + 6, 20, 20);
+            graphics.FillRectangle(flagBrush, 207, y + 7, 22, 14);
         }
 
         private static void DrawPanelRow(

@@ -271,10 +271,11 @@ namespace readboard
         private static PixelRect ResolvePanelStoneBounds(Bitmap bitmap, PixelRect rowBounds, int nicknameLeft, int stoneLeft)
         {
             int iconSize = Math.Max(16, Math.Min(rowBounds.Height - 2, bitmap.Width / 16));
-            int scanLeft = Math.Max(nicknameLeft + 28, stoneLeft - 14);
-            int scanRight = Math.Min(rowBounds.X + rowBounds.Width - iconSize, stoneLeft + 18);
+            int scanLeft = Math.Max(nicknameLeft + 28, rowBounds.X);
+            int scanRight = Math.Min(rowBounds.X + rowBounds.Width - iconSize, rowBounds.X + rowBounds.Width * 65 / 100);
             int scanTop = rowBounds.Y + Math.Max(2, (rowBounds.Height - iconSize) / 2);
             int scanBottom = Math.Min(rowBounds.Y + rowBounds.Height - iconSize, scanTop + 2);
+            PixelRect firstWhiteBounds = new PixelRect(0, 0, 0, 0);
             for (int y = scanTop; y <= scanBottom; y++)
             {
                 for (int x = scanLeft; x <= scanRight; x++)
@@ -283,11 +284,16 @@ namespace readboard
                     using (Bitmap icon = Crop(bitmap, bounds))
                     {
                         AutoPlayColorResolution resolution = FoxPlayerStoneIconDetector.Detect(icon);
-                        if (resolution.IsKnown)
+                        if (resolution.Status == AutoPlayColorStatus.RecognizedBlack)
                             return bounds;
+                        if (firstWhiteBounds.IsEmpty && resolution.Status == AutoPlayColorStatus.RecognizedWhite)
+                            firstWhiteBounds = bounds;
                     }
                 }
             }
+
+            if (!firstWhiteBounds.IsEmpty)
+                return firstWhiteBounds;
 
             return new PixelRect(stoneLeft, scanTop, iconSize, iconSize);
         }
