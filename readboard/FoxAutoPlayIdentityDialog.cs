@@ -5,6 +5,14 @@ using System.Windows.Forms;
 
 namespace readboard
 {
+    internal enum FoxAutoPlayIdentityDialogAction
+    {
+        Cancel = 0,
+        UseOnce = 1,
+        SaveAndUse = 2,
+        ClearSaved = 3
+    }
+
     internal partial class FoxAutoPlayIdentityDialog : Form
     {
         private const int CandidatePanelHeight = 52;
@@ -29,23 +37,36 @@ namespace readboard
         internal FoxAutoPlayIdentityDialog(
             string currentNicknameSignature,
             IEnumerable<FoxAutoPlayIdentityCandidate> candidates)
+            : this(currentNicknameSignature, !string.IsNullOrWhiteSpace(currentNicknameSignature), candidates)
+        {
+        }
+
+        internal FoxAutoPlayIdentityDialog(
+            string currentNicknameSignature,
+            bool hasSavedIdentity,
+            IEnumerable<FoxAutoPlayIdentityCandidate> candidates)
         {
             InitializeComponent();
             ApplyLanguage();
             SelectedNickname = string.Empty;
             SelectedNicknameSignature = currentNicknameSignature ?? string.Empty;
+            SelectedAction = FoxAutoPlayIdentityDialogAction.Cancel;
+            btnClearSavedIdentity.Enabled = hasSavedIdentity;
             LoadCandidates(candidates);
         }
 
         internal string SelectedNickname { get; private set; }
         internal string SelectedNicknameSignature { get; private set; }
+        internal FoxAutoPlayIdentityDialogAction SelectedAction { get; private set; }
 
         private void ApplyLanguage()
         {
             Text = getLangStr("FoxAutoPlayIdentityDialog_title");
             lblPrompt.Text = getLangStr("FoxAutoPlayIdentityDialog_lblPrompt");
             lblDetectedNicknames.Text = getLangStr("FoxAutoPlayIdentityDialog_lblDetectedNicknames");
-            btnConfirm.Text = getLangStr("FoxAutoPlayIdentityDialog_btnConfirm");
+            btnUseOnce.Text = getLangStr("FoxAutoPlayIdentityDialog_btnUseOnce");
+            btnSaveAndUse.Text = getLangStr("FoxAutoPlayIdentityDialog_btnSaveAndUse");
+            btnClearSavedIdentity.Text = getLangStr("FoxAutoPlayIdentityDialog_btnClearSavedIdentity");
             btnCancel.Text = getLangStr("FoxAutoPlayIdentityDialog_btnCancel");
         }
 
@@ -162,7 +183,26 @@ namespace readboard
             return -1;
         }
 
-        private void btnConfirm_Click(object sender, EventArgs e)
+        private void btnUseOnce_Click(object sender, EventArgs e)
+        {
+            AcceptSelectedCandidate(FoxAutoPlayIdentityDialogAction.UseOnce);
+        }
+
+        private void btnSaveAndUse_Click(object sender, EventArgs e)
+        {
+            AcceptSelectedCandidate(FoxAutoPlayIdentityDialogAction.SaveAndUse);
+        }
+
+        private void btnClearSavedIdentity_Click(object sender, EventArgs e)
+        {
+            SelectedNickname = string.Empty;
+            SelectedNicknameSignature = string.Empty;
+            SelectedAction = FoxAutoPlayIdentityDialogAction.ClearSaved;
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+
+        private void AcceptSelectedCandidate(FoxAutoPlayIdentityDialogAction action)
         {
             int selectedIndex = GetSelectedCandidateIndex();
             if (selectedIndex < 0 || selectedIndex >= detectedCandidates.Count)
@@ -173,6 +213,7 @@ namespace readboard
 
             SelectedNickname = string.Empty;
             SelectedNicknameSignature = ResolveSelectedSignature(selectedIndex);
+            SelectedAction = action;
             DialogResult = DialogResult.OK;
             Close();
         }
@@ -188,6 +229,7 @@ namespace readboard
 
         private void btnCancel_Click(object sender, EventArgs e)
         {
+            SelectedAction = FoxAutoPlayIdentityDialogAction.Cancel;
             DialogResult = DialogResult.Cancel;
             Close();
         }

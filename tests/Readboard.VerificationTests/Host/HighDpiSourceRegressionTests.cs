@@ -64,9 +64,13 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("radioAutoPlayColor.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);", adaptiveSlice);
             Assert.Contains("lblAutoPlayColorStatus.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);", legacySlice);
             Assert.Contains("lblAutoPlayColorStatus.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);", adaptiveSlice);
+            Assert.Contains("btnFoxAutoPlayIdentity.Margin = new Padding(0, ScaleValue(1), ScaleValue(12), 0);", legacySlice);
+            Assert.Contains("btnFoxAutoPlayIdentity.Margin = new Padding(0, ScaleValue(1), ScaleValue(12), 0);", adaptiveSlice);
             Assert.Contains("GetLayoutOptionPreferredSize(radioAutoPlayColor).Width", widthSlice);
             Assert.Contains("lblAutoPlayColorStatus.PreferredSize.Width", widthSlice);
+            Assert.Contains("GetLayoutOptionPreferredSize(btnFoxAutoPlayIdentity).Width", widthSlice);
             Assert.Contains("radioAutoPlayColor", optionsSlice);
+            Assert.Contains("btnFoxAutoPlayIdentity", optionsSlice);
             Assert.Contains("lblAutoPlayColorStatus", labelsSlice);
         }
 
@@ -81,25 +85,16 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void SettingsForm_FoxAutoPlayIdentityControls_AreMeasuredAndThemed()
+        public void SettingsForm_FoxAutoPlayIdentityControls_AreNotInSettings()
         {
             string content = LoadSource("readboard", "Form4.cs");
             string designerSource = LoadSource("readboard", "Form4.Designer.cs");
-            string themeSlice = GetMethodSlice(content, "private void ApplySettingsTheme()");
-            string classicThemeSlice = GetMethodSlice(content, "private void ApplyClassicSettingsTheme()");
-            string legacySlice = GetMethodSlice(content, "private void ArrangeLegacySettingsLayout()");
-            string adaptiveSlice = GetMethodSlice(content, "private void ArrangeAdaptiveSettingsLayout()");
-            string decisionSlice = GetMethodSlice(content, "private bool CanUseLegacySettingsDesktopLayout()");
 
-            Assert.Contains("lblFoxAutoPlayNickname", designerSource);
+            Assert.DoesNotContain("lblFoxAutoPlayNickname", designerSource);
             Assert.DoesNotContain("txtFoxAutoPlayNickname", designerSource);
-            Assert.Contains("btnClearFoxAutoPlayIdentity", designerSource);
-            Assert.Contains("UiTheme.StyleSecondaryButton(btnClearFoxAutoPlayIdentity);", themeSlice);
-            Assert.DoesNotContain("txtFoxAutoPlayNickname", classicThemeSlice);
-            Assert.Contains("btnClearFoxAutoPlayIdentity", classicThemeSlice);
-            Assert.Contains("LayoutFoxAutoPlayIdentityRow(left, identityTop, contentWidth, buttonHeight);", legacySlice);
-            Assert.Contains("currentTop = LayoutFoxAutoPlayIdentityRow(left, currentTop, contentWidth, buttonHeight) + optionRowGap;", adaptiveSlice);
-            Assert.Contains("MeasureButtonWidth(btnClearFoxAutoPlayIdentity, 84)", decisionSlice);
+            Assert.DoesNotContain("btnClearFoxAutoPlayIdentity", designerSource);
+            Assert.DoesNotContain("LayoutFoxAutoPlayIdentityRow", content);
+            Assert.DoesNotContain("MeasureButtonWidth(btnClearFoxAutoPlayIdentity", content);
         }
 
         [Fact]

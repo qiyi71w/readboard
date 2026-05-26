@@ -55,6 +55,7 @@
             this.radioWhite = new System.Windows.Forms.RadioButton();
             this.radioAutoPlayColor = new System.Windows.Forms.RadioButton();
             this.lblAutoPlayColorStatus = new System.Windows.Forms.Label();
+            this.btnFoxAutoPlayIdentity = new System.Windows.Forms.Button();
             this.radioBlack = new System.Windows.Forms.RadioButton();
             this.chkBothSync = new System.Windows.Forms.CheckBox();
             this.textBox1 = new System.Windows.Forms.TextBox();
@@ -385,8 +386,20 @@
             this.lblAutoPlayColorStatus.Size = new System.Drawing.Size(0, 12);
             this.lblAutoPlayColorStatus.TabIndex = 25;
             //
+            // btnFoxAutoPlayIdentity
+            //
+            this.btnFoxAutoPlayIdentity.AutoSize = true;
+            this.btnFoxAutoPlayIdentity.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            this.btnFoxAutoPlayIdentity.Location = new System.Drawing.Point(187, 1);
+            this.btnFoxAutoPlayIdentity.Name = "btnFoxAutoPlayIdentity";
+            this.btnFoxAutoPlayIdentity.Size = new System.Drawing.Size(55, 22);
+            this.btnFoxAutoPlayIdentity.TabIndex = 26;
+            this.btnFoxAutoPlayIdentity.Text = "身份...";
+            this.btnFoxAutoPlayIdentity.UseVisualStyleBackColor = true;
+            this.btnFoxAutoPlayIdentity.Click += new System.EventHandler(this.btnFoxAutoPlayIdentity_Click);
+            //
             // radioBlack
-            // 
+            //
             this.radioBlack.AutoSize = true;
             this.radioBlack.Location = new System.Drawing.Point(81, 3);
             this.radioBlack.Name = "radioBlack";
@@ -517,6 +530,7 @@
             this.flowLayoutPanel2.Controls.Add(this.radioWhite);
             this.flowLayoutPanel2.Controls.Add(this.radioAutoPlayColor);
             this.flowLayoutPanel2.Controls.Add(this.lblAutoPlayColorStatus);
+            this.flowLayoutPanel2.Controls.Add(this.btnFoxAutoPlayIdentity);
             this.flowLayoutPanel2.Controls.Add(this.panel3);
             this.flowLayoutPanel2.Controls.Add(this.textBox1);
             this.flowLayoutPanel2.Controls.Add(this.panel4);
@@ -727,6 +741,7 @@
         private System.Windows.Forms.RadioButton radioWhite;
         private System.Windows.Forms.RadioButton radioAutoPlayColor;
         private System.Windows.Forms.Label lblAutoPlayColorStatus;
+        private System.Windows.Forms.Button btnFoxAutoPlayIdentity;
         private System.Windows.Forms.RadioButton radioBlack;
         private System.Windows.Forms.Button btnTogglePonder;
         private System.Windows.Forms.CheckBox chkBothSync;

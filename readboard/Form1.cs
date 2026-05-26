@@ -69,6 +69,7 @@ namespace readboard
         private IntPtr lastFoxAutoPlayColorDetectionWindowHandle = IntPtr.Zero;
         private string lastFoxAutoPlayColorDetectionContextSignature = string.Empty;
         private string lastFoxAutoPlayColorDetectionNicknameSignature = string.Empty;
+        private string currentFoxAutoPlayNicknameSignature = string.Empty;
         private DateTime lastFoxAutoPlayColorDetectionTimestampUtc = DateTime.MinValue;
         private const int FoxAutoPlayColorDetectionCacheMs = 1000;
 
@@ -219,7 +220,7 @@ namespace readboard
 
         private IEnumerable<ButtonBase> MainThemeOptions()
         {
-            return new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite, radioAutoPlayColor };
+            return new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite, radioAutoPlayColor, btnFoxAutoPlayIdentity };
         }
 
         private IEnumerable<TextBox> MainThemeInputs()
@@ -681,6 +682,7 @@ namespace readboard
             radioWhite.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             radioAutoPlayColor.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             lblAutoPlayColorStatus.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            btnFoxAutoPlayIdentity.Margin = new Padding(0, ScaleValue(1), ScaleValue(12), 0);
             panel1.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel2.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel3.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
@@ -744,6 +746,7 @@ namespace readboard
             radioWhite.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             radioAutoPlayColor.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             lblAutoPlayColorStatus.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            btnFoxAutoPlayIdentity.Margin = new Padding(0, ScaleValue(1), ScaleValue(12), 0);
             panel1.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel2.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel3.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
@@ -935,6 +938,19 @@ namespace readboard
                 }
             }
 
+            if (option is Button button)
+            {
+                using (Button probe = new Button())
+                {
+                    probe.AutoSize = true;
+                    probe.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+                    probe.Text = button.Text;
+                    probe.Font = button.Font;
+                    probe.FlatStyle = flatStyle;
+                    return probe.PreferredSize;
+                }
+            }
+
             throw new NotSupportedException($"Unsupported layout option type: {option.GetType().FullName}");
         }
 
@@ -1040,6 +1056,8 @@ namespace readboard
                 + GetLayoutOptionPreferredSize(radioAutoPlayColor).Width
                 + buttonGap
                 + lblAutoPlayColorStatus.PreferredSize.Width
+                + buttonGap
+                + GetLayoutOptionPreferredSize(btnFoxAutoPlayIdentity).Width
                 + buttonGap
                 + Math.Max(ScaleValue(61), lblTime.PreferredSize.Width + ScaleValue(8))
                 + timeFieldGap
@@ -1186,6 +1204,7 @@ namespace readboard
         private void ApplyAutoPlayColorAvailability()
         {
             radioAutoPlayColor.Enabled = chkAutoPlay.Checked && IsFoxSyncType(CurrentSyncType);
+            btnFoxAutoPlayIdentity.Enabled = IsFoxSyncType(CurrentSyncType);
             if (!IsFoxSyncType(CurrentSyncType) && radioAutoPlayColor.Checked)
                 ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);
             if (!radioAutoPlayColor.Enabled)
@@ -1459,7 +1478,7 @@ namespace readboard
             AutoPlayColorResolution resolution = FoxAutoPlayColorResolver.Resolve(
                 GetSelectedAutoPlayColorMode(),
                 GetCurrentSyncMode(),
-                Program.CurrentContext.Config.FoxAutoPlayNicknameSignature,
+                ResolveCurrentFoxAutoPlayNicknameSignature(),
                 foxWindowContext,
                 detected);
             UpdateAutoPlayColorStatus(resolution);
@@ -1468,7 +1487,7 @@ namespace readboard
 
         private AutoPlayColorResolution ResolveDetectedFoxAutoPlayColor(FoxWindowContext foxWindowContext)
         {
-            string nicknameSignature = Program.CurrentContext.Config.FoxAutoPlayNicknameSignature;
+            string nicknameSignature = ResolveCurrentFoxAutoPlayNicknameSignature();
             if (!IsFoxSyncType(CurrentSyncType)
                 || hwnd == IntPtr.Zero
                 || string.IsNullOrWhiteSpace(nicknameSignature))
@@ -1499,6 +1518,13 @@ namespace readboard
             lastFoxAutoPlayColorDetectionNicknameSignature = nicknameSignature;
             lastFoxAutoPlayColorDetectionTimestampUtc = now;
             return detection;
+        }
+
+        private string ResolveCurrentFoxAutoPlayNicknameSignature()
+        {
+            return !string.IsNullOrWhiteSpace(currentFoxAutoPlayNicknameSignature)
+                ? currentFoxAutoPlayNicknameSignature
+                : Program.CurrentContext.Config.FoxAutoPlayNicknameSignature;
         }
 
         private void UpdateAutoPlayColorStatus(AutoPlayColorResolution resolution)
@@ -1535,19 +1561,47 @@ namespace readboard
         private bool TryConfigureFoxAutoPlayIdentity()
         {
             using (FoxAutoPlayIdentityDialog dialog = new FoxAutoPlayIdentityDialog(
-                Program.CurrentConfig.FoxAutoPlayNicknameSignature,
+                ResolveCurrentFoxAutoPlayNicknameSignature(),
+                HasSavedFoxAutoPlayIdentity(),
                 BuildFoxAutoPlayIdentityCandidates()))
             {
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                     return false;
 
-                AppConfig updatedConfig = Program.CurrentConfig.Clone();
-                updatedConfig.FoxAutoPlayNickname = string.Empty;
-                updatedConfig.FoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;
-                Program.SaveAppConfig(updatedConfig);
+                if (dialog.SelectedAction == FoxAutoPlayIdentityDialogAction.ClearSaved)
+                {
+                    ClearSavedFoxAutoPlayIdentity();
+                    ClearFoxAutoPlayColorDetectionState();
+                    return true;
+                }
+
+                currentFoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;
+                if (dialog.SelectedAction == FoxAutoPlayIdentityDialogAction.SaveAndUse)
+                {
+                    AppConfig updatedConfig = Program.CurrentConfig.Clone();
+                    updatedConfig.FoxAutoPlayNickname = string.Empty;
+                    updatedConfig.FoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;
+                    Program.SaveAppConfig(updatedConfig);
+                }
                 ClearFoxAutoPlayColorDetectionState();
                 return true;
             }
+        }
+
+        private void ClearSavedFoxAutoPlayIdentity()
+        {
+            AppConfig updatedConfig = Program.CurrentConfig.Clone();
+            updatedConfig.FoxAutoPlayNickname = string.Empty;
+            updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;
+            Program.SaveAppConfig(updatedConfig);
+        }
+
+        private static bool HasSavedFoxAutoPlayIdentity()
+        {
+            AppConfig config = Program.CurrentContext.Config;
+            return config != null
+                && (!string.IsNullOrWhiteSpace(config.FoxAutoPlayNickname)
+                    || !string.IsNullOrWhiteSpace(config.FoxAutoPlayNicknameSignature));
         }
 
         private IList<FoxAutoPlayIdentityCandidate> BuildFoxAutoPlayIdentityCandidates()
@@ -2194,6 +2248,7 @@ namespace readboard
             radioWhite.Enabled = false;
             radioBlack.Enabled = false;
             radioAutoPlayColor.Enabled = false;
+            btnFoxAutoPlayIdentity.Enabled = false;
             textBox1.Enabled = false;
             textBox2.Enabled = false;
             textBox3.Enabled = false;
@@ -2225,6 +2280,7 @@ namespace readboard
             this.radioBlack.Text = getLangStr("MainForm_radioBlack");
             this.radioWhite.Text = getLangStr("MainForm_radioWhite");
             this.radioAutoPlayColor.Text = getLangStr("MainForm_radioAutoPlayColor");
+            this.btnFoxAutoPlayIdentity.Text = getLangStr("MainForm_btnFoxAutoPlayIdentity");
             this.lblAutoPlayColorStatus.Text = string.Empty;
             this.lblPlayCondition.Text = getLangStr("MainForm_lblPlayCondition");
             this.lblTime.Text = getLangStr("MainForm_lblTime");
@@ -3186,7 +3242,7 @@ namespace readboard
                 if (isInitializingProtocolState)
                     return;
                 if (IsFoxSyncType(CurrentSyncType)
-                    && string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNicknameSignature))
+                    && string.IsNullOrWhiteSpace(ResolveCurrentFoxAutoPlayNicknameSignature()))
                 {
                     bool configured = TryConfigureFoxAutoPlayIdentity();
                     if (!configured)
@@ -3202,6 +3258,18 @@ namespace readboard
                 ClearFoxAutoPlayColorDetectionState();
                 UpdateAutoPlayColorStatus(null);
             }
+            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
+                SendPlayCommandIfSelected();
+        }
+
+        private void btnFoxAutoPlayIdentity_Click(object sender, EventArgs e)
+        {
+            if (!IsFoxSyncType(CurrentSyncType))
+                return;
+
+            TryConfigureFoxAutoPlayIdentity();
+            if (radioAutoPlayColor.Checked)
+                ResolveCurrentAutoPlayColor(ResolveFoxWindowContext());
             if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
                 SendPlayCommandIfSelected();
         }

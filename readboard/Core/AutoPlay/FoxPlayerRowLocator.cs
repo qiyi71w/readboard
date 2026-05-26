@@ -9,6 +9,7 @@ namespace readboard
         private const double MinimumRowLightRatio = 0.36d;
         private const double MinimumPanelContentRatio = 0.02d;
         private const int PanelContentMergeGap = 8;
+        private const int MinimumPanelRowHeight = 18;
 
         public static IList<FoxPlayerRowCandidate> Locate(Bitmap bitmap, SyncMode syncMode)
         {
@@ -54,10 +55,10 @@ namespace readboard
 
             int scanLeft = Math.Max(12, bitmap.Width * 8 / 100);
             int scanRight = Math.Min(bitmap.Width - 12, bitmap.Width * 67 / 100);
-            int scanTop = Math.Max(18, bitmap.Height * 16 / 100);
+            int scanTop = Math.Max(18, Math.Min(bitmap.Height * 16 / 100, 28));
             int scanBottom = bitmap.Height;
-            int minimumHeight = Math.Max(20, bitmap.Height / 8);
-            int maximumHeight = Math.Max(minimumHeight + 1, bitmap.Height / 3);
+            int minimumHeight = MinimumPanelRowHeight;
+            int maximumHeight = Math.Max(minimumHeight + 1, Math.Min(72, bitmap.Height / 3));
 
             List<RowRun> runs = new List<RowRun>();
             bool inRun = false;

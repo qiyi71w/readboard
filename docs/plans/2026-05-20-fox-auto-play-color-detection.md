@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a safe Fox-only `执黑 / 执白 / 自动` auto-play color mode so readboard can decide whether to send `play black ...` or `play white ...` after the user saves their Fox identity.
+**Goal:** Add a safe Fox-only `执黑 / 执白 / 自动` auto-play color mode so readboard can decide whether to send `play black ...` or `play white ...` after the user selects their Fox identity for this session or saves it for future sessions.
 
-**Architecture:** Keep the wire protocol unchanged and resolve auto color before `SyncCoordinatorHostSnapshot.PlayColor` is populated. Manual black/white stays in `MainForm`; Fox auto mode stores a remembered nickname plus a nickname glyph signature captured from the user-confirmed row. The analyzer first rejects non-Fox and Fox `观战中` titles, then matches the current Fox player row by readable text when available, otherwise by the saved glyph signature, and finally reads the row's black/white icon. If any step is not reliable, the resolver returns unknown and no `play` command is sent.
+**Architecture:** Keep the wire protocol unchanged and resolve auto color before `SyncCoordinatorHostSnapshot.PlayColor` is populated. Manual black/white stays in `MainForm`; Fox auto mode uses a current-session identity first, then a saved nickname glyph signature captured from the user-confirmed row. The analyzer rejects non-Fox and Fox `观战中` titles, matches the current Fox player row by glyph signature, and finally reads the row's black/white icon. If any step is not reliable, the resolver returns unknown and no `play` command is sent.
 
 **Tech Stack:** WinForms, .NET 10, System.Drawing bitmap/pixel analysis, xUnit verification tests, existing readboard text protocol.
 
@@ -14,7 +14,7 @@
 
 - Do not add OCR or a new external runtime dependency in the first implementation.
 - Real Fox probing on 2026-05-20 showed the player list text is not exposed through `GetWindowText`, UI Automation, MSAA, or standard `SysListView32` item messages. Keep those probes as cheap preferred paths, but expect glyph signature matching to be the first practical implementation.
-- The saved Fox nickname is for user-facing clarity, settings, and a future text-readable path. Actual first-version automatic matching uses the nickname glyph signature captured from the user-confirmed row.
+- Manual nickname text is not part of the first-version UI because typed text is not used for matching. Automatic matching uses the nickname glyph signature captured from the user-confirmed row.
 - Fox titles parsed as `观战中` must return unknown even when the nickname matches; auto-play is allowed only for Fox `对弈中`.
 - Auto mode applies only to `SyncMode.Fox` and `SyncMode.FoxBackgroundPlace`.
 - The first implementation may need real Fox screenshots for final tuning, but unit tests should cover the resolver and image heuristics with synthetic bitmaps.
@@ -59,13 +59,13 @@
 - Modify: `readboard/MainForm.Configuration.cs`
   - Apply and persist `AutoPlayColorMode`.
 - Create: `readboard/FoxAutoPlayIdentityDialog.cs`
-  - First-run dialog for selecting current row and saving nickname.
+  - First-run and reselect dialog for choosing current row, using it once, saving it, or clearing the saved identity.
 - Create: `readboard/FoxAutoPlayIdentityDialog.Designer.cs`
-  - Minimal WinForms controls for row choices, nickname input, remember checkbox.
+  - Minimal WinForms controls for row previews and explicit `本次使用` / `保存并使用` / `清除保存` actions.
 - Modify: `readboard/Form4.Designer.cs`
-  - Add Fox nickname settings controls.
+  - Keep Fox identity controls out of the settings form.
 - Modify: `readboard/Form4.cs`
-  - Load/save/clear saved nickname and signature.
+  - Keep settings layout stable after removing Fox identity controls.
 - Modify: `readboard/Program.cs`
   - Add default language keys.
 - Modify: `readboard/language_cn.txt`, `readboard/language_en.txt`, `readboard/language_jp.txt`, `readboard/language_kr.txt`
@@ -448,12 +448,13 @@ git add readboard\Form1.Designer.cs readboard\Form1.cs readboard\MainForm.Config
 git commit -m "feat(readboard): 增加自动落子棋色模式"
 ```
 
-## Task 5: Add First-Run Fox Identity Dialog And Settings Entry
+## Task 5: Add First-Run Fox Identity Dialog And Main-Form Reselect Entry
 
 **Files:**
 - Create: `readboard/FoxAutoPlayIdentityDialog.cs`
 - Create: `readboard/FoxAutoPlayIdentityDialog.Designer.cs`
 - Modify: `readboard/Form1.cs`
+- Modify: `readboard/Form1.Designer.cs`
 - Modify: `readboard/Form4.Designer.cs`
 - Modify: `readboard/Form4.cs`
 - Modify: `readboard/Program.cs`
@@ -469,9 +470,9 @@ git commit -m "feat(readboard): 增加自动落子棋色模式"
 Assert:
 
 - dialog files exist and expose selected nickname/signature properties;
-- `Form1.cs` opens the dialog only when auto mode is selected and no saved signature exists;
-- `Form4.cs` loads and clears `FoxAutoPlayNickname` and `FoxAutoPlayNicknameSignature`;
-- settings layout includes a nickname text box and clear/reselect button;
+- `Form1.cs` opens the dialog when auto mode is selected and neither a current-session nor saved signature exists;
+- `Form1.cs` has a Fox-only `身份...` button for reselecting, saving, or clearing identity without restarting;
+- `Form4.cs` and `Form4.Designer.cs` do not contain Fox identity controls;
 - all language files contain the new keys.
 
 - [ ] **Step 2: Run source tests and verify failure**
@@ -489,9 +490,10 @@ Expected: FAIL.
 The first version should not need live OCR:
 
 - show visible row preview boxes when nickname snippets are available;
-- allow selecting exactly one current player row as the saved identity;
+- allow selecting exactly one current player row;
+- provide explicit `本次使用`, `保存并使用`, `清除保存`, and `取消` actions;
 - do not show a manual nickname field because typed text is not used for matching;
-- require selecting one row preview before saving.
+- require selecting one row preview before using or saving.
 
 - [ ] **Step 4: Wire first-run behavior**
 
@@ -499,16 +501,21 @@ In `radioAutoPlayColor_CheckedChanged(...)`:
 
 - if initialization is in progress, return after setting state;
 - if auto is checked and current sync type is not Fox, update status and do not prompt;
-- if auto is checked and saved signature is empty, open the dialog;
-- on confirm, update `Program.CurrentConfig`, persist config, clear cached detection state, and resend play state if keep sync is active;
+- if auto is checked and both current-session and saved signatures are empty, open the dialog;
+- on `本次使用`, update only the current-session identity and clear cached detection state;
+- on `保存并使用`, persist the signature, update the current-session identity, clear cached detection state, and resend play state if keep sync is active;
+- on `清除保存`, remove persisted identity from config and keep settings free of Fox identity controls;
 - on cancel, switch back to previous manual mode and do not send `play`.
 
-- [ ] **Step 5: Add settings controls**
+- [ ] **Step 5: Add main-form identity button and remove settings controls**
 
-In `SettingsForm`:
+In `MainForm`:
 
-- add `btnClearFoxAutoPlayIdentity`;
-- clearing marks both the legacy nickname field and signature for removal on confirm.
+- add `btnFoxAutoPlayIdentity` next to the auto status label;
+- enable it only for `野狐` / `野狐(后台落子)`;
+- use it to reopen the identity dialog even when a temporary identity already exists.
+
+In `SettingsForm`, delete the Fox identity label/button and related language keys.
 
 - [ ] **Step 6: Run source tests and commit**
 
@@ -516,7 +523,7 @@ Run:
 
 ```powershell
 C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~StartupAndShutdownRegressionTests|FullyQualifiedName~HighDpiSourceRegressionTests" -c Debug
-git add readboard\FoxAutoPlayIdentityDialog.cs readboard\FoxAutoPlayIdentityDialog.Designer.cs readboard\Form1.cs readboard\Form4.cs readboard\Form4.Designer.cs readboard\Program.cs readboard\language_cn.txt readboard\language_en.txt readboard\language_jp.txt readboard\language_kr.txt tests\Readboard.VerificationTests\Host\StartupAndShutdownRegressionTests.cs tests\Readboard.VerificationTests\Host\HighDpiSourceRegressionTests.cs
+git add readboard\FoxAutoPlayIdentityDialog.cs readboard\FoxAutoPlayIdentityDialog.Designer.cs readboard\Form1.Designer.cs readboard\Form1.cs readboard\Form4.cs readboard\Form4.Designer.cs readboard\Program.cs readboard\language_cn.txt readboard\language_en.txt readboard\language_jp.txt readboard\language_kr.txt tests\Readboard.VerificationTests\Host\StartupAndShutdownRegressionTests.cs tests\Readboard.VerificationTests\Host\HighDpiSourceRegressionTests.cs
 git commit -m "feat(readboard): 添加野狐自动模式身份设置"
 ```
 
@@ -635,10 +642,11 @@ pwsh.exe -NoProfile -File scripts\run-readboard-ui-debug.ps1 -Configuration Debu
 
 Check:
 
-- `执黑 / 执白 / 自动` fit in both default and optimized themes.
+- `执黑 / 执白 / 自动 / 身份...` fit in both default and optimized themes.
 - Auto status text does not overlap at high DPI.
 - Settings form keeps scroll and buttons visible.
-- Selecting `自动` with no saved identity opens the dialog.
+- Selecting `自动` with no current-session or saved identity opens the dialog.
+- The `身份...` button can reselect a temporary identity, save it, or clear the saved identity without using Settings.
 - Canceling the dialog does not send `play`.
 - Manual `执黑` and `执白` still send the old protocol.
 
@@ -646,7 +654,7 @@ Check:
 
 With a real Fox window:
 
-- select `野狐`, choose `自动`, save identity;
+- select `野狐`, choose `自动`, use identity once, then reopen `身份...` and save identity;
 - verify empty board at move 0 does not guess from stone count;
 - verify recognized black sends `play black ...`;
 - verify recognized white sends `play white ...`;
@@ -672,6 +680,6 @@ Only commit if there are actual final changes.
 - `自动` mode never sends `play` when identity or color is unknown.
 - Saved nickname/signature round-trips through config.
 - The first-run dialog can be canceled without side effects.
-- Settings can clear saved identity.
+- The identity dialog can clear saved identity; Settings does not expose Fox identity controls.
 - No new wire protocol lines are added.
 - Focused and full verification tests pass.

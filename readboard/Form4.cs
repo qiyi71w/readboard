@@ -15,7 +15,6 @@ namespace readboard
         private readonly MainForm host;
         private bool isApplyingSettingsLayout;
         private bool suppressDebugDiagnosticsPrompt;
-        private bool clearFoxAutoPlayIdentity;
 
         internal SettingsForm(MainForm host)
         {
@@ -50,8 +49,6 @@ namespace readboard
             this.rdoColorSystem.Text = getLangStr("SettingsForm_rdoColorSystem");
             this.rdoColorDark.Text = getLangStr("SettingsForm_rdoColorDark");
             this.rdoColorLight.Text = getLangStr("SettingsForm_rdoColorLight");
-            this.lblFoxAutoPlayNickname.Text = getLangStr("SettingsForm_lblFoxAutoPlayNickname");
-            this.btnClearFoxAutoPlayIdentity.Text = getLangStr("SettingsForm_btnClearFoxAutoPlayIdentity");
             this.chkDebugDiagnostics.Text = getLangStr("SettingsForm_chkDebugDiagnostics");
             this.btnOpenDebugDiagnostics.Text = getLangStr("SettingsForm_btnOpenDebugDiagnostics");
             var toolTip1 = new ToolTip();
@@ -121,9 +118,6 @@ namespace readboard
                 label.Font = UiTheme.BodyFont;
             }
 
-            lblFoxAutoPlayNickname.ForeColor = UiTheme.PrimaryText;
-            lblFoxAutoPlayNickname.Font = UiTheme.BodyFont;
-
             foreach (Label label in new[] { lblTips, lblTips1, lblTips2 })
                 UiTheme.StyleSubtleLabel(label);
 
@@ -131,7 +125,6 @@ namespace readboard
             UiTheme.StyleDangerButton(btnReset);
             UiTheme.StyleSecondaryButton(btnCancel);
             UiTheme.StyleSecondaryButton(btnOpenDebugDiagnostics);
-            UiTheme.StyleSecondaryButton(btnClearFoxAutoPlayIdentity);
             UiTheme.StylePrimaryButton(btnConfirm);
         }
 
@@ -178,10 +171,8 @@ namespace readboard
             chkVerifyMove.Location = new Point(left, top + optionRowGap * 2);
             chkDisableShowInBoardShortcut.Location = new Point(ScaleValue(170), top + optionRowGap * 2);
             chkDebugDiagnostics.Location = new Point(left, top + optionRowGap * 3);
-            LayoutColorModeRow(left, top + optionRowGap * 4);
-            int identityTop = top + optionRowGap * 5;
-            LayoutFoxAutoPlayIdentityRow(left, identityTop, contentWidth, buttonHeight);
-            int fieldsTop = LayoutWrappedLabel(lblBackForeOnly, left, btnClearFoxAutoPlayIdentity.Bottom + ScaleValue(16), contentWidth, true) + ScaleValue(20);
+            int colorBottom = LayoutColorModeRow(left, top + optionRowGap * 4);
+            int fieldsTop = LayoutWrappedLabel(lblBackForeOnly, left, colorBottom + ScaleValue(16), contentWidth, true) + ScaleValue(20);
             LayoutSettingsField(lblSyncInterval, txtSyncInterval, left, fieldsTop, labelWidth, inputWidth, fieldGap, ScaleValue(24));
             LayoutSettingsField(lblGrayOffsets, txtGrayOffsets, right, fieldsTop, labelWidth, inputWidth, fieldGap, ScaleValue(24));
             LayoutSettingsField(lblBlackOffsets, txtBlackOffsets, left, fieldsTop + fieldRowGap, labelWidth, inputWidth, fieldGap, ScaleValue(24));
@@ -229,7 +220,6 @@ namespace readboard
             currentTop = Math.Max(currentTop, btnOpenDebugDiagnostics.Bottom + optionRowGap);
 
             currentTop = LayoutColorModeRow(left, currentTop) + optionRowGap;
-            currentTop = LayoutFoxAutoPlayIdentityRow(left, currentTop, contentWidth, buttonHeight) + optionRowGap;
 
             currentTop = LayoutWrappedLabel(lblBackForeOnly, left, currentTop + ScaleValue(8), contentWidth, true) + ScaleValue(16);
 
@@ -314,7 +304,6 @@ namespace readboard
             requiredOptionWidth = Math.Max(requiredOptionWidth, GetLegacyOptionPreferredWidth(chkDebugDiagnostics));
             int requiredSecondOptionWidth = GetLegacyOptionPreferredWidth(chkPonder, chkEnhanceScreen, chkDisableShowInBoardShortcut);
             requiredSecondOptionWidth = Math.Max(requiredSecondOptionWidth, MeasureButtonWidth(btnOpenDebugDiagnostics, 124));
-            requiredSecondOptionWidth = Math.Max(requiredSecondOptionWidth, MeasureButtonWidth(btnClearFoxAutoPlayIdentity, 84));
             int requiredFieldsWidth = labelWidth * 2 + inputWidth * 2 + fieldGap * 2 + fieldColumnGap;
             int requiredFooterWidth =
                 MeasureButtonWidth(btnReset, 124)
@@ -389,26 +378,6 @@ namespace readboard
                 radioLeft = radio.Right + ScaleValue(10);
             }
             return Math.Max(lblColorMode.Bottom, rdoColorLight.Bottom);
-        }
-
-        private int LayoutFoxAutoPlayIdentityRow(int left, int top, int contentWidth, int buttonHeight)
-        {
-            int labelWidth = Math.Max(ScaleValue(FieldLabelWidth), lblFoxAutoPlayNickname.PreferredSize.Width);
-            int fieldGap = ScaleValue(8);
-            int clearButtonWidth = Math.Min(MeasureButtonWidth(btnClearFoxAutoPlayIdentity, 84), contentWidth);
-            lblFoxAutoPlayNickname.AutoSize = false;
-            lblFoxAutoPlayNickname.TextAlign = ContentAlignment.MiddleLeft;
-            lblFoxAutoPlayNickname.SetBounds(left, top + ScaleValue(4), labelWidth, ScaleValue(20));
-
-            int buttonLeft = lblFoxAutoPlayNickname.Right + fieldGap;
-            if (buttonLeft + clearButtonWidth <= left + contentWidth)
-            {
-                btnClearFoxAutoPlayIdentity.SetBounds(buttonLeft, top, clearButtonWidth, buttonHeight);
-                return Math.Max(lblFoxAutoPlayNickname.Bottom, btnClearFoxAutoPlayIdentity.Bottom);
-            }
-
-            btnClearFoxAutoPlayIdentity.SetBounds(left, lblFoxAutoPlayNickname.Bottom + ScaleValue(4), contentWidth, buttonHeight);
-            return btnClearFoxAutoPlayIdentity.Bottom;
         }
 
         private void ConfigureLegacyOptionCheckBox(CheckBox checkBox)
@@ -496,7 +465,7 @@ namespace readboard
             foreach (TextBox textBox in new[] { txtSyncInterval, txtGrayOffsets, txtBlackOffsets, txtBlackPercents, txtWhiteOffsets, txtWhitePercents })
                 textBox.TextAlign = HorizontalAlignment.Center;
 
-            foreach (Label label in new[] { lblSyncInterval, lblGrayOffsets, lblBlackOffsets, lblBlackPercents, lblWhiteOffsets, lblWhitePercents, lblFoxAutoPlayNickname, lblBackForeOnly, lblTips, lblTips1, lblTips2 })
+            foreach (Label label in new[] { lblSyncInterval, lblGrayOffsets, lblBlackOffsets, lblBlackPercents, lblWhiteOffsets, lblWhitePercents, lblBackForeOnly, lblTips, lblTips1, lblTips2 })
             {
                 label.BackColor = Color.Transparent;
                 label.ForeColor = SystemColors.ControlText;
@@ -505,7 +474,7 @@ namespace readboard
                 label.Padding = Padding.Empty;
             }
 
-            foreach (Button button in new[] { btnReset, btnCancel, btnConfirm, btnOpenDebugDiagnostics, btnClearFoxAutoPlayIdentity })
+            foreach (Button button in new[] { btnReset, btnCancel, btnConfirm, btnOpenDebugDiagnostics })
             {
                 button.FlatStyle = FlatStyle.System;
                 button.UseVisualStyleBackColor = true;
@@ -668,8 +637,6 @@ namespace readboard
             rdoColorSystem.Checked = config.ColorMode == AppConfig.ColorModeSystem;
             rdoColorDark.Checked = config.ColorMode == AppConfig.ColorModeDark;
             rdoColorLight.Checked = config.ColorMode == AppConfig.ColorModeLight;
-            clearFoxAutoPlayIdentity = false;
-            btnClearFoxAutoPlayIdentity.Enabled = HasFoxAutoPlayIdentity(config);
         }
 
         private bool TryBuildUpdatedConfig(out AppConfig updatedConfig)
@@ -708,30 +675,12 @@ namespace readboard
             updatedConfig.ColorMode = rdoColorDark.Checked ? AppConfig.ColorModeDark
                 : rdoColorLight.Checked ? AppConfig.ColorModeLight
                 : AppConfig.ColorModeSystem;
-            if (clearFoxAutoPlayIdentity)
-            {
-                updatedConfig.FoxAutoPlayNickname = string.Empty;
-                updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;
-            }
             if (IsOffsetOrPercentOutOfRange(updatedConfig))
             {
                 MessageBox.Show(getLangStr("SettingsForm_outOfRange"));
                 return false;
             }
             return true;
-        }
-
-        private void btnClearFoxAutoPlayIdentity_Click(object sender, EventArgs e)
-        {
-            clearFoxAutoPlayIdentity = true;
-            btnClearFoxAutoPlayIdentity.Enabled = false;
-        }
-
-        private static bool HasFoxAutoPlayIdentity(AppConfig config)
-        {
-            return config != null
-                && (!string.IsNullOrWhiteSpace(config.FoxAutoPlayNickname)
-                    || !string.IsNullOrWhiteSpace(config.FoxAutoPlayNicknameSignature));
         }
 
         private void chkDebugDiagnostics_CheckedChanged(object sender, EventArgs e)

@@ -18,7 +18,9 @@ namespace readboard
             this.lblPrompt = new System.Windows.Forms.Label();
             this.lblDetectedNicknames = new System.Windows.Forms.Label();
             this.pnlDetectedPlayerRows = new System.Windows.Forms.Panel();
-            this.btnConfirm = new System.Windows.Forms.Button();
+            this.btnUseOnce = new System.Windows.Forms.Button();
+            this.btnSaveAndUse = new System.Windows.Forms.Button();
+            this.btnClearSavedIdentity = new System.Windows.Forms.Button();
             this.btnCancel = new System.Windows.Forms.Button();
             this.SuspendLayout();
             //
@@ -48,35 +50,57 @@ namespace readboard
             this.pnlDetectedPlayerRows.Size = new System.Drawing.Size(500, 154);
             this.pnlDetectedPlayerRows.TabIndex = 2;
             //
-            // btnConfirm
+            // btnUseOnce
             //
-            this.btnConfirm.Location = new System.Drawing.Point(354, 248);
-            this.btnConfirm.Name = "btnConfirm";
-            this.btnConfirm.Size = new System.Drawing.Size(75, 26);
-            this.btnConfirm.TabIndex = 3;
-            this.btnConfirm.Text = "确定";
-            this.btnConfirm.UseVisualStyleBackColor = true;
-            this.btnConfirm.Click += new System.EventHandler(this.btnConfirm_Click);
+            this.btnUseOnce.Location = new System.Drawing.Point(124, 248);
+            this.btnUseOnce.Name = "btnUseOnce";
+            this.btnUseOnce.Size = new System.Drawing.Size(90, 26);
+            this.btnUseOnce.TabIndex = 3;
+            this.btnUseOnce.Text = "本次使用";
+            this.btnUseOnce.UseVisualStyleBackColor = true;
+            this.btnUseOnce.Click += new System.EventHandler(this.btnUseOnce_Click);
+            //
+            // btnSaveAndUse
+            //
+            this.btnSaveAndUse.Location = new System.Drawing.Point(220, 248);
+            this.btnSaveAndUse.Name = "btnSaveAndUse";
+            this.btnSaveAndUse.Size = new System.Drawing.Size(96, 26);
+            this.btnSaveAndUse.TabIndex = 4;
+            this.btnSaveAndUse.Text = "保存并使用";
+            this.btnSaveAndUse.UseVisualStyleBackColor = true;
+            this.btnSaveAndUse.Click += new System.EventHandler(this.btnSaveAndUse_Click);
+            //
+            // btnClearSavedIdentity
+            //
+            this.btnClearSavedIdentity.Location = new System.Drawing.Point(322, 248);
+            this.btnClearSavedIdentity.Name = "btnClearSavedIdentity";
+            this.btnClearSavedIdentity.Size = new System.Drawing.Size(90, 26);
+            this.btnClearSavedIdentity.TabIndex = 5;
+            this.btnClearSavedIdentity.Text = "清除保存";
+            this.btnClearSavedIdentity.UseVisualStyleBackColor = true;
+            this.btnClearSavedIdentity.Click += new System.EventHandler(this.btnClearSavedIdentity_Click);
             //
             // btnCancel
             //
-            this.btnCancel.Location = new System.Drawing.Point(441, 248);
+            this.btnCancel.Location = new System.Drawing.Point(418, 248);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(75, 26);
-            this.btnCancel.TabIndex = 4;
+            this.btnCancel.TabIndex = 6;
             this.btnCancel.Text = "取消";
             this.btnCancel.UseVisualStyleBackColor = true;
             this.btnCancel.Click += new System.EventHandler(this.btnCancel_Click);
             //
             // FoxAutoPlayIdentityDialog
             //
-            this.AcceptButton = this.btnConfirm;
+            this.AcceptButton = this.btnSaveAndUse;
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.btnCancel;
             this.ClientSize = new System.Drawing.Size(532, 292);
             this.Controls.Add(this.btnCancel);
-            this.Controls.Add(this.btnConfirm);
+            this.Controls.Add(this.btnClearSavedIdentity);
+            this.Controls.Add(this.btnSaveAndUse);
+            this.Controls.Add(this.btnUseOnce);
             this.Controls.Add(this.pnlDetectedPlayerRows);
             this.Controls.Add(this.lblDetectedNicknames);
             this.Controls.Add(this.lblPrompt);
@@ -94,7 +118,9 @@ namespace readboard
         private System.Windows.Forms.Label lblPrompt;
         private System.Windows.Forms.Label lblDetectedNicknames;
         private System.Windows.Forms.Panel pnlDetectedPlayerRows;
-        private System.Windows.Forms.Button btnConfirm;
+        private System.Windows.Forms.Button btnUseOnce;
+        private System.Windows.Forms.Button btnSaveAndUse;
+        private System.Windows.Forms.Button btnClearSavedIdentity;
         private System.Windows.Forms.Button btnCancel;
     }
 }

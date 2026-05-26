@@ -341,6 +341,7 @@ namespace readboard
             langItems["MainForm_radioBlack"] = "执黑";
             langItems["MainForm_radioWhite"] = "执白";
             langItems["MainForm_radioAutoPlayColor"] = "自动";
+            langItems["MainForm_btnFoxAutoPlayIdentity"] = "身份...";
             langItems["MainForm_autoPlayColorStatusUnconfigured"] = "未配置";
             langItems["MainForm_autoPlayColorStatusWaiting"] = "待识别";
             langItems["MainForm_autoPlayColorStatusBlack"] = "识别:黑";
@@ -431,12 +432,12 @@ namespace readboard
             langItems["SettingsForm_rdoColorDark"] = "深色";
             langItems["SettingsForm_rdoColorLight"] = "浅色";
             langItems["SettingsForm_colorModeRestartTip"] = "颜色模式已更改，重启后生效。";
-            langItems["SettingsForm_lblFoxAutoPlayNickname"] = "野狐自动身份";
-            langItems["SettingsForm_btnClearFoxAutoPlayIdentity"] = "清除已保存身份";
             langItems["FoxAutoPlayIdentityDialog_title"] = "野狐自动模式";
             langItems["FoxAutoPlayIdentityDialog_lblPrompt"] = "请选择你在野狐当前房间里的玩家行。";
             langItems["FoxAutoPlayIdentityDialog_lblDetectedNicknames"] = "可选玩家行";
-            langItems["FoxAutoPlayIdentityDialog_btnConfirm"] = "确定";
+            langItems["FoxAutoPlayIdentityDialog_btnUseOnce"] = "本次使用";
+            langItems["FoxAutoPlayIdentityDialog_btnSaveAndUse"] = "保存并使用";
+            langItems["FoxAutoPlayIdentityDialog_btnClearSavedIdentity"] = "清除保存";
             langItems["FoxAutoPlayIdentityDialog_btnCancel"] = "取消";
             langItems["FoxAutoPlayIdentityDialog_noDetectedNicknames"] = "暂未识别到可选玩家行";
             langItems["FoxAutoPlayIdentityDialog_noSelectedPlayerRow"] = "请先选择你的玩家行。";
