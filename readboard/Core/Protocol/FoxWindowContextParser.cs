@@ -26,6 +26,7 @@ namespace readboard
                 return new FoxWindowContext
                 {
                     Kind = FoxWindowKind.LiveRoom,
+                    LiveRoomState = ParseLiveRoomState(title),
                     RoomToken = roomMatch.Groups[1].Value,
                     LiveTitleMove = FoxMoveNumberParser.Parse(title)
                 };
@@ -56,6 +57,15 @@ namespace readboard
                 return null;
 
             return int.Parse(match.Groups[1].Value);
+        }
+
+        private static FoxLiveRoomState ParseLiveRoomState(string title)
+        {
+            if (title.Contains("对弈中"))
+                return FoxLiveRoomState.Playing;
+            if (title.Contains("观战中"))
+                return FoxLiveRoomState.Watching;
+            return FoxLiveRoomState.Unknown;
         }
 
         private static string Fingerprint(string title)

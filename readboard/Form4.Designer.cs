@@ -333,14 +333,13 @@
             this.rdoColorLight.TabIndex = 33;
             this.rdoColorLight.Text = "浅色";
             this.rdoColorLight.UseVisualStyleBackColor = true;
-            //
             // chkDebugDiagnostics
             //
             this.chkDebugDiagnostics.AutoSize = true;
-            this.chkDebugDiagnostics.Location = new System.Drawing.Point(12, 75);
+            this.chkDebugDiagnostics.Location = new System.Drawing.Point(12, 103);
             this.chkDebugDiagnostics.Name = "chkDebugDiagnostics";
             this.chkDebugDiagnostics.Size = new System.Drawing.Size(120, 16);
-            this.chkDebugDiagnostics.TabIndex = 34;
+            this.chkDebugDiagnostics.TabIndex = 37;
             this.chkDebugDiagnostics.Text = "保存调试诊断";
             this.chkDebugDiagnostics.UseVisualStyleBackColor = true;
             //
@@ -349,7 +348,7 @@
             this.btnOpenDebugDiagnostics.Location = new System.Drawing.Point(304, 12);
             this.btnOpenDebugDiagnostics.Name = "btnOpenDebugDiagnostics";
             this.btnOpenDebugDiagnostics.Size = new System.Drawing.Size(108, 23);
-            this.btnOpenDebugDiagnostics.TabIndex = 35;
+            this.btnOpenDebugDiagnostics.TabIndex = 38;
             this.btnOpenDebugDiagnostics.Text = "打开调试目录";
             this.btnOpenDebugDiagnostics.UseVisualStyleBackColor = true;
             this.btnOpenDebugDiagnostics.Click += new System.EventHandler(this.btnOpenDebugDiagnostics_Click);

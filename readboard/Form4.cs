@@ -171,8 +171,8 @@ namespace readboard
             chkVerifyMove.Location = new Point(left, top + optionRowGap * 2);
             chkDisableShowInBoardShortcut.Location = new Point(ScaleValue(170), top + optionRowGap * 2);
             chkDebugDiagnostics.Location = new Point(left, top + optionRowGap * 3);
-            LayoutColorModeRow(left, top + optionRowGap * 4);
-            int fieldsTop = LayoutWrappedLabel(lblBackForeOnly, left, ScaleValue(170), contentWidth, true) + ScaleValue(20);
+            int colorBottom = LayoutColorModeRow(left, top + optionRowGap * 4);
+            int fieldsTop = LayoutWrappedLabel(lblBackForeOnly, left, colorBottom + ScaleValue(16), contentWidth, true) + ScaleValue(20);
             LayoutSettingsField(lblSyncInterval, txtSyncInterval, left, fieldsTop, labelWidth, inputWidth, fieldGap, ScaleValue(24));
             LayoutSettingsField(lblGrayOffsets, txtGrayOffsets, right, fieldsTop, labelWidth, inputWidth, fieldGap, ScaleValue(24));
             LayoutSettingsField(lblBlackOffsets, txtBlackOffsets, left, fieldsTop + fieldRowGap, labelWidth, inputWidth, fieldGap, ScaleValue(24));
@@ -461,8 +461,9 @@ namespace readboard
                 textBox.ForeColor = SystemColors.WindowText;
                 textBox.Font = Control.DefaultFont;
                 textBox.BorderStyle = BorderStyle.Fixed3D;
-                textBox.TextAlign = HorizontalAlignment.Center;
             }
+            foreach (TextBox textBox in new[] { txtSyncInterval, txtGrayOffsets, txtBlackOffsets, txtBlackPercents, txtWhiteOffsets, txtWhitePercents })
+                textBox.TextAlign = HorizontalAlignment.Center;
 
             foreach (Label label in new[] { lblSyncInterval, lblGrayOffsets, lblBlackOffsets, lblBlackPercents, lblWhiteOffsets, lblWhitePercents, lblBackForeOnly, lblTips, lblTips1, lblTips2 })
             {

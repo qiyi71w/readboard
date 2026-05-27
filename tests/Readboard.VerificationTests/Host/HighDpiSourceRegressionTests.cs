@@ -51,6 +51,28 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void MainForm_AutoPlayColorMode_IsMeasuredAndThemed()
+        {
+            string content = LoadSource("readboard", "Form1.cs");
+            string legacySlice = GetMethodSlice(content, "private int ArrangeLegacyMainSyncSection(int top)");
+            string adaptiveSlice = GetMethodSlice(content, "private int ArrangeAdaptiveMainSyncSection(int top)");
+            string widthSlice = GetMethodSlice(content, "private int GetLegacyMainSyncRequiredWidth()");
+            string optionsSlice = GetMethodSlice(content, "private IEnumerable<ButtonBase> MainThemeOptions()");
+            string labelsSlice = GetMethodSlice(content, "private IEnumerable<Label> MainThemeLabels()");
+
+            Assert.Contains("ArrangeMainSyncAutoStatusColumn(rowHeight);", legacySlice);
+            Assert.Contains("ArrangeMainSyncAutoStatusColumn(rowHeight);", adaptiveSlice);
+            Assert.Contains("pnlAutoPlayColorStatus.Margin = new Padding(0, 0, 0, 0);", legacySlice);
+            Assert.Contains("pnlAutoPlayColorStatus.Margin = new Padding(0, 0, 0, 0);", adaptiveSlice);
+            Assert.Contains("pnlFoxAutoPlayIdentity.Margin = new Padding(0, 0, 0, 0);", legacySlice);
+            Assert.Contains("pnlFoxAutoPlayIdentity.Margin = new Padding(0, 0, 0, 0);", adaptiveSlice);
+            Assert.Contains("GetMainSyncAutoStatusColumnWidth()", widthSlice);
+            Assert.Contains("radioAutoPlayColor", optionsSlice);
+            Assert.Contains("btnFoxAutoPlayIdentity", optionsSlice);
+            Assert.Contains("lblAutoPlayColorStatus", labelsSlice);
+        }
+
+        [Fact]
         public void SettingsForm_PlacesOpenDebugDirectoryButtonInTopRightSlot()
         {
             string content = LoadSource("readboard", "Form4.cs");
@@ -58,6 +80,19 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("btnOpenDebugDiagnostics.SetBounds(buttonLeft, top, buttonWidth, buttonHeight);", content);
             Assert.Contains("currentTop = LayoutSingleOption(chkDebugDiagnostics, left, currentTop, optionRowGap);", content);
             Assert.DoesNotContain("LayoutOptionRow(chkDebugDiagnostics, btnOpenDebugDiagnostics", content);
+        }
+
+        [Fact]
+        public void SettingsForm_FoxAutoPlayIdentityControls_AreNotInSettings()
+        {
+            string content = LoadSource("readboard", "Form4.cs");
+            string designerSource = LoadSource("readboard", "Form4.Designer.cs");
+
+            Assert.DoesNotContain("lblFoxAutoPlayNickname", designerSource);
+            Assert.DoesNotContain("txtFoxAutoPlayNickname", designerSource);
+            Assert.DoesNotContain("btnClearFoxAutoPlayIdentity", designerSource);
+            Assert.DoesNotContain("LayoutFoxAutoPlayIdentityRow", content);
+            Assert.DoesNotContain("MeasureButtonWidth(btnClearFoxAutoPlayIdentity", content);
         }
 
         [Fact]
@@ -88,6 +123,31 @@ namespace Readboard.VerificationTests.Host
         {
             string path = Path.Combine(VerificationFixtureLocator.RepositoryRoot(), Path.Combine(segments));
             return File.ReadAllText(path);
+        }
+
+        private static int IndexOfRequired(string source, string value)
+        {
+            int index = source.IndexOf(value, StringComparison.Ordinal);
+            Assert.True(index >= 0, "Expected to find source fragment: " + value);
+            return index;
+        }
+
+        private static string GetMethodSlice(string source, string methodSignature)
+        {
+            int startIndex = IndexOfRequired(source, methodSignature);
+            int nextMethodIndex = source.IndexOf("\n        private ", startIndex + methodSignature.Length, StringComparison.Ordinal);
+            int publicMethodIndex = source.IndexOf("\n        public ", startIndex + methodSignature.Length, StringComparison.Ordinal);
+            int defaultMethodIndex = source.IndexOf("\n        void ", startIndex + methodSignature.Length, StringComparison.Ordinal);
+            int internalMethodIndex = source.IndexOf("\n        internal ", startIndex + methodSignature.Length, StringComparison.Ordinal);
+            if (publicMethodIndex >= 0 && (nextMethodIndex < 0 || publicMethodIndex < nextMethodIndex))
+                nextMethodIndex = publicMethodIndex;
+            if (defaultMethodIndex >= 0 && (nextMethodIndex < 0 || defaultMethodIndex < nextMethodIndex))
+                nextMethodIndex = defaultMethodIndex;
+            if (internalMethodIndex >= 0 && (nextMethodIndex < 0 || internalMethodIndex < nextMethodIndex))
+                nextMethodIndex = internalMethodIndex;
+            if (nextMethodIndex < 0)
+                nextMethodIndex = source.Length;
+            return source.Substring(startIndex, nextMethodIndex - startIndex);
         }
     }
 }

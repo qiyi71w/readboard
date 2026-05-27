@@ -61,24 +61,55 @@ namespace Readboard.VerificationTests.Host
             string adaptiveSync = GetMethodSlice(source, "private int ArrangeAdaptiveMainSyncSection(int top)");
             string visitsLabel = GetMethodSlice(source, "private int GetSharedMainSyncVisitsLabelWidth()");
             string adaptiveVisits = GetMethodSlice(source, "private int GetAdaptiveMainSyncVisitsPanelWidth()");
+            string conditionLabel = GetMethodSlice(source, "private int GetMainSyncConditionTimeLabelWidth()");
+            string timeLabelPanel = GetMethodSlice(source, "private int GetMainSyncTimeLabelPanelWidth()");
+            string conditionSlot = GetMethodSlice(source, "private int GetMainSyncConditionTimeSlotWidth()");
+            string timeRowVisitsMargin = GetMethodSlice(source, "private int GetMainSyncTimeRowVisitsLeftMargin()");
+            string syncWidth = GetMethodSlice(source, "private int GetLegacyMainSyncRequiredWidth()");
 
             Assert.Contains("int sharedLegacyVisitsPanelWidth = GetLegacyMainSyncVisitsPanelWidth();", legacySync);
+            Assert.Contains("int conditionLabelWidth = GetMainSyncConditionTimeLabelWidth();", legacySync);
+            Assert.Contains("panel1.Size = new Size(GetMainSyncConditionTimeSlotWidth(), rowHeight);", legacySync);
+            Assert.Contains("panel4.Margin = new Padding(GetMainSyncTimeRowVisitsLeftMargin(), ScaleValue(2), 0, 0);", legacySync);
+            Assert.Contains("panel3.Size = new Size(GetMainSyncTimeLabelPanelWidth(), rowHeight);", legacySync);
+            Assert.Contains("lblPlayCondition.SetBounds(0, ScaleValue(3), conditionLabelWidth, ScaleValue(18));", legacySync);
             Assert.Contains("lblTotalVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(18));", legacySync);
+            Assert.Contains("lblTime.SetBounds(0, ScaleValue(3), lblTime.PreferredSize.Width, ScaleValue(18));", legacySync);
             Assert.Contains("lblBestMoveVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(18));", legacySync);
+            Assert.Contains("lblTime.TextAlign = ContentAlignment.MiddleLeft;", legacySync);
             Assert.Contains("textBox1.Size = new Size(ScaleValue(68), rowHeight);", legacySync);
             Assert.Contains("textBox2.Size = new Size(ScaleValue(92), rowHeight);", legacySync);
             Assert.Contains("textBox3.Size = new Size(ScaleValue(92), rowHeight);", legacySync);
 
-            Assert.Contains("panel1.Size = new System.Drawing.Size(lblPlayCondition.PreferredSize.Width + ScaleValue(18) + ScaleValue(68) + timeFieldGap, rowHeight);", adaptiveSync);
-            Assert.Contains("panel3.Size = new System.Drawing.Size(lblTime.PreferredSize.Width + ScaleValue(18) + ScaleValue(92), rowHeight);", adaptiveSync);
+            Assert.Contains("int conditionLabelWidth = GetMainSyncConditionTimeLabelWidth();", adaptiveSync);
+            Assert.Contains("panel1.Size = new System.Drawing.Size(GetMainSyncConditionTimeSlotWidth(), rowHeight);", adaptiveSync);
+            Assert.Contains("panel4.Margin = new Padding(GetMainSyncTimeRowVisitsLeftMargin(), ScaleValue(2), 0, 0);", adaptiveSync);
+            Assert.Contains("panel3.Size = new System.Drawing.Size(GetMainSyncTimeLabelPanelWidth(), rowHeight);", adaptiveSync);
+            Assert.Contains("lblPlayCondition.SetBounds(0, ScaleValue(3), conditionLabelWidth, ScaleValue(20));", adaptiveSync);
             Assert.Contains("lblTotalVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(20));", adaptiveSync);
+            Assert.Contains("lblTime.SetBounds(0, ScaleValue(3), lblTime.PreferredSize.Width, ScaleValue(20));", adaptiveSync);
             Assert.Contains("lblBestMoveVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(20));", adaptiveSync);
+            Assert.Contains("lblTime.TextAlign = ContentAlignment.MiddleLeft;", adaptiveSync);
             Assert.Contains("textBox1.Size = new System.Drawing.Size(ScaleValue(68), rowHeight);", adaptiveSync);
             Assert.Contains("textBox2.Size = new System.Drawing.Size(ScaleValue(92), rowHeight);", adaptiveSync);
             Assert.Contains("textBox3.Size = new System.Drawing.Size(ScaleValue(92), rowHeight);", adaptiveSync);
 
             Assert.Contains("return Math.Max(lblTotalVisits.PreferredSize.Width, lblBestMoveVisits.PreferredSize.Width);", visitsLabel);
             Assert.Contains("return GetSharedMainSyncVisitsLabelWidth() + ScaleValue(18) + ScaleValue(92);", adaptiveVisits);
+            Assert.Contains("return Math.Max(lblPlayCondition.PreferredSize.Width, lblTime.PreferredSize.Width);", conditionLabel);
+            Assert.Contains("return lblTime.PreferredSize.Width + ScaleValue(18);", timeLabelPanel);
+            Assert.Contains("return GetMainSyncConditionTimeLabelWidth() + ScaleValue(18) + ScaleValue(8) + ScaleValue(68);", conditionSlot);
+            Assert.Contains("int usedWidth = GetMainSyncTimeLabelPanelWidth() + ScaleValue(8) + ScaleValue(68);", timeRowVisitsMargin);
+            Assert.Contains("return ScaleValue(12) + Math.Max(0, GetMainSyncConditionTimeSlotWidth() - usedWidth);", timeRowVisitsMargin);
+            Assert.Contains("+ GetMainSyncConditionTimeSlotWidth()", syncWidth);
+            Assert.Contains("ArrangeMainSyncFlowOrder();", legacySync);
+            Assert.Contains("ArrangeMainSyncFlowOrder();", adaptiveSync);
+            Assert.Contains("pnlAutoPlayColorStatus.Margin = new Padding(0, 0, 0, 0);", legacySync);
+            Assert.Contains("pnlAutoPlayColorStatus.Margin = new Padding(0, 0, 0, 0);", adaptiveSync);
+            Assert.Contains("pnlFoxAutoPlayIdentity.Margin = new Padding(0, 0, 0, 0);", legacySync);
+            Assert.Contains("pnlFoxAutoPlayIdentity.Margin = new Padding(0, 0, 0, 0);", adaptiveSync);
+            Assert.Contains("ArrangeMainSyncAutoStatusColumn(rowHeight);", legacySync);
+            Assert.Contains("ArrangeMainSyncAutoStatusColumn(rowHeight);", adaptiveSync);
 
             Assert.DoesNotContain("GetSharedMainSyncToggleWidth()", source);
             Assert.DoesNotContain("GetSharedMainSyncColorWidth()", source);
@@ -87,6 +118,64 @@ namespace Readboard.VerificationTests.Host
             Assert.DoesNotContain("GetSharedMainSyncTimeSlotWidth()", source);
             Assert.DoesNotContain("GetSharedMainSyncConditionSlotWidth()", source);
             Assert.DoesNotContain("GetSharedMainSyncVisitsPanelWidth()", source);
+        }
+
+        [Fact]
+        public void MainForm_SyncFlowPlacesAutoColorAboveIdentityColumn()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string orderSlice = GetMethodSlice(source, "private void ArrangeMainSyncFlowOrder()");
+            string columnSlice = GetMethodSlice(source, "private void ArrangeMainSyncAutoStatusColumn(int rowHeight)");
+            string columnWidthSlice = GetMethodSlice(source, "private int GetMainSyncAutoStatusColumnWidth()");
+            string statusTextSlice = GetMethodSlice(source, "private void SetAutoPlayColorStatusText(string text)");
+            string widthSlice = GetMethodSlice(source, "private int GetLegacyMainSyncRequiredWidth()");
+
+            int autoIndex = IndexOfRequired(orderSlice, "flowLayoutPanel1.Controls.SetChildIndex(pnlAutoPlayColorStatus, 2);");
+            int conditionIndex = IndexOfRequired(orderSlice, "flowLayoutPanel1.Controls.SetChildIndex(panel1, 3);");
+            int identityIndex = IndexOfRequired(orderSlice, "flowLayoutPanel2.Controls.SetChildIndex(pnlFoxAutoPlayIdentity, 2);");
+            int timeIndex = IndexOfRequired(orderSlice, "flowLayoutPanel2.Controls.SetChildIndex(panel3, 3);");
+            int timeInputIndex = IndexOfRequired(orderSlice, "flowLayoutPanel2.Controls.SetChildIndex(textBox1, 4);");
+            int visitsIndex = IndexOfRequired(orderSlice, "flowLayoutPanel2.Controls.SetChildIndex(panel4, 5);");
+            int visitsInputIndex = IndexOfRequired(orderSlice, "flowLayoutPanel2.Controls.SetChildIndex(textBox3, 6);");
+
+            Assert.True(autoIndex < conditionIndex);
+            Assert.True(identityIndex < timeIndex);
+            Assert.True(timeIndex < timeInputIndex);
+            Assert.True(timeInputIndex < visitsIndex);
+            Assert.True(visitsIndex < visitsInputIndex);
+            Assert.Contains("int columnHeight = Math.Max(rowHeight, btnFoxAutoPlayIdentity.PreferredSize.Height + ScaleValue(2));", columnSlice);
+            Assert.Contains("pnlAutoPlayColorStatus.Size = new Size(columnWidth, columnHeight);", columnSlice);
+            Assert.Contains("pnlFoxAutoPlayIdentity.Size = new Size(columnWidth, columnHeight);", columnSlice);
+            Assert.Contains("radioAutoPlayColor.Location = new Point(0, Math.Max(0, (columnHeight - radioAutoPlayColor.PreferredSize.Height) / 2));", columnSlice);
+            Assert.Contains("lblAutoPlayColorStatus.Location = new Point(", columnSlice);
+            Assert.Contains("btnFoxAutoPlayIdentity.Location = new Point(0, Math.Max(0, (columnHeight - btnFoxAutoPlayIdentity.PreferredSize.Height) / 2));", columnSlice);
+            Assert.Contains("int autoStatusWidth = GetLayoutOptionPreferredSize(radioAutoPlayColor).Width + ScaleValue(6) + GetMainSyncAutoPlayStatusTextWidth();", columnWidthSlice);
+            Assert.Contains("return Math.Max(autoStatusWidth, identityWidth);", columnWidthSlice);
+            Assert.Contains("lblAutoPlayColorStatus.Text = text;", statusTextSlice);
+            Assert.Contains("+ GetMainSyncAutoStatusColumnWidth()", widthSlice);
+        }
+
+        [Fact]
+        public void MainForm_AutoPlayStatusTextDoesNotRefreshLayout()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string statusTextSlice = GetMethodSlice(source, "private void SetAutoPlayColorStatusText(string text)");
+            string columnWidthSlice = GetMethodSlice(source, "private int GetMainSyncAutoStatusColumnWidth()");
+            string statusWidthSlice = GetMethodSlice(source, "private int GetMainSyncAutoPlayStatusTextWidth()");
+
+            Assert.DoesNotContain("ApplyMainFormUi();", statusTextSlice);
+            Assert.DoesNotContain("RefreshMainSyncLayoutFromStatusText", source);
+            Assert.DoesNotContain("ArrangeMainSyncSection", statusTextSlice);
+            Assert.DoesNotContain("ArrangeMainActions", statusTextSlice);
+            Assert.DoesNotContain("lblAutoPlayColorStatus.PreferredSize.Width", columnWidthSlice);
+            Assert.Contains("GetMainSyncAutoPlayStatusTextWidth()", columnWidthSlice);
+            Assert.Contains("MainForm_autoPlayColorStatusUnconfigured", statusWidthSlice);
+            Assert.Contains("MainForm_autoPlayColorStatusBlack", statusWidthSlice);
+            Assert.Contains("MainForm_autoPlayColorStatusWhite", statusWidthSlice);
+            Assert.Contains("MainForm_autoPlayColorStatusUnsupported", statusWidthSlice);
+            Assert.Contains("MainForm_autoPlayColorStatusSpectating", statusWidthSlice);
+            Assert.Contains("MainForm_autoPlayColorStatusWaiting", statusWidthSlice);
+            Assert.Contains("TextRenderer.MeasureText(statusTexts[i], lblAutoPlayColorStatus.Font).Width", statusWidthSlice);
         }
 
         [Fact]
@@ -180,6 +269,13 @@ namespace Readboard.VerificationTests.Host
             }
 
             throw new InvalidOperationException($"Could not slice method: {signature}");
+        }
+
+        private static int IndexOfRequired(string source, string value)
+        {
+            int index = source.IndexOf(value, StringComparison.Ordinal);
+            Assert.True(index >= 0, "Expected to find source fragment: " + value);
+            return index;
         }
     }
 }
