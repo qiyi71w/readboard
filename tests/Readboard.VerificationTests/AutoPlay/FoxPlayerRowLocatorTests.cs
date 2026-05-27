@@ -174,6 +174,26 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
+        public void DetectPlayerListPanel_MatchesSavedSignatureWhenNicknameCropWidthChanges()
+        {
+            using (Bitmap sourceBitmap = CreateFoxPlayerListPanel(350, 249))
+            using (Bitmap targetBitmap = CreateFoxPlayerListPanel(520, 249))
+            {
+                IList<FoxPlayerRowCandidate> sourceRows = FoxPlayerRowLocator.LocatePlayerListPanel(sourceBitmap);
+                using (Bitmap nicknameSnippet = Crop(sourceBitmap, sourceRows[1].NicknameBounds))
+                {
+                    string signature = FoxPlayerNicknameSignature.FromBitmap(nicknameSnippet).Serialize();
+
+                    AutoPlayColorResolution resolution = FoxAutoPlayColorDetector.DetectPlayerListPanel(targetBitmap, signature);
+
+                    Assert.True(resolution.IsKnown);
+                    Assert.Equal("white", resolution.PlayColor);
+                    Assert.Equal(AutoPlayColorStatus.RecognizedWhite, resolution.Status);
+                }
+            }
+        }
+
+        [Fact]
         public void Detect_ReturnsStoneColorForMatchedNicknameSignature()
         {
             using (Bitmap bitmap = CreateFoxLikeWindow(2, 1.0f))
@@ -271,8 +291,16 @@ namespace Readboard.VerificationTests.AutoPlay
                     int y = panelY + row * rowHeight;
                     graphics.FillRectangle(row % 2 == 0 ? rowBrush : alternateRowBrush, panelX, y, panelWidth, rowHeight);
                     graphics.DrawRectangle(borderPen, panelX, y, panelWidth, rowHeight);
-                    graphics.FillRectangle(glyphBrush, panelX + (int)(48 * scale), y + (int)(8 * scale), (int)(70 * scale), (int)(4 * scale));
-                    graphics.FillRectangle(glyphBrush, panelX + (int)(48 * scale), y + (int)(16 * scale), (int)(86 * scale), (int)(4 * scale));
+                    if (row % 2 == 0)
+                    {
+                        graphics.FillRectangle(glyphBrush, panelX + (int)(48 * scale), y + (int)(8 * scale), (int)(70 * scale), (int)(4 * scale));
+                        graphics.FillRectangle(glyphBrush, panelX + (int)(48 * scale), y + (int)(16 * scale), (int)(86 * scale), (int)(4 * scale));
+                    }
+                    else
+                    {
+                        graphics.FillRectangle(glyphBrush, panelX + (int)(60 * scale), y + (int)(8 * scale), (int)(76 * scale), (int)(4 * scale));
+                        graphics.FillRectangle(glyphBrush, panelX + (int)(48 * scale), y + (int)(16 * scale), (int)(56 * scale), (int)(4 * scale));
+                    }
                     Brush stoneBrush = row % 2 == 0 ? darkStoneBrush : whiteStoneBrush;
                     if (row % 2 != 0)
                     {
@@ -414,8 +442,17 @@ namespace Readboard.VerificationTests.AutoPlay
             int secondGlyphWidth = Math.Min(alternateGlyphShape ? 62 : 84, Math.Max(20, stoneLeft - secondGlyphLeft - 10));
 
             graphics.FillRectangle(rowBrush, 0, y, width, 28);
-            graphics.FillRectangle(glyphBrush, nicknameLeft, y + 8, firstGlyphWidth, 4);
-            graphics.FillRectangle(glyphBrush, secondGlyphLeft, y + 16, secondGlyphWidth, 4);
+            if (alternateGlyphShape)
+            {
+                graphics.FillRectangle(glyphBrush, nicknameLeft + 18, y + 7, Math.Max(18, firstGlyphWidth / 2), 4);
+                graphics.FillRectangle(glyphBrush, secondGlyphLeft, y + 16, secondGlyphWidth, 4);
+                graphics.FillRectangle(glyphBrush, nicknameLeft + 6, y + 9, 4, 14);
+            }
+            else
+            {
+                graphics.FillRectangle(glyphBrush, nicknameLeft, y + 8, firstGlyphWidth, 4);
+                graphics.FillRectangle(glyphBrush, secondGlyphLeft, y + 16, secondGlyphWidth, 4);
+            }
             if (stoneShadowBrush != null)
                 graphics.FillEllipse(stoneShadowBrush, stoneLeft - 2, y + 5, 23, 23);
             graphics.FillEllipse(stoneBrush, stoneLeft, y + 6, 20, 20);
@@ -440,8 +477,17 @@ namespace Readboard.VerificationTests.AutoPlay
             int secondGlyphWidth = Math.Min(alternateGlyphShape ? 62 : 84, Math.Max(20, stoneLeft - secondGlyphLeft - 10));
 
             graphics.FillRectangle(rowBrush, 0, y, width, 28);
-            graphics.FillRectangle(glyphBrush, nicknameLeft, y + 8, firstGlyphWidth, 4);
-            graphics.FillRectangle(glyphBrush, secondGlyphLeft, y + 16, secondGlyphWidth, 4);
+            if (alternateGlyphShape)
+            {
+                graphics.FillRectangle(glyphBrush, nicknameLeft + 18, y + 7, Math.Max(18, firstGlyphWidth / 2), 4);
+                graphics.FillRectangle(glyphBrush, secondGlyphLeft, y + 16, secondGlyphWidth, 4);
+                graphics.FillRectangle(glyphBrush, nicknameLeft + 6, y + 9, 4, 14);
+            }
+            else
+            {
+                graphics.FillRectangle(glyphBrush, nicknameLeft, y + 8, firstGlyphWidth, 4);
+                graphics.FillRectangle(glyphBrush, secondGlyphLeft, y + 16, secondGlyphWidth, 4);
+            }
             if (stoneShadowBrush != null)
                 graphics.FillEllipse(stoneShadowBrush, stoneLeft - 2, y + 5, 23, 23);
             graphics.FillEllipse(stoneBrush, stoneLeft, y + 6, 20, 20);

@@ -132,6 +132,7 @@ namespace readboard
             config.WhitePercent = ReadIntValue(values, "WhitePercent", config.WhitePercent);
             config.UseMagnifier = ReadBoolValue(values, "UseMagnifier", config.UseMagnifier);
             config.VerifyMove = ReadBoolValue(values, "VerifyMove", config.VerifyMove);
+            config.MoveVerifyMaxAttempts = ReadIntValue(values, "MoveVerifyMaxAttempts", config.MoveVerifyMaxAttempts);
             config.ShowScaleHint = ReadBoolValue(values, "ShowScaleHint", config.ShowScaleHint);
             config.ShowInBoard = ReadBoolValue(values, "ShowInBoard", config.ShowInBoard);
             config.ShowInBoardHint = ReadBoolValue(values, "ShowInBoardHint", config.ShowInBoardHint);
@@ -305,6 +306,8 @@ namespace readboard
         {
             config.ProtocolVersion = protocolVersion;
             config.MachineKey = machineKey;
+            config.MoveVerifyMaxAttempts =
+                AppConfig.NormalizeMoveVerifyMaxAttempts(config.MoveVerifyMaxAttempts);
         }
 
         private static void NormalizeWindowPosition(AppConfig config)

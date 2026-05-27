@@ -114,6 +114,28 @@ namespace Readboard.VerificationTests.Placement
         }
 
         [Fact]
+        public void Place_FoxBackgroundSend_WhenSendMessageFailsReturnsPlacementFailure()
+        {
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods
+            {
+                SendMouseMessageResult = false
+            };
+            LegacyMovePlacementService service = new LegacyMovePlacementService(nativeMethods);
+
+            MovePlacementResult result = service.Place(new MovePlacementRequest
+            {
+                Frame = CreateFoxBackgroundFrame(),
+                Move = new MoveRequest { X = 1, Y = 1 }
+            });
+
+            Assert.False(result.Success);
+            Assert.Equal(PlacementPathKind.BackgroundSend, result.PlacementPath);
+            Assert.Equal(MovePlacementFailureKind.PlacementFailed, result.FailureKind);
+            Assert.Equal("SendMessage placement timed out or failed.", result.FailureReason);
+            Assert.Single(nativeMethods.SentMessages);
+        }
+
+        [Fact]
         public void Place_ForegroundCancellationRequestedAfterActivation_DoesNotClick()
         {
             bool cancelRequested = false;
@@ -299,6 +321,26 @@ namespace Readboard.VerificationTests.Placement
             };
         }
 
+        private static BoardFrame CreateFoxBackgroundFrame()
+        {
+            return new BoardFrame
+            {
+                SyncMode = SyncMode.FoxBackgroundPlace,
+                BoardSize = new BoardDimensions(5, 5),
+                Viewport = new BoardViewport
+                {
+                    SourceBounds = new PixelRect(20, 30, 50, 50)
+                },
+                Window = new WindowDescriptor
+                {
+                    Handle = new IntPtr(3003),
+                    Bounds = new PixelRect(100, 200, 150, 150),
+                    IsDpiAware = true,
+                    DpiScale = 1d
+                }
+            };
+        }
+
         private sealed class RecordingNativeMethods : IPlacementNativeMethods
         {
             public PlacementClick ForegroundClick { get; private set; }
@@ -309,6 +351,7 @@ namespace Readboard.VerificationTests.Placement
             public IntPtr YikeRenderWidgetHandle { get; set; }
             public PixelRect YikeRenderWidgetBounds { get; set; }
             public string LastRequestedChildClassName { get; private set; }
+            public bool SendMouseMessageResult { get; set; } = true;
 
             public IntPtr FindWindowByClass(string className)
             {
@@ -351,9 +394,10 @@ namespace Readboard.VerificationTests.Placement
                 return true;
             }
 
-            public void SendMouseMessage(IntPtr handle, uint message, int wParam, int lParam)
+            public bool TrySendMouseMessage(IntPtr handle, uint message, int wParam, int lParam)
             {
                 SentMessages.Add(new PostedMouseMessage(handle, message, wParam, lParam));
+                return SendMouseMessageResult;
             }
         }
 

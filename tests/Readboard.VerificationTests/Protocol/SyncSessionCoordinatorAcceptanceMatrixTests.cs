@@ -71,6 +71,53 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public async Task VerifiedPendingMove_WithOneConfiguredMaxAttemptFailsAfterInitialUnconfirmedSnapshot()
+        {
+            await AssertVerifiedPendingMoveFailsAfterTotalPlacementAttempts(1, 1);
+        }
+
+        [Fact]
+        public async Task VerifiedPendingMove_UsesConfiguredTotalAttemptsBeforeFailing()
+        {
+            await AssertVerifiedPendingMoveFailsAfterTotalPlacementAttempts(2, 2);
+        }
+
+        [Fact]
+        public async Task VerifiedPendingMove_WithoutConfiguredMaxAttemptsUsesDefaultTotalAttemptsBeforeFailing()
+        {
+            await AssertVerifiedPendingMoveFailsAfterTotalPlacementAttempts(
+                null,
+                AppConfig.DefaultMoveVerifyMaxAttempts);
+        }
+
+        [Fact]
+        public async Task UnverifiedPendingMove_IgnoresConfiguredMaxAttempts()
+        {
+            SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator();
+            Assert.True(coordinator.TryQueuePendingMove(
+                new MoveRequest
+                {
+                    X = 1,
+                    Y = 1,
+                    VerifyMove = false,
+                    MoveVerifyMaxAttempts = 5
+                },
+                19,
+                19));
+            Task<bool> waitTask = Task.Run(() => coordinator.WaitForPendingMoveResult());
+
+            Assert.True(coordinator.TryTakePendingMove(out MoveRequest attempt));
+            Assert.Equal(1, attempt.X);
+            Assert.Equal(1, attempt.Y);
+            coordinator.HandlePendingMovePlacementResult(false);
+
+            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(1));
+
+            Assert.False(result);
+            Assert.False(coordinator.TryTakePendingMove(out _));
+        }
+
+        [Fact]
         public void SendSync_YikePlatformControlsBrowserSync()
         {
             RecordingTransport transport = new RecordingTransport();
@@ -116,6 +163,47 @@ namespace Readboard.VerificationTests.Protocol
             };
         }
 
+        private static async Task AssertVerifiedPendingMoveFailsAfterTotalPlacementAttempts(
+            int? configuredMaxAttempts,
+            int expectedPlacementAttempts)
+        {
+            SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator();
+
+            Assert.True(coordinator.TryQueuePendingMove(
+                new MoveRequest
+                {
+                    X = 1,
+                    Y = 1,
+                    VerifyMove = true,
+                    MoveVerifyMaxAttempts = configuredMaxAttempts
+                },
+                19,
+                19));
+            Task<bool> waitTask = Task.Run(() => coordinator.WaitForPendingMoveResult());
+
+            for (int attemptNumber = 0; attemptNumber < expectedPlacementAttempts; attemptNumber++)
+            {
+                Assert.True(coordinator.TryTakePendingMove(out MoveRequest attempt));
+                Assert.Equal(1, attempt.X);
+                Assert.Equal(1, attempt.Y);
+                coordinator.HandlePendingMovePlacementResult(true);
+                coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
+            }
+
+            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(1));
+
+            Assert.False(result);
+            Assert.False(coordinator.TryTakePendingMove(out _));
+        }
+
+        private static SyncSessionCoordinator CreateActiveBidirectionalCoordinator()
+        {
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(new RecordingTransport(), new LegacyProtocolAdapter());
+            coordinator.BeginKeepSync();
+            coordinator.SetSyncBoth(true);
+            return coordinator;
+        }
+
         private static BoardSnapshot CreateSnapshot(int boardWidth, int boardHeight, MoveRequest move)
         {
             BoardCellState[] boardState = new BoardCellState[boardWidth * boardHeight];
@@ -128,6 +216,19 @@ namespace Readboard.VerificationTests.Protocol
                 BoardState = boardState,
                 Payload = "matrix-payload",
                 ProtocolLines = new[] { "re=matrix" }
+            };
+        }
+
+        private static BoardSnapshot CreateEmptySnapshot(int boardWidth, int boardHeight)
+        {
+            return new BoardSnapshot
+            {
+                Width = boardWidth,
+                Height = boardHeight,
+                IsValid = true,
+                BoardState = new BoardCellState[boardWidth * boardHeight],
+                Payload = "empty-matrix-payload",
+                ProtocolLines = new[] { "re=empty" }
             };
         }
 

@@ -68,6 +68,23 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
+        public void FromBitmap_ReturnsInvalidForTinyGlyphNoise()
+        {
+            using (Bitmap noisy = new Bitmap(96, 24))
+            using (Graphics graphics = Graphics.FromImage(noisy))
+            {
+                graphics.Clear(Color.FromArgb(245, 245, 240));
+                noisy.SetPixel(20, 8, Color.Red);
+                noisy.SetPixel(22, 10, Color.Red);
+
+                FoxPlayerNicknameSignature signature = FoxPlayerNicknameSignature.FromBitmap(noisy);
+
+                Assert.False(signature.IsValid);
+                Assert.Equal(string.Empty, signature.Serialize());
+            }
+        }
+
+        [Fact]
         public void Match_SelectsOnlyCandidateWithClearMargin()
         {
             using (Bitmap source = CreateNicknameSnippet(Color.Fuchsia, 0, false))
@@ -87,9 +104,38 @@ namespace Readboard.VerificationTests.AutoPlay
             }
         }
 
+        [Fact]
+        public void Match_IgnoresExtraBlankCanvasAroundSameGlyph()
+        {
+            using (Bitmap source = CreateNicknameSnippet(Color.Red, 0, false, 96))
+            using (Bitmap widerCandidate = CreateNicknameSnippet(Color.Red, 18, false, 148))
+            {
+                FoxPlayerNicknameSignature signature = FoxPlayerNicknameSignature.FromBitmap(source);
+
+                FoxPlayerNicknameMatch match = signature.Match(new[] { widerCandidate });
+
+                Assert.True(match.IsReliable);
+                Assert.Equal(0, match.Index);
+                Assert.True(match.Score > 0.85);
+            }
+        }
+
+        [Fact]
+        public void FromString_ReturnsInvalidForShortBitPayload()
+        {
+            FoxPlayerNicknameSignature signature = FoxPlayerNicknameSignature.FromString("v1:100:100:AA==");
+
+            Assert.False(signature.IsValid);
+        }
+
         private static Bitmap CreateNicknameSnippet(Color glyphColor, int offsetX, bool alternateShape)
         {
-            Bitmap bitmap = new Bitmap(96, 24);
+            return CreateNicknameSnippet(glyphColor, offsetX, alternateShape, 96);
+        }
+
+        private static Bitmap CreateNicknameSnippet(Color glyphColor, int offsetX, bool alternateShape, int width)
+        {
+            Bitmap bitmap = new Bitmap(width, 24);
             using (Graphics graphics = Graphics.FromImage(bitmap))
             using (Pen pen = new Pen(glyphColor, 2))
             {

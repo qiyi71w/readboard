@@ -12,6 +12,10 @@ namespace readboard
         private const double ReliableScoreThreshold = 0.70d;
         private const double ReliableMarginThreshold = 0.20d;
         private const int MaxShift = 3;
+        private const int NormalizedWidth = 96;
+        private const int NormalizedHeight = 24;
+        private const int NormalizedPadding = 2;
+        private const int MaximumSerializedPixels = 1000000;
 
         private readonly bool[] mask;
 
@@ -37,7 +41,6 @@ namespace readboard
                 return Invalid();
 
             bool[] pixels = new bool[bitmap.Width * bitmap.Height];
-            int glyphPixels = 0;
             for (int y = 0; y < bitmap.Height; y++)
             {
                 for (int x = 0; x < bitmap.Width; x++)
@@ -46,11 +49,10 @@ namespace readboard
                         continue;
 
                     pixels[y * bitmap.Width + x] = true;
-                    glyphPixels++;
                 }
             }
 
-            return new FoxPlayerNicknameSignature(bitmap.Width, bitmap.Height, pixels, glyphPixels);
+            return CreateNormalized(pixels, bitmap.Width, bitmap.Height);
         }
 
         public static FoxPlayerNicknameSignature FromString(string value)
@@ -69,12 +71,27 @@ namespace readboard
 
             try
             {
+                int bitCount = checked(width * height);
+                if (bitCount > MaximumSerializedPixels)
+                    return Invalid();
+
                 byte[] bytes = Convert.FromBase64String(parts[3]);
-                bool[] pixels = UnpackBits(bytes, width * height);
-                int glyphPixels = CountTrue(pixels);
-                return new FoxPlayerNicknameSignature(width, height, pixels, glyphPixels);
+                int expectedBytes = (bitCount + 7) / 8;
+                if (bytes.Length < expectedBytes)
+                    return Invalid();
+
+                bool[] pixels = UnpackBits(bytes, bitCount);
+                return CreateNormalized(pixels, width, height);
             }
             catch (FormatException)
+            {
+                return Invalid();
+            }
+            catch (OverflowException)
+            {
+                return Invalid();
+            }
+            catch (ArgumentException)
             {
                 return Invalid();
             }
@@ -120,11 +137,11 @@ namespace readboard
 
         public double Compare(Bitmap candidate)
         {
-            if (!IsValid || candidate == null || candidate.Width != Width || candidate.Height != Height)
+            if (!IsValid || candidate == null)
                 return 0d;
 
             FoxPlayerNicknameSignature candidateSignature = FromBitmap(candidate);
-            if (!candidateSignature.IsValid)
+            if (!candidateSignature.IsValid || candidateSignature.Width != Width || candidateSignature.Height != Height)
                 return 0d;
 
             double best = 0d;
@@ -140,6 +157,92 @@ namespace readboard
         private static FoxPlayerNicknameSignature Invalid()
         {
             return new FoxPlayerNicknameSignature(0, 0, null, 0);
+        }
+
+        private static FoxPlayerNicknameSignature CreateNormalized(bool[] pixels, int width, int height)
+        {
+            if (pixels == null || width <= 0 || height <= 0 || pixels.Length != width * height)
+                return Invalid();
+
+            int left;
+            int top;
+            int right;
+            int bottom;
+            if (!TryGetGlyphBounds(pixels, width, height, out left, out top, out right, out bottom))
+                return Invalid();
+
+            int sourceGlyphPixels = CountTrue(pixels);
+            if (sourceGlyphPixels < MinimumGlyphPixels)
+                return Invalid();
+
+            bool[] normalized = new bool[NormalizedWidth * NormalizedHeight];
+            int sourceWidth = right - left + 1;
+            int sourceHeight = bottom - top + 1;
+            int targetMaxWidth = NormalizedWidth - NormalizedPadding * 2;
+            int targetMaxHeight = NormalizedHeight - NormalizedPadding * 2;
+            double scale = Math.Min(targetMaxWidth / (double)sourceWidth, targetMaxHeight / (double)sourceHeight);
+            int targetWidth = Math.Max(1, (int)Math.Round(sourceWidth * scale));
+            int targetHeight = Math.Max(1, (int)Math.Round(sourceHeight * scale));
+            int targetLeft = (NormalizedWidth - targetWidth) / 2;
+            int targetTop = (NormalizedHeight - targetHeight) / 2;
+
+            for (int y = top; y <= bottom; y++)
+            {
+                for (int x = left; x <= right; x++)
+                {
+                    if (!pixels[y * width + x])
+                        continue;
+
+                    int x0 = targetLeft + (int)Math.Floor((x - left) * scale);
+                    int x1 = targetLeft + (int)Math.Ceiling((x - left + 1) * scale) - 1;
+                    int y0 = targetTop + (int)Math.Floor((y - top) * scale);
+                    int y1 = targetTop + (int)Math.Ceiling((y - top + 1) * scale) - 1;
+                    SetNormalizedPixels(normalized, x0, y0, x1, y1);
+                }
+            }
+
+            int glyphPixels = CountTrue(normalized);
+            return new FoxPlayerNicknameSignature(NormalizedWidth, NormalizedHeight, normalized, glyphPixels);
+        }
+
+        private static bool TryGetGlyphBounds(bool[] pixels, int width, int height, out int left, out int top, out int right, out int bottom)
+        {
+            left = width;
+            top = height;
+            right = -1;
+            bottom = -1;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (!pixels[y * width + x])
+                        continue;
+
+                    if (x < left)
+                        left = x;
+                    if (x > right)
+                        right = x;
+                    if (y < top)
+                        top = y;
+                    if (y > bottom)
+                        bottom = y;
+                }
+            }
+
+            return right >= left && bottom >= top;
+        }
+
+        private static void SetNormalizedPixels(bool[] pixels, int x0, int y0, int x1, int y1)
+        {
+            int left = Math.Max(0, Math.Min(x0, x1));
+            int right = Math.Min(NormalizedWidth - 1, Math.Max(x0, x1));
+            int top = Math.Max(0, Math.Min(y0, y1));
+            int bottom = Math.Min(NormalizedHeight - 1, Math.Max(y0, y1));
+            for (int y = top; y <= bottom; y++)
+            {
+                for (int x = left; x <= right; x++)
+                    pixels[y * NormalizedWidth + x] = true;
+            }
         }
 
         private static bool IsGlyphPixel(Color color)
