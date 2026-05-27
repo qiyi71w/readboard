@@ -872,7 +872,40 @@ namespace readboard
             MoveRequest request;
             if (!TryTakePendingMove(out request))
                 return;
-            HandlePendingMovePlacementResult(PlacePendingMove(runtime, snapshot, request, isOperationCurrent));
+
+            bool success = false;
+            try
+            {
+                success = PlacePendingMove(runtime, snapshot, request, isOperationCurrent);
+            }
+            catch (Exception ex)
+            {
+                TryReportPendingMovePlacementException(runtime, ex, isOperationCurrent);
+            }
+            finally
+            {
+                HandlePendingMovePlacementResult(success);
+            }
+        }
+
+        private void TryReportPendingMovePlacementException(
+            SyncSessionRuntimeDependencies runtime,
+            Exception exception,
+            Func<bool> isOperationCurrent)
+        {
+            if (runtime == null || runtime.Host == null || exception == null)
+                return;
+            if (!IsOperationCurrent(isOperationCurrent))
+                return;
+
+            try
+            {
+                runtime.Host.TrySendPlaceProtocolError(exception.Message);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceError(ex.ToString());
+            }
         }
 
         private bool PlacePendingMove(

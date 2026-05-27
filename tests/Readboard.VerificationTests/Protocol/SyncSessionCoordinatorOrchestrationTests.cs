@@ -554,6 +554,51 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public async Task HandlePlaceRequest_WhenPlacementThrowsCompletesAsFailure()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Foreground, IntPtr.Zero);
+            HostRecorder hostRecorder = new HostRecorder(snapshot);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            ThrowingPlacementService placementService = new ThrowingPlacementService();
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=foreground")));
+            SetProperty(runtime, "PlacementService", placementService);
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            try
+            {
+                Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+                Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+                coordinator.SetSyncBoth(true);
+                SetRuntimeBoardPixelWidth(coordinator, 190);
+
+                Task<PlaceRequestExecutionResult> resultTask = Task.Run(delegate
+                {
+                    return coordinator.HandlePlaceRequest(new MoveRequest { X = 1, Y = 1, VerifyMove = false });
+                });
+
+                Assert.True(placementService.PlaceCalled.Wait(TimeSpan.FromSeconds(1)));
+                PlaceRequestExecutionResult result = await resultTask.WaitAsync(TimeSpan.FromSeconds(1));
+
+                Assert.True(result.ShouldSendResponse);
+                Assert.False(result.Success);
+            }
+            finally
+            {
+                coordinator.Stop();
+            }
+        }
+
+        [Fact]
         public async Task StopSyncSession_AfterPlacementSideEffect_WaitsForActualPlacementResult()
         {
             RecordingTransport transport = new RecordingTransport();
@@ -1660,6 +1705,17 @@ namespace Readboard.VerificationTests.Protocol
             public MovePlacementResult Place(MovePlacementRequest request)
             {
                 return new MovePlacementResult { Success = true };
+            }
+        }
+
+        private sealed class ThrowingPlacementService : IMovePlacementService
+        {
+            public ManualResetEventSlim PlaceCalled { get; } = new ManualResetEventSlim(false);
+
+            public MovePlacementResult Place(MovePlacementRequest request)
+            {
+                PlaceCalled.Set();
+                throw new InvalidOperationException("placement failed unexpectedly");
             }
         }
 

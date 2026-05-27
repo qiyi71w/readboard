@@ -7,7 +7,6 @@ namespace readboard
 {
     internal sealed partial class SyncSessionCoordinator : ISyncSessionCoordinator
     {
-        private const int MoveVerifyMaxAttempts = 10;
         private const int PendingMoveWaitTimeoutMs = 250;
         private const int DisposeStateDisposed = 1;
 
@@ -279,7 +278,9 @@ namespace readboard
                 pendingMove.Reset();
                 pendingMove.X = request.X;
                 pendingMove.Y = request.Y;
-                pendingMove.AttemptsRemaining = request.VerifyMove ? MoveVerifyMaxAttempts : 1;
+                pendingMove.AttemptsRemaining = request.VerifyMove
+                    ? AppConfig.ResolveMoveVerifyTotalPlacementAttempts(request.MoveVerifyMaxAttempts)
+                    : 1;
                 pendingMove.VerifyMove = request.VerifyMove;
                 pendingMove.Active = true;
                 UpdatePendingMoveAvailableEventUnsafe();

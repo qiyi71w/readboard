@@ -19,11 +19,40 @@ namespace Readboard.VerificationTests
             Assert.True(config.UseMagnifier);
             Assert.False(config.DisableShowInBoardShortcut);
             Assert.False(config.DebugDiagnosticsEnabled);
+            Assert.Equal(AppConfig.DefaultMoveVerifyMaxAttempts, config.MoveVerifyMaxAttempts);
             Assert.Equal(SyncMode.Fox, config.SyncMode);
             Assert.Equal(1, config.UiThemeMode);
             Assert.Equal(0, config.ColorMode);
             Assert.Equal(-1, config.WindowPosX);
             Assert.Equal(-1, config.WindowPosY);
+        }
+
+        [Fact]
+        public void MoveVerifyMaxAttempts_DefaultsToInitialPlacementOnly()
+        {
+            Assert.Equal(1, AppConfig.DefaultMoveVerifyMaxAttempts);
+        }
+
+        [Theory]
+        [InlineData(1, 1)]
+        [InlineData(2, 2)]
+        [InlineData(10, 10)]
+        [InlineData(99, AppConfig.MaxMoveVerifyMaxAttempts)]
+        public void MoveVerifyMaxAttempts_ResolvesConfiguredValueAsTotalPlacementAttempts(
+            int configuredValue,
+            int expectedTotalPlacementAttempts)
+        {
+            Assert.Equal(
+                expectedTotalPlacementAttempts,
+                AppConfig.ResolveMoveVerifyTotalPlacementAttempts(configuredValue));
+        }
+
+        [Fact]
+        public void MoveVerifyMaxAttempts_WithoutConfiguredValueUsesDefaultTotalPlacementAttempts()
+        {
+            Assert.Equal(
+                AppConfig.DefaultMoveVerifyMaxAttempts,
+                AppConfig.ResolveMoveVerifyTotalPlacementAttempts(null));
         }
     }
 }

@@ -380,9 +380,12 @@ namespace readboard
                 return cancellationFailure;
             IntPtr handle = ResolveTargetHandle(request);
             int lParam = BuildMouseLParam(point.X, point.Y);
-            nativeMethods.SendMouseMessage(handle, NativePlacementConstants.WmMouseMove, 0, lParam);
-            nativeMethods.SendMouseMessage(handle, NativePlacementConstants.WmLButtonDown, NativePlacementConstants.MkLButton, lParam);
-            nativeMethods.SendMouseMessage(handle, NativePlacementConstants.WmLButtonUp, 0, lParam);
+            if (!nativeMethods.TrySendMouseMessage(handle, NativePlacementConstants.WmMouseMove, 0, lParam))
+                return Failure(request, PlacementPathKind.BackgroundSend, MovePlacementFailureKind.PlacementFailed, "SendMessage placement timed out or failed.");
+            if (!nativeMethods.TrySendMouseMessage(handle, NativePlacementConstants.WmLButtonDown, NativePlacementConstants.MkLButton, lParam))
+                return Failure(request, PlacementPathKind.BackgroundSend, MovePlacementFailureKind.PlacementFailed, "SendMessage placement timed out or failed.");
+            if (!nativeMethods.TrySendMouseMessage(handle, NativePlacementConstants.WmLButtonUp, 0, lParam))
+                return Failure(request, PlacementPathKind.BackgroundSend, MovePlacementFailureKind.PlacementFailed, "SendMessage placement timed out or failed.");
             return Success(request, PlacementPathKind.BackgroundSend);
         }
 
@@ -474,7 +477,7 @@ namespace readboard
         void SwitchToWindow(IntPtr handle);
         bool TryForegroundLeftClick(int x, int y, bool holdButtonBeforeRelease);
         bool TryPostMouseMessage(IntPtr handle, uint message, int wParam, int lParam);
-        void SendMouseMessage(IntPtr handle, uint message, int wParam, int lParam);
+        bool TrySendMouseMessage(IntPtr handle, uint message, int wParam, int lParam);
     }
 
     internal interface IPlacementDelay
@@ -570,9 +573,17 @@ namespace readboard
             return PostMessage(handle, message, (IntPtr)wParam, (IntPtr)lParam);
         }
 
-        public void SendMouseMessage(IntPtr handle, uint message, int wParam, int lParam)
+        public bool TrySendMouseMessage(IntPtr handle, uint message, int wParam, int lParam)
         {
-            SendMessage(handle, message, (IntPtr)wParam, (IntPtr)lParam);
+            IntPtr result;
+            return SendMessageTimeout(
+                handle,
+                message,
+                (IntPtr)wParam,
+                (IntPtr)lParam,
+                NativePlacementConstants.SendMessageTimeoutFlags,
+                NativePlacementConstants.BackgroundSendMessageTimeoutMs,
+                out result) != IntPtr.Zero;
         }
 
         [DllImport("USER32.DLL")]
@@ -592,7 +603,14 @@ namespace readboard
         private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+        private static extern IntPtr SendMessageTimeout(
+            IntPtr hWnd,
+            uint msg,
+            IntPtr wParam,
+            IntPtr lParam,
+            uint flags,
+            uint timeout,
+            out IntPtr result);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
@@ -669,6 +687,8 @@ namespace readboard
     internal static class NativePlacementConstants
     {
         internal const int FoxForegroundButtonHoldMs = 50;
+        internal const uint BackgroundSendMessageTimeoutMs = 1000;
+        internal const uint SendMessageTimeoutFlags = 0x0002;
         internal const int MkLButton = 0x0001;
         internal const uint WmMouseMove = 0x0200;
         internal const uint WmLButtonDown = 0x0201;
