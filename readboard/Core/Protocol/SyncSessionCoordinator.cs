@@ -279,7 +279,7 @@ namespace readboard
                 pendingMove.X = request.X;
                 pendingMove.Y = request.Y;
                 pendingMove.AttemptsRemaining = request.VerifyMove
-                    ? AppConfig.ResolveMoveVerifyPlacementAttempts(request.MoveVerifyMaxAttempts)
+                    ? AppConfig.ResolveMoveVerifyTotalPlacementAttempts(request.MoveVerifyMaxAttempts)
                     : 1;
                 pendingMove.VerifyMove = request.VerifyMove;
                 pendingMove.Active = true;

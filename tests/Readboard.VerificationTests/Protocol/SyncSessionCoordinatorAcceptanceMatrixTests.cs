@@ -71,27 +71,27 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
-        public async Task VerifiedPendingMove_WithZeroConfiguredRetriesFailsAfterFirstUnconfirmedSnapshot()
+        public async Task VerifiedPendingMove_WithOneConfiguredMaxAttemptFailsAfterInitialUnconfirmedSnapshot()
         {
-            await AssertVerifiedPendingMoveFailsAfterAttempts(0, 1);
+            await AssertVerifiedPendingMoveFailsAfterTotalPlacementAttempts(1, 1);
         }
 
         [Fact]
-        public async Task VerifiedPendingMove_UsesConfiguredAttemptsBeforeFailing()
+        public async Task VerifiedPendingMove_UsesConfiguredTotalAttemptsBeforeFailing()
         {
-            await AssertVerifiedPendingMoveFailsAfterAttempts(2, 2);
+            await AssertVerifiedPendingMoveFailsAfterTotalPlacementAttempts(2, 2);
         }
 
         [Fact]
-        public async Task VerifiedPendingMove_WithoutConfiguredAttemptsUsesDefaultBeforeFailing()
+        public async Task VerifiedPendingMove_WithoutConfiguredMaxAttemptsUsesDefaultTotalAttemptsBeforeFailing()
         {
-            await AssertVerifiedPendingMoveFailsAfterAttempts(
+            await AssertVerifiedPendingMoveFailsAfterTotalPlacementAttempts(
                 null,
                 AppConfig.DefaultMoveVerifyMaxAttempts);
         }
 
         [Fact]
-        public async Task UnverifiedPendingMove_IgnoresConfiguredAttempts()
+        public async Task UnverifiedPendingMove_IgnoresConfiguredMaxAttempts()
         {
             SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator();
             Assert.True(coordinator.TryQueuePendingMove(
@@ -163,8 +163,8 @@ namespace Readboard.VerificationTests.Protocol
             };
         }
 
-        private static async Task AssertVerifiedPendingMoveFailsAfterAttempts(
-            int? configuredAttempts,
+        private static async Task AssertVerifiedPendingMoveFailsAfterTotalPlacementAttempts(
+            int? configuredMaxAttempts,
             int expectedPlacementAttempts)
         {
             SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator();
@@ -175,7 +175,7 @@ namespace Readboard.VerificationTests.Protocol
                     X = 1,
                     Y = 1,
                     VerifyMove = true,
-                    MoveVerifyMaxAttempts = configuredAttempts
+                    MoveVerifyMaxAttempts = configuredMaxAttempts
                 },
                 19,
                 19));

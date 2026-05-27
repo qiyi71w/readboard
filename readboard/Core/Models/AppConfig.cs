@@ -11,7 +11,7 @@ namespace readboard
         internal const int ColorModeDark = 1;
         internal const int ColorModeLight = 2;
 
-        internal const int MinMoveVerifyMaxAttempts = 0;
+        internal const int MinMoveVerifyMaxAttempts = 1;
         internal const int MaxMoveVerifyMaxAttempts = 10;
         internal const int DefaultMoveVerifyMaxAttempts = 10;
 
@@ -95,15 +95,16 @@ namespace readboard
             return value;
         }
 
-        internal static int ResolveMoveVerifyPlacementAttempts(int value)
+        internal static int ResolveMoveVerifyTotalPlacementAttempts(int value)
         {
-            // Zero disables extra retries but still allows the initial placement attempt.
-            return Math.Max(1, NormalizeMoveVerifyMaxAttempts(value));
+            // This setting is the maximum total placement attempts, including the initial click.
+            // A value of 1 means no extra retry; 2 means the initial click plus one retry.
+            return NormalizeMoveVerifyMaxAttempts(value);
         }
 
-        internal static int ResolveMoveVerifyPlacementAttempts(int? value)
+        internal static int ResolveMoveVerifyTotalPlacementAttempts(int? value)
         {
-            return ResolveMoveVerifyPlacementAttempts(value ?? DefaultMoveVerifyMaxAttempts);
+            return ResolveMoveVerifyTotalPlacementAttempts(value ?? DefaultMoveVerifyMaxAttempts);
         }
     }
 }

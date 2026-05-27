@@ -179,7 +179,7 @@ namespace Readboard.VerificationTests
 
         [Theory]
         [InlineData(-1, AppConfig.MinMoveVerifyMaxAttempts)]
-        [InlineData(0, 0)]
+        [InlineData(1, 1)]
         [InlineData(2, 2)]
         [InlineData(99, AppConfig.MaxMoveVerifyMaxAttempts)]
         public void Load_ClampsMoveVerifyMaxAttemptsFromJson(int configuredValue, int expectedValue)
