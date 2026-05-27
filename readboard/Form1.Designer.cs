@@ -394,7 +394,7 @@
             this.btnFoxAutoPlayIdentity.Name = "btnFoxAutoPlayIdentity";
             this.btnFoxAutoPlayIdentity.Size = new System.Drawing.Size(55, 22);
             this.btnFoxAutoPlayIdentity.TabIndex = 26;
-            this.btnFoxAutoPlayIdentity.Text = "身份...";
+            this.btnFoxAutoPlayIdentity.Text = "身份";
             this.btnFoxAutoPlayIdentity.UseVisualStyleBackColor = true;
             this.btnFoxAutoPlayIdentity.Click += new System.EventHandler(this.btnFoxAutoPlayIdentity_Click);
             //

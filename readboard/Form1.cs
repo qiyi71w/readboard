@@ -77,6 +77,8 @@ namespace readboard
         int posY = -1;
 
         private Button btnTheme;
+        private Panel pnlAutoPlayColorStatus;
+        private Panel pnlFoxAutoPlayIdentity;
         private ContextMenuStrip themeMenu;
         private ToolStripMenuItem menuThemeOptimized;
         private ToolStripMenuItem menuThemeClassic;
@@ -215,7 +217,7 @@ namespace readboard
 
         private IEnumerable<Control> MainThemeSurfaces()
         {
-            return new Control[] { flowLayoutPanel1, flowLayoutPanel2, panel1, panel2, panel3, panel4 };
+            return new Control[] { flowLayoutPanel1, flowLayoutPanel2, panel1, panel2, panel3, panel4, pnlAutoPlayColorStatus, pnlFoxAutoPlayIdentity };
         }
 
         private IEnumerable<ButtonBase> MainThemeOptions()
@@ -270,6 +272,16 @@ namespace readboard
             themeMenu.Items.Add(menuThemeClassic);
             Controls.Add(btnTheme);
             btnTheme.BringToFront();
+
+            pnlAutoPlayColorStatus = new Panel();
+            pnlAutoPlayColorStatus.Name = "pnlAutoPlayColorStatus";
+            pnlAutoPlayColorStatus.Margin = Padding.Empty;
+            pnlAutoPlayColorStatus.TabStop = false;
+
+            pnlFoxAutoPlayIdentity = new Panel();
+            pnlFoxAutoPlayIdentity.Name = "pnlFoxAutoPlayIdentity";
+            pnlFoxAutoPlayIdentity.Margin = Padding.Empty;
+            pnlFoxAutoPlayIdentity.TabStop = false;
         }
 
         private void ApplyThemeControlTexts()
@@ -670,7 +682,9 @@ namespace readboard
             int rowWidth = groupWidth - ScaleValue(34);
             int sharedVisitsLabelWidth = GetSharedMainSyncVisitsLabelWidth();
             int sharedLegacyVisitsPanelWidth = GetLegacyMainSyncVisitsPanelWidth();
+            int conditionLabelWidth = GetMainSyncConditionTimeLabelWidth();
 
+            ArrangeMainSyncFlowOrder();
             groupBox4.SetBounds(left, top, groupWidth, ScaleValue(100));
             flowLayoutPanel1.SetBounds(ScaleValue(16), ScaleValue(28), rowWidth, ScaleValue(30));
             flowLayoutPanel2.SetBounds(ScaleValue(16), ScaleValue(62), rowWidth, ScaleValue(30));
@@ -680,30 +694,25 @@ namespace readboard
             radioBlack.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             chkAutoPlay.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             radioWhite.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            radioAutoPlayColor.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            lblAutoPlayColorStatus.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            btnFoxAutoPlayIdentity.Margin = new Padding(0, ScaleValue(1), ScaleValue(12), 0);
+            pnlAutoPlayColorStatus.Margin = new Padding(0, 0, 0, 0);
+            pnlFoxAutoPlayIdentity.Margin = new Padding(0, 0, 0, 0);
             panel1.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel2.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel3.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
-            panel4.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
+            panel4.Margin = new Padding(GetMainSyncTimeRowVisitsLeftMargin(), ScaleValue(2), 0, 0);
             panel1.AutoSize = false;
             panel2.AutoSize = false;
             panel3.AutoSize = false;
             panel4.AutoSize = false;
-            panel1.Size = new Size(
-                Math.Max(ScaleValue(129) + timeFieldGap, lblPlayCondition.PreferredSize.Width + ScaleValue(22) + timeFieldGap),
-                rowHeight);
+            panel1.Size = new Size(GetMainSyncConditionTimeSlotWidth(), rowHeight);
             panel2.Size = new Size(sharedLegacyVisitsPanelWidth, rowHeight);
-            panel3.Size = new Size(
-                Math.Max(ScaleValue(61), lblTime.PreferredSize.Width + ScaleValue(8)),
-                rowHeight);
+            panel3.Size = new Size(GetMainSyncTimeLabelPanelWidth(), rowHeight);
             panel4.Size = new Size(sharedLegacyVisitsPanelWidth, rowHeight);
             lblPlayCondition.AutoSize = false;
             lblTotalVisits.AutoSize = false;
             lblTime.AutoSize = false;
             lblBestMoveVisits.AutoSize = false;
-            lblPlayCondition.SetBounds(0, ScaleValue(3), lblPlayCondition.PreferredSize.Width, ScaleValue(18));
+            lblPlayCondition.SetBounds(0, ScaleValue(3), conditionLabelWidth, ScaleValue(18));
             lblTotalVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(18));
             lblTime.SetBounds(0, ScaleValue(3), lblTime.PreferredSize.Width, ScaleValue(18));
             lblBestMoveVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(18));
@@ -720,6 +729,7 @@ namespace readboard
             textBox1.Size = new Size(ScaleValue(68), rowHeight);
             textBox2.Size = new Size(ScaleValue(92), rowHeight);
             textBox3.Size = new Size(ScaleValue(92), rowHeight);
+            ArrangeMainSyncAutoStatusColumn(rowHeight);
             flowLayoutPanel1.Height = ScaleValue(30);
             flowLayoutPanel2.Height = ScaleValue(30);
             return groupBox4.Bottom;
@@ -734,7 +744,9 @@ namespace readboard
             int rowWidth = groupWidth - ScaleValue(34);
             int sharedVisitsLabelWidth = GetSharedMainSyncVisitsLabelWidth();
             int sharedAdaptiveVisitsPanelWidth = GetAdaptiveMainSyncVisitsPanelWidth();
+            int conditionLabelWidth = GetMainSyncConditionTimeLabelWidth();
 
+            ArrangeMainSyncFlowOrder();
             groupBox4.SetBounds(left, top, groupWidth, 0);
             flowLayoutPanel1.SetBounds(ScaleValue(16), ScaleValue(28), rowWidth, rowHeight);
             flowLayoutPanel2.SetBounds(ScaleValue(16), flowLayoutPanel1.Bottom + ScaleValue(8), rowWidth, rowHeight);
@@ -744,26 +756,25 @@ namespace readboard
             radioBlack.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             chkAutoPlay.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             radioWhite.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            radioAutoPlayColor.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            lblAutoPlayColorStatus.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            btnFoxAutoPlayIdentity.Margin = new Padding(0, ScaleValue(1), ScaleValue(12), 0);
+            pnlAutoPlayColorStatus.Margin = new Padding(0, 0, 0, 0);
+            pnlFoxAutoPlayIdentity.Margin = new Padding(0, 0, 0, 0);
             panel1.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel2.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
             panel3.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
-            panel4.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
+            panel4.Margin = new Padding(GetMainSyncTimeRowVisitsLeftMargin(), ScaleValue(2), 0, 0);
             panel1.AutoSize = false;
             panel2.AutoSize = false;
             panel3.AutoSize = false;
             panel4.AutoSize = false;
-            panel1.Size = new System.Drawing.Size(lblPlayCondition.PreferredSize.Width + ScaleValue(18) + ScaleValue(68) + timeFieldGap, rowHeight);
+            panel1.Size = new System.Drawing.Size(GetMainSyncConditionTimeSlotWidth(), rowHeight);
             panel2.Size = new System.Drawing.Size(sharedAdaptiveVisitsPanelWidth, rowHeight);
-            panel3.Size = new System.Drawing.Size(lblTime.PreferredSize.Width + ScaleValue(18) + ScaleValue(92), rowHeight);
+            panel3.Size = new System.Drawing.Size(GetMainSyncTimeLabelPanelWidth(), rowHeight);
             panel4.Size = new System.Drawing.Size(sharedAdaptiveVisitsPanelWidth, rowHeight);
             lblPlayCondition.AutoSize = false;
             lblTotalVisits.AutoSize = false;
             lblTime.AutoSize = false;
             lblBestMoveVisits.AutoSize = false;
-            lblPlayCondition.SetBounds(0, ScaleValue(3), lblPlayCondition.PreferredSize.Width, ScaleValue(20));
+            lblPlayCondition.SetBounds(0, ScaleValue(3), conditionLabelWidth, ScaleValue(20));
             lblTotalVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(20));
             lblTime.SetBounds(0, ScaleValue(3), lblTime.PreferredSize.Width, ScaleValue(20));
             lblBestMoveVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(20));
@@ -780,11 +791,103 @@ namespace readboard
             textBox1.Size = new System.Drawing.Size(ScaleValue(68), rowHeight);
             textBox2.Size = new System.Drawing.Size(ScaleValue(92), rowHeight);
             textBox3.Size = new System.Drawing.Size(ScaleValue(92), rowHeight);
+            ArrangeMainSyncAutoStatusColumn(rowHeight);
             flowLayoutPanel1.Height = flowLayoutPanel1.GetPreferredSize(new Size(rowWidth, 0)).Height;
             flowLayoutPanel2.Top = flowLayoutPanel1.Bottom + ScaleValue(8);
             flowLayoutPanel2.Height = flowLayoutPanel2.GetPreferredSize(new Size(rowWidth, 0)).Height;
             groupBox4.Height = flowLayoutPanel2.Bottom + ScaleValue(10);
             return groupBox4.Bottom;
+        }
+
+        private void ArrangeMainSyncFlowOrder()
+        {
+            if (radioAutoPlayColor.Parent != pnlAutoPlayColorStatus)
+                pnlAutoPlayColorStatus.Controls.Add(radioAutoPlayColor);
+            if (lblAutoPlayColorStatus.Parent != pnlAutoPlayColorStatus)
+                pnlAutoPlayColorStatus.Controls.Add(lblAutoPlayColorStatus);
+            if (btnFoxAutoPlayIdentity.Parent != pnlFoxAutoPlayIdentity)
+                pnlFoxAutoPlayIdentity.Controls.Add(btnFoxAutoPlayIdentity);
+            if (pnlAutoPlayColorStatus.Parent != flowLayoutPanel1)
+                flowLayoutPanel1.Controls.Add(pnlAutoPlayColorStatus);
+            if (pnlFoxAutoPlayIdentity.Parent != flowLayoutPanel2)
+                flowLayoutPanel2.Controls.Add(pnlFoxAutoPlayIdentity);
+
+            flowLayoutPanel1.Controls.SetChildIndex(chkBothSync, 0);
+            flowLayoutPanel1.Controls.SetChildIndex(radioBlack, 1);
+            flowLayoutPanel1.Controls.SetChildIndex(pnlAutoPlayColorStatus, 2);
+            flowLayoutPanel1.Controls.SetChildIndex(panel1, 3);
+            flowLayoutPanel1.Controls.SetChildIndex(panel2, 4);
+            flowLayoutPanel1.Controls.SetChildIndex(textBox2, 5);
+
+            flowLayoutPanel2.Controls.SetChildIndex(chkAutoPlay, 0);
+            flowLayoutPanel2.Controls.SetChildIndex(radioWhite, 1);
+            flowLayoutPanel2.Controls.SetChildIndex(pnlFoxAutoPlayIdentity, 2);
+            flowLayoutPanel2.Controls.SetChildIndex(panel3, 3);
+            flowLayoutPanel2.Controls.SetChildIndex(textBox1, 4);
+            flowLayoutPanel2.Controls.SetChildIndex(panel4, 5);
+            flowLayoutPanel2.Controls.SetChildIndex(textBox3, 6);
+        }
+
+        private void ArrangeMainSyncAutoStatusColumn(int rowHeight)
+        {
+            int columnWidth = GetMainSyncAutoStatusColumnWidth();
+            int columnHeight = Math.Max(rowHeight, btnFoxAutoPlayIdentity.PreferredSize.Height + ScaleValue(2));
+            pnlAutoPlayColorStatus.Size = new Size(columnWidth, columnHeight);
+            pnlFoxAutoPlayIdentity.Size = new Size(columnWidth, columnHeight);
+            radioAutoPlayColor.Margin = Padding.Empty;
+            lblAutoPlayColorStatus.Margin = Padding.Empty;
+            btnFoxAutoPlayIdentity.Margin = Padding.Empty;
+            radioAutoPlayColor.Location = new Point(0, Math.Max(0, (columnHeight - radioAutoPlayColor.PreferredSize.Height) / 2));
+            lblAutoPlayColorStatus.Location = new Point(
+                radioAutoPlayColor.Right + ScaleValue(6),
+                Math.Max(0, (columnHeight - lblAutoPlayColorStatus.PreferredSize.Height) / 2));
+            btnFoxAutoPlayIdentity.Location = new Point(0, Math.Max(0, (columnHeight - btnFoxAutoPlayIdentity.PreferredSize.Height) / 2));
+        }
+
+        private int GetMainSyncAutoStatusColumnWidth()
+        {
+            int autoStatusWidth = GetLayoutOptionPreferredSize(radioAutoPlayColor).Width + ScaleValue(6) + GetMainSyncAutoPlayStatusTextWidth();
+            int identityWidth = GetLayoutOptionPreferredSize(btnFoxAutoPlayIdentity).Width;
+            return Math.Max(autoStatusWidth, identityWidth);
+        }
+
+        private int GetMainSyncAutoPlayStatusTextWidth()
+        {
+            string[] statusTexts = new string[]
+            {
+                string.Empty,
+                getLangStr("MainForm_autoPlayColorStatusUnconfigured"),
+                getLangStr("MainForm_autoPlayColorStatusBlack"),
+                getLangStr("MainForm_autoPlayColorStatusWhite"),
+                getLangStr("MainForm_autoPlayColorStatusUnsupported"),
+                getLangStr("MainForm_autoPlayColorStatusSpectating"),
+                getLangStr("MainForm_autoPlayColorStatusWaiting")
+            };
+            int width = 0;
+            for (int i = 0; i < statusTexts.Length; i++)
+                width = Math.Max(width, TextRenderer.MeasureText(statusTexts[i], lblAutoPlayColorStatus.Font).Width);
+            return width;
+        }
+
+        private int GetMainSyncConditionTimeLabelWidth()
+        {
+            return Math.Max(lblPlayCondition.PreferredSize.Width, lblTime.PreferredSize.Width);
+        }
+
+        private int GetMainSyncTimeLabelPanelWidth()
+        {
+            return lblTime.PreferredSize.Width + ScaleValue(18);
+        }
+
+        private int GetMainSyncConditionTimeSlotWidth()
+        {
+            return GetMainSyncConditionTimeLabelWidth() + ScaleValue(18) + ScaleValue(8) + ScaleValue(68);
+        }
+
+        private int GetMainSyncTimeRowVisitsLeftMargin()
+        {
+            int usedWidth = GetMainSyncTimeLabelPanelWidth() + ScaleValue(8) + ScaleValue(68);
+            return ScaleValue(12) + Math.Max(0, GetMainSyncConditionTimeSlotWidth() - usedWidth);
         }
 
         private void ArrangeMainActions(int top)
@@ -1035,7 +1138,6 @@ namespace readboard
         private int GetLegacyMainSyncRequiredWidth()
         {
             int left = ScaleValue(12);
-            int timeFieldGap = ScaleValue(8);
             int buttonGap = ScaleValue(12);
             int sharedVisitsPanelWidth = GetLegacyMainSyncVisitsPanelWidth();
             int row1Width =
@@ -1043,7 +1145,9 @@ namespace readboard
                 + buttonGap
                 + GetLayoutOptionPreferredSize(radioBlack).Width
                 + buttonGap
-                + Math.Max(ScaleValue(129) + timeFieldGap, lblPlayCondition.PreferredSize.Width + ScaleValue(22) + timeFieldGap)
+                + GetMainSyncAutoStatusColumnWidth()
+                + buttonGap
+                + GetMainSyncConditionTimeSlotWidth()
                 + buttonGap
                 + sharedVisitsPanelWidth
                 + ScaleValue(8)
@@ -1053,15 +1157,9 @@ namespace readboard
                 + buttonGap
                 + GetLayoutOptionPreferredSize(radioWhite).Width
                 + buttonGap
-                + GetLayoutOptionPreferredSize(radioAutoPlayColor).Width
+                + GetMainSyncAutoStatusColumnWidth()
                 + buttonGap
-                + lblAutoPlayColorStatus.PreferredSize.Width
-                + buttonGap
-                + GetLayoutOptionPreferredSize(btnFoxAutoPlayIdentity).Width
-                + buttonGap
-                + Math.Max(ScaleValue(61), lblTime.PreferredSize.Width + ScaleValue(8))
-                + timeFieldGap
-                + ScaleValue(68)
+                + GetMainSyncConditionTimeSlotWidth()
                 + buttonGap
                 + sharedVisitsPanelWidth
                 + ScaleValue(8)
@@ -1531,31 +1629,39 @@ namespace readboard
         {
             if (!radioAutoPlayColor.Checked || resolution == null)
             {
-                lblAutoPlayColorStatus.Text = string.Empty;
+                SetAutoPlayColorStatusText(string.Empty);
                 return;
             }
 
             switch (resolution.Status)
             {
                 case AutoPlayColorStatus.Unconfigured:
-                    lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusUnconfigured");
+                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusUnconfigured"));
                     return;
                 case AutoPlayColorStatus.RecognizedBlack:
-                    lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusBlack");
+                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusBlack"));
                     return;
                 case AutoPlayColorStatus.RecognizedWhite:
-                    lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusWhite");
+                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusWhite"));
                     return;
                 case AutoPlayColorStatus.UnsupportedPlatform:
-                    lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusUnsupported");
+                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusUnsupported"));
                     return;
                 case AutoPlayColorStatus.Spectating:
-                    lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusSpectating");
+                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusSpectating"));
                     return;
                 default:
-                    lblAutoPlayColorStatus.Text = getLangStr("MainForm_autoPlayColorStatusWaiting");
+                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusWaiting"));
                     return;
             }
+        }
+
+        private void SetAutoPlayColorStatusText(string text)
+        {
+            if (string.Equals(lblAutoPlayColorStatus.Text, text, StringComparison.Ordinal))
+                return;
+
+            lblAutoPlayColorStatus.Text = text;
         }
 
         private bool TryConfigureFoxAutoPlayIdentity()

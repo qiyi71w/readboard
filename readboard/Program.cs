@@ -341,7 +341,7 @@ namespace readboard
             langItems["MainForm_radioBlack"] = "执黑";
             langItems["MainForm_radioWhite"] = "执白";
             langItems["MainForm_radioAutoPlayColor"] = "自动";
-            langItems["MainForm_btnFoxAutoPlayIdentity"] = "身份...";
+            langItems["MainForm_btnFoxAutoPlayIdentity"] = "身份";
             langItems["MainForm_autoPlayColorStatusUnconfigured"] = "未配置";
             langItems["MainForm_autoPlayColorStatusWaiting"] = "待识别";
             langItems["MainForm_autoPlayColorStatusBlack"] = "识别:黑";

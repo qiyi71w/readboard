@@ -60,15 +60,13 @@ namespace Readboard.VerificationTests.Host
             string optionsSlice = GetMethodSlice(content, "private IEnumerable<ButtonBase> MainThemeOptions()");
             string labelsSlice = GetMethodSlice(content, "private IEnumerable<Label> MainThemeLabels()");
 
-            Assert.Contains("radioAutoPlayColor.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);", legacySlice);
-            Assert.Contains("radioAutoPlayColor.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);", adaptiveSlice);
-            Assert.Contains("lblAutoPlayColorStatus.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);", legacySlice);
-            Assert.Contains("lblAutoPlayColorStatus.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);", adaptiveSlice);
-            Assert.Contains("btnFoxAutoPlayIdentity.Margin = new Padding(0, ScaleValue(1), ScaleValue(12), 0);", legacySlice);
-            Assert.Contains("btnFoxAutoPlayIdentity.Margin = new Padding(0, ScaleValue(1), ScaleValue(12), 0);", adaptiveSlice);
-            Assert.Contains("GetLayoutOptionPreferredSize(radioAutoPlayColor).Width", widthSlice);
-            Assert.Contains("lblAutoPlayColorStatus.PreferredSize.Width", widthSlice);
-            Assert.Contains("GetLayoutOptionPreferredSize(btnFoxAutoPlayIdentity).Width", widthSlice);
+            Assert.Contains("ArrangeMainSyncAutoStatusColumn(rowHeight);", legacySlice);
+            Assert.Contains("ArrangeMainSyncAutoStatusColumn(rowHeight);", adaptiveSlice);
+            Assert.Contains("pnlAutoPlayColorStatus.Margin = new Padding(0, 0, 0, 0);", legacySlice);
+            Assert.Contains("pnlAutoPlayColorStatus.Margin = new Padding(0, 0, 0, 0);", adaptiveSlice);
+            Assert.Contains("pnlFoxAutoPlayIdentity.Margin = new Padding(0, 0, 0, 0);", legacySlice);
+            Assert.Contains("pnlFoxAutoPlayIdentity.Margin = new Padding(0, 0, 0, 0);", adaptiveSlice);
+            Assert.Contains("GetMainSyncAutoStatusColumnWidth()", widthSlice);
             Assert.Contains("radioAutoPlayColor", optionsSlice);
             Assert.Contains("btnFoxAutoPlayIdentity", optionsSlice);
             Assert.Contains("lblAutoPlayColorStatus", labelsSlice);
