@@ -13,7 +13,7 @@ namespace readboard
 
         internal const int MinMoveVerifyMaxAttempts = 1;
         internal const int MaxMoveVerifyMaxAttempts = 10;
-        internal const int DefaultMoveVerifyMaxAttempts = 10;
+        internal const int DefaultMoveVerifyMaxAttempts = 1;
 
         public string ProtocolVersion { get; set; }
         public string MachineKey { get; set; }

@@ -27,6 +27,12 @@ namespace Readboard.VerificationTests
             Assert.Equal(-1, config.WindowPosY);
         }
 
+        [Fact]
+        public void MoveVerifyMaxAttempts_DefaultsToInitialPlacementOnly()
+        {
+            Assert.Equal(1, AppConfig.DefaultMoveVerifyMaxAttempts);
+        }
+
         [Theory]
         [InlineData(1, 1)]
         [InlineData(2, 2)]
