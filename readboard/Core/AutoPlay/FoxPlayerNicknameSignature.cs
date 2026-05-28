@@ -168,10 +168,10 @@ namespace readboard
             int top;
             int right;
             int bottom;
-            if (!TryGetGlyphBounds(pixels, width, height, out left, out top, out right, out bottom))
+            int sourceGlyphPixels;
+            if (!TryGetGlyphBounds(pixels, width, height, out left, out top, out right, out bottom, out sourceGlyphPixels))
                 return Invalid();
 
-            int sourceGlyphPixels = CountTrue(pixels);
             if (sourceGlyphPixels < MinimumGlyphPixels)
                 return Invalid();
 
@@ -205,12 +205,21 @@ namespace readboard
             return new FoxPlayerNicknameSignature(NormalizedWidth, NormalizedHeight, normalized, glyphPixels);
         }
 
-        private static bool TryGetGlyphBounds(bool[] pixels, int width, int height, out int left, out int top, out int right, out int bottom)
+        private static bool TryGetGlyphBounds(
+            bool[] pixels,
+            int width,
+            int height,
+            out int left,
+            out int top,
+            out int right,
+            out int bottom,
+            out int glyphPixels)
         {
             left = width;
             top = height;
             right = -1;
             bottom = -1;
+            glyphPixels = 0;
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -218,6 +227,7 @@ namespace readboard
                     if (!pixels[y * width + x])
                         continue;
 
+                    glyphPixels++;
                     if (x < left)
                         left = x;
                     if (x > right)

@@ -356,7 +356,7 @@ namespace Readboard.VerificationTests.Host
             string clearSavedIdentitySlice = GetMethodSlice(mainFormSource, "private void ClearSavedFoxAutoPlayIdentity()");
             string buttonSlice = GetMethodSlice(mainFormSource, "private void btnFoxAutoPlayIdentity_Click(object sender, EventArgs e)");
 
-            Assert.Contains("internal string SelectedNickname", dialogSource);
+            Assert.DoesNotContain("internal string SelectedNickname {", dialogSource);
             Assert.Contains("internal string SelectedNicknameSignature", dialogSource);
             Assert.Contains("internal FoxAutoPlayIdentityDialogAction SelectedAction", dialogSource);
             Assert.Contains("this.TopMost = true;", dialogDesignerSource);
@@ -368,6 +368,9 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("PictureBox", dialogSource);
             Assert.Contains("candidate.PreviewImage", dialogSource);
             Assert.Contains("public Bitmap PreviewImage", dialogSource);
+            Assert.Contains("public string DisplayName", dialogSource);
+            Assert.DoesNotContain("public string Nickname {", dialogSource);
+            Assert.DoesNotContain("string currentNickname,", dialogSource);
             Assert.DoesNotContain("txtNickname", dialogDesignerSource);
             Assert.DoesNotContain("lblManualNickname", dialogDesignerSource);
             Assert.DoesNotContain("chkRememberNickname", dialogDesignerSource);
@@ -421,6 +424,7 @@ namespace Readboard.VerificationTests.Host
             string source = LoadSource("readboard", "Form1.cs");
             string resolveSlice = GetMethodSlice(source, "private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)");
             string detectionSlice = GetMethodSlice(source, "private AutoPlayColorResolution ResolveDetectedFoxAutoPlayColor(FoxWindowContext foxWindowContext)");
+            string contextSignatureSlice = GetMethodSlice(source, "private static string BuildFoxAutoPlayColorDetectionContextSignature(FoxWindowContext context)");
             string clearSlice = GetMethodSlice(source, "private void ClearFoxAutoPlayColorDetectionState()");
             string handleSlice = GetMethodSlice(source, "private void SetSelectedWindowHandle(IntPtr handle)");
 
@@ -429,6 +433,10 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("lastFoxAutoPlayColorDetectionContextSignature", source);
             Assert.Contains("lastFoxAutoPlayColorDetectionTimestampUtc", source);
             Assert.Contains("ResolveDetectedFoxAutoPlayColor(foxWindowContext)", resolveSlice);
+            Assert.Contains("BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext)", detectionSlice);
+            Assert.Contains("context.RoomToken", contextSignatureSlice);
+            Assert.DoesNotContain("context.LiveTitleMove", contextSignatureSlice);
+            Assert.DoesNotContain("foxWindowContext.TitleFingerprint ?? string.Empty", detectionSlice);
             Assert.Contains("IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(hwnd);", detectionSlice);
             Assert.Contains("FoxAutoPlayColorDetector.DetectPlayerListPanel(", detectionSlice);
             Assert.Contains("foxAutoPlayCapturePlatform.CaptureWindow(captureHandle)", detectionSlice);

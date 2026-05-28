@@ -57,6 +57,165 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public void KeepSync_ResendsPlayAfterFoxLiveRoomContextChanges()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncPlatform("fox");
+            coordinator.SetSyncBoth(true);
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            Type descriptorInterfaceType = RequireType(assembly, "readboard.IWindowDescriptorFactory");
+
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, new IntPtr(5151));
+            SetProperty(snapshot, "PlayColor", "black");
+            FoxRoomSwitchingHostRecorder hostRecorder = new FoxRoomSwitchingHostRecorder(snapshot, coordinator);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=fox")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            SetProperty(runtime, "WindowDescriptorFactory", CreateProxy(
+                descriptorInterfaceType,
+                new DescriptorFactoryRecorder().HandleCall));
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
+            Assert.True(started);
+            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+            Assert.True(WaitForCondition(delegate
+            {
+                lock (transport.SentLines)
+                {
+                    return transport.SentLines.IndexOf("roomToken 222号") >= 0;
+                }
+            }, TimeSpan.FromSeconds(1)));
+
+            Invoke(coordinator, "StopSyncSession");
+
+            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            int secondRoomIndex = transport.SentLines.IndexOf("roomToken 222号");
+            int firstPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0");
+            int secondPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0", firstPlayIndex + 1);
+            Assert.True(firstPlayIndex >= 0, "Initial keep sync should send the selected play color.");
+            Assert.True(secondRoomIndex >= 0, "The second Fox room context should be sent.");
+            Assert.True(secondPlayIndex > secondRoomIndex, "Changing Fox live room should resend play after the new room context.");
+        }
+
+        [Fact]
+        public void KeepSync_DoesNotResendPlayWhenOnlyFoxLiveMoveChanges()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncPlatform("fox");
+            coordinator.SetSyncBoth(true);
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            Type descriptorInterfaceType = RequireType(assembly, "readboard.IWindowDescriptorFactory");
+
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, new IntPtr(5151));
+            SetProperty(snapshot, "PlayColor", "black");
+            FoxLiveContextSequenceHostRecorder hostRecorder = new FoxLiveContextSequenceHostRecorder(
+                snapshot,
+                coordinator,
+                CreateFoxLiveRoomContext("111号", 57),
+                CreateFoxLiveRoomContext("111号", 58));
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=fox")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            SetProperty(runtime, "WindowDescriptorFactory", CreateProxy(
+                descriptorInterfaceType,
+                new DescriptorFactoryRecorder().HandleCall));
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
+            Assert.True(started);
+            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+            Assert.True(WaitForCondition(delegate
+            {
+                lock (transport.SentLines)
+                {
+                    return transport.SentLines.IndexOf("liveTitleMove 58") >= 0;
+                }
+            }, TimeSpan.FromSeconds(1)));
+
+            Invoke(coordinator, "StopSyncSession");
+
+            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            Assert.Equal(1, transport.CountLines("play>black>0 0 0"));
+        }
+
+        [Fact]
+        public void KeepSync_DoesNotConsumeFoxRoomPlayRearmOnInvalidSnapshot()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncPlatform("fox");
+            coordinator.SetSyncBoth(true);
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            Type descriptorInterfaceType = RequireType(assembly, "readboard.IWindowDescriptorFactory");
+
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, new IntPtr(5151));
+            SetProperty(snapshot, "PlayColor", "black");
+            FoxLiveContextSequenceHostRecorder hostRecorder = new FoxLiveContextSequenceHostRecorder(
+                snapshot,
+                coordinator,
+                CreateFoxLiveRoomContext("111号", 57),
+                CreateFoxLiveRoomContext("222号", 58),
+                CreateFoxLiveRoomContext("222号", 58));
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(
+                CreateResult("re=initial"),
+                CreateInvalidResult("re=invalid"),
+                CreateResult("re=fox")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            SetProperty(runtime, "WindowDescriptorFactory", CreateProxy(
+                descriptorInterfaceType,
+                new DescriptorFactoryRecorder().HandleCall));
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
+            Assert.True(started);
+            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+            Assert.True(WaitForCondition(delegate
+            {
+                lock (transport.SentLines)
+                {
+                    return transport.SentLines.IndexOf("roomToken 222号") >= 0;
+                }
+            }, TimeSpan.FromSeconds(1)));
+
+            Invoke(coordinator, "StopSyncSession");
+
+            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            int secondRoomIndex = transport.SentLines.IndexOf("roomToken 222号");
+            int firstPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0");
+            int secondPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0", firstPlayIndex + 1);
+            Assert.True(secondPlayIndex > secondRoomIndex, "Invalid snapshots must not consume the Fox room play rearm before the new room context is sent.");
+            Assert.Equal(2, transport.CountLines("play>black>0 0 0"));
+        }
+
+        [Fact]
         public void TryStartKeepSync_YikeSendsYikeSyncControlCommands()
         {
             RecordingTransport transport = new RecordingTransport();
@@ -1144,6 +1303,13 @@ namespace Readboard.VerificationTests.Protocol
             };
         }
 
+        private static BoardRecognitionResult CreateInvalidResult(string protocolLine)
+        {
+            BoardRecognitionResult result = CreateResult(protocolLine);
+            result.Snapshot.IsValid = false;
+            return result;
+        }
+
         private static Type RequireType(Assembly assembly, string typeName)
         {
             Type resolved = assembly.GetType(typeName);
@@ -1308,6 +1474,108 @@ namespace Readboard.VerificationTests.Protocol
                         return GetDefault(method.ReturnType);
                 }
             }
+        }
+
+        private sealed class FoxRoomSwitchingHostRecorder
+        {
+            private readonly object snapshot;
+            private readonly SyncSessionCoordinator coordinator;
+            private int snapshotRequests;
+
+            public FoxRoomSwitchingHostRecorder(object snapshot, SyncSessionCoordinator coordinator)
+            {
+                this.snapshot = snapshot;
+                this.coordinator = coordinator;
+            }
+
+            public ManualResetEventSlim KeepStarted { get; } = new ManualResetEventSlim(false);
+            public ManualResetEventSlim KeepStopped { get; } = new ManualResetEventSlim(false);
+
+            public object HandleCall(MethodInfo method, object[] args)
+            {
+                switch (method.Name)
+                {
+                    case "CaptureSnapshot":
+                        coordinator.SetFoxWindowContext(CreateFoxLiveRoomContext(
+                            Interlocked.Increment(ref snapshotRequests) == 1 ? "111号" : "222号",
+                            57));
+                        return snapshot;
+                    case "OnKeepSyncStarted":
+                        KeepStarted.Set();
+                        return null;
+                    case "OnKeepSyncStopped":
+                        KeepStopped.Set();
+                        return null;
+                    case "UpdateSelectedWindowHandle":
+                    case "OnSyncCachesReset":
+                    case "ShowMissingSyncSourceMessage":
+                    case "ShowRecognitionFailureMessage":
+                    case "MinimizeWindow":
+                        return null;
+                    default:
+                        return GetDefault(method.ReturnType);
+                }
+            }
+        }
+
+        private sealed class FoxLiveContextSequenceHostRecorder
+        {
+            private readonly object snapshot;
+            private readonly SyncSessionCoordinator coordinator;
+            private readonly FoxWindowContext[] contexts;
+            private int snapshotRequests;
+
+            public FoxLiveContextSequenceHostRecorder(
+                object snapshot,
+                SyncSessionCoordinator coordinator,
+                params FoxWindowContext[] contexts)
+            {
+                this.snapshot = snapshot;
+                this.coordinator = coordinator;
+                Assert.True(contexts != null && contexts.Length > 0);
+                this.contexts = contexts;
+            }
+
+            public ManualResetEventSlim KeepStarted { get; } = new ManualResetEventSlim(false);
+            public ManualResetEventSlim KeepStopped { get; } = new ManualResetEventSlim(false);
+
+            public object HandleCall(MethodInfo method, object[] args)
+            {
+                switch (method.Name)
+                {
+                    case "CaptureSnapshot":
+                        int contextIndex = Math.Min(
+                            Interlocked.Increment(ref snapshotRequests) - 1,
+                            contexts.Length - 1);
+                        coordinator.SetFoxWindowContext(contexts[contextIndex]);
+                        return snapshot;
+                    case "OnKeepSyncStarted":
+                        KeepStarted.Set();
+                        return null;
+                    case "OnKeepSyncStopped":
+                        KeepStopped.Set();
+                        return null;
+                    case "UpdateSelectedWindowHandle":
+                    case "OnSyncCachesReset":
+                    case "ShowMissingSyncSourceMessage":
+                    case "ShowRecognitionFailureMessage":
+                    case "MinimizeWindow":
+                        return null;
+                    default:
+                        return GetDefault(method.ReturnType);
+                }
+            }
+        }
+
+        private static FoxWindowContext CreateFoxLiveRoomContext(string roomToken, int liveTitleMove)
+        {
+            return new FoxWindowContext
+            {
+                Kind = FoxWindowKind.LiveRoom,
+                LiveRoomState = FoxLiveRoomState.Playing,
+                RoomToken = roomToken,
+                LiveTitleMove = liveTitleMove
+            };
         }
 
         private sealed class LightweightBindingRestartHostRecorder
@@ -1649,16 +1917,19 @@ namespace Readboard.VerificationTests.Protocol
 
         private sealed class SequencedRecognitionService : IBoardRecognitionService
         {
-            private readonly BoardRecognitionResult result;
+            private readonly BoardRecognitionResult[] results;
+            private int resultIndex;
 
-            public SequencedRecognitionService(BoardRecognitionResult result)
+            public SequencedRecognitionService(params BoardRecognitionResult[] results)
             {
-                this.result = result;
+                Assert.True(results != null && results.Length > 0);
+                this.results = results;
             }
 
             public BoardRecognitionResult Recognize(BoardRecognitionRequest request)
             {
-                return result;
+                int index = Math.Min(Interlocked.Increment(ref resultIndex) - 1, results.Length - 1);
+                return results[index];
             }
         }
 

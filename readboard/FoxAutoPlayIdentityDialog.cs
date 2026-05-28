@@ -21,19 +21,6 @@ namespace readboard
         private readonly List<FoxAutoPlayIdentityCandidate> detectedCandidates = new List<FoxAutoPlayIdentityCandidate>();
         private readonly List<RadioButton> candidateRadioButtons = new List<RadioButton>();
 
-        internal FoxAutoPlayIdentityDialog(string currentNickname, string currentNicknameSignature)
-            : this(currentNicknameSignature, (IEnumerable<FoxAutoPlayIdentityCandidate>)null)
-        {
-        }
-
-        internal FoxAutoPlayIdentityDialog(
-            string currentNickname,
-            string currentNicknameSignature,
-            IEnumerable<FoxAutoPlayIdentityCandidate> candidates)
-            : this(currentNicknameSignature, candidates)
-        {
-        }
-
         internal FoxAutoPlayIdentityDialog(
             string currentNicknameSignature,
             IEnumerable<FoxAutoPlayIdentityCandidate> candidates)
@@ -48,14 +35,12 @@ namespace readboard
         {
             InitializeComponent();
             ApplyLanguage();
-            SelectedNickname = string.Empty;
             SelectedNicknameSignature = currentNicknameSignature ?? string.Empty;
             SelectedAction = FoxAutoPlayIdentityDialogAction.Cancel;
             btnClearSavedIdentity.Enabled = hasSavedIdentity;
             LoadCandidates(candidates);
         }
 
-        internal string SelectedNickname { get; private set; }
         internal string SelectedNicknameSignature { get; private set; }
         internal FoxAutoPlayIdentityDialogAction SelectedAction { get; private set; }
 
@@ -123,7 +108,7 @@ namespace readboard
                 AutoSize = true,
                 Left = ScaleValue(8),
                 Top = ScaleValue(16),
-                Text = candidate.Nickname
+                Text = candidate.DisplayName
             };
             radioButton.CheckedChanged += delegate
             {
@@ -195,7 +180,6 @@ namespace readboard
 
         private void btnClearSavedIdentity_Click(object sender, EventArgs e)
         {
-            SelectedNickname = string.Empty;
             SelectedNicknameSignature = string.Empty;
             SelectedAction = FoxAutoPlayIdentityDialogAction.ClearSaved;
             DialogResult = DialogResult.OK;
@@ -211,7 +195,6 @@ namespace readboard
                 return;
             }
 
-            SelectedNickname = string.Empty;
             SelectedNicknameSignature = ResolveSelectedSignature(selectedIndex);
             SelectedAction = action;
             DialogResult = DialogResult.OK;
@@ -267,19 +250,19 @@ namespace readboard
 
     internal sealed class FoxAutoPlayIdentityCandidate : IDisposable
     {
-        public FoxAutoPlayIdentityCandidate(string nickname, string nicknameSignature)
-            : this(nickname, nicknameSignature, null)
+        public FoxAutoPlayIdentityCandidate(string displayName, string nicknameSignature)
+            : this(displayName, nicknameSignature, null)
         {
         }
 
-        public FoxAutoPlayIdentityCandidate(string nickname, string nicknameSignature, Bitmap previewImage)
+        public FoxAutoPlayIdentityCandidate(string displayName, string nicknameSignature, Bitmap previewImage)
         {
-            Nickname = nickname ?? string.Empty;
+            DisplayName = displayName ?? string.Empty;
             NicknameSignature = nicknameSignature ?? string.Empty;
             PreviewImage = previewImage;
         }
 
-        public string Nickname { get; private set; }
+        public string DisplayName { get; private set; }
         public string NicknameSignature { get; private set; }
         public Bitmap PreviewImage { get; private set; }
 

@@ -12,30 +12,7 @@ namespace readboard
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.Unconfigured);
 
             IList<FoxPlayerRowCandidate> rows = FoxPlayerRowLocator.Locate(windowBitmap, syncMode);
-            if (rows.Count == 0)
-                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
-
-            List<Bitmap> nicknameSnippets = new List<Bitmap>();
-            try
-            {
-                foreach (FoxPlayerRowCandidate row in rows)
-                    nicknameSnippets.Add(Crop(windowBitmap, row.NicknameBounds));
-
-                FoxPlayerNicknameMatch match = signature.Match(nicknameSnippets);
-                if (!match.IsReliable || match.Index < 0 || match.Index >= rows.Count)
-                    return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
-
-                using (Bitmap icon = Crop(windowBitmap, rows[match.Index].StoneIconBounds))
-                    return FoxPlayerStoneIconDetector.Detect(icon);
-            }
-            finally
-            {
-                foreach (Bitmap bitmap in nicknameSnippets)
-                {
-                    if (bitmap != null)
-                        bitmap.Dispose();
-                }
-            }
+            return DetectRows(windowBitmap, rows, signature);
         }
 
         public static AutoPlayColorResolution DetectPlayerListPanel(Bitmap panelBitmap, string nicknameSignature)
@@ -45,6 +22,14 @@ namespace readboard
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.Unconfigured);
 
             IList<FoxPlayerRowCandidate> rows = FoxPlayerRowLocator.LocatePlayerListPanel(panelBitmap);
+            return DetectRows(panelBitmap, rows, signature);
+        }
+
+        private static AutoPlayColorResolution DetectRows(
+            Bitmap bitmap,
+            IList<FoxPlayerRowCandidate> rows,
+            FoxPlayerNicknameSignature signature)
+        {
             if (rows.Count == 0)
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
 
@@ -52,21 +37,21 @@ namespace readboard
             try
             {
                 foreach (FoxPlayerRowCandidate row in rows)
-                    nicknameSnippets.Add(Crop(panelBitmap, row.NicknameBounds));
+                    nicknameSnippets.Add(Crop(bitmap, row.NicknameBounds));
 
                 FoxPlayerNicknameMatch match = signature.Match(nicknameSnippets);
                 if (!match.IsReliable || match.Index < 0 || match.Index >= rows.Count)
                     return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
 
-                using (Bitmap icon = Crop(panelBitmap, rows[match.Index].StoneIconBounds))
+                using (Bitmap icon = Crop(bitmap, rows[match.Index].StoneIconBounds))
                     return FoxPlayerStoneIconDetector.Detect(icon);
             }
             finally
             {
-                foreach (Bitmap bitmap in nicknameSnippets)
+                foreach (Bitmap snippet in nicknameSnippets)
                 {
-                    if (bitmap != null)
-                        bitmap.Dispose();
+                    if (snippet != null)
+                        snippet.Dispose();
                 }
             }
         }
