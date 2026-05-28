@@ -810,7 +810,10 @@ namespace readboard
             }
             ResolvePendingMove(sample.Snapshot, snapshot.BoardWidth);
             if (sample.Snapshot != null && sample.Snapshot.IsValid)
+            {
                 dispatch.BoardSnapshotBatch = TryBuildOutboundBoardSnapshotBatch(sample.Snapshot);
+                dispatch.PlayMessage = ReservePlayMessageIfChanged(snapshot);
+            }
             return dispatch;
         }
 
@@ -833,6 +836,8 @@ namespace readboard
                     outboundProtocolDispatcher.SendMessageWhileSynchronized(dispatch.StartMessage);
                 if (dispatch.BoardSnapshotBatch != null)
                     outboundBoardSnapshotEmitter.EmitWhileSynchronized(dispatch.BoardSnapshotBatch);
+                if (dispatch.PlayMessage != null)
+                    outboundProtocolDispatcher.SendMessageWhileSynchronized(dispatch.PlayMessage);
             });
         }
 
@@ -1164,6 +1169,107 @@ namespace readboard
                 NormalizeNumericValue(snapshot.FirstPolicyValue));
         }
 
+        private ProtocolMessage ReservePlayMessageIfChanged(SyncCoordinatorHostSnapshot snapshot)
+        {
+            if (!SyncBoth || snapshot == null || string.IsNullOrWhiteSpace(snapshot.PlayColor))
+                return null;
+
+            string color = snapshot.PlayColor;
+            string time = NormalizeNumericValue(snapshot.AiTimeValue);
+            string playouts = NormalizeNumericValue(snapshot.PlayoutsValue);
+            string firstPolicy = NormalizeNumericValue(snapshot.FirstPolicyValue);
+            string signature;
+            lock (stateLock)
+            {
+                signature = BuildPlayStateSignatureForCurrentContext(color, time, playouts, firstPolicy);
+                if (string.Equals(lastSentPlayStateSignature, signature, StringComparison.Ordinal))
+                    return null;
+                lastSentPlayStateSignature = signature;
+            }
+
+            return protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy);
+        }
+
+        private void RememberSentPlayState(string color, string time, string playouts, string firstPolicy)
+        {
+            lock (stateLock)
+            {
+                lastSentPlayStateSignature = BuildPlayStateSignatureForCurrentContext(
+                    color,
+                    time,
+                    playouts,
+                    firstPolicy);
+            }
+        }
+
+        private string BuildPlayStateSignatureForCurrentContext(
+            string color,
+            string time,
+            string playouts,
+            string firstPolicy)
+        {
+            return BuildPlayStateSignature(
+                color,
+                NormalizeNumericValue(time),
+                NormalizeNumericValue(playouts),
+                NormalizeNumericValue(firstPolicy),
+                BuildPlayRearmContextSignatureUnsafe());
+        }
+
+        private string BuildPlayRearmContextSignatureUnsafe()
+        {
+            string normalizedPlatform = NormalizeSyncPlatform(syncPlatform);
+            if (string.Equals(normalizedPlatform, ProtocolKeywords.Yike, StringComparison.Ordinal))
+            {
+                YikeWindowContext yikeContext = YikeWindowContext.CopyOf(runtimeState.LastCapturedYikeContext);
+                return "platform=" + normalizedPlatform
+                    + "|room=" + TrimSignatureValue(yikeContext.RoomToken);
+            }
+
+            FoxWindowContext context = FoxWindowContext.CopyOf(foxWindowContext);
+            if (context.Kind == FoxWindowKind.LiveRoom)
+            {
+                return "platform=" + normalizedPlatform
+                    + "|kind=" + (int)context.Kind
+                    + "|room=" + TrimSignatureValue(context.RoomToken);
+            }
+
+            if (context.Kind == FoxWindowKind.RecordView)
+            {
+                return "platform=" + normalizedPlatform
+                    + "|kind=" + (int)context.Kind
+                    + "|total=" + FormatNullableInt(context.RecordTotalMove)
+                    + "|end=" + (context.RecordAtEnd ? "1" : "0")
+                    + "|fingerprint=" + TrimSignatureValue(context.TitleFingerprint);
+            }
+
+            return "platform=" + normalizedPlatform + "|kind=" + (int)context.Kind;
+        }
+
+        private static string BuildPlayStateSignature(
+            string color,
+            string time,
+            string playouts,
+            string firstPolicy,
+            string windowContextSignature)
+        {
+            return (color ?? string.Empty).Trim()
+                + "|time=" + (time ?? string.Empty)
+                + "|playouts=" + (playouts ?? string.Empty)
+                + "|first=" + (firstPolicy ?? string.Empty)
+                + "|ctx=" + (windowContextSignature ?? string.Empty);
+        }
+
+        private static string TrimSignatureValue(string value)
+        {
+            return value == null ? string.Empty : value.Trim();
+        }
+
+        private static string FormatNullableInt(int? value)
+        {
+            return value.HasValue ? value.Value.ToString() : string.Empty;
+        }
+
         private static string NormalizeNumericValue(string value)
         {
             return string.IsNullOrWhiteSpace(value) ? "0" : value;
@@ -1254,6 +1360,7 @@ namespace readboard
             public string OverlayProtocolLine { get; set; }
             public ProtocolMessage StartMessage { get; set; }
             public OutboundBoardSnapshotBatch BoardSnapshotBatch { get; set; }
+            public ProtocolMessage PlayMessage { get; set; }
         }
     }
 }

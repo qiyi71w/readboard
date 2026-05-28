@@ -1595,7 +1595,7 @@ namespace readboard
             if (captureHandle == IntPtr.Zero)
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
 
-            string contextSignature = foxWindowContext == null ? string.Empty : foxWindowContext.TitleFingerprint ?? string.Empty;
+            string contextSignature = BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext);
             DateTime now = DateTime.UtcNow;
             if (lastFoxAutoPlayColorDetection != null
                 && lastFoxAutoPlayColorDetectionWindowHandle == captureHandle
@@ -1616,6 +1616,33 @@ namespace readboard
             lastFoxAutoPlayColorDetectionNicknameSignature = nicknameSignature;
             lastFoxAutoPlayColorDetectionTimestampUtc = now;
             return detection;
+        }
+
+        private static string BuildFoxAutoPlayColorDetectionContextSignature(FoxWindowContext context)
+        {
+            if (context == null)
+                return string.Empty;
+
+            if (context.Kind == FoxWindowKind.LiveRoom)
+            {
+                return "live|state=" + (int)context.LiveRoomState
+                    + "|room=" + (context.RoomToken ?? string.Empty).Trim();
+            }
+
+            if (context.Kind == FoxWindowKind.RecordView)
+            {
+                return "record|current=" + FormatNullableInt(context.RecordCurrentMove)
+                    + "|total=" + FormatNullableInt(context.RecordTotalMove)
+                    + "|end=" + (context.RecordAtEnd ? "1" : "0")
+                    + "|fingerprint=" + (context.TitleFingerprint ?? string.Empty).Trim();
+            }
+
+            return "kind=" + (int)context.Kind;
+        }
+
+        private static string FormatNullableInt(int? value)
+        {
+            return value.HasValue ? value.Value.ToString() : string.Empty;
         }
 
         private string ResolveCurrentFoxAutoPlayNicknameSignature()
@@ -2044,8 +2071,8 @@ namespace readboard
 
         private void UpdateMainWindowTitle(FoxWindowContext foxWindowContext)
         {
-            string previousContextSignature = lastFoxWindowContext == null ? string.Empty : lastFoxWindowContext.TitleFingerprint ?? string.Empty;
-            string nextContextSignature = foxWindowContext == null ? string.Empty : foxWindowContext.TitleFingerprint ?? string.Empty;
+            string previousContextSignature = BuildFoxAutoPlayColorDetectionContextSignature(lastFoxWindowContext);
+            string nextContextSignature = BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext);
             if (!string.Equals(previousContextSignature, nextContextSignature, StringComparison.Ordinal))
                 ClearFoxAutoPlayColorDetectionState();
             lastFoxWindowContext = FoxWindowContext.CopyOf(foxWindowContext);

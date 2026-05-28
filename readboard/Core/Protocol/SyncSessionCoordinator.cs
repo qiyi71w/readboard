@@ -28,6 +28,7 @@ namespace readboard
         private int? lastCapturedFoxMoveNumber;
         private int? lastSentBoardFoxMoveNumber;
         private string lastSentWindowContextSignature;
+        private string lastSentPlayStateSignature;
         private SessionState sessionState;
         private IProtocolCommandHost host;
 
@@ -518,6 +519,7 @@ namespace readboard
 
         public void SendPlay(string color, string time, string playouts, string firstPolicy)
         {
+            RememberSentPlayState(color, time, playouts, firstPolicy);
             SendProtocolMessage(protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy));
         }
 
