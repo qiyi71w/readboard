@@ -427,6 +427,7 @@ namespace Readboard.VerificationTests.Host
             string contextSignatureSlice = GetMethodSlice(source, "private static string BuildFoxAutoPlayColorDetectionContextSignature(FoxWindowContext context)");
             string clearSlice = GetMethodSlice(source, "private void ClearFoxAutoPlayColorDetectionState()");
             string handleSlice = GetMethodSlice(source, "private void SetSelectedWindowHandle(IntPtr handle)");
+            string updateTitleSlice = GetMethodSlice(source, "private void UpdateMainWindowTitle(FoxWindowContext foxWindowContext)");
 
             Assert.Contains("lastFoxAutoPlayColorDetection", source);
             Assert.Contains("lastFoxAutoPlayColorDetectionWindowHandle", source);
@@ -443,6 +444,8 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("FindFoxPlayerListPanelHandle", source);
             Assert.Contains("lastFoxAutoPlayColorDetection = null;", clearSlice);
             Assert.Contains("ClearFoxAutoPlayColorDetectionState();", handleSlice);
+            Assert.Contains("BuildFoxAutoPlayColorDetectionContextSignature(", updateTitleSlice);
+            Assert.DoesNotContain("TitleFingerprint", updateTitleSlice);
         }
 
         [Fact]

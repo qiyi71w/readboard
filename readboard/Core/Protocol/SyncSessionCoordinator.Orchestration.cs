@@ -1181,7 +1181,7 @@ namespace readboard
             string signature;
             lock (stateLock)
             {
-                signature = BuildPlayStateSignature(color, time, playouts, firstPolicy, BuildPlayRearmContextSignatureUnsafe());
+                signature = BuildPlayStateSignatureForCurrentContext(color, time, playouts, firstPolicy);
                 if (string.Equals(lastSentPlayStateSignature, signature, StringComparison.Ordinal))
                     return null;
                 lastSentPlayStateSignature = signature;
@@ -1194,13 +1194,26 @@ namespace readboard
         {
             lock (stateLock)
             {
-                lastSentPlayStateSignature = BuildPlayStateSignature(
+                lastSentPlayStateSignature = BuildPlayStateSignatureForCurrentContext(
                     color,
-                    NormalizeNumericValue(time),
-                    NormalizeNumericValue(playouts),
-                    NormalizeNumericValue(firstPolicy),
-                    BuildPlayRearmContextSignatureUnsafe());
+                    time,
+                    playouts,
+                    firstPolicy);
             }
+        }
+
+        private string BuildPlayStateSignatureForCurrentContext(
+            string color,
+            string time,
+            string playouts,
+            string firstPolicy)
+        {
+            return BuildPlayStateSignature(
+                color,
+                NormalizeNumericValue(time),
+                NormalizeNumericValue(playouts),
+                NormalizeNumericValue(firstPolicy),
+                BuildPlayRearmContextSignatureUnsafe());
         }
 
         private string BuildPlayRearmContextSignatureUnsafe()

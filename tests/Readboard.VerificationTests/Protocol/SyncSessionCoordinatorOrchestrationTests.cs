@@ -112,6 +112,63 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public void KeepSync_ResendsPlayAfterFoxRecordViewContextChanges()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncPlatform("fox");
+            coordinator.SetSyncBoth(true);
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            Type descriptorInterfaceType = RequireType(assembly, "readboard.IWindowDescriptorFactory");
+
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, new IntPtr(5151));
+            SetProperty(snapshot, "PlayColor", "black");
+            FoxLiveContextSequenceHostRecorder hostRecorder = new FoxLiveContextSequenceHostRecorder(
+                snapshot,
+                coordinator,
+                CreateFoxRecordViewContext(10, 120, false, "game-1"),
+                CreateFoxRecordViewContext(10, 120, false, "game-1-variant"),
+                CreateFoxRecordViewContext(11, 120, false, "game-1-variant"));
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=fox")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            SetProperty(runtime, "WindowDescriptorFactory", CreateProxy(
+                descriptorInterfaceType,
+                new DescriptorFactoryRecorder().HandleCall));
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
+            Assert.True(started);
+            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+            Assert.True(WaitForCondition(delegate
+            {
+                lock (transport.SentLines)
+                {
+                    return transport.SentLines.IndexOf("recordCurrentMove 11") >= 0;
+                }
+            }, TimeSpan.FromSeconds(1)));
+
+            Invoke(coordinator, "StopSyncSession");
+
+            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            int secondFingerprintIndex = transport.SentLines.IndexOf("recordTitleFingerprint game-1-variant");
+            int firstPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0");
+            int secondPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0", firstPlayIndex + 1);
+            Assert.True(firstPlayIndex >= 0, "Initial keep sync should send the selected play color.");
+            Assert.True(secondFingerprintIndex >= 0, "The second Fox record context should be sent.");
+            Assert.True(secondPlayIndex > secondFingerprintIndex, "Changing Fox record fingerprint should resend play after the new record context.");
+            Assert.Equal(2, transport.CountLines("play>black>0 0 0"));
+        }
+
+        [Fact]
         public void KeepSync_DoesNotResendPlayWhenOnlyFoxLiveMoveChanges()
         {
             RecordingTransport transport = new RecordingTransport();
@@ -1537,6 +1594,22 @@ namespace Readboard.VerificationTests.Protocol
                 LiveRoomState = FoxLiveRoomState.Playing,
                 RoomToken = roomToken,
                 LiveTitleMove = liveTitleMove
+            };
+        }
+
+        private static FoxWindowContext CreateFoxRecordViewContext(
+            int recordCurrentMove,
+            int recordTotalMove,
+            bool recordAtEnd,
+            string titleFingerprint)
+        {
+            return new FoxWindowContext
+            {
+                Kind = FoxWindowKind.RecordView,
+                RecordCurrentMove = recordCurrentMove,
+                RecordTotalMove = recordTotalMove,
+                RecordAtEnd = recordAtEnd,
+                TitleFingerprint = titleFingerprint
             };
         }
 
