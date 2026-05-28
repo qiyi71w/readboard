@@ -1241,9 +1241,9 @@ namespace readboard
             string windowContextSignature)
         {
             return (color ?? string.Empty).Trim()
-                + "|time=" + NormalizeNumericValue(time)
-                + "|playouts=" + NormalizeNumericValue(playouts)
-                + "|first=" + NormalizeNumericValue(firstPolicy)
+                + "|time=" + (time ?? string.Empty)
+                + "|playouts=" + (playouts ?? string.Empty)
+                + "|first=" + (firstPolicy ?? string.Empty)
                 + "|ctx=" + (windowContextSignature ?? string.Empty);
         }
 

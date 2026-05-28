@@ -71,7 +71,11 @@ namespace Readboard.VerificationTests.Protocol
 
             object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, new IntPtr(5151));
             SetProperty(snapshot, "PlayColor", "black");
-            FoxRoomSwitchingHostRecorder hostRecorder = new FoxRoomSwitchingHostRecorder(snapshot, coordinator);
+            FoxLiveContextSequenceHostRecorder hostRecorder = new FoxLiveContextSequenceHostRecorder(
+                snapshot,
+                coordinator,
+                CreateFoxLiveRoomContext("111号", 57),
+                CreateFoxLiveRoomContext("222号", 57));
             object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
             object runtime = Activator.CreateInstance(runtimeType);
             SetProperty(runtime, "Host", host);
@@ -1466,48 +1470,6 @@ namespace Readboard.VerificationTests.Protocol
                     case "OnSyncCachesReset":
                         SyncCachesResetCount++;
                         return null;
-                    case "ShowMissingSyncSourceMessage":
-                    case "ShowRecognitionFailureMessage":
-                    case "MinimizeWindow":
-                        return null;
-                    default:
-                        return GetDefault(method.ReturnType);
-                }
-            }
-        }
-
-        private sealed class FoxRoomSwitchingHostRecorder
-        {
-            private readonly object snapshot;
-            private readonly SyncSessionCoordinator coordinator;
-            private int snapshotRequests;
-
-            public FoxRoomSwitchingHostRecorder(object snapshot, SyncSessionCoordinator coordinator)
-            {
-                this.snapshot = snapshot;
-                this.coordinator = coordinator;
-            }
-
-            public ManualResetEventSlim KeepStarted { get; } = new ManualResetEventSlim(false);
-            public ManualResetEventSlim KeepStopped { get; } = new ManualResetEventSlim(false);
-
-            public object HandleCall(MethodInfo method, object[] args)
-            {
-                switch (method.Name)
-                {
-                    case "CaptureSnapshot":
-                        coordinator.SetFoxWindowContext(CreateFoxLiveRoomContext(
-                            Interlocked.Increment(ref snapshotRequests) == 1 ? "111号" : "222号",
-                            57));
-                        return snapshot;
-                    case "OnKeepSyncStarted":
-                        KeepStarted.Set();
-                        return null;
-                    case "OnKeepSyncStopped":
-                        KeepStopped.Set();
-                        return null;
-                    case "UpdateSelectedWindowHandle":
-                    case "OnSyncCachesReset":
                     case "ShowMissingSyncSourceMessage":
                     case "ShowRecognitionFailureMessage":
                     case "MinimizeWindow":

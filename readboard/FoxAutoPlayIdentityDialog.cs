@@ -23,13 +23,6 @@ namespace readboard
 
         internal FoxAutoPlayIdentityDialog(
             string currentNicknameSignature,
-            IEnumerable<FoxAutoPlayIdentityCandidate> candidates)
-            : this(currentNicknameSignature, !string.IsNullOrWhiteSpace(currentNicknameSignature), candidates)
-        {
-        }
-
-        internal FoxAutoPlayIdentityDialog(
-            string currentNicknameSignature,
             bool hasSavedIdentity,
             IEnumerable<FoxAutoPlayIdentityCandidate> candidates)
         {
