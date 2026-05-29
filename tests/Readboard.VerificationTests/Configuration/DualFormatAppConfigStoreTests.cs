@@ -187,6 +187,24 @@ namespace Readboard.VerificationTests
         }
 
         [Theory]
+        [InlineData(-1)]
+        [InlineData(99)]
+        public void Load_NormalizesInvalidAutoPlayColorModeFromJson(int configuredValue)
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config.readboard.json"),
+                    "{\"MachineKey\":\"MACHINE-001\",\"AutoPlayColorMode\":" + configuredValue + "}");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.Equal(AutoPlayColorMode.ManualBlack, result.Config.AutoPlayColorMode);
+            }
+        }
+
+        [Theory]
         [InlineData(-1, AppConfig.MinMoveVerifyMaxAttempts)]
         [InlineData(1, 1)]
         [InlineData(2, 2)]
@@ -250,6 +268,28 @@ namespace Readboard.VerificationTests
                 Assert.Equal(AutoPlayColorMode.FoxAuto, result.Config.AutoPlayColorMode);
                 Assert.Equal("鳕鱼の让子", result.Config.FoxAutoPlayNickname);
                 Assert.Equal("sig-xyz", result.Config.FoxAutoPlayNicknameSignature);
+            }
+        }
+
+        [Theory]
+        [InlineData(-1)]
+        [InlineData(99)]
+        public void Load_NormalizesInvalidAutoPlayColorModeFromLegacyOtherConfig(int configuredValue)
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard.txt"),
+                    "101_42_77_18_1_0_1_0_1_1_MACHINE-001_4");
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard_others.txt"),
+                    "220430_13_13_15_16_150_1_61_320_240_1_0_1_1_0_" + configuredValue);
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.True(result.HasExistingConfig);
+                Assert.Equal(AutoPlayColorMode.ManualBlack, result.Config.AutoPlayColorMode);
             }
         }
 
