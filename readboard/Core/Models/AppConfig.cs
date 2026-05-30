@@ -101,6 +101,15 @@ namespace readboard
             return value;
         }
 
+        internal static AutoPlayColorMode NormalizeAutoPlayColorMode(AutoPlayColorMode value)
+        {
+            if (value == AutoPlayColorMode.ManualBlack
+                || value == AutoPlayColorMode.ManualWhite
+                || value == AutoPlayColorMode.FoxAuto)
+                return value;
+            return AutoPlayColorMode.ManualBlack;
+        }
+
         internal static int ResolveMoveVerifyTotalPlacementAttempts(int value)
         {
             // This setting is the maximum total placement attempts, including the initial click.

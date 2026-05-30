@@ -25,13 +25,13 @@ namespace Readboard.VerificationTests.Host
             "}]}";
 
         [Fact]
-        public void CheckAsync_ParsesTypicalReleaseResponse()
+        public async Task CheckAsync_ParsesTypicalReleaseResponse()
         {
             GitHubUpdateChecker checker = new GitHubUpdateChecker(
                 () => "v1.0.0",
                 () => Task.FromResult(TypicalReleaseJson));
 
-            UpdateCheckResult result = checker.CheckAsync().Result;
+            UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
             Assert.Equal("1.0.0", result.CurrentVersion);
@@ -43,13 +43,13 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void CheckAsync_ParsesMatchingReleaseAsset()
+        public async Task CheckAsync_ParsesMatchingReleaseAsset()
         {
             GitHubUpdateChecker checker = new GitHubUpdateChecker(
                 () => "v3.0.1",
                 () => Task.FromResult(ReleaseWithMatchingAssetJson));
 
-            UpdateCheckResult result = checker.CheckAsync().Result;
+            UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
             Assert.Equal("readboard-github-release-v3.0.2.zip", result.AssetName);
@@ -60,7 +60,7 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void CheckAsync_LeavesAssetFieldsEmptyWhenNoMatchingAssetExists()
+        public async Task CheckAsync_LeavesAssetFieldsEmptyWhenNoMatchingAssetExists()
         {
             string json =
                 "{\"tag_name\":\"v3.0.2\"," +
@@ -74,7 +74,7 @@ namespace Readboard.VerificationTests.Host
                 () => "v3.0.1",
                 () => Task.FromResult(json));
 
-            UpdateCheckResult result = checker.CheckAsync().Result;
+            UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
             Assert.Equal("https://github.com/qiyi71w/readboard/releases/tag/v3.0.2", result.ReleaseUrl);
@@ -84,7 +84,7 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void CheckAsync_LeavesAssetFieldsEmptyWhenMatchingAssetUrlIsNotHttps()
+        public async Task CheckAsync_LeavesAssetFieldsEmptyWhenMatchingAssetUrlIsNotHttps()
         {
             string json =
                 "{\"tag_name\":\"v3.0.2\"," +
@@ -98,7 +98,7 @@ namespace Readboard.VerificationTests.Host
                 () => "v3.0.1",
                 () => Task.FromResult(json));
 
-            UpdateCheckResult result = checker.CheckAsync().Result;
+            UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
             Assert.Null(result.AssetName);
@@ -107,13 +107,13 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void CheckAsync_ReturnsUpToDateWhenVersionsMatch()
+        public async Task CheckAsync_ReturnsUpToDateWhenVersionsMatch()
         {
             GitHubUpdateChecker checker = new GitHubUpdateChecker(
                 () => "v2.0.3",
                 () => Task.FromResult(TypicalReleaseJson));
 
-            UpdateCheckResult result = checker.CheckAsync().Result;
+            UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.UpToDate, result.Status);
             Assert.Equal("2.0.3", result.CurrentVersion);
@@ -121,7 +121,7 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void CheckAsync_HandlesNullOptionalFields()
+        public async Task CheckAsync_HandlesNullOptionalFields()
         {
             string json =
                 "{\"tag_name\":\"v1.0.0\",\"name\":null,\"body\":null," +
@@ -130,7 +130,7 @@ namespace Readboard.VerificationTests.Host
                 () => "v1.0.0",
                 () => Task.FromResult(json));
 
-            UpdateCheckResult result = checker.CheckAsync().Result;
+            UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.UpToDate, result.Status);
             Assert.Null(result.ReleaseNotes);
@@ -138,7 +138,7 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void CheckAsync_HandlesMissingOptionalFields()
+        public async Task CheckAsync_HandlesMissingOptionalFields()
         {
             string json =
                 "{\"tag_name\":\"v1.0.0\"," +
@@ -147,7 +147,7 @@ namespace Readboard.VerificationTests.Host
                 () => "v1.0.0",
                 () => Task.FromResult(json));
 
-            UpdateCheckResult result = checker.CheckAsync().Result;
+            UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.UpToDate, result.Status);
             Assert.Null(result.ReleaseNotes);
@@ -155,53 +155,53 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void CheckAsync_ReportsFailureForEmptyResponse()
+        public async Task CheckAsync_ReportsFailureForEmptyResponse()
         {
             GitHubUpdateChecker checker = new GitHubUpdateChecker(
                 () => "v1.0.0",
                 () => Task.FromResult(""));
 
-            UpdateCheckResult result = checker.CheckAsync().Result;
+            UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.Failed, result.Status);
             Assert.NotNull(result.ErrorMessage);
         }
 
         [Fact]
-        public void CheckAsync_ReportsFailureForMissingRequiredField()
+        public async Task CheckAsync_ReportsFailureForMissingRequiredField()
         {
             string json = "{\"name\":\"release\",\"html_url\":\"https://example.com\"}";
             GitHubUpdateChecker checker = new GitHubUpdateChecker(
                 () => "v1.0.0",
                 () => Task.FromResult(json));
 
-            UpdateCheckResult result = checker.CheckAsync().Result;
+            UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.Failed, result.Status);
             Assert.Contains("tag_name", result.ErrorMessage);
         }
 
         [Fact]
-        public void CheckAsync_ReportsFailureForInvalidJson()
+        public async Task CheckAsync_ReportsFailureForInvalidJson()
         {
             GitHubUpdateChecker checker = new GitHubUpdateChecker(
                 () => "v1.0.0",
                 () => Task.FromResult("{broken json"));
 
-            UpdateCheckResult result = checker.CheckAsync().Result;
+            UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.Failed, result.Status);
             Assert.NotNull(result.ErrorMessage);
         }
 
         [Fact]
-        public void CheckAsync_ReportsFailureForNetworkException()
+        public async Task CheckAsync_ReportsFailureForNetworkException()
         {
             GitHubUpdateChecker checker = new GitHubUpdateChecker(
                 () => "v1.0.0",
                 () => { throw new Exception("Network error"); });
 
-            UpdateCheckResult result = checker.CheckAsync().Result;
+            UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.Failed, result.Status);
             Assert.Equal("Network error", result.ErrorMessage);

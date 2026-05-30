@@ -308,6 +308,8 @@ namespace readboard
             config.MachineKey = machineKey;
             config.MoveVerifyMaxAttempts =
                 AppConfig.NormalizeMoveVerifyMaxAttempts(config.MoveVerifyMaxAttempts);
+            config.AutoPlayColorMode =
+                AppConfig.NormalizeAutoPlayColorMode(config.AutoPlayColorMode);
         }
 
         private static void NormalizeWindowPosition(AppConfig config)

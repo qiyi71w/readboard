@@ -81,8 +81,6 @@ pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-readboard-rele
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-readboard-release.local.ps1
 ```
 
-版本号取自 `readboard/Properties/AssemblyInfo.cs` 的 `AssemblyInformationalVersion`（当前 `v3.0.2`）。
-
 ## 与 LizzieYzy-Next 的关系
 
 本项目是 LizzieYzy-Next 的外接同步工具，宿主侧启动逻辑位于：
