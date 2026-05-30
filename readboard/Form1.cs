@@ -2558,7 +2558,9 @@ namespace readboard
                 model.HostedReleaseTag,
                 model.HostedAssetName,
                 model.HostedAssetDownloadUrl);
-            model.ReportHostedUpdateStatus?.Invoke(model.VerifyingPackageStatusText);
+            model.ReportHostedUpdateStatus?.Invoke(
+                model.VerifyingPackageStatusText,
+                "Verifying update package...");
             new HostedUpdatePackageVerifier().Verify(model.HostedReleaseTag, zipPath);
             return zipPath;
         }

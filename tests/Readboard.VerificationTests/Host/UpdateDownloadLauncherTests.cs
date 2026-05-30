@@ -78,7 +78,9 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("PrepareHostedUpdateAsync = PrepareHostedUpdatePackageAsync", methodSlice);
             Assert.Contains("NotifyHostedUpdateReady = NotifyHostedUpdateReady", methodSlice);
             Assert.Contains("activeHostedUpdateDialog = formUpdate;", methodSlice);
-            Assert.Contains("model.ReportHostedUpdateStatus?.Invoke(model.VerifyingPackageStatusText);", prepareSlice);
+            Assert.Contains("model.ReportHostedUpdateStatus?.Invoke(", prepareSlice);
+            Assert.Contains("model.VerifyingPackageStatusText,", prepareSlice);
+            Assert.Contains("\"Verifying update package...\"", prepareSlice);
         }
 
         [Fact]

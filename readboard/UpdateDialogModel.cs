@@ -59,7 +59,7 @@ namespace readboard
 
         public string ManualDownloadFallbackMessage { get; set; }
 
-        public Action<string> ReportHostedUpdateStatus { get; set; }
+        public Action<string, string> ReportHostedUpdateStatus { get; set; }
 
         public Func<UpdateDialogModel, Task<string>> PrepareHostedUpdateAsync { get; set; }
 

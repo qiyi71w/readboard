@@ -20,7 +20,7 @@ namespace readboard
         private const string DefaultDownloadingButtonText = "Downloading...";
         private const string DefaultDownloadingPackageStatusText = "Downloading update package...";
         private const string DefaultVerifyingPackageStatusText = "Verifying update package...";
-        private const string DefaultNotifyingHostStatusText = "Handing update package to host...";
+        private const string DefaultNotifyingHostStatusText = "Handing the update package to the host...";
         private const string DefaultWaitingForHostInstallText = "Waiting for Host Install...";
         private const string DefaultHostInstallingStatusText = "Host is installing the update...";
         private const string DefaultHostCancelledText = "Host installation was cancelled.";
