@@ -41,7 +41,15 @@ namespace readboard
 
         public string DownloadingButtonText { get; set; }
 
+        public string DownloadingPackageStatusText { get; set; }
+
+        public string VerifyingPackageStatusText { get; set; }
+
+        public string NotifyingHostStatusText { get; set; }
+
         public string WaitingForHostInstallText { get; set; }
+
+        public string HostInstallingStatusText { get; set; }
 
         public string HostCancelledText { get; set; }
 
@@ -50,6 +58,8 @@ namespace readboard
         public string HostTimedOutText { get; set; }
 
         public string ManualDownloadFallbackMessage { get; set; }
+
+        public Action<string> ReportHostedUpdateStatus { get; set; }
 
         public Func<UpdateDialogModel, Task<string>> PrepareHostedUpdateAsync { get; set; }
 

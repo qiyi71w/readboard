@@ -17,6 +17,7 @@ namespace readboard
         private System.Windows.Forms.Label lblReleaseDate;
         private System.Windows.Forms.Label lblReleaseDateValue;
         private System.Windows.Forms.Label lblReleaseNotes;
+        private System.Windows.Forms.Label lblHostedUpdateStatus;
         private System.Windows.Forms.Label lblTitle;
         private System.Windows.Forms.TableLayoutPanel infoPanel;
         private System.Windows.Forms.TableLayoutPanel rootPanel;
@@ -53,6 +54,7 @@ namespace readboard
             lblReleaseDate = new System.Windows.Forms.Label();
             lblReleaseDateValue = new System.Windows.Forms.Label();
             lblReleaseNotes = new System.Windows.Forms.Label();
+            lblHostedUpdateStatus = new System.Windows.Forms.Label();
             lblTitle = new System.Windows.Forms.Label();
             infoPanel = new System.Windows.Forms.TableLayoutPanel();
             rootPanel = new System.Windows.Forms.TableLayoutPanel();
@@ -209,6 +211,16 @@ namespace readboard
             txtReleaseNotes.Size = new System.Drawing.Size(610, 233);
             txtReleaseNotes.TabIndex = 3;
             txtReleaseNotes.TabStop = false;
+
+            lblHostedUpdateStatus.AutoEllipsis = true;
+            lblHostedUpdateStatus.Dock = System.Windows.Forms.DockStyle.Fill;
+            lblHostedUpdateStatus.Location = new System.Drawing.Point(3, 356);
+            lblHostedUpdateStatus.Margin = new System.Windows.Forms.Padding(3, 0, 3, 8);
+            lblHostedUpdateStatus.Name = "lblHostedUpdateStatus";
+            lblHostedUpdateStatus.Size = new System.Drawing.Size(610, 18);
+            lblHostedUpdateStatus.TabIndex = 4;
+            lblHostedUpdateStatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            lblHostedUpdateStatus.Visible = false;
         }
 
         private void InitializeRootPanel()
@@ -219,15 +231,17 @@ namespace readboard
             rootPanel.Controls.Add(infoPanel, 0, 1);
             rootPanel.Controls.Add(lblReleaseNotes, 0, 2);
             rootPanel.Controls.Add(txtReleaseNotes, 0, 3);
-            rootPanel.Controls.Add(buttonPanel, 0, 4);
+            rootPanel.Controls.Add(lblHostedUpdateStatus, 0, 4);
+            rootPanel.Controls.Add(buttonPanel, 0, 5);
             rootPanel.Dock = System.Windows.Forms.DockStyle.Fill;
             rootPanel.Location = new System.Drawing.Point(12, 12);
             rootPanel.Name = "rootPanel";
-            rootPanel.RowCount = 5;
+            rootPanel.RowCount = 6;
             rootPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
             rootPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
             rootPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
             rootPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            rootPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
             rootPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
             rootPanel.Size = new System.Drawing.Size(616, 395);
             rootPanel.TabIndex = 0;

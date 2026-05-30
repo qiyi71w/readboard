@@ -18,7 +18,11 @@ namespace readboard
         private const string DefaultDownloadButtonText = "Download";
         private const string DefaultDownloadAndInstallButtonText = "Download and Install";
         private const string DefaultDownloadingButtonText = "Downloading...";
+        private const string DefaultDownloadingPackageStatusText = "Downloading update package...";
+        private const string DefaultVerifyingPackageStatusText = "Verifying update package...";
+        private const string DefaultNotifyingHostStatusText = "Handing update package to host...";
         private const string DefaultWaitingForHostInstallText = "Waiting for Host Install...";
+        private const string DefaultHostInstallingStatusText = "Host is installing the update...";
         private const string DefaultHostCancelledText = "Host installation was cancelled.";
         private const string DefaultHostFailedText = "Host installation failed.";
         private const string DefaultHostTimedOutText = "Host did not respond in time.";
@@ -133,6 +137,7 @@ namespace readboard
         {
             hostedUpdateResponseTimer.Interval = HostedUpdateResponseTimeoutMilliseconds;
             hostedUpdateResponseTimer.Tick += HostedUpdateResponseTimer_Tick;
+            model.ReportHostedUpdateStatus = UpdateHostedStatus;
             btnDownload.Enabled = true;
             btnDownload.Text = GetInitialDownloadButtonText();
         }
@@ -207,7 +212,7 @@ namespace readboard
         {
             foreach (Label label in new[] { lblCurrentVersion, lblLatestVersion, lblReleaseDate, lblReleaseNotes })
                 StyleUpdateLabel(label, labelColor, font);
-            foreach (Label label in new[] { lblCurrentVersionValue, lblLatestVersionValue, lblReleaseDateValue })
+            foreach (Label label in new[] { lblCurrentVersionValue, lblLatestVersionValue, lblReleaseDateValue, lblHostedUpdateStatus })
                 StyleUpdateLabel(label, valueColor, font);
         }
 
@@ -308,6 +313,7 @@ namespace readboard
         private async Task BeginHostedInstallAsync()
         {
             UpdateDownloadButtonState(false, model.DownloadingButtonText, DefaultDownloadingButtonText);
+            UpdateHostedStatus(model.DownloadingPackageStatusText, DefaultDownloadingPackageStatusText);
 
             try
             {
@@ -315,7 +321,9 @@ namespace readboard
                 if (IsDisposed || Disposing)
                     return;
 
+                UpdateHostedStatus(model.NotifyingHostStatusText, DefaultNotifyingHostStatusText);
                 model.NotifyHostedUpdateReady(model.HostedReleaseTag, zipPath);
+                UpdateHostedStatus(model.WaitingForHostInstallText, DefaultWaitingForHostInstallText);
                 UpdateDownloadButtonState(false, model.WaitingForHostInstallText, DefaultWaitingForHostInstallText);
                 hostedUpdateResponseTimer.Stop();
                 hostedUpdateResponseTimer.Start();
@@ -372,6 +380,7 @@ namespace readboard
                 return;
 
             hostedUpdateResponseTimer.Stop();
+            UpdateHostedStatus(model.HostInstallingStatusText, DefaultHostInstallingStatusText);
             UpdateDownloadButtonState(false, model.WaitingForHostInstallText, DefaultWaitingForHostInstallText);
         }
 
@@ -427,6 +436,7 @@ namespace readboard
         {
             hostedUpdateResponseTimer.Stop();
             hostedInstallFallbackActive = true;
+            UpdateHostedStatus(string.Empty);
             UpdateDownloadButtonState(true, model.DownloadButtonText, DefaultDownloadButtonText);
 
             if (!string.IsNullOrWhiteSpace(message))
@@ -517,6 +527,27 @@ namespace readboard
         {
             btnDownload.Enabled = enabled;
             btnDownload.Text = NormalizeFallbackText(configuredText, defaultText);
+        }
+
+        private void UpdateHostedStatus(string configuredText)
+        {
+            UpdateHostedStatus(configuredText, string.Empty);
+        }
+
+        private void UpdateHostedStatus(string configuredText, string defaultText)
+        {
+            if (IsDisposed || Disposing)
+                return;
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<string, string>(UpdateHostedStatus), configuredText, defaultText);
+                return;
+            }
+
+            string statusText = NormalizeFallbackText(configuredText, defaultText);
+            lblHostedUpdateStatus.Text = statusText;
+            lblHostedUpdateStatus.Visible = !string.IsNullOrWhiteSpace(statusText);
         }
 
         internal static string BuildHostedUpdateMessage(

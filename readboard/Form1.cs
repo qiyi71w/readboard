@@ -2521,7 +2521,11 @@ namespace readboard
                 DownloadButtonText = getLangStr("Update_download"),
                 DownloadAndInstallButtonText = getLangStr("Update_downloadAndInstall"),
                 DownloadingButtonText = getLangStr("Update_downloading"),
+                DownloadingPackageStatusText = getLangStr("Update_downloadingPackage"),
+                VerifyingPackageStatusText = getLangStr("Update_verifyingPackage"),
+                NotifyingHostStatusText = getLangStr("Update_notifyingHost"),
                 WaitingForHostInstallText = getLangStr("Update_waitingForHostInstall"),
+                HostInstallingStatusText = getLangStr("Update_hostInstalling"),
                 HostCancelledText = getLangStr("Update_hostCancelled"),
                 HostFailedText = getLangStr("Update_hostFailed"),
                 HostTimedOutText = getLangStr("Update_hostTimedOut"),
@@ -2554,6 +2558,7 @@ namespace readboard
                 model.HostedReleaseTag,
                 model.HostedAssetName,
                 model.HostedAssetDownloadUrl);
+            model.ReportHostedUpdateStatus?.Invoke(model.VerifyingPackageStatusText);
             new HostedUpdatePackageVerifier().Verify(model.HostedReleaseTag, zipPath);
             return zipPath;
         }
