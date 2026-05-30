@@ -581,7 +581,8 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("rootPanel.Controls.Add(infoPanel, 0, 1);", designerSource);
             Assert.Contains("rootPanel.Controls.Add(lblReleaseNotes, 0, 2);", designerSource);
             Assert.Contains("rootPanel.Controls.Add(txtReleaseNotes, 0, 3);", designerSource);
-            Assert.Contains("rootPanel.Controls.Add(buttonPanel, 0, 4);", designerSource);
+            Assert.Contains("rootPanel.Controls.Add(lblHostedUpdateStatus, 0, 4);", designerSource);
+            Assert.Contains("rootPanel.Controls.Add(buttonPanel, 0, 5);", designerSource);
         }
 
         [Fact]
