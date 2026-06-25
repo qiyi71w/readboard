@@ -1166,7 +1166,8 @@ namespace readboard
                 snapshot.PlayColor,
                 NormalizeNumericValue(snapshot.AiTimeValue),
                 NormalizeNumericValue(snapshot.PlayoutsValue),
-                NormalizeNumericValue(snapshot.FirstPolicyValue));
+                NormalizeNumericValue(snapshot.FirstPolicyValue),
+                snapshot.AutoPlayMoveMode);
         }
 
         private ProtocolMessage ReservePlayMessageIfChanged(SyncCoordinatorHostSnapshot snapshot)
@@ -1178,19 +1179,25 @@ namespace readboard
             string time = NormalizeNumericValue(snapshot.AiTimeValue);
             string playouts = NormalizeNumericValue(snapshot.PlayoutsValue);
             string firstPolicy = NormalizeNumericValue(snapshot.FirstPolicyValue);
+            AutoPlayMoveMode moveMode = AppConfig.NormalizeAutoPlayMoveMode(snapshot.AutoPlayMoveMode);
             string signature;
             lock (stateLock)
             {
-                signature = BuildPlayStateSignatureForCurrentContext(color, time, playouts, firstPolicy);
+                signature = BuildPlayStateSignatureForCurrentContext(color, time, playouts, firstPolicy, moveMode);
                 if (string.Equals(lastSentPlayStateSignature, signature, StringComparison.Ordinal))
                     return null;
                 lastSentPlayStateSignature = signature;
             }
 
-            return protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy);
+            return protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode);
         }
 
-        private void RememberSentPlayState(string color, string time, string playouts, string firstPolicy)
+        private void RememberSentPlayState(
+            string color,
+            string time,
+            string playouts,
+            string firstPolicy,
+            AutoPlayMoveMode moveMode)
         {
             lock (stateLock)
             {
@@ -1198,7 +1205,8 @@ namespace readboard
                     color,
                     time,
                     playouts,
-                    firstPolicy);
+                    firstPolicy,
+                    moveMode);
             }
         }
 
@@ -1206,13 +1214,15 @@ namespace readboard
             string color,
             string time,
             string playouts,
-            string firstPolicy)
+            string firstPolicy,
+            AutoPlayMoveMode moveMode)
         {
             return BuildPlayStateSignature(
                 color,
                 NormalizeNumericValue(time),
                 NormalizeNumericValue(playouts),
                 NormalizeNumericValue(firstPolicy),
+                AppConfig.NormalizeAutoPlayMoveMode(moveMode),
                 BuildPlayRearmContextSignatureUnsafe());
         }
 
@@ -1251,12 +1261,14 @@ namespace readboard
             string time,
             string playouts,
             string firstPolicy,
+            AutoPlayMoveMode moveMode,
             string windowContextSignature)
         {
             return (color ?? string.Empty).Trim()
                 + "|time=" + (time ?? string.Empty)
                 + "|playouts=" + (playouts ?? string.Empty)
                 + "|first=" + (firstPolicy ?? string.Empty)
+                + "|mode=" + (int)moveMode
                 + "|ctx=" + (windowContextSignature ?? string.Empty);
         }
 

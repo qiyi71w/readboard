@@ -175,9 +175,14 @@ namespace readboard
             return CreateLegacyMessage(line);
         }
 
-        public ProtocolMessage CreatePlayMessage(string color, string time, string playouts, string firstPolicy)
+        public ProtocolMessage CreatePlayMessage(
+            string color,
+            string time,
+            string playouts,
+            string firstPolicy,
+            AutoPlayMoveMode moveMode = AutoPlayMoveMode.FirstCandidate)
         {
-            return CreateLegacyMessage(
+            string line =
                 ProtocolKeywords.PlayPrefix
                 + color
                 + ProtocolKeywords.PlaySeparator
@@ -185,7 +190,11 @@ namespace readboard
                 + " "
                 + NormalizeNumericValue(playouts)
                 + " "
-                + NormalizeNumericValue(firstPolicy));
+                + NormalizeNumericValue(firstPolicy);
+            if (moveMode == AutoPlayMoveMode.GenmoveAnalyze)
+                line += " " + ProtocolKeywords.GenmoveAnalyzePlayModeToken;
+            return CreateLegacyMessage(
+                line);
         }
 
         public ProtocolMessage CreateNoInBoardMessage()

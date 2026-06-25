@@ -154,6 +154,7 @@ namespace readboard
             config.WindowPosX = ReadIntValue(values, "WindowPosX", config.WindowPosX);
             config.WindowPosY = ReadIntValue(values, "WindowPosY", config.WindowPosY);
             config.AutoPlayColorMode = (AutoPlayColorMode)ReadIntValue(values, "AutoPlayColorMode", (int)config.AutoPlayColorMode);
+            config.AutoPlayMoveMode = (AutoPlayMoveMode)ReadIntValue(values, "AutoPlayMoveMode", (int)config.AutoPlayMoveMode);
             config.FoxAutoPlayNickname = ReadStringValue(values, "FoxAutoPlayNickname", config.FoxAutoPlayNickname);
             config.FoxAutoPlayNicknameSignature = ReadStringValue(values, "FoxAutoPlayNicknameSignature", config.FoxAutoPlayNicknameSignature);
         }
@@ -188,6 +189,7 @@ namespace readboard
         //   14: + DisableShowInBoardShortcut @ 12, UiThemeMode @ 13
         //   15: + ColorMode @ 14
         //   18: + AutoPlayColorMode @ 15, FoxAutoPlayNickname @ 16, FoxAutoPlayNicknameSignature @ 17
+        //   19: + AutoPlayMoveMode @ 18
         private bool ApplyLegacyOtherConfig(AppConfig config)
         {
             string[] parts = ReadLegacyParts(LegacyOtherFileName);
@@ -226,6 +228,8 @@ namespace readboard
                 config.FoxAutoPlayNickname = ReadString(parts[16], config.FoxAutoPlayNickname);
             if (parts.Length >= 18)
                 config.FoxAutoPlayNicknameSignature = ReadString(parts[17], config.FoxAutoPlayNicknameSignature);
+            if (parts.Length >= 19)
+                config.AutoPlayMoveMode = (AutoPlayMoveMode)ReadInt(parts[18], (int)config.AutoPlayMoveMode);
             return true;
         }
 
@@ -299,6 +303,7 @@ namespace readboard
             builder.Append('_').Append((int)config.AutoPlayColorMode);
             builder.Append('_').Append(EscapeLegacyToken(config.FoxAutoPlayNickname));
             builder.Append('_').Append(EscapeLegacyToken(config.FoxAutoPlayNicknameSignature));
+            builder.Append('_').Append((int)config.AutoPlayMoveMode);
             File.WriteAllText(GetPath(LegacyOtherFileName), builder.ToString(), Encoding.UTF8);
         }
 
@@ -310,6 +315,8 @@ namespace readboard
                 AppConfig.NormalizeMoveVerifyMaxAttempts(config.MoveVerifyMaxAttempts);
             config.AutoPlayColorMode =
                 AppConfig.NormalizeAutoPlayColorMode(config.AutoPlayColorMode);
+            config.AutoPlayMoveMode =
+                AppConfig.NormalizeAutoPlayMoveMode(config.AutoPlayMoveMode);
         }
 
         private static void NormalizeWindowPosition(AppConfig config)

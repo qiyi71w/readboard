@@ -30,7 +30,12 @@ namespace readboard
         ProtocolMessage CreateYikeSyncStartMessage();
         ProtocolMessage CreateYikeSyncStopMessage();
         ProtocolMessage CreateStartMessage(int boardWidth, int boardHeight, IntPtr windowHandle, bool includeWindowHandle);
-        ProtocolMessage CreatePlayMessage(string color, string time, string playouts, string firstPolicy);
+        ProtocolMessage CreatePlayMessage(
+            string color,
+            string time,
+            string playouts,
+            string firstPolicy,
+            AutoPlayMoveMode moveMode = AutoPlayMoveMode.FirstCandidate);
         ProtocolMessage CreateNoInBoardMessage();
         ProtocolMessage CreateNotInBoardMessage();
         ProtocolMessage CreatePlacementResultMessage(bool success);

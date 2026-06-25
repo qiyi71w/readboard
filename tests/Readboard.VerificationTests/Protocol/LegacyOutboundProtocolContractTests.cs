@@ -99,6 +99,28 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public void CreatePlayMessage_SerializesLegacyFirstCandidateModeWithoutTailToken()
+        {
+            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
+
+            string serialized = adapter.Serialize(
+                adapter.CreatePlayMessage("black", "5", "1000", "0", AutoPlayMoveMode.FirstCandidate));
+
+            Assert.Equal("play>black>5 1000 0", serialized);
+        }
+
+        [Fact]
+        public void CreatePlayMessage_SerializesGenmoveAnalyzeModeWithGmaTailToken()
+        {
+            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
+
+            string serialized = adapter.Serialize(
+                adapter.CreatePlayMessage("black", "5", "1000", "0", AutoPlayMoveMode.GenmoveAnalyze));
+
+            Assert.Equal("play>black>5 1000 0 gma", serialized);
+        }
+
+        [Fact]
         public void ProtocolKeywords_DefineStableLegacyWireTokens()
         {
             Assert.Equal("place", ProtocolKeywords.Place);
@@ -133,6 +155,7 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("start ", ProtocolKeywords.StartPrefix);
             Assert.Equal("play>", ProtocolKeywords.PlayPrefix);
             Assert.Equal(">", ProtocolKeywords.PlaySeparator);
+            Assert.Equal("gma", ProtocolKeywords.GenmoveAnalyzePlayModeToken);
             Assert.Equal("noinboard", ProtocolKeywords.NoInBoard);
             Assert.Equal("placeComplete", ProtocolKeywords.PlaceComplete);
             Assert.Equal("error place failed", ProtocolKeywords.PlacementFailed);

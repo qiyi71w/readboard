@@ -69,6 +69,10 @@
             this.btnCheckUpdate = new System.Windows.Forms.Button();
             this.lblPlayCondition = new System.Windows.Forms.Label();
             this.groupBox4 = new System.Windows.Forms.GroupBox();
+            this.flowLayoutPanelAutoPlayMoveMode = new System.Windows.Forms.FlowLayoutPanel();
+            this.lblAutoPlayMoveMode = new System.Windows.Forms.Label();
+            this.radioAutoPlayMoveFirst = new System.Windows.Forms.RadioButton();
+            this.radioAutoPlayMoveGma = new System.Windows.Forms.RadioButton();
             this.flowLayoutPanel2 = new System.Windows.Forms.FlowLayoutPanel();
             this.chkAutoPlay = new System.Windows.Forms.CheckBox();
             this.panel3 = new System.Windows.Forms.Panel();
@@ -85,6 +89,7 @@
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             this.groupBox4.SuspendLayout();
+            this.flowLayoutPanelAutoPlayMoveMode.SuspendLayout();
             this.flowLayoutPanel2.SuspendLayout();
             this.panel3.SuspendLayout();
             this.panel4.SuspendLayout();
@@ -514,6 +519,7 @@
             // 
             // groupBox4
             // 
+            this.groupBox4.Controls.Add(this.flowLayoutPanelAutoPlayMoveMode);
             this.groupBox4.Controls.Add(this.flowLayoutPanel2);
             this.groupBox4.Controls.Add(this.flowLayoutPanel1);
             this.groupBox4.Location = new System.Drawing.Point(7, 59);
@@ -523,6 +529,50 @@
             this.groupBox4.Size = new System.Drawing.Size(541, 63);
             this.groupBox4.TabIndex = 32;
             this.groupBox4.TabStop = false;
+            //
+            // flowLayoutPanelAutoPlayMoveMode
+            //
+            this.flowLayoutPanelAutoPlayMoveMode.Controls.Add(this.lblAutoPlayMoveMode);
+            this.flowLayoutPanelAutoPlayMoveMode.Controls.Add(this.radioAutoPlayMoveFirst);
+            this.flowLayoutPanelAutoPlayMoveMode.Controls.Add(this.radioAutoPlayMoveGma);
+            this.flowLayoutPanelAutoPlayMoveMode.Location = new System.Drawing.Point(1, 58);
+            this.flowLayoutPanelAutoPlayMoveMode.Margin = new System.Windows.Forms.Padding(4);
+            this.flowLayoutPanelAutoPlayMoveMode.Name = "flowLayoutPanelAutoPlayMoveMode";
+            this.flowLayoutPanelAutoPlayMoveMode.Size = new System.Drawing.Size(588, 24);
+            this.flowLayoutPanelAutoPlayMoveMode.TabIndex = 40;
+            //
+            // lblAutoPlayMoveMode
+            //
+            this.lblAutoPlayMoveMode.AutoSize = true;
+            this.lblAutoPlayMoveMode.Location = new System.Drawing.Point(3, 5);
+            this.lblAutoPlayMoveMode.Name = "lblAutoPlayMoveMode";
+            this.lblAutoPlayMoveMode.Size = new System.Drawing.Size(59, 12);
+            this.lblAutoPlayMoveMode.TabIndex = 41;
+            this.lblAutoPlayMoveMode.Text = "落子方式:";
+            //
+            // radioAutoPlayMoveFirst
+            //
+            this.radioAutoPlayMoveFirst.AutoSize = true;
+            this.radioAutoPlayMoveFirst.Checked = true;
+            this.radioAutoPlayMoveFirst.Location = new System.Drawing.Point(68, 3);
+            this.radioAutoPlayMoveFirst.Name = "radioAutoPlayMoveFirst";
+            this.radioAutoPlayMoveFirst.Size = new System.Drawing.Size(71, 16);
+            this.radioAutoPlayMoveFirst.TabIndex = 42;
+            this.radioAutoPlayMoveFirst.TabStop = true;
+            this.radioAutoPlayMoveFirst.Text = "一选落子";
+            this.radioAutoPlayMoveFirst.UseVisualStyleBackColor = true;
+            this.radioAutoPlayMoveFirst.CheckedChanged += new System.EventHandler(this.radioAutoPlayMoveFirst_CheckedChanged);
+            //
+            // radioAutoPlayMoveGma
+            //
+            this.radioAutoPlayMoveGma.AutoSize = true;
+            this.radioAutoPlayMoveGma.Location = new System.Drawing.Point(145, 3);
+            this.radioAutoPlayMoveGma.Name = "radioAutoPlayMoveGma";
+            this.radioAutoPlayMoveGma.Size = new System.Drawing.Size(95, 16);
+            this.radioAutoPlayMoveGma.TabIndex = 43;
+            this.radioAutoPlayMoveGma.Text = "引擎决策落子";
+            this.radioAutoPlayMoveGma.UseVisualStyleBackColor = true;
+            this.radioAutoPlayMoveGma.CheckedChanged += new System.EventHandler(this.radioAutoPlayMoveGma_CheckedChanged);
             // 
             // flowLayoutPanel2
             // 
@@ -702,6 +752,8 @@
             this.groupBox2.ResumeLayout(false);
             this.groupBox2.PerformLayout();
             this.groupBox4.ResumeLayout(false);
+            this.flowLayoutPanelAutoPlayMoveMode.ResumeLayout(false);
+            this.flowLayoutPanelAutoPlayMoveMode.PerformLayout();
             this.flowLayoutPanel2.ResumeLayout(false);
             this.flowLayoutPanel2.PerformLayout();
             this.panel3.ResumeLayout(false);
@@ -755,6 +807,10 @@
         private System.Windows.Forms.Button btnCheckUpdate;
         private System.Windows.Forms.Label lblPlayCondition;
         private System.Windows.Forms.GroupBox groupBox4;
+        private System.Windows.Forms.FlowLayoutPanel flowLayoutPanelAutoPlayMoveMode;
+        private System.Windows.Forms.Label lblAutoPlayMoveMode;
+        private System.Windows.Forms.RadioButton radioAutoPlayMoveFirst;
+        private System.Windows.Forms.RadioButton radioAutoPlayMoveGma;
         private System.Windows.Forms.RadioButton rdoFore;
         private System.Windows.Forms.CheckBox chkAutoPlay;
         private System.Windows.Forms.Button btnSettings;

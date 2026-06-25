@@ -76,5 +76,6 @@ namespace readboard
         public string AiTimeValue { get; set; }
         public string PlayoutsValue { get; set; }
         public string FirstPolicyValue { get; set; }
+        public AutoPlayMoveMode AutoPlayMoveMode { get; set; }
     }
 }

@@ -34,6 +34,7 @@ namespace readboard
         internal const string StartPrefix = "start ";
         internal const string PlayPrefix = "play>";
         internal const string PlaySeparator = ">";
+        internal const string GenmoveAnalyzePlayModeToken = "gma";
         internal const string NoInBoard = "noinboard";
         internal const string PlaceComplete = "placeComplete";
         internal const string PlacementFailed = "error place failed";

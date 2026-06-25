@@ -517,10 +517,15 @@ namespace readboard
             SendProtocolMessage(protocolAdapter.CreateStartMessage(boardWidth, boardHeight, windowHandle, includeWindowHandle));
         }
 
-        public void SendPlay(string color, string time, string playouts, string firstPolicy)
+        public void SendPlay(
+            string color,
+            string time,
+            string playouts,
+            string firstPolicy,
+            AutoPlayMoveMode moveMode = AutoPlayMoveMode.FirstCandidate)
         {
-            RememberSentPlayState(color, time, playouts, firstPolicy);
-            SendProtocolMessage(protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy));
+            RememberSentPlayState(color, time, playouts, firstPolicy, moveMode);
+            SendProtocolMessage(protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode));
         }
 
         public void SendNoInBoard()

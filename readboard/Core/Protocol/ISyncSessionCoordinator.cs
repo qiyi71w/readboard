@@ -47,7 +47,12 @@ namespace readboard
         void SendEndSync();
         void SendForegroundFoxInBoard(bool enabled);
         void SendStart(int boardWidth, int boardHeight, IntPtr windowHandle, bool includeWindowHandle);
-        void SendPlay(string color, string time, string playouts, string firstPolicy);
+        void SendPlay(
+            string color,
+            string time,
+            string playouts,
+            string firstPolicy,
+            AutoPlayMoveMode moveMode = AutoPlayMoveMode.FirstCandidate);
         void SendNoInBoard();
         void SendNotInBoard();
         void SendPlacementResult(bool success);
