@@ -27,9 +27,9 @@ namespace Readboard.VerificationTests.Diagnostics
                 string metadataJson = File.ReadAllText(Path.Combine(eventDirectory, "metadata.json"));
                 string recognitionText = File.ReadAllText(Path.Combine(eventDirectory, "recognition.txt"));
                 Assert.Contains("\"EventName\":\"recognition-success\"", metadataJson);
-                Assert.Contains("\"LastMoveSource\":\"FoxCornerFlip\"", metadataJson);
+                Assert.Contains("\"LastMoveSource\":\"foxCornerFlip\"", metadataJson);
                 Assert.Contains("payload=XO.", recognitionText);
-                Assert.Contains("lastMoveSource=FoxCornerFlip", recognitionText);
+                Assert.Contains("lastMoveSource=foxCornerFlip", recognitionText);
                 Assert.Contains("recognition-success", File.ReadAllText(Path.Combine(workspace.RootPath, "debug.log")));
             }
         }

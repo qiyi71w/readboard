@@ -197,7 +197,9 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Contains("`foxCornerFlip`", spec);
             Assert.Contains("`deviation`", spec);
             Assert.Contains("`stoneCount`", spec);
-            Assert.Contains("Lizzie", spec);
+            Assert.Contains(
+                "Lizzie parser 必须容忍并消费 ReadBoard 新增的 outbound 行；旧端不能因为未知 `lastMoveSource` 行破坏普通同步。",
+                spec);
         }
 
         [Fact]
