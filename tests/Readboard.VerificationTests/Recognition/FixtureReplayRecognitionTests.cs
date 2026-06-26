@@ -20,6 +20,8 @@ namespace Readboard.VerificationTests.Recognition
             Assert.Equal(fixture.BaseProtocolLines, result.Snapshot.ProtocolLines);
             Assert.Equal(2, result.Snapshot.BlackStoneCount);
             Assert.Equal(2, result.Snapshot.WhiteStoneCount);
+            Assert.Null(result.Snapshot.LastMove);
+            Assert.Equal(LastMoveSource.None, result.Snapshot.LastMoveSource);
         }
 
         [Fact]

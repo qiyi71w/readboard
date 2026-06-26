@@ -120,6 +120,63 @@ namespace Readboard.VerificationTests.Recognition
         }
 
         [Fact]
+        public void Apply_PromotesMarkerBeforeDeviationAndStoneCount()
+        {
+            BoardCellState[] state =
+            {
+                BoardCellState.Black,
+                BoardCellState.White,
+                BoardCellState.Black,
+                BoardCellState.White,
+                BoardCellState.Black
+            };
+            StoneSummary black = new StoneSummary(BoardCellState.Black, BoardCellState.BlackLastMove);
+            StoneSummary white = new StoneSummary(BoardCellState.White, BoardCellState.WhiteLastMove);
+            black.Observe(60, 0, 0);
+            black.Observe(90, 2, 0);
+            black.Observe(92, 4, 0);
+            white.Observe(80, 1, 0);
+            white.Observe(82, 3, 0);
+            MarkerSummary marker = new MarkerSummary();
+            marker.Observe(redPercent: 5, bluePercent: 0, threshold: 1, x: 1, y: 0);
+
+            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 5, black, white, marker, FoxCornerFlipSummary.Empty);
+
+            Assert.Equal(LastMoveSource.RedBlueMarker, result.Source);
+            AssertCoordinate(1, 0, result.Coordinate);
+            Assert.Equal(BoardCellState.WhiteLastMove, state[1]);
+            Assert.Equal(BoardCellState.Black, state[0]);
+        }
+
+        [Fact]
+        public void Apply_PromotesDeviationBeforeStoneCount()
+        {
+            BoardCellState[] state =
+            {
+                BoardCellState.Black,
+                BoardCellState.White,
+                BoardCellState.Black,
+                BoardCellState.White,
+                BoardCellState.Black
+            };
+            StoneSummary black = new StoneSummary(BoardCellState.Black, BoardCellState.BlackLastMove);
+            StoneSummary white = new StoneSummary(BoardCellState.White, BoardCellState.WhiteLastMove);
+            black.Observe(70, 0, 0);
+            black.Observe(80, 2, 0);
+            black.Observe(90, 4, 0);
+            white.Observe(60, 1, 0);
+            white.Observe(100, 3, 0);
+            MarkerSummary marker = new MarkerSummary();
+
+            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 5, black, white, marker, FoxCornerFlipSummary.Empty);
+
+            Assert.Equal(LastMoveSource.Deviation, result.Source);
+            AssertCoordinate(1, 0, result.Coordinate);
+            Assert.Equal(BoardCellState.WhiteLastMove, state[1]);
+            Assert.Equal(BoardCellState.Black, state[0]);
+        }
+
+        [Fact]
         public void Apply_ReturnsNoneWhenNoCandidates()
         {
             BoardCellState[] state = { BoardCellState.Black, BoardCellState.White };
