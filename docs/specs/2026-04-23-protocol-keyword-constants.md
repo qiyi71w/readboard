@@ -16,6 +16,7 @@
 - 前缀常量要保留协议里已经存在的尾随空格，例如 `syncPlatform `、`roomToken `、`start `。
 - 不修正历史拼写差异，例如 `noinboard` 与 `notinboard` 都是有效旧协议文本。
 - 新增协议关键字时，必须同时更新本文件、`ProtocolKeywords`、协议契约测试，并重新核对 `lizzieyzy-next` 解析端。
+- Lizzie parser 必须容忍并消费 ReadBoard 新增的 outbound 行；旧端不能因为未知 `lastMoveSource` 行破坏普通同步。
 - 仅常量化不允许改 `LegacyProtocolAdapter` 的 parse / emit 语义。
 
 ## 2026-04-23 实现结果
@@ -59,6 +60,12 @@
 | outbound prefix | `recordTitleFingerprint ` |
 | outbound command | `forceRebuild` |
 | outbound prefix | `foxMoveNumber ` |
+| outbound prefix | `lastMoveSource ` |
+| outbound token | `none` |
+| outbound token | `redBlueMarker` |
+| outbound token | `foxCornerFlip` |
+| outbound token | `deviation` |
+| outbound token | `stoneCount` |
 | outbound prefix | `start ` |
 | outbound prefix | `play>` |
 | outbound separator | `>` |

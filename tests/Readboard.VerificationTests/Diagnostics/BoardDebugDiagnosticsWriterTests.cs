@@ -24,8 +24,12 @@ namespace Readboard.VerificationTests.Diagnostics
 
                 string eventDirectory = Assert.Single(Directory.GetDirectories(workspace.RootPath));
                 Assert.True(File.Exists(Path.Combine(eventDirectory, "frame.png")));
-                Assert.Contains("\"EventName\":\"recognition-success\"", File.ReadAllText(Path.Combine(eventDirectory, "metadata.json")));
-                Assert.Contains("payload=XO.", File.ReadAllText(Path.Combine(eventDirectory, "recognition.txt")));
+                string metadataJson = File.ReadAllText(Path.Combine(eventDirectory, "metadata.json"));
+                string recognitionText = File.ReadAllText(Path.Combine(eventDirectory, "recognition.txt"));
+                Assert.Contains("\"EventName\":\"recognition-success\"", metadataJson);
+                Assert.Contains("\"LastMoveSource\":\"FoxCornerFlip\"", metadataJson);
+                Assert.Contains("payload=XO.", recognitionText);
+                Assert.Contains("lastMoveSource=FoxCornerFlip", recognitionText);
                 Assert.Contains("recognition-success", File.ReadAllText(Path.Combine(workspace.RootPath, "debug.log")));
             }
         }
@@ -188,6 +192,7 @@ namespace Readboard.VerificationTests.Diagnostics
                     IsValid = true,
                     BlackStoneCount = 1,
                     WhiteStoneCount = 1,
+                    LastMoveSource = LastMoveSource.FoxCornerFlip,
                     Payload = "XO.",
                     StateSignature = 7
                 }

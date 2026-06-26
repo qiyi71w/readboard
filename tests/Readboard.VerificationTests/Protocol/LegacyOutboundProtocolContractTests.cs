@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using Xunit;
 using readboard;
@@ -179,6 +180,24 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("readboardUpdateInstalling", ProtocolKeywords.ReadboardUpdateInstalling);
             Assert.Equal("readboardUpdateCancelled", ProtocolKeywords.ReadboardUpdateCancelled);
             Assert.Equal("readboardUpdateFailed\t", ProtocolKeywords.ReadboardUpdateFailedPrefix);
+        }
+
+        [Fact]
+        public void ProtocolKeywords_SpecDocumentsLastMoveSourceWireTokens()
+        {
+            string spec = File.ReadAllText(Path.Combine(
+                VerificationFixtureLocator.RepositoryRoot(),
+                "docs",
+                "specs",
+                "2026-04-23-protocol-keyword-constants.md"));
+
+            Assert.Contains("`lastMoveSource `", spec);
+            Assert.Contains("`none`", spec);
+            Assert.Contains("`redBlueMarker`", spec);
+            Assert.Contains("`foxCornerFlip`", spec);
+            Assert.Contains("`deviation`", spec);
+            Assert.Contains("`stoneCount`", spec);
+            Assert.Contains("Lizzie", spec);
         }
 
         [Fact]

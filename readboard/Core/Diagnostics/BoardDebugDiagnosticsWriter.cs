@@ -257,7 +257,8 @@ namespace readboard
                 SnapshotSignature = ResolveSnapshotSignature(snapshot),
                 BlackStoneCount = snapshot == null ? 0 : snapshot.BlackStoneCount,
                 WhiteStoneCount = snapshot == null ? 0 : snapshot.WhiteStoneCount,
-                LastMove = snapshot == null || snapshot.LastMove == null ? null : snapshot.LastMove.ToString()
+                LastMove = snapshot == null || snapshot.LastMove == null ? null : snapshot.LastMove.ToString(),
+                LastMoveSource = snapshot == null ? null : snapshot.LastMoveSource.ToString()
             };
         }
 
@@ -273,6 +274,7 @@ namespace readboard
             builder.AppendLine("stateSignature=" + snapshot.StateSignature.ToString(CultureInfo.InvariantCulture));
             if (snapshot.LastMove != null)
                 builder.AppendLine("lastMove=" + snapshot.LastMove);
+            builder.AppendLine("lastMoveSource=" + snapshot.LastMoveSource);
             return builder.ToString();
         }
 
