@@ -57,5 +57,19 @@ namespace Readboard.VerificationTests.Recognition
             Assert.False(summary.TryGetUniqueCandidate(out candidate));
             Assert.Null(candidate);
         }
+
+        [Fact]
+        public void Empty_ReturnsIndependentNoCandidateSummaries()
+        {
+            FoxCornerFlipSummary first = FoxCornerFlipSummary.Empty;
+            FoxCornerFlipSummary second = FoxCornerFlipSummary.Empty;
+
+            first.Observe(BoardCellState.Black, blackOppositePercent: 18, whiteOppositePercent: 0, x: 1, y: 2);
+
+            BoardCoordinate candidate;
+            Assert.NotSame(first, second);
+            Assert.False(second.TryGetUniqueCandidate(out candidate));
+            Assert.Null(candidate);
+        }
     }
 }

@@ -492,8 +492,9 @@ namespace readboard
 
         private static bool IsLowerRightCornerSample(int x, int y, int regionWidth, int regionHeight)
         {
-            return x * 20 > regionWidth * 9
-                && y * 20 > regionHeight * 9;
+            return x > regionWidth / 2
+                && y > regionHeight / 2
+                && (x + y) * 40 >= (regionWidth + regionHeight) * 23;
         }
 
         private static void CountGrayMetrics(

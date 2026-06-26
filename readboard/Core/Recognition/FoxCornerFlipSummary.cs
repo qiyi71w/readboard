@@ -5,7 +5,10 @@ namespace readboard
         private const int MinimumScore = 10;
         private const int MinimumMargin = 5;
 
-        public static FoxCornerFlipSummary Empty { get; } = new FoxCornerFlipSummary();
+        public static FoxCornerFlipSummary Empty
+        {
+            get { return new FoxCornerFlipSummary(); }
+        }
 
         private int bestScore;
         private int secondBestScore;
