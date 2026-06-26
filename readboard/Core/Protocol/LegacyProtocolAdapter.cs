@@ -147,6 +147,11 @@ namespace readboard
             return CreateLegacyMessage(ProtocolKeywords.FoxMoveNumberPrefix + moveNumber);
         }
 
+        public ProtocolMessage CreateLastMoveSourceMessage(LastMoveSource source)
+        {
+            return CreateLegacyMessage(ProtocolKeywords.LastMoveSourcePrefix + LastMoveSourceToToken(source));
+        }
+
         public ProtocolMessage CreateYikeRoomTokenMessage(string roomToken)
         {
             return CreateLegacyMessage(ProtocolKeywords.YikeRoomTokenPrefix + (roomToken ?? string.Empty));
@@ -278,6 +283,23 @@ namespace readboard
         private static ProtocolMessage CreateLegacyMessage(string rawLine)
         {
             return ProtocolMessage.CreateLegacyLine(rawLine);
+        }
+
+        private static string LastMoveSourceToToken(LastMoveSource source)
+        {
+            switch (source)
+            {
+                case LastMoveSource.RedBlueMarker:
+                    return ProtocolKeywords.LastMoveSourceRedBlueMarker;
+                case LastMoveSource.FoxCornerFlip:
+                    return ProtocolKeywords.LastMoveSourceFoxCornerFlip;
+                case LastMoveSource.Deviation:
+                    return ProtocolKeywords.LastMoveSourceDeviation;
+                case LastMoveSource.StoneCount:
+                    return ProtocolKeywords.LastMoveSourceStoneCount;
+                default:
+                    return ProtocolKeywords.LastMoveSourceNone;
+            }
         }
 
         private static ProtocolMessage ParseYikeContext(string trimmed)

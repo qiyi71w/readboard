@@ -31,6 +31,12 @@ namespace readboard
         internal const string RecordTitleFingerprintPrefix = "recordTitleFingerprint ";
         internal const string ForceRebuild = "forceRebuild";
         internal const string FoxMoveNumberPrefix = "foxMoveNumber ";
+        internal const string LastMoveSourcePrefix = "lastMoveSource ";
+        internal const string LastMoveSourceNone = "none";
+        internal const string LastMoveSourceRedBlueMarker = "redBlueMarker";
+        internal const string LastMoveSourceFoxCornerFlip = "foxCornerFlip";
+        internal const string LastMoveSourceDeviation = "deviation";
+        internal const string LastMoveSourceStoneCount = "stoneCount";
         internal const string StartPrefix = "start ";
         internal const string PlayPrefix = "play>";
         internal const string PlaySeparator = ">";

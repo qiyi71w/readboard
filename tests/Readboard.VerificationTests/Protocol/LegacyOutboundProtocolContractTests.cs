@@ -152,6 +152,12 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("recordTitleFingerprint ", ProtocolKeywords.RecordTitleFingerprintPrefix);
             Assert.Equal("forceRebuild", ProtocolKeywords.ForceRebuild);
             Assert.Equal("foxMoveNumber ", ProtocolKeywords.FoxMoveNumberPrefix);
+            Assert.Equal("lastMoveSource ", ProtocolKeywords.LastMoveSourcePrefix);
+            Assert.Equal("none", ProtocolKeywords.LastMoveSourceNone);
+            Assert.Equal("redBlueMarker", ProtocolKeywords.LastMoveSourceRedBlueMarker);
+            Assert.Equal("foxCornerFlip", ProtocolKeywords.LastMoveSourceFoxCornerFlip);
+            Assert.Equal("deviation", ProtocolKeywords.LastMoveSourceDeviation);
+            Assert.Equal("stoneCount", ProtocolKeywords.LastMoveSourceStoneCount);
             Assert.Equal("start ", ProtocolKeywords.StartPrefix);
             Assert.Equal("play>", ProtocolKeywords.PlayPrefix);
             Assert.Equal(">", ProtocolKeywords.PlaySeparator);

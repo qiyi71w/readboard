@@ -25,6 +25,7 @@ namespace readboard
         ProtocolMessage CreateRecordTitleFingerprintMessage(string fingerprint);
         ProtocolMessage CreateForceRebuildMessage();
         ProtocolMessage CreateFoxMoveNumberMessage(int moveNumber);
+        ProtocolMessage CreateLastMoveSourceMessage(LastMoveSource source);
         ProtocolMessage CreateYikeRoomTokenMessage(string roomToken);
         ProtocolMessage CreateYikeMoveNumberMessage(int moveNumber);
         ProtocolMessage CreateYikeSyncStartMessage();
