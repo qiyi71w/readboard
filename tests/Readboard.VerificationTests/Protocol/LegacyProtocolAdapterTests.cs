@@ -48,6 +48,8 @@ namespace Readboard.VerificationTests
         [InlineData(2, "lastMoveSource foxCornerFlip")]
         [InlineData(3, "lastMoveSource deviation")]
         [InlineData(4, "lastMoveSource stoneCount")]
+        [InlineData(99, "lastMoveSource none")]
+        [InlineData(-1, "lastMoveSource none")]
         public void CreateLastMoveSourceMessage_SerializesLegacyRawText(
             int source,
             string expected)
