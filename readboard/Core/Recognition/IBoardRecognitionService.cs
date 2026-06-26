@@ -393,6 +393,7 @@ namespace readboard
             int whiteCount = 0;
             int pureWhiteCount = 0;
             int almostWhiteCount = 0;
+            int stoneColorSampleCount = 0;
             int redCount = 0;
             int blueCount = 0;
             int cornerSampleCount = 0;
@@ -421,6 +422,7 @@ namespace readboard
                         ref whiteCount,
                         ref pureWhiteCount,
                         ref almostWhiteCount,
+                        ref stoneColorSampleCount,
                         ref redCount,
                         ref blueCount,
                         ref cornerSampleCount,
@@ -431,10 +433,10 @@ namespace readboard
             }
 
             return new RegionMetrics(
-                (100 * blackCount) / pixelCount,
-                (100 * whiteCount) / pixelCount,
-                (100 * pureWhiteCount) / pixelCount,
-                (100 * almostWhiteCount) / pixelCount,
+                stoneColorSampleCount == 0 ? 0 : (100 * blackCount) / stoneColorSampleCount,
+                stoneColorSampleCount == 0 ? 0 : (100 * whiteCount) / stoneColorSampleCount,
+                stoneColorSampleCount == 0 ? 0 : (100 * pureWhiteCount) / stoneColorSampleCount,
+                stoneColorSampleCount == 0 ? 0 : (100 * almostWhiteCount) / stoneColorSampleCount,
                 (100 * redCount) / pixelCount,
                 (100 * blueCount) / pixelCount,
                 cornerSampleCount == 0 ? 0 : (100 * blackOppositeCount) / cornerSampleCount,
@@ -458,6 +460,7 @@ namespace readboard
             ref int whiteCount,
             ref int pureWhiteCount,
             ref int almostWhiteCount,
+            ref int stoneColorSampleCount,
             ref int redCount,
             ref int blueCount,
             ref int cornerSampleCount,
@@ -468,8 +471,12 @@ namespace readboard
             bool isGray = Math.Abs(rgb.Red - rgb.Green) < thresholds.GrayOffset
                 && Math.Abs(rgb.Green - rgb.Blue) < thresholds.GrayOffset
                 && Math.Abs(rgb.Blue - rgb.Red) < thresholds.GrayOffset;
-            if (isGray)
-                CountGrayMetrics(rgb, thresholds.BlackOffset, whiteValue, pureWhiteValue, almostWhiteValue, ref blackCount, ref whiteCount, ref pureWhiteCount, ref almostWhiteCount);
+            if (IsStoneColorSample(x, y, regionWidth, regionHeight))
+            {
+                stoneColorSampleCount++;
+                if (isGray)
+                    CountGrayMetrics(rgb, thresholds.BlackOffset, whiteValue, pureWhiteValue, almostWhiteValue, ref blackCount, ref whiteCount, ref pureWhiteCount, ref almostWhiteCount);
+            }
 
             if (rgb.Red <= StrongColorMaxValue && rgb.Green <= StrongColorMaxValue && rgb.Blue >= StrongColorMinValue)
                 blueCount++;
@@ -495,6 +502,14 @@ namespace readboard
             return x > regionWidth / 2
                 && y > regionHeight / 2
                 && (x + y) * 40 >= (regionWidth + regionHeight) * 23;
+        }
+
+        private static bool IsStoneColorSample(int x, int y, int regionWidth, int regionHeight)
+        {
+            return x * 10 >= regionWidth
+                && y * 10 >= regionHeight
+                && x * 10 < regionWidth * 9
+                && y * 10 < regionHeight * 9;
         }
 
         private static void CountGrayMetrics(

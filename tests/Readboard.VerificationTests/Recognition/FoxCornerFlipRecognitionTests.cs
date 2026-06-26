@@ -43,6 +43,10 @@ namespace Readboard.VerificationTests.Recognition
                 Assert.Equal(RecognitionThresholds.DefaultWhiteOffset, request.Thresholds.WhiteOffset);
                 Assert.Equal(RecognitionThresholds.DefaultGrayOffset, request.Thresholds.GrayOffset);
                 Assert.Equal(RecognitionThresholds.DefaultRedBlueMarkerThreshold, request.Thresholds.RedBlueMarkerThreshold);
+                Assert.Equal(0, request.Frame.Viewport.SourceBounds.X);
+                Assert.Equal(0, request.Frame.Viewport.SourceBounds.Y);
+                Assert.Equal(bitmap.Width, request.Frame.Viewport.SourceBounds.Width);
+                Assert.Equal(bitmap.Height, request.Frame.Viewport.SourceBounds.Height);
             }
         }
 
@@ -60,7 +64,6 @@ namespace Readboard.VerificationTests.Recognition
 
         private static BoardRecognitionRequest CreateDefaultThresholdRequest(Bitmap bitmap)
         {
-            const int fixtureInset = 6;
             return new BoardRecognitionRequest
             {
                 Frame = new BoardFrame
@@ -70,11 +73,10 @@ namespace Readboard.VerificationTests.Recognition
                     Image = bitmap,
                     Viewport = new BoardViewport
                     {
-                        SourceBounds = new PixelRect(
-                            fixtureInset,
-                            fixtureInset,
-                            bitmap.Width - (fixtureInset * 2),
-                            bitmap.Height - (fixtureInset * 2))
+                        SourceBounds = new PixelRect(0, 0, bitmap.Width, bitmap.Height),
+                        ScreenBounds = new PixelRect(0, 0, bitmap.Width, bitmap.Height),
+                        CellWidth = bitmap.Width,
+                        CellHeight = bitmap.Height
                     }
                 },
                 InferLastMove = true
