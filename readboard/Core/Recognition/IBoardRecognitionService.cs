@@ -137,6 +137,7 @@ namespace readboard
                 BlackStoneCount = snapshot.BlackStoneCount,
                 WhiteStoneCount = snapshot.WhiteStoneCount,
                 LastMove = snapshot.LastMove,
+                LastMoveSource = snapshot.LastMoveSource,
                 NeedsPrintWindowFallback = snapshot.NeedsPrintWindowFallback,
                 Payload = snapshot.Payload,
                 ProtocolLines = snapshot.ProtocolLines,
