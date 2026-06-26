@@ -315,16 +315,17 @@ namespace readboard
                     cellHeightInt);
             }
 
-            BoardCoordinate lastMove = inferLastMove
-                ? ApplyLastMoveInference(boardState, boardSize.Width, blackSummary, whiteSummary, markerSummary)
-                : null;
+            LastMoveInference lastMove = inferLastMove
+                ? LastMoveInferenceResolver.Apply(boardState, boardSize.Width, blackSummary, whiteSummary, markerSummary, FoxCornerFlipSummary.Empty)
+                : LastMoveInference.None;
 
             return new LegacyBoardAnalysis
             {
                 BoardState = boardState,
                 BlackStoneCount = blackSummary.Count,
                 WhiteStoneCount = whiteSummary.Count,
-                LastMove = lastMove
+                LastMove = lastMove.Coordinate,
+                LastMoveSource = lastMove.Source
             };
         }
 
@@ -516,111 +517,6 @@ namespace readboard
                 whiteSummary.Observe(metrics.WhitePercent, x, y);
         }
 
-        private static BoardCoordinate ApplyLastMoveInference(
-            BoardCellState[] boardState,
-            int boardWidth,
-            StoneSummary blackSummary,
-            StoneSummary whiteSummary,
-            MarkerSummary markerSummary)
-        {
-            BoardCoordinate lastMove = TryApplyMarkerLastMove(boardState, boardWidth, blackSummary, whiteSummary, markerSummary);
-            if (lastMove != null)
-                return lastMove;
-
-            lastMove = TryApplyDeviationLastMove(boardState, boardWidth, blackSummary, whiteSummary);
-            if (lastMove != null)
-                return lastMove;
-
-            return TryApplyStoneCountLastMove(boardState, boardWidth, blackSummary, whiteSummary);
-        }
-
-        private static BoardCoordinate TryApplyMarkerLastMove(
-            BoardCellState[] boardState,
-            int boardWidth,
-            StoneSummary blackSummary,
-            StoneSummary whiteSummary,
-            MarkerSummary markerSummary)
-        {
-            bool redOnly = markerSummary.RedCount == 1 && markerSummary.BlueCount != 1;
-            bool blueOnly = markerSummary.RedCount != 1 && markerSummary.BlueCount == 1;
-            if (!redOnly && !blueOnly)
-                return null;
-
-            return PromoteLastMove(boardState, boardWidth, markerSummary.Candidate, blackSummary, whiteSummary);
-        }
-
-        private static BoardCoordinate TryApplyDeviationLastMove(
-            BoardCellState[] boardState,
-            int boardWidth,
-            StoneSummary blackSummary,
-            StoneSummary whiteSummary)
-        {
-            if (blackSummary.Count < 2 || whiteSummary.Count < 2)
-                return null;
-
-            double blackOffset = CalculateDeviation(blackSummary);
-            double whiteOffset = CalculateDeviation(whiteSummary);
-            BoardCoordinate candidate = blackOffset >= whiteOffset
-                ? blackSummary.MinCoordinate
-                : whiteSummary.MinCoordinate;
-
-            return PromoteLastMove(boardState, boardWidth, candidate, blackSummary, whiteSummary);
-        }
-
-        private static double CalculateDeviation(StoneSummary summary)
-        {
-            if (summary.Count <= 1)
-                return 0d;
-
-            double average = (summary.TotalPercent - summary.MinPercent) / (double)(summary.Count - 1);
-            return Math.Abs(summary.MinPercent - average);
-        }
-
-        private static BoardCoordinate TryApplyStoneCountLastMove(
-            BoardCellState[] boardState,
-            int boardWidth,
-            StoneSummary blackSummary,
-            StoneSummary whiteSummary)
-        {
-            if (blackSummary.Count <= 0 || whiteSummary.Count <= 0)
-                return null;
-
-            if (blackSummary.Count > whiteSummary.Count)
-                return PromoteLastMove(boardState, boardWidth, blackSummary.MinCoordinate, blackSummary, whiteSummary);
-            if (whiteSummary.Count > blackSummary.Count)
-                return PromoteLastMove(boardState, boardWidth, whiteSummary.MinCoordinate, blackSummary, whiteSummary);
-            return null;
-        }
-
-        private static BoardCoordinate PromoteLastMove(
-            BoardCellState[] boardState,
-            int boardWidth,
-            BoardCoordinate candidate,
-            StoneSummary blackSummary,
-            StoneSummary whiteSummary)
-        {
-            if (candidate == null)
-                return null;
-
-            int index = (candidate.Y * boardWidth) + candidate.X;
-            if (index < 0 || index >= boardState.Length)
-                return null;
-
-            if (boardState[index] == blackSummary.NormalState)
-            {
-                boardState[index] = blackSummary.LastMoveState;
-                return new BoardCoordinate(candidate.X, candidate.Y);
-            }
-
-            if (boardState[index] == whiteSummary.NormalState)
-            {
-                boardState[index] = whiteSummary.LastMoveState;
-                return new BoardCoordinate(candidate.X, candidate.Y);
-            }
-
-            return null;
-        }
-
         private static BoardSnapshot BuildSnapshot(BoardDimensions boardSize, LegacyBoardAnalysis analysis)
         {
             List<string> protocolLines = new List<string>(boardSize.Height);
@@ -650,6 +546,7 @@ namespace readboard
                 BlackStoneCount = analysis.BlackStoneCount,
                 WhiteStoneCount = analysis.WhiteStoneCount,
                 LastMove = analysis.LastMove,
+                LastMoveSource = analysis.LastMoveSource,
                 Payload = payloadBuilder.ToString(),
                 ProtocolLines = protocolLines,
                 StateSignature = stateSignature

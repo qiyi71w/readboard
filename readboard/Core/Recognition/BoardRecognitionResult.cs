@@ -584,6 +584,7 @@ namespace readboard
         public int BlackStoneCount { get; set; }
         public int WhiteStoneCount { get; set; }
         public BoardCoordinate LastMove { get; set; }
+        public LastMoveSource LastMoveSource { get; set; }
     }
 
     internal sealed class StoneSummary
