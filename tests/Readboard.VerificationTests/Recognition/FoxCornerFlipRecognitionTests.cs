@@ -51,6 +51,28 @@ namespace Readboard.VerificationTests.Recognition
         }
 
         [Fact]
+        public void Recognize_StoneClassificationUsesWholeRegionPercent()
+        {
+            using (Bitmap bitmap = new Bitmap(10, 10))
+            {
+                using (Graphics graphics = Graphics.FromImage(bitmap))
+                    graphics.Clear(Color.Lime);
+                for (int y = 1; y < 9; y++)
+                    for (int x = 1; x < 9; x++)
+                        bitmap.SetPixel(x, y, Color.Black);
+
+                BoardRecognitionRequest request = CreateDefaultThresholdRequest(bitmap);
+                request.InferLastMove = false;
+                request.Thresholds.BlackPercent = 80;
+
+                BoardRecognitionResult result = new LegacyBoardRecognitionService().Recognize(request);
+
+                Assert.True(result.Success, result.FailureReason);
+                Assert.Equal(BoardCellState.Empty, result.Snapshot.BoardState[0]);
+            }
+        }
+
+        [Fact]
         public void IsLowerRightCornerSample_RequiresInnerTriangleSector()
         {
             MethodInfo method = typeof(LegacyBoardRecognitionService).GetMethod(

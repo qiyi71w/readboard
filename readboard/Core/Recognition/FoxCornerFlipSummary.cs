@@ -16,6 +16,8 @@ namespace readboard
 
         public void Observe(
             BoardCellState state,
+            int innerBlackPercent,
+            int innerWhitePercent,
             int blackOppositePercent,
             int whiteOppositePercent,
             int x,
@@ -23,9 +25,17 @@ namespace readboard
         {
             int score;
             if (state == BoardCellState.Black)
+            {
+                if (innerBlackPercent <= 0)
+                    return;
                 score = blackOppositePercent;
+            }
             else if (state == BoardCellState.White)
+            {
+                if (innerWhitePercent <= 0)
+                    return;
                 score = whiteOppositePercent;
+            }
             else
                 return;
 

@@ -367,7 +367,14 @@ namespace readboard
                 if (inferLastMove && state != BoardCellState.Empty)
                 {
                     markerSummary.Observe(metrics.RedPercent, metrics.BluePercent, thresholds.RedBlueMarkerThreshold, x, y);
-                    foxCornerFlipSummary.Observe(state, metrics.BlackOppositePercent, metrics.WhiteOppositePercent, x, y);
+                    foxCornerFlipSummary.Observe(
+                        state,
+                        metrics.InnerBlackPercent,
+                        metrics.InnerWhitePercent,
+                        metrics.BlackOppositePercent,
+                        metrics.WhiteOppositePercent,
+                        x,
+                        y);
                 }
             }
         }
@@ -393,6 +400,8 @@ namespace readboard
             int whiteCount = 0;
             int pureWhiteCount = 0;
             int almostWhiteCount = 0;
+            int innerBlackCount = 0;
+            int innerWhiteCount = 0;
             int stoneColorSampleCount = 0;
             int redCount = 0;
             int blueCount = 0;
@@ -422,6 +431,8 @@ namespace readboard
                         ref whiteCount,
                         ref pureWhiteCount,
                         ref almostWhiteCount,
+                        ref innerBlackCount,
+                        ref innerWhiteCount,
                         ref stoneColorSampleCount,
                         ref redCount,
                         ref blueCount,
@@ -433,12 +444,14 @@ namespace readboard
             }
 
             return new RegionMetrics(
-                stoneColorSampleCount == 0 ? 0 : (100 * blackCount) / stoneColorSampleCount,
-                stoneColorSampleCount == 0 ? 0 : (100 * whiteCount) / stoneColorSampleCount,
-                stoneColorSampleCount == 0 ? 0 : (100 * pureWhiteCount) / stoneColorSampleCount,
-                stoneColorSampleCount == 0 ? 0 : (100 * almostWhiteCount) / stoneColorSampleCount,
+                (100 * blackCount) / pixelCount,
+                (100 * whiteCount) / pixelCount,
+                (100 * pureWhiteCount) / pixelCount,
+                (100 * almostWhiteCount) / pixelCount,
                 (100 * redCount) / pixelCount,
                 (100 * blueCount) / pixelCount,
+                stoneColorSampleCount == 0 ? 0 : (100 * innerBlackCount) / stoneColorSampleCount,
+                stoneColorSampleCount == 0 ? 0 : (100 * innerWhiteCount) / stoneColorSampleCount,
                 cornerSampleCount == 0 ? 0 : (100 * blackOppositeCount) / cornerSampleCount,
                 cornerSampleCount == 0 ? 0 : (100 * whiteOppositeCount) / cornerSampleCount,
                 hasTrueWhiteEvidence);
@@ -460,6 +473,8 @@ namespace readboard
             ref int whiteCount,
             ref int pureWhiteCount,
             ref int almostWhiteCount,
+            ref int innerBlackCount,
+            ref int innerWhiteCount,
             ref int stoneColorSampleCount,
             ref int redCount,
             ref int blueCount,
@@ -471,11 +486,14 @@ namespace readboard
             bool isGray = Math.Abs(rgb.Red - rgb.Green) < thresholds.GrayOffset
                 && Math.Abs(rgb.Green - rgb.Blue) < thresholds.GrayOffset
                 && Math.Abs(rgb.Blue - rgb.Red) < thresholds.GrayOffset;
+            if (isGray)
+                CountGrayMetrics(rgb, thresholds.BlackOffset, whiteValue, pureWhiteValue, almostWhiteValue, ref blackCount, ref whiteCount, ref pureWhiteCount, ref almostWhiteCount);
+
             if (IsStoneColorSample(x, y, regionWidth, regionHeight))
             {
                 stoneColorSampleCount++;
                 if (isGray)
-                    CountGrayMetrics(rgb, thresholds.BlackOffset, whiteValue, pureWhiteValue, almostWhiteValue, ref blackCount, ref whiteCount, ref pureWhiteCount, ref almostWhiteCount);
+                    CountInnerStoneMetrics(rgb, thresholds.BlackOffset, whiteValue, ref innerBlackCount, ref innerWhiteCount);
             }
 
             if (rgb.Red <= StrongColorMaxValue && rgb.Green <= StrongColorMaxValue && rgb.Blue >= StrongColorMinValue)
@@ -531,6 +549,19 @@ namespace readboard
                 pureWhiteCount++;
             if (rgb.Red >= almostWhiteValue && rgb.Green >= almostWhiteValue && rgb.Blue >= almostWhiteValue)
                 almostWhiteCount++;
+        }
+
+        private static void CountInnerStoneMetrics(
+            LegacyRgbInfo rgb,
+            int blackOffset,
+            int whiteValue,
+            ref int innerBlackCount,
+            ref int innerWhiteCount)
+        {
+            if (rgb.Red <= blackOffset && rgb.Green <= blackOffset && rgb.Blue <= blackOffset)
+                innerBlackCount++;
+            if (rgb.Red >= whiteValue && rgb.Green >= whiteValue && rgb.Blue >= whiteValue)
+                innerWhiteCount++;
         }
 
         private static BoardCellState DetermineCellState(RegionMetrics metrics, RecognitionThresholds thresholds)
