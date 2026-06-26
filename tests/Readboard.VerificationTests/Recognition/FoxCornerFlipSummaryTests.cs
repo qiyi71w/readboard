@@ -58,6 +58,25 @@ namespace Readboard.VerificationTests.Recognition
             Assert.Null(candidate);
         }
 
+        [Theory]
+        [InlineData((int)BoardCellState.Black, 1, 0, 18, 0)]
+        [InlineData((int)BoardCellState.White, 0, 1, 0, 18)]
+        public void Observe_RejectsSparseOrdinaryStoneSupport(
+            int state,
+            int innerBlackPercent,
+            int innerWhitePercent,
+            int blackOppositePercent,
+            int whiteOppositePercent)
+        {
+            FoxCornerFlipSummary summary = new FoxCornerFlipSummary();
+
+            summary.Observe((BoardCellState)state, innerBlackPercent, innerWhitePercent, blackOppositePercent, whiteOppositePercent, x: 0, y: 0);
+
+            BoardCoordinate candidate;
+            Assert.False(summary.TryGetUniqueCandidate(out candidate));
+            Assert.Null(candidate);
+        }
+
         [Fact]
         public void Empty_ReturnsIndependentNoCandidateSummaries()
         {

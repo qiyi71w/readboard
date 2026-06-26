@@ -72,6 +72,46 @@ namespace Readboard.VerificationTests.Recognition
             }
         }
 
+        [Theory]
+        [InlineData((int)BoardCellState.Black, 40, 40, 40, 240, 240, 240)]
+        [InlineData((int)BoardCellState.White, 240, 240, 240, 40, 40, 40)]
+        public void Recognize_OrdinaryUnmarkedStoneWithLowerRightShading_DoesNotReportFoxCornerFlip(
+            int expectedState,
+            int red,
+            int green,
+            int blue,
+            int oppositeRed,
+            int oppositeGreen,
+            int oppositeBlue)
+        {
+            using (Bitmap bitmap = new Bitmap(20, 20))
+            {
+                using (Graphics graphics = Graphics.FromImage(bitmap))
+                {
+                    graphics.Clear(Color.Lime);
+                }
+                Color stone = Color.FromArgb(red, green, blue);
+                Color opposite = Color.FromArgb(oppositeRed, oppositeGreen, oppositeBlue);
+                for (int y = 0; y < bitmap.Height; y++)
+                    for (int x = 0; x < bitmap.Width; x++)
+                        if (x < 3 || y < 3 || x >= bitmap.Width - 3 || y >= bitmap.Height - 3)
+                            bitmap.SetPixel(x, y, stone);
+                bitmap.SetPixel(13, 13, opposite);
+                bitmap.SetPixel(14, 13, opposite);
+                bitmap.SetPixel(13, 14, opposite);
+                bitmap.SetPixel(14, 14, opposite);
+
+                BoardRecognitionRequest request = CreateDefaultThresholdRequest(bitmap);
+
+                BoardRecognitionResult result = new LegacyBoardRecognitionService().Recognize(request);
+
+                Assert.True(result.Success, result.FailureReason);
+                Assert.Equal((BoardCellState)expectedState, result.Snapshot.BoardState[0]);
+                Assert.NotEqual(LastMoveSource.FoxCornerFlip, result.Snapshot.LastMoveSource);
+                Assert.Equal(LastMoveSource.None, result.Snapshot.LastMoveSource);
+            }
+        }
+
         [Fact]
         public void IsLowerRightCornerSample_RequiresInnerTriangleSector()
         {

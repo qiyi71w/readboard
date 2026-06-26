@@ -4,6 +4,7 @@ namespace readboard
     {
         private const int MinimumScore = 10;
         private const int MinimumMargin = 5;
+        private const int MinimumInnerStonePercent = 10;
 
         public static FoxCornerFlipSummary Empty
         {
@@ -26,13 +27,13 @@ namespace readboard
             int score;
             if (state == BoardCellState.Black)
             {
-                if (innerBlackPercent <= 0)
+                if (innerBlackPercent < MinimumInnerStonePercent)
                     return;
                 score = blackOppositePercent;
             }
             else if (state == BoardCellState.White)
             {
-                if (innerWhitePercent <= 0)
+                if (innerWhitePercent < MinimumInnerStonePercent)
                     return;
                 score = whiteOppositePercent;
             }
