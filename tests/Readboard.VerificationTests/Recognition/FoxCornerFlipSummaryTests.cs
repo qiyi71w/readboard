@@ -1,0 +1,61 @@
+using Xunit;
+using readboard;
+
+namespace Readboard.VerificationTests.Recognition
+{
+    public sealed class FoxCornerFlipSummaryTests
+    {
+        [Fact]
+        public void Observe_AcceptsUniqueBlackCornerFlip()
+        {
+            FoxCornerFlipSummary summary = new FoxCornerFlipSummary();
+
+            summary.Observe(BoardCellState.Black, blackOppositePercent: 18, whiteOppositePercent: 0, x: 2, y: 3);
+            summary.Observe(BoardCellState.Black, blackOppositePercent: 3, whiteOppositePercent: 0, x: 4, y: 5);
+
+            BoardCoordinate candidate;
+            Assert.True(summary.TryGetUniqueCandidate(out candidate));
+            Assert.Equal(2, candidate.X);
+            Assert.Equal(3, candidate.Y);
+        }
+
+        [Fact]
+        public void Observe_AcceptsUniqueWhiteCornerFlip()
+        {
+            FoxCornerFlipSummary summary = new FoxCornerFlipSummary();
+
+            summary.Observe(BoardCellState.White, blackOppositePercent: 0, whiteOppositePercent: 17, x: 6, y: 7);
+            summary.Observe(BoardCellState.White, blackOppositePercent: 0, whiteOppositePercent: 2, x: 8, y: 9);
+
+            BoardCoordinate candidate;
+            Assert.True(summary.TryGetUniqueCandidate(out candidate));
+            Assert.Equal(6, candidate.X);
+            Assert.Equal(7, candidate.Y);
+        }
+
+        [Fact]
+        public void Observe_RejectsCloseCandidates()
+        {
+            FoxCornerFlipSummary summary = new FoxCornerFlipSummary();
+
+            summary.Observe(BoardCellState.Black, blackOppositePercent: 18, whiteOppositePercent: 0, x: 0, y: 0);
+            summary.Observe(BoardCellState.Black, blackOppositePercent: 15, whiteOppositePercent: 0, x: 1, y: 0);
+
+            BoardCoordinate candidate;
+            Assert.False(summary.TryGetUniqueCandidate(out candidate));
+            Assert.Null(candidate);
+        }
+
+        [Fact]
+        public void Observe_RejectsLowScore()
+        {
+            FoxCornerFlipSummary summary = new FoxCornerFlipSummary();
+
+            summary.Observe(BoardCellState.Black, blackOppositePercent: 6, whiteOppositePercent: 0, x: 0, y: 0);
+
+            BoardCoordinate candidate;
+            Assert.False(summary.TryGetUniqueCandidate(out candidate));
+            Assert.Null(candidate);
+        }
+    }
+}

@@ -295,6 +295,7 @@ namespace readboard
             StoneSummary blackSummary = new StoneSummary(BoardCellState.Black, BoardCellState.BlackLastMove);
             StoneSummary whiteSummary = new StoneSummary(BoardCellState.White, BoardCellState.WhiteLastMove);
             MarkerSummary markerSummary = new MarkerSummary();
+            FoxCornerFlipSummary foxCornerFlipSummary = new FoxCornerFlipSummary();
 
             for (int y = 0; y < boardSize.Height; y++)
             {
@@ -308,6 +309,7 @@ namespace readboard
                     blackSummary,
                     whiteSummary,
                     markerSummary,
+                    foxCornerFlipSummary,
                     inferLastMove,
                     cellWidth,
                     cellHeight,
@@ -316,7 +318,7 @@ namespace readboard
             }
 
             LastMoveInference lastMove = inferLastMove
-                ? LastMoveInferenceResolver.Apply(boardState, boardSize.Width, blackSummary, whiteSummary, markerSummary, FoxCornerFlipSummary.Empty)
+                ? LastMoveInferenceResolver.Apply(boardState, boardSize.Width, blackSummary, whiteSummary, markerSummary, foxCornerFlipSummary)
                 : LastMoveInference.None;
 
             return new LegacyBoardAnalysis
@@ -339,6 +341,7 @@ namespace readboard
             StoneSummary blackSummary,
             StoneSummary whiteSummary,
             MarkerSummary markerSummary,
+            FoxCornerFlipSummary foxCornerFlipSummary,
             bool inferLastMove,
             double cellWidth,
             double cellHeight,
@@ -362,7 +365,10 @@ namespace readboard
                 boardState[index] = state;
                 ObserveStone(state, metrics, x, y, blackSummary, whiteSummary);
                 if (inferLastMove && state != BoardCellState.Empty)
+                {
                     markerSummary.Observe(metrics.RedPercent, metrics.BluePercent, thresholds.RedBlueMarkerThreshold, x, y);
+                    foxCornerFlipSummary.Observe(state, metrics.BlackOppositePercent, metrics.WhiteOppositePercent, x, y);
+                }
             }
         }
 
@@ -389,6 +395,9 @@ namespace readboard
             int almostWhiteCount = 0;
             int redCount = 0;
             int blueCount = 0;
+            int cornerSampleCount = 0;
+            int blackOppositeCount = 0;
+            int whiteOppositeCount = 0;
             bool hasTrueWhiteEvidence = false;
 
             for (int y = 0; y < regionHeight; y++)
@@ -403,6 +412,8 @@ namespace readboard
                         almostWhiteValue,
                         sampleY,
                         sampleWidth,
+                        regionWidth,
+                        regionHeight,
                         x,
                         y,
                         rgb,
@@ -412,6 +423,9 @@ namespace readboard
                         ref almostWhiteCount,
                         ref redCount,
                         ref blueCount,
+                        ref cornerSampleCount,
+                        ref blackOppositeCount,
+                        ref whiteOppositeCount,
                         ref hasTrueWhiteEvidence);
                 }
             }
@@ -423,6 +437,8 @@ namespace readboard
                 (100 * almostWhiteCount) / pixelCount,
                 (100 * redCount) / pixelCount,
                 (100 * blueCount) / pixelCount,
+                cornerSampleCount == 0 ? 0 : (100 * blackOppositeCount) / cornerSampleCount,
+                cornerSampleCount == 0 ? 0 : (100 * whiteOppositeCount) / cornerSampleCount,
                 hasTrueWhiteEvidence);
         }
 
@@ -433,6 +449,8 @@ namespace readboard
             int almostWhiteValue,
             int sampleY,
             int sampleWidth,
+            int regionWidth,
+            int regionHeight,
             int x,
             int y,
             LegacyRgbInfo rgb,
@@ -442,6 +460,9 @@ namespace readboard
             ref int almostWhiteCount,
             ref int redCount,
             ref int blueCount,
+            ref int cornerSampleCount,
+            ref int blackOppositeCount,
+            ref int whiteOppositeCount,
             ref bool hasTrueWhiteEvidence)
         {
             bool isGray = Math.Abs(rgb.Red - rgb.Green) < thresholds.GrayOffset
@@ -455,9 +476,24 @@ namespace readboard
             if (rgb.Red >= StrongColorMinValue && rgb.Green <= StrongColorMaxValue && rgb.Blue <= StrongColorMaxValue)
                 redCount++;
 
+            if (IsLowerRightCornerSample(x, y, regionWidth, regionHeight))
+            {
+                cornerSampleCount++;
+                if (rgb.Red >= whiteValue && rgb.Green >= whiteValue && rgb.Blue >= whiteValue)
+                    blackOppositeCount++;
+                if (rgb.Red <= thresholds.BlackOffset && rgb.Green <= thresholds.BlackOffset && rgb.Blue <= thresholds.BlackOffset)
+                    whiteOppositeCount++;
+            }
+
             bool sampleCandidate = !hasTrueWhiteEvidence && y == sampleY && x < sampleWidth;
             if (sampleCandidate && (rgb.Red < pureWhiteValue || rgb.Green < pureWhiteValue || rgb.Blue < pureWhiteValue))
                 hasTrueWhiteEvidence = true;
+        }
+
+        private static bool IsLowerRightCornerSample(int x, int y, int regionWidth, int regionHeight)
+        {
+            return x * 20 > regionWidth * 9
+                && y * 20 > regionHeight * 9;
         }
 
         private static void CountGrayMetrics(

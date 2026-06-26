@@ -160,14 +160,4 @@ namespace readboard
         }
     }
 
-    internal sealed class FoxCornerFlipSummary
-    {
-        public static FoxCornerFlipSummary Empty { get; } = new FoxCornerFlipSummary();
-
-        public bool TryGetUniqueCandidate(out BoardCoordinate candidate)
-        {
-            candidate = null;
-            return false;
-        }
-    }
 }

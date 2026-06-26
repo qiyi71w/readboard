@@ -704,6 +704,8 @@ namespace readboard
             int almostWhitePercent,
             int redPercent,
             int bluePercent,
+            int blackOppositePercent,
+            int whiteOppositePercent,
             bool hasTrueWhiteEvidence)
         {
             BlackPercent = blackPercent;
@@ -712,6 +714,8 @@ namespace readboard
             AlmostWhitePercent = almostWhitePercent;
             RedPercent = redPercent;
             BluePercent = bluePercent;
+            BlackOppositePercent = blackOppositePercent;
+            WhiteOppositePercent = whiteOppositePercent;
             HasTrueWhiteEvidence = hasTrueWhiteEvidence;
         }
 
@@ -721,6 +725,8 @@ namespace readboard
         public int AlmostWhitePercent;
         public int RedPercent;
         public int BluePercent;
+        public int BlackOppositePercent;
+        public int WhiteOppositePercent;
         public bool HasTrueWhiteEvidence;
     }
 
