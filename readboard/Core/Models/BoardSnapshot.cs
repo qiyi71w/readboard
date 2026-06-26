@@ -14,6 +14,7 @@ namespace readboard
         public int WhiteStoneCount { get; set; }
         public BoardCoordinate LastMove { get; set; }
         public int? FoxMoveNumber { get; set; }
+        public LastMoveSource LastMoveSource { get; set; }
         public bool NeedsPrintWindowFallback { get; set; }
         public string Payload { get; set; }
         public IList<string> ProtocolLines { get; set; }

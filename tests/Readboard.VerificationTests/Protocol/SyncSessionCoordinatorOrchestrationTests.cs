@@ -37,7 +37,7 @@ namespace Readboard.VerificationTests.Protocol
             bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
             Assert.True(started);
             Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(transport.WaitForLines(6, TimeSpan.FromSeconds(1)));
+            Assert.True(transport.WaitForLines(7, TimeSpan.FromSeconds(1)));
 
             Invoke(coordinator, "StopSyncSession");
 
@@ -49,10 +49,11 @@ namespace Readboard.VerificationTests.Protocol
                     "sync",
                     "start 19 19",
                     "syncPlatform generic",
+                    "lastMoveSource none",
                     "re=foreground",
                     "end"
                 },
-                transport.SentLines.GetRange(0, 6));
+                transport.SentLines.GetRange(0, 7));
             Assert.True(hostRecorder.SnapshotRequests >= 2);
         }
 
@@ -406,7 +407,7 @@ namespace Readboard.VerificationTests.Protocol
             bool started = (bool)Invoke(coordinator, "TryStartContinuousSync");
             Assert.True(started);
             Assert.True(hostRecorder.ContinuousStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(transport.WaitForLines(6, TimeSpan.FromSeconds(1)));
+            Assert.True(transport.WaitForLines(7, TimeSpan.FromSeconds(1)));
 
             Invoke(coordinator, "StopSyncSession");
 
@@ -420,10 +421,11 @@ namespace Readboard.VerificationTests.Protocol
                     "sync",
                     "start 19 19 4242",
                     "syncPlatform generic",
+                    "lastMoveSource none",
                     "re=fox",
                     "end"
                 },
-                transport.SentLines.GetRange(0, 6));
+                transport.SentLines.GetRange(0, 7));
         }
 
         [Fact]
@@ -1160,12 +1162,14 @@ namespace Readboard.VerificationTests.Protocol
                     "start 19 19",
                     "syncPlatform generic",
                     "foxMoveNumber 57",
+                    "lastMoveSource none",
                     "re=background",
                     "end",
                     "overlay-visible",
                     "start 19 19",
                     "syncPlatform generic",
                     "foxMoveNumber 57",
+                    "lastMoveSource none",
                     "re=background",
                     "end"
                 },

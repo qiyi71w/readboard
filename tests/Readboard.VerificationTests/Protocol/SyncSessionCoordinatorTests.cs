@@ -104,7 +104,7 @@ namespace Readboard.VerificationTests
             coordinator.SendBoardSnapshot(firstSnapshot);
             coordinator.SendBoardSnapshot(secondSnapshot);
 
-            Assert.Equal(new[] { "syncPlatform generic", "foxMoveNumber 57", "re=000", "re=111", "end" }, transport.SentLines);
+            Assert.Equal(new[] { "syncPlatform generic", "foxMoveNumber 57", "lastMoveSource none", "re=000", "re=111", "end" }, transport.SentLines);
         }
 
         [Fact]
@@ -129,6 +129,7 @@ namespace Readboard.VerificationTests
                     "roomToken 43581号",
                     "liveTitleMove 89",
                     "foxMoveNumber 57",
+                    "lastMoveSource none",
                     "re=000",
                     "re=111",
                     "end"
@@ -162,6 +163,7 @@ namespace Readboard.VerificationTests
                     "recordAtEnd 1",
                     "recordTitleFingerprint record-fingerprint",
                     "foxMoveNumber 333",
+                    "lastMoveSource none",
                     "re=000",
                     "re=111",
                     "end"
@@ -183,8 +185,30 @@ namespace Readboard.VerificationTests
             Assert.Equal(
                 new[]
                 {
-                    "syncPlatform generic", "foxMoveNumber 57", "re=000", "re=111", "end",
-                    "syncPlatform generic", "foxMoveNumber 58", "re=000", "re=111", "end"
+                    "syncPlatform generic", "foxMoveNumber 57", "lastMoveSource none", "re=000", "re=111", "end",
+                    "syncPlatform generic", "foxMoveNumber 58", "lastMoveSource none", "re=000", "re=111", "end"
+                },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void SendBoardSnapshot_ResendsFullFrameWhenLastMoveSourceChangesWithoutPayloadChange()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            BoardSnapshot first = CreateSnapshot("payload-1", 57);
+            first.LastMoveSource = LastMoveSource.StoneCount;
+            BoardSnapshot second = CreateSnapshot("payload-1", 57);
+            second.LastMoveSource = LastMoveSource.FoxCornerFlip;
+
+            coordinator.SendBoardSnapshot(first);
+            coordinator.SendBoardSnapshot(second);
+
+            Assert.Equal(
+                new[]
+                {
+                    "syncPlatform generic", "foxMoveNumber 57", "lastMoveSource stoneCount", "re=000", "re=111", "end",
+                    "syncPlatform generic", "foxMoveNumber 57", "lastMoveSource foxCornerFlip", "re=000", "re=111", "end"
                 },
                 transport.SentLines);
         }
@@ -219,6 +243,7 @@ namespace Readboard.VerificationTests
                     "roomToken 43581号",
                     "liveTitleMove 89",
                     "foxMoveNumber 57",
+                    "lastMoveSource none",
                     "re=000",
                     "re=111",
                     "end",
@@ -226,6 +251,7 @@ namespace Readboard.VerificationTests
                     "roomToken 43582号",
                     "liveTitleMove 89",
                     "foxMoveNumber 57",
+                    "lastMoveSource none",
                     "re=000",
                     "re=111",
                     "end"
@@ -243,7 +269,7 @@ namespace Readboard.VerificationTests
             coordinator.SetCapturedFoxMoveNumber(57);
             coordinator.SendBoardSnapshot(snapshot);
 
-            Assert.Equal(new[] { "syncPlatform generic", "foxMoveNumber 57", "re=000", "re=111", "end" }, transport.SentLines);
+            Assert.Equal(new[] { "syncPlatform generic", "foxMoveNumber 57", "lastMoveSource none", "re=000", "re=111", "end" }, transport.SentLines);
         }
 
         [Fact]
@@ -259,7 +285,7 @@ namespace Readboard.VerificationTests
             coordinator.SetCapturedFoxMoveNumber(57);
             coordinator.SendBoardSnapshot(secondSnapshot);
 
-            Assert.Equal(new[] { "syncPlatform generic", "foxMoveNumber 57", "re=000", "re=111", "end" }, transport.SentLines);
+            Assert.Equal(new[] { "syncPlatform generic", "foxMoveNumber 57", "lastMoveSource none", "re=000", "re=111", "end" }, transport.SentLines);
         }
 
         [Fact]
@@ -278,8 +304,8 @@ namespace Readboard.VerificationTests
             Assert.Equal(
                 new[]
                 {
-                    "syncPlatform generic", "foxMoveNumber 57", "re=000", "re=111", "end",
-                    "syncPlatform generic", "foxMoveNumber 58", "re=000", "re=111", "end"
+                    "syncPlatform generic", "foxMoveNumber 57", "lastMoveSource none", "re=000", "re=111", "end",
+                    "syncPlatform generic", "foxMoveNumber 58", "lastMoveSource none", "re=000", "re=111", "end"
                 },
                 transport.SentLines);
         }
@@ -300,8 +326,8 @@ namespace Readboard.VerificationTests
             Assert.Equal(
                 new[]
                 {
-                    "syncPlatform generic", "foxMoveNumber 57", "re=000", "re=111", "end",
-                    "syncPlatform generic", "foxMoveNumber 58", "re=000", "re=111", "end"
+                    "syncPlatform generic", "foxMoveNumber 57", "lastMoveSource none", "re=000", "re=111", "end",
+                    "syncPlatform generic", "foxMoveNumber 58", "lastMoveSource none", "re=000", "re=111", "end"
                 },
                 transport.SentLines);
         }
@@ -323,6 +349,7 @@ namespace Readboard.VerificationTests
                     "syncPlatform generic",
                     "forceRebuild",
                     "foxMoveNumber 57",
+                    "lastMoveSource none",
                     "re=000",
                     "re=111",
                     "end"
@@ -348,12 +375,14 @@ namespace Readboard.VerificationTests
                     "syncPlatform yike",
                     "yikeRoomToken 65191829",
                     "yikeMoveNumber 16",
+                    "lastMoveSource none",
                     "re=000",
                     "re=111",
                     "end",
                     "syncPlatform yike",
                     "yikeRoomToken 65191830",
                     "yikeMoveNumber 16",
+                    "lastMoveSource none",
                     "re=000",
                     "re=111",
                     "end"
@@ -379,12 +408,14 @@ namespace Readboard.VerificationTests
                     "syncPlatform yike",
                     "yikeRoomToken 65191829",
                     "yikeMoveNumber 16",
+                    "lastMoveSource none",
                     "re=000",
                     "re=111",
                     "end",
                     "syncPlatform yike",
                     "yikeRoomToken 65191829",
                     "yikeMoveNumber 17",
+                    "lastMoveSource none",
                     "re=000",
                     "re=111",
                     "end"
@@ -408,6 +439,7 @@ namespace Readboard.VerificationTests
                     "syncPlatform yike",
                     "yikeRoomToken 65191829",
                     "yikeMoveNumber 16",
+                    "lastMoveSource none",
                     "re=000",
                     "re=111",
                     "end"

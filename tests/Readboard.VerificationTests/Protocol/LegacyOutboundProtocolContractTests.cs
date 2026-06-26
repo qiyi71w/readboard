@@ -69,6 +69,7 @@ namespace Readboard.VerificationTests.Protocol
                     startLine,
                     visibleLine,
                     "syncPlatform generic",
+                    "lastMoveSource none",
                     replayLines[0],
                     replayLines[1],
                     "end",
@@ -76,6 +77,7 @@ namespace Readboard.VerificationTests.Protocol
                     hiddenLine,
                     visibleLine,
                     "syncPlatform generic",
+                    "lastMoveSource none",
                     replayLines[0],
                     replayLines[1],
                     "end"
