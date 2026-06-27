@@ -22,31 +22,31 @@
 
 ## File Structure
 
-- Create `readboard/Core/Models/LastMoveSource.cs`  
+- Create `readboard/Core/Models/LastMoveSource.cs`
   Defines the internal enum: `None`, `RedBlueMarker`, `FoxCornerFlip`, `Deviation`, `StoneCount`.
-- Create `readboard/Core/Recognition/LastMoveInference.cs`  
+- Create `readboard/Core/Recognition/LastMoveInference.cs`
   Small immutable result carrying `BoardCoordinate Coordinate` and `LastMoveSource Source`; include `None`.
-- Create `readboard/Core/Recognition/LastMoveInferenceResolver.cs`  
+- Create `readboard/Core/Recognition/LastMoveInferenceResolver.cs`
   Moves source-aware marker/deviation/stone-count inference out of `IBoardRecognitionService.cs` while preserving current behavior.
-- Create `readboard/Core/Recognition/FoxCornerFlipSummary.cs`  
+- Create `readboard/Core/Recognition/FoxCornerFlipSummary.cs`
   Tracks best/second-best corner-flip candidates and enforces uniqueness/margin.
-- Modify `readboard/Core/Recognition/BoardRecognitionResult.cs`  
+- Modify `readboard/Core/Recognition/BoardRecognitionResult.cs`
   Add `LastMoveSource` to `LegacyBoardAnalysis`, `RegionMetrics`, and relevant diagnostics helpers.
-- Modify `readboard/Core/Recognition/IBoardRecognitionService.cs`  
+- Modify `readboard/Core/Recognition/IBoardRecognitionService.cs`
   Populate `LastMoveSource`, compute corner-flip metrics in `AnalyzeRegion`, and clone/cache source metadata.
-- Modify `readboard/Core/Models/BoardSnapshot.cs`  
+- Modify `readboard/Core/Models/BoardSnapshot.cs`
   Add `LastMoveSource LastMoveSource`.
-- Modify `readboard/Core/Protocol/ProtocolKeywords.cs`  
+- Modify `readboard/Core/Protocol/ProtocolKeywords.cs`
   Add stable wire tokens.
-- Modify `readboard/Core/Protocol/IReadBoardProtocolAdapter.cs` and `LegacyProtocolAdapter.cs`  
+- Modify `readboard/Core/Protocol/IReadBoardProtocolAdapter.cs` and `LegacyProtocolAdapter.cs`
   Add `CreateLastMoveSourceMessage(LastMoveSource source)`.
-- Modify `readboard/Core/Protocol/OutboundBoardSnapshotEmitter.cs`  
+- Modify `readboard/Core/Protocol/OutboundBoardSnapshotEmitter.cs`
   Add source to `OutboundBoardSnapshotBatch` and emit it before board rows.
-- Modify `readboard/Core/Protocol/SyncSessionCoordinator.cs`  
+- Modify `readboard/Core/Protocol/SyncSessionCoordinator.cs`
   Include source in outbound dedupe and batch creation.
-- Modify `readboard/Core/Diagnostics/BoardDebugDiagnosticsWriter.cs`  
+- Modify `readboard/Core/Diagnostics/BoardDebugDiagnosticsWriter.cs`
   Include `lastMoveSource` in recognition text/metadata if snapshot is present.
-- Modify `docs/specs/2026-04-23-protocol-keyword-constants.md`  
+- Modify `docs/specs/2026-04-23-protocol-keyword-constants.md`
   Record the new public wire token.
 - Tests:
   - `tests/Readboard.VerificationTests/Protocol/LegacyOutboundProtocolContractTests.cs`
