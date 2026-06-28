@@ -488,7 +488,7 @@ namespace Readboard.VerificationTests
                     Assert.True(doc.RootElement.GetProperty("DebugDiagnosticsEnabled").GetBoolean());
                 }
                 Assert.True(loaded.DebugDiagnosticsEnabled);
-                Assert.Equal(18, legacyOther.Split('_').Length);
+                Assert.Equal(19, legacyOther.Split('_').Length);
             }
         }
     }

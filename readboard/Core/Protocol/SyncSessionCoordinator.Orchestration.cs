@@ -616,6 +616,7 @@ namespace readboard
             UpdateBoardGeometry(frame, snapshot);
             ReplaceRuntimeFrame(frame);
             runtimeState.InitialProbePending = false;
+            runtime.Host.OnBoardSnapshotRecognized(recognition.Snapshot);
             return new RecognizedSyncSample(previousArea, frame, recognition.Snapshot);
         }
 

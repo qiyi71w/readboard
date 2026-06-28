@@ -58,6 +58,37 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public void TryRunOneTimeSync_NotifiesHostOfRecognizedSnapshot()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+
+            BoardRecognitionResult recognition = CreateResultWithBoardState(
+                "re=foreground",
+                BoardCellState.BlackLastMove);
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Foreground, IntPtr.Zero);
+            HostRecorder hostRecorder = new HostRecorder(snapshot);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(recognition));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            Assert.True((bool)Invoke(coordinator, "TryRunOneTimeSync"));
+
+            Assert.Equal(1, hostRecorder.RecognizedSnapshotCount);
+            Assert.Same(recognition.Snapshot, hostRecorder.LastRecognizedSnapshot);
+        }
+
+        [Fact]
         public void KeepSync_ResendsPlayAfterFoxLiveRoomContextChanges()
         {
             RecordingTransport transport = new RecordingTransport();
@@ -1368,6 +1399,17 @@ namespace Readboard.VerificationTests.Protocol
             };
         }
 
+        private static BoardRecognitionResult CreateResultWithBoardState(
+            string protocolLine,
+            params BoardCellState[] boardState)
+        {
+            BoardRecognitionResult result = CreateResult(protocolLine);
+            result.Snapshot.BoardState = boardState;
+            result.Snapshot.Width = boardState.Length;
+            result.Snapshot.Height = 1;
+            return result;
+        }
+
         private static BoardRecognitionResult CreateInvalidResult(string protocolLine)
         {
             BoardRecognitionResult result = CreateResult(protocolLine);
@@ -1500,6 +1542,8 @@ namespace Readboard.VerificationTests.Protocol
             public int ContinuousStartedCount { get; private set; }
             public int ContinuousStoppedCount { get; private set; }
             public int SyncCachesResetCount { get; private set; }
+            public int RecognizedSnapshotCount { get; private set; }
+            public BoardSnapshot LastRecognizedSnapshot { get; private set; }
 
             public object HandleCall(MethodInfo method, object[] args)
             {
@@ -1530,6 +1574,10 @@ namespace Readboard.VerificationTests.Protocol
                         return null;
                     case "OnSyncCachesReset":
                         SyncCachesResetCount++;
+                        return null;
+                    case "OnBoardSnapshotRecognized":
+                        RecognizedSnapshotCount++;
+                        LastRecognizedSnapshot = (BoardSnapshot)args[0];
                         return null;
                     case "ShowMissingSyncSourceMessage":
                     case "ShowRecognitionFailureMessage":

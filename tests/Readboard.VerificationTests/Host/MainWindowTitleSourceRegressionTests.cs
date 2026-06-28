@@ -13,6 +13,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("private FoxWindowContext lastFoxWindowContext = FoxWindowContext.Unknown();", source);
             Assert.Contains("private FoxWindowBinding foxWindowBinding = null;", source);
             Assert.Contains("private bool hasRetainedFoxTitleSnapshot = false;", source);
+            Assert.Contains("private MainWindowTitleTurn lastMainWindowTitleTurn = MainWindowTitleTurn.None;", source);
             Assert.Contains("private void UpdateMainWindowTitle(FoxWindowContext foxWindowContext)", source);
             Assert.Contains("private void RefreshMainWindowTitleFromCurrentWindow()", source);
             Assert.Contains("private void ResetMainWindowTitle()", source);
@@ -36,6 +37,7 @@ namespace Readboard.VerificationTests.Host
             Assert.DoesNotContain("FoxWindowDescriptorFactory", resolveSlice);
             Assert.Contains("AppReleaseVersion.GetCurrentVersion()", applyTitleSlice);
             Assert.Contains("MainWindowTitleFormatter.FormatBaseTitle(", applyTitleSlice);
+            Assert.Contains("lastMainWindowTitleTurn", applyTitleSlice);
             Assert.Contains("string title = MainWindowTitleFormatter.Format(", applyTitleSlice);
             Assert.Contains("ApplyMainWindowTitleText(title);", applyTitleSlice);
             Assert.Contains(
@@ -97,6 +99,30 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("if (IsFoxSyncType(CurrentSyncType))", oneTimeSyncSlice);
             Assert.Contains("hasRetainedFoxTitleSnapshot = true;", oneTimeSyncSlice);
             Assert.Contains("ApplyMainWindowTitle();", oneTimeSyncSlice);
+        }
+
+        [Fact]
+        public void MainForm_KeepSyncStartPreservesRecognizedTurnIndicator()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+            string keepStartedSlice = GetMethodSlice(source, "private void ApplyKeepSyncStartedUi()");
+
+            Assert.Contains("if (lastMainWindowTitleTurn == MainWindowTitleTurn.None)", keepStartedSlice);
+            Assert.Contains("lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;", keepStartedSlice);
+        }
+
+        [Fact]
+        public void MainForm_UpdatesTurnIndicatorFromRecognizedSnapshots()
+        {
+            string formSource = LoadSource("readboard", "Form1.cs");
+            string coordinatorSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
+
+            string recognizedSlice = GetMethodSlice(formSource, "void ISyncCoordinatorHost.OnBoardSnapshotRecognized(BoardSnapshot snapshot)");
+            Assert.Contains("lastMainWindowTitleTurn = MainWindowTitleTurnResolver.Resolve(snapshot);", recognizedSlice);
+            Assert.Contains("ApplyMainWindowTitle();", recognizedSlice);
+            Assert.Contains(
+                "runtime.Host.OnBoardSnapshotRecognized(recognition.Snapshot);",
+                GetMethodSlice(coordinatorSource, "private RecognizedSyncSample CompleteRecognizedSample("));
         }
 
         [Fact]

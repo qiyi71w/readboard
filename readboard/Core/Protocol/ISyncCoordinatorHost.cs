@@ -11,6 +11,7 @@ namespace readboard
         void OnContinuousSyncStarted();
         void OnContinuousSyncStopped();
         void OnSyncCachesReset();
+        void OnBoardSnapshotRecognized(BoardSnapshot snapshot);
         void ShowMissingSyncSourceMessage();
         void ShowRecognitionFailureMessage();
         void MinimizeWindow();

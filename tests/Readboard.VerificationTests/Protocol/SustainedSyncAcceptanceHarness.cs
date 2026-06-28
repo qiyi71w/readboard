@@ -279,6 +279,10 @@ namespace Readboard.VerificationTests.Protocol
             {
             }
 
+            public void OnBoardSnapshotRecognized(BoardSnapshot snapshot)
+            {
+            }
+
             public bool WaitForKeepSyncStopped(TimeSpan timeout)
             {
                 return keepSyncStopped.Wait(timeout);

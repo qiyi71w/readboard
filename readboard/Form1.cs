@@ -63,6 +63,7 @@ namespace readboard
         private IntPtr lastYikeContextWindowHandle = IntPtr.Zero;
         private FoxWindowBinding foxWindowBinding = null;
         private bool hasRetainedFoxTitleSnapshot = false;
+        private MainWindowTitleTurn lastMainWindowTitleTurn = MainWindowTitleTurn.None;
         private string lastAppliedMainWindowTitle = string.Empty;
         private readonly IBoardCapturePlatform foxAutoPlayCapturePlatform = new Win32BoardCapturePlatform();
         private AutoPlayColorResolution lastFoxAutoPlayColorDetection = null;
@@ -2150,6 +2151,7 @@ namespace readboard
         private void ResetMainWindowTitle()
         {
             hasRetainedFoxTitleSnapshot = false;
+            lastMainWindowTitleTurn = MainWindowTitleTurn.None;
             lastFoxWindowContext = FoxWindowContext.Unknown();
             if (CurrentSyncType != TYPE_YIKE)
                 lastYikeWindowContext = YikeWindowContext.Unknown();
@@ -2174,7 +2176,8 @@ namespace readboard
         {
             string baseTitle = MainWindowTitleFormatter.FormatBaseTitle(
                 getLangStr("MainForm_title"),
-                AppReleaseVersion.GetCurrentVersion());
+                AppReleaseVersion.GetCurrentVersion(),
+                lastMainWindowTitleTurn);
 
             if (CurrentSyncType == TYPE_YIKE)
             {
@@ -2238,6 +2241,7 @@ namespace readboard
             {
                 SetSelectedWindowHandle(handle);
                 hasRetainedFoxTitleSnapshot = false;
+                lastMainWindowTitleTurn = MainWindowTitleTurn.None;
                 lastFoxWindowContext = FoxWindowContext.Unknown();
                 InvalidateFoxWindowBinding();
                 if (HasActiveSyncOperation())
@@ -2290,6 +2294,16 @@ namespace readboard
         {
             InvokeUiHostAction(delegate
             {
+                lastMainWindowTitleTurn = MainWindowTitleTurn.None;
+                ApplyMainWindowTitle();
+            });
+        }
+
+        void ISyncCoordinatorHost.OnBoardSnapshotRecognized(BoardSnapshot snapshot)
+        {
+            InvokeUiHostAction(delegate
+            {
+                lastMainWindowTitleTurn = MainWindowTitleTurnResolver.Resolve(snapshot);
                 ApplyMainWindowTitle();
             });
         }
@@ -2331,6 +2345,8 @@ namespace readboard
             SetSyncConfigurationControlsEnabled(false);
             DisableBoardSelectionControls();
             hasRetainedFoxTitleSnapshot = false;
+            if (lastMainWindowTitleTurn == MainWindowTitleTurn.None)
+                lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
             RefreshMainWindowTitleFromCurrentWindow();
         }
 
@@ -2356,6 +2372,7 @@ namespace readboard
             SetSyncConfigurationControlsEnabled(false);
             DisableBoardSelectionControls();
             hasRetainedFoxTitleSnapshot = false;
+            lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
             RefreshMainWindowTitleFromCurrentWindow();
         }
 
