@@ -16,7 +16,7 @@ namespace Readboard.VerificationTests.Recognition
             MarkerSummary marker = new MarkerSummary();
             marker.Observe(redPercent: 5, bluePercent: 0, threshold: 1, x: 0, y: 0);
 
-            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 2, black, white, marker, FoxCornerFlipSummary.Empty);
+            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 2, black, white, marker, new FoxCornerFlipSummary());
 
             Assert.Equal(LastMoveSource.RedBlueMarker, result.Source);
             AssertCoordinate(0, 0, result.Coordinate);
@@ -41,7 +41,7 @@ namespace Readboard.VerificationTests.Recognition
             white.Observe(82, 1, 1);
             MarkerSummary marker = new MarkerSummary();
 
-            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 2, black, white, marker, FoxCornerFlipSummary.Empty);
+            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 2, black, white, marker, new FoxCornerFlipSummary());
 
             Assert.Equal(LastMoveSource.Deviation, result.Source);
             AssertCoordinate(0, 0, result.Coordinate);
@@ -66,7 +66,7 @@ namespace Readboard.VerificationTests.Recognition
             white.Observe(90, 1, 1);
             MarkerSummary marker = new MarkerSummary();
 
-            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 2, black, white, marker, FoxCornerFlipSummary.Empty);
+            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 2, black, white, marker, new FoxCornerFlipSummary());
 
             Assert.Equal(LastMoveSource.Deviation, result.Source);
             AssertCoordinate(1, 0, result.Coordinate);
@@ -89,7 +89,7 @@ namespace Readboard.VerificationTests.Recognition
             white.Observe(90, 1, 0);
             MarkerSummary marker = new MarkerSummary();
 
-            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 3, black, white, marker, FoxCornerFlipSummary.Empty);
+            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 3, black, white, marker, new FoxCornerFlipSummary());
 
             Assert.Equal(LastMoveSource.StoneCount, result.Source);
             AssertCoordinate(0, 0, result.Coordinate);
@@ -112,7 +112,7 @@ namespace Readboard.VerificationTests.Recognition
             white.Observe(80, 2, 0);
             MarkerSummary marker = new MarkerSummary();
 
-            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 3, black, white, marker, FoxCornerFlipSummary.Empty);
+            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 3, black, white, marker, new FoxCornerFlipSummary());
 
             Assert.Equal(LastMoveSource.StoneCount, result.Source);
             AssertCoordinate(1, 0, result.Coordinate);
@@ -140,7 +140,7 @@ namespace Readboard.VerificationTests.Recognition
             MarkerSummary marker = new MarkerSummary();
             marker.Observe(redPercent: 5, bluePercent: 0, threshold: 1, x: 1, y: 0);
 
-            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 5, black, white, marker, FoxCornerFlipSummary.Empty);
+            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 5, black, white, marker, new FoxCornerFlipSummary());
 
             Assert.Equal(LastMoveSource.RedBlueMarker, result.Source);
             AssertCoordinate(1, 0, result.Coordinate);
@@ -168,7 +168,7 @@ namespace Readboard.VerificationTests.Recognition
             white.Observe(100, 3, 0);
             MarkerSummary marker = new MarkerSummary();
 
-            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 5, black, white, marker, FoxCornerFlipSummary.Empty);
+            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 5, black, white, marker, new FoxCornerFlipSummary());
 
             Assert.Equal(LastMoveSource.Deviation, result.Source);
             AssertCoordinate(1, 0, result.Coordinate);
@@ -186,7 +186,7 @@ namespace Readboard.VerificationTests.Recognition
             white.Observe(80, 1, 0);
             MarkerSummary marker = new MarkerSummary();
 
-            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 2, black, white, marker, FoxCornerFlipSummary.Empty);
+            LastMoveInference result = LastMoveInferenceResolver.Apply(state, 2, black, white, marker, new FoxCornerFlipSummary());
 
             Assert.Equal(LastMoveSource.None, result.Source);
             Assert.Null(result.Coordinate);

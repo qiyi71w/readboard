@@ -6,11 +6,6 @@ namespace readboard
         private const int MinimumMargin = 5;
         private const int MinimumInnerStonePercent = 10;
 
-        public static FoxCornerFlipSummary Empty
-        {
-            get { return new FoxCornerFlipSummary(); }
-        }
-
         private int bestScore;
         private int secondBestScore;
         private BoardCoordinate bestCoordinate;

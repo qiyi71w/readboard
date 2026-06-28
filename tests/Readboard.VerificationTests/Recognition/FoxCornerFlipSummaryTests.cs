@@ -80,8 +80,8 @@ namespace Readboard.VerificationTests.Recognition
         [Fact]
         public void Empty_ReturnsIndependentNoCandidateSummaries()
         {
-            FoxCornerFlipSummary first = FoxCornerFlipSummary.Empty;
-            FoxCornerFlipSummary second = FoxCornerFlipSummary.Empty;
+            FoxCornerFlipSummary first = new FoxCornerFlipSummary();
+            FoxCornerFlipSummary second = new FoxCornerFlipSummary();
 
             first.Observe(BoardCellState.Black, innerBlackPercent: 70, innerWhitePercent: 0, blackOppositePercent: 18, whiteOppositePercent: 0, x: 1, y: 2);
 

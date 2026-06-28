@@ -2303,7 +2303,7 @@ namespace readboard
         {
             InvokeUiHostAction(delegate
             {
-                lastMainWindowTitleTurn = MainWindowTitleTurnResolver.Resolve(snapshot);
+                lastMainWindowTitleTurn = ResolveMainWindowTitleTurn(snapshot);
                 ApplyMainWindowTitle();
             });
         }
@@ -2348,6 +2348,28 @@ namespace readboard
             if (lastMainWindowTitleTurn == MainWindowTitleTurn.None)
                 lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
             RefreshMainWindowTitleFromCurrentWindow();
+        }
+
+        private static MainWindowTitleTurn ResolveMainWindowTitleTurn(BoardSnapshot snapshot)
+        {
+            if (snapshot == null || snapshot.BoardState == null)
+                return MainWindowTitleTurn.Unknown;
+
+            int blackLastMoveCount = 0;
+            int whiteLastMoveCount = 0;
+            for (int i = 0; i < snapshot.BoardState.Length; i++)
+            {
+                if (snapshot.BoardState[i] == BoardCellState.BlackLastMove)
+                    blackLastMoveCount++;
+                else if (snapshot.BoardState[i] == BoardCellState.WhiteLastMove)
+                    whiteLastMoveCount++;
+            }
+
+            if (blackLastMoveCount == 1 && whiteLastMoveCount == 0)
+                return MainWindowTitleTurn.White;
+            if (whiteLastMoveCount == 1 && blackLastMoveCount == 0)
+                return MainWindowTitleTurn.Black;
+            return MainWindowTitleTurn.Unknown;
         }
 
         private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)

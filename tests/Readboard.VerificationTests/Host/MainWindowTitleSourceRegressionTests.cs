@@ -118,7 +118,7 @@ namespace Readboard.VerificationTests.Host
             string coordinatorSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
 
             string recognizedSlice = GetMethodSlice(formSource, "void ISyncCoordinatorHost.OnBoardSnapshotRecognized(BoardSnapshot snapshot)");
-            Assert.Contains("lastMainWindowTitleTurn = MainWindowTitleTurnResolver.Resolve(snapshot);", recognizedSlice);
+            Assert.Contains("lastMainWindowTitleTurn = ResolveMainWindowTitleTurn(snapshot);", recognizedSlice);
             Assert.Contains("ApplyMainWindowTitle();", recognizedSlice);
             Assert.Contains(
                 "runtime.Host.OnBoardSnapshotRecognized(recognition.Snapshot);",
