@@ -273,6 +273,10 @@ namespace Readboard.VerificationTests.Protocol
             {
             }
 
+            public void OnBoardSnapshotRecognized(BoardSnapshot snapshot)
+            {
+            }
+
             public void ShowMissingSyncSourceMessage()
             {
             }

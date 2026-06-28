@@ -257,7 +257,8 @@ namespace readboard
                 SnapshotSignature = ResolveSnapshotSignature(snapshot),
                 BlackStoneCount = snapshot == null ? 0 : snapshot.BlackStoneCount,
                 WhiteStoneCount = snapshot == null ? 0 : snapshot.WhiteStoneCount,
-                LastMove = snapshot == null || snapshot.LastMove == null ? null : snapshot.LastMove.ToString()
+                LastMove = snapshot == null || snapshot.LastMove == null ? null : snapshot.LastMove.ToString(),
+                LastMoveSource = snapshot == null ? null : LastMoveSourceToToken(snapshot.LastMoveSource)
             };
         }
 
@@ -273,7 +274,25 @@ namespace readboard
             builder.AppendLine("stateSignature=" + snapshot.StateSignature.ToString(CultureInfo.InvariantCulture));
             if (snapshot.LastMove != null)
                 builder.AppendLine("lastMove=" + snapshot.LastMove);
+            builder.AppendLine("lastMoveSource=" + LastMoveSourceToToken(snapshot.LastMoveSource));
             return builder.ToString();
+        }
+
+        private static string LastMoveSourceToToken(LastMoveSource source)
+        {
+            switch (source)
+            {
+                case LastMoveSource.RedBlueMarker:
+                    return ProtocolKeywords.LastMoveSourceRedBlueMarker;
+                case LastMoveSource.FoxCornerFlip:
+                    return ProtocolKeywords.LastMoveSourceFoxCornerFlip;
+                case LastMoveSource.Deviation:
+                    return ProtocolKeywords.LastMoveSourceDeviation;
+                case LastMoveSource.StoneCount:
+                    return ProtocolKeywords.LastMoveSourceStoneCount;
+                default:
+                    return ProtocolKeywords.LastMoveSourceNone;
+            }
         }
 
         private static string FormatLogLine(string eventName, DateTime timestampUtc, BoardDebugDiagnosticRecord record)

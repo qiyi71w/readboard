@@ -18,6 +18,23 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(expected, MainWindowTitleFormatter.FormatBaseTitle(baseTitle, releaseVersion));
         }
 
+        [Theory]
+        [InlineData((int)MainWindowTitleTurn.None, "棋盘同步工具 v3.0.8")]
+        [InlineData((int)MainWindowTitleTurn.White, "棋盘同步工具 v3.0.8 [白]")]
+        [InlineData((int)MainWindowTitleTurn.Black, "棋盘同步工具 v3.0.8 [黑]")]
+        [InlineData((int)MainWindowTitleTurn.Unknown, "棋盘同步工具 v3.0.8 [?]")]
+        public void FormatBaseTitle_AppendsTurnIndicatorAfterVersion(
+            int turn,
+            string expected)
+        {
+            Assert.Equal(
+                expected,
+                MainWindowTitleFormatter.FormatBaseTitle(
+                    "棋盘同步工具",
+                    "v3.0.8",
+                    (MainWindowTitleTurn)turn));
+        }
+
         [Fact]
         public void Format_ReturnsBaseTitleWhenTitleModeHidden()
         {

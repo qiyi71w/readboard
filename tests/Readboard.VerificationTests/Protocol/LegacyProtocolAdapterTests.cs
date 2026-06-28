@@ -42,6 +42,25 @@ namespace Readboard.VerificationTests
             Assert.Equal("foxMoveNumber 57", line);
         }
 
+        [Theory]
+        [InlineData(0, "lastMoveSource none")]
+        [InlineData(1, "lastMoveSource redBlueMarker")]
+        [InlineData(2, "lastMoveSource foxCornerFlip")]
+        [InlineData(3, "lastMoveSource deviation")]
+        [InlineData(4, "lastMoveSource stoneCount")]
+        [InlineData(99, "lastMoveSource none")]
+        [InlineData(-1, "lastMoveSource none")]
+        public void CreateLastMoveSourceMessage_SerializesLegacyRawText(
+            int source,
+            string expected)
+        {
+            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
+
+            string line = adapter.Serialize(adapter.CreateLastMoveSourceMessage((LastMoveSource)source));
+
+            Assert.Equal(expected, line);
+        }
+
         [Fact]
         public void ParseInbound_MapsHostedUpdateLifecycleCommands()
         {
