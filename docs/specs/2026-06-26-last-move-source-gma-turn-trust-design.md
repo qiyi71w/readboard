@@ -13,6 +13,8 @@
 
 下游 Lizzie 只能看到 `BlackLastMove` / `WhiteLastMove`，无法知道末手是否来自真实视觉标记。GMA 自动落子因此可能在不可信轮次上启动。
 
+后续联调结论：真实视觉末手标记是辅助可信来源，不应成为跨平台唯一方案；Fox 让子初始局可由 Lizzie 在 `foxMoveNumber 0` + 全黑 setup 形态下按固定规则处理，ReadBoard 仍只输出棋盘和末手来源。
+
 本设计已核对：
 
 - `docs/specs/2026-06-24-gma-engine-decision-autoplay-design.md`
@@ -34,6 +36,8 @@
 - 不改变 ReadBoard 的自动落子模式配置、GMA 参数语义或后台思考语义。
 - 不改变 snapshot rebuild、history matching、conflict key 或 PASS/MOVE 语义。
 - 不把启发式末手提升为真实视觉 marker。
+- 不删除 `deviation` / `stoneCount` 兜底；下游不能把它们当成权威轮次。
+- 不在 ReadBoard 里推断跨平台 side-to-play；手动“交换顺序”仍走既有 `pass` 协议。
 - 不为非 Fox 平台引入特殊 title 轮询。
 
 ## 协议
