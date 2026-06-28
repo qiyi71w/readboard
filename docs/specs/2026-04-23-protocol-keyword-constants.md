@@ -69,6 +69,7 @@
 | outbound prefix | `start ` |
 | outbound prefix | `play>` |
 | outbound separator | `>` |
+| outbound token | `gma` |
 | outbound command | `noinboard` |
 | outbound command | `placeComplete` |
 | outbound command | `error place failed` |
