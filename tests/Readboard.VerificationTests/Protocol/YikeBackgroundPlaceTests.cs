@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Text.Json;
 using System.Threading;
 using Xunit;
 using readboard;
@@ -62,6 +65,7 @@ namespace Readboard.VerificationTests.Protocol
         {
             IntPtr handle = new IntPtr(5151);
             IntPtr childHandle = new IntPtr(6161);
+            string diagnosticsRoot = CreateDiagnosticsRoot();
             RecordingNativeMethods nativeMethods = new RecordingNativeMethods
             {
                 YikeRenderWidgetHandle = childHandle,
@@ -70,6 +74,7 @@ namespace Readboard.VerificationTests.Protocol
             RecordingHost host = new RecordingHost(CreateSnapshot(handle));
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            BoardDebugDiagnosticsWriter debugDiagnostics = new BoardDebugDiagnosticsWriter(diagnosticsRoot, () => true);
             host.AttachCoordinator(coordinator);
             coordinator.AttachHost(host);
             coordinator.SetSyncBoth(true);
@@ -80,7 +85,8 @@ namespace Readboard.VerificationTests.Protocol
                 RecognitionService = new StaticRecognitionService(),
                 PlacementService = new LegacyMovePlacementService(nativeMethods),
                 OverlayService = new PassiveOverlayService(),
-                WindowDescriptorFactory = new StaticWindowDescriptorFactory(handle)
+                WindowDescriptorFactory = new StaticWindowDescriptorFactory(handle),
+                DebugDiagnostics = debugDiagnostics
             });
 
             try
@@ -97,12 +103,21 @@ namespace Readboard.VerificationTests.Protocol
             finally
             {
                 coordinator.Stop();
+                debugDiagnostics.Dispose();
             }
 
-            Assert.Empty(nativeMethods.ForegroundClicks);
-            Assert.Empty(nativeMethods.SentMessages);
-            Assert.Empty(nativeMethods.PostedMessages);
-            Assert.Contains(host.PlaceErrors, error => error.Contains("Yike geometry unavailable."));
+            try
+            {
+                Assert.Empty(nativeMethods.ForegroundClicks);
+                Assert.Empty(nativeMethods.SentMessages);
+                Assert.Empty(nativeMethods.PostedMessages);
+                Assert.Contains(host.PlaceErrors, error => error.Contains("Yike geometry unavailable."));
+                AssertPlacementSkippedMetadata(diagnosticsRoot, 1, 2);
+            }
+            finally
+            {
+                DeleteDiagnosticsRoot(diagnosticsRoot);
+            }
         }
 
         [Fact]
@@ -205,6 +220,60 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public void yike_geometry_targets_current_selected_handle_when_capture_frame_has_old_handle()
+        {
+            IntPtr oldHandle = new IntPtr(5151);
+            IntPtr oldChildHandle = new IntPtr(6161);
+            IntPtr currentHandle = new IntPtr(7171);
+            IntPtr currentChildHandle = new IntPtr(8181);
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods
+            {
+                YikeRenderWidgetBounds = new PixelRect(100, 200, 800, 600)
+            };
+            nativeMethods.YikeRenderWidgetHandles[oldHandle] = oldChildHandle;
+            nativeMethods.YikeRenderWidgetHandles[currentHandle] = currentChildHandle;
+            nativeMethods.WindowBounds[oldChildHandle] = new PixelRect(100, 200, 800, 600);
+            nativeMethods.WindowBounds[currentChildHandle] = new PixelRect(100, 200, 800, 600);
+            RecordingHost host = new RecordingHost(CreateSnapshot(currentHandle));
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            host.AttachCoordinator(coordinator);
+            coordinator.AttachHost(host);
+            coordinator.SetSyncBoth(true);
+            coordinator.AttachRuntime(new SyncSessionRuntimeDependencies
+            {
+                Host = host,
+                CaptureService = new RequestFrameCaptureService(),
+                RecognitionService = new StaticRecognitionService(),
+                PlacementService = new LegacyMovePlacementService(nativeMethods),
+                OverlayService = new PassiveOverlayService(),
+                WindowDescriptorFactory = new StaticWindowDescriptorFactory(currentHandle)
+            });
+
+            try
+            {
+                coordinator.Start();
+                Assert.True(coordinator.TryStartKeepSync());
+                Assert.True(host.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+                Assert.True(transport.WaitForLine("end", TimeSpan.FromSeconds(1)));
+
+                ReplaceRuntimeYikeFrame(coordinator, currentHandle, oldHandle);
+                transport.Emit("yikeGeometry left=100 top=200 width=250 height=250 board=5");
+                transport.Emit("place 1 2");
+
+                Assert.True(transport.WaitForLine("placeComplete", TimeSpan.FromSeconds(1)));
+            }
+            finally
+            {
+                coordinator.Stop();
+            }
+
+            Assert.Equal(3, nativeMethods.PostedMessages.Count);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(currentChildHandle, message.Handle));
+            Assert.DoesNotContain(nativeMethods.PostedMessages, message => message.Handle == oldChildHandle);
+        }
+
+        [Fact]
         public void yike_geometry_explicit_grid_controls_background_post_coordinate()
         {
             IntPtr handle = new IntPtr(5151);
@@ -304,6 +373,63 @@ namespace Readboard.VerificationTests.Protocol
         private static int BuildMouseLParam(int x, int y)
         {
             return (x & 0xFFFF) | ((y & 0xFFFF) << 16);
+        }
+
+        private static void ReplaceRuntimeYikeFrame(SyncSessionCoordinator coordinator, IntPtr selectedHandle, IntPtr frameHandle)
+        {
+            FieldInfo field = typeof(SyncSessionCoordinator).GetField("runtimeState", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(field);
+            SyncSessionRuntimeState runtimeState = (SyncSessionRuntimeState)field.GetValue(coordinator);
+            runtimeState.SelectedWindowHandle = selectedHandle;
+            runtimeState.CurrentBoardFrame = new BoardFrame
+            {
+                SyncMode = SyncMode.Yike,
+                BoardSize = new BoardDimensions(5, 5),
+                Window = new WindowDescriptor
+                {
+                    Handle = frameHandle,
+                    ClassName = "SunAwtFrame",
+                    Bounds = new PixelRect(1, 2, 190, 190),
+                    IsDpiAware = true,
+                    DpiScale = 1d,
+                    IsJavaWindow = true
+                },
+                Viewport = new BoardViewport
+                {
+                    SourceBounds = new PixelRect(0, 0, 190, 190),
+                    CellWidth = 10d,
+                    CellHeight = 10d
+                }
+            };
+        }
+
+        private static string CreateDiagnosticsRoot()
+        {
+            string rootPath = Path.Combine(Path.GetTempPath(), "readboard-yike-place-tests-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(rootPath);
+            return rootPath;
+        }
+
+        private static void DeleteDiagnosticsRoot(string rootPath)
+        {
+            if (Directory.Exists(rootPath))
+                Directory.Delete(rootPath, true);
+        }
+
+        private static void AssertPlacementSkippedMetadata(string diagnosticsRoot, int expectedX, int expectedY)
+        {
+            string eventDirectory = Assert.Single(Directory.GetDirectories(diagnosticsRoot, "*placement-skipped"));
+            using (JsonDocument metadata = JsonDocument.Parse(File.ReadAllText(Path.Combine(eventDirectory, "metadata.json"))))
+            {
+                JsonElement root = metadata.RootElement;
+                Assert.Equal("placement-skipped", root.GetProperty("EventName").GetString());
+                Assert.Equal(expectedX, root.GetProperty("PlacementX").GetInt32());
+                Assert.Equal(expectedY, root.GetProperty("PlacementY").GetInt32());
+                Assert.Equal(0L, root.GetProperty("PlacementTargetHandle").GetInt64());
+                Assert.Equal(JsonValueKind.Null, root.GetProperty("PlacementClientX").ValueKind);
+                Assert.Equal(JsonValueKind.Null, root.GetProperty("PlacementClientY").ValueKind);
+                Assert.Equal(JsonValueKind.Null, root.GetProperty("PlacementMouseLParam").ValueKind);
+            }
         }
 
         private static SyncCoordinatorHostSnapshot CreateSnapshot(IntPtr handle)
@@ -617,6 +743,8 @@ namespace Readboard.VerificationTests.Protocol
             public List<MouseMessage> SentMessages { get; } = new List<MouseMessage>();
             public IntPtr YikeRenderWidgetHandle { get; set; }
             public PixelRect YikeRenderWidgetBounds { get; set; }
+            public Dictionary<IntPtr, IntPtr> YikeRenderWidgetHandles { get; } = new Dictionary<IntPtr, IntPtr>();
+            public Dictionary<IntPtr, PixelRect> WindowBounds { get; } = new Dictionary<IntPtr, PixelRect>();
             public string LastRequestedChildClassName { get; private set; }
 
             public IntPtr FindWindowByClass(string className)
@@ -627,12 +755,19 @@ namespace Readboard.VerificationTests.Protocol
             public IntPtr FindChildWindowByClass(IntPtr parentHandle, string className)
             {
                 LastRequestedChildClassName = className;
+                if (YikeRenderWidgetHandles.TryGetValue(parentHandle, out IntPtr childHandle))
+                    return childHandle;
                 return YikeRenderWidgetHandle;
             }
 
             public bool TryGetWindowBounds(IntPtr handle, out PixelRect bounds)
             {
                 bounds = null;
+                if (WindowBounds.TryGetValue(handle, out PixelRect mappedBounds))
+                {
+                    bounds = mappedBounds;
+                    return true;
+                }
                 if (handle == YikeRenderWidgetHandle && YikeRenderWidgetBounds != null)
                 {
                     bounds = YikeRenderWidgetBounds;

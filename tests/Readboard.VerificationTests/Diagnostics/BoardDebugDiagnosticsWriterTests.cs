@@ -148,6 +148,38 @@ namespace Readboard.VerificationTests.Diagnostics
         }
 
         [Fact]
+        public void RecordPlacementSkipped_WritesMoveCoordinateWithoutClickMetadata()
+        {
+            using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())
+            {
+                using (BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => true))
+                {
+                    writer.RecordPlacementSkipped(new BoardDebugDiagnosticRecord
+                    {
+                        SyncMode = SyncMode.Yike,
+                        BoardWidth = 19,
+                        BoardHeight = 19,
+                        CapturePath = CapturePathKind.Unknown,
+                        FailureReason = "Yike geometry unavailable.",
+                        PlacementCoordinate = new BoardCoordinate(1, 2)
+                    });
+                }
+
+                string eventDirectory = Assert.Single(Directory.GetDirectories(workspace.RootPath));
+                using (JsonDocument metadata = JsonDocument.Parse(File.ReadAllText(Path.Combine(eventDirectory, "metadata.json"))))
+                {
+                    Assert.Equal("placement-skipped", metadata.RootElement.GetProperty("EventName").GetString());
+                    Assert.Equal(1, metadata.RootElement.GetProperty("PlacementX").GetInt32());
+                    Assert.Equal(2, metadata.RootElement.GetProperty("PlacementY").GetInt32());
+                    Assert.Equal(0L, metadata.RootElement.GetProperty("PlacementTargetHandle").GetInt64());
+                    Assert.Equal(JsonValueKind.Null, metadata.RootElement.GetProperty("PlacementClientX").ValueKind);
+                    Assert.Equal(JsonValueKind.Null, metadata.RootElement.GetProperty("PlacementClientY").ValueKind);
+                    Assert.Equal(JsonValueKind.Null, metadata.RootElement.GetProperty("PlacementMouseLParam").ValueKind);
+                }
+            }
+        }
+
+        [Fact]
         public void Dispose_FlushesQueuedRecognitionSuccess()
         {
             using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())

@@ -160,7 +160,7 @@ namespace readboard
             int boardPixelWidth = runtimeState.CurrentBoardPixelWidth;
             if (snapshot.SyncMode == SyncMode.Yike && !TryResolveYikePlacementBoardPixelWidth(out boardPixelWidth))
             {
-                RecordPlacementSkipped(GetRuntimeDependencies(), snapshot, "Yike geometry unavailable.");
+                RecordPlacementSkipped(GetRuntimeDependencies(), snapshot, request, "Yike geometry unavailable.");
                 TrySendPlaceProtocolError(GetRuntimeDependencies(), "Yike geometry unavailable.");
                 return PlaceRequestExecutionResult.CreateResponse(false);
             }
@@ -959,7 +959,7 @@ namespace readboard
             {
                 if (snapshot != null && snapshot.SyncMode == SyncMode.Yike && IsOperationCurrent(isOperationCurrent))
                 {
-                    RecordPlacementSkipped(runtime, snapshot, "Yike geometry unavailable.");
+                    RecordPlacementSkipped(runtime, snapshot, request, "Yike geometry unavailable.");
                     runtime.Host.TrySendPlaceProtocolError("Yike geometry unavailable.");
                 }
                 return false;
@@ -986,17 +986,21 @@ namespace readboard
         private static void RecordPlacementSkipped(
             SyncSessionRuntimeDependencies runtime,
             SyncCoordinatorHostSnapshot snapshot,
+            MoveRequest request,
             string failureReason)
         {
             if (runtime == null || runtime.DebugDiagnostics == null)
                 return;
 
-            runtime.DebugDiagnostics.RecordPlacementSkipped(CreateDebugDiagnosticRecord(
+            BoardDebugDiagnosticRecord record = CreateDebugDiagnosticRecord(
                 snapshot,
                 null,
                 null,
                 CapturePathKind.Unknown,
-                failureReason));
+                failureReason);
+            if (request != null)
+                record.PlacementCoordinate = new BoardCoordinate(request.X, request.Y);
+            runtime.DebugDiagnostics.RecordPlacementSkipped(record);
         }
 
         private static void RecordPlacementResult(
@@ -1051,6 +1055,8 @@ namespace readboard
             IntPtr selectedHandle = runtimeState.SelectedWindowHandle != IntPtr.Zero
                 ? runtimeState.SelectedWindowHandle
                 : snapshotSelectedWindowHandle;
+            if (selectedHandle == IntPtr.Zero)
+                return null;
 
             WindowDescriptor window = currentFrame == null ? null : currentFrame.Window;
             if (window == null)
@@ -1068,9 +1074,8 @@ namespace readboard
             else
             {
                 window = CloneWindowDescriptor(window);
-                window.Handle = window.Handle == IntPtr.Zero ? selectedHandle : window.Handle;
-                if (!IsUsableWindowBounds(window.Bounds))
-                    window.Bounds = CloneRect(geometry.Bounds);
+                window.Handle = selectedHandle;
+                window.Bounds = CloneRect(geometry.Bounds);
                 window.IsJavaWindow = true;
             }
 

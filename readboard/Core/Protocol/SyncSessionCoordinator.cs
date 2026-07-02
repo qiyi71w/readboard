@@ -134,7 +134,13 @@ namespace readboard
             lock (stateLock)
             {
                 runtimeState.LastCapturedYikeGeometry = YikeBoardGeometry.CopyOf(geometry);
-                if (runtimeState.LastCapturedYikeGeometry != null && runtimeState.LastCapturedYikeGeometry.IsUsable)
+                if (runtimeState.LastCapturedYikeGeometry == null)
+                {
+                    runtimeState.CurrentBoardPixelWidth = 0;
+                    runtimeState.CurrentBoardPixelHeight = 0;
+                    return;
+                }
+                if (runtimeState.LastCapturedYikeGeometry.IsUsable)
                 {
                     runtimeState.CurrentBoardPixelWidth = runtimeState.LastCapturedYikeGeometry.Bounds.Width;
                     runtimeState.CurrentBoardPixelHeight = runtimeState.LastCapturedYikeGeometry.Bounds.Height;

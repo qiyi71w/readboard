@@ -2016,6 +2016,7 @@ namespace readboard
             lastYikeWindowContext = YikeWindowContext.Unknown();
             lastYikeContextWindowHandle = IntPtr.Zero;
             sessionCoordinator.SetYikeContext(lastYikeWindowContext);
+            sessionCoordinator.SetYikeGeometry(null);
         }
 
         private FoxWindowContext ResolveFoxWindowContext()
