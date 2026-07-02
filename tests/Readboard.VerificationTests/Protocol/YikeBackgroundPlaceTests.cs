@@ -9,7 +9,56 @@ namespace Readboard.VerificationTests.Protocol
     public sealed class YikeBackgroundPlaceTests
     {
         [Fact]
-        public void place_request_in_yike_mode_uses_background_post_path()
+        public void place_request_in_yike_mode_with_geometry_uses_background_post_path()
+        {
+            IntPtr handle = new IntPtr(5151);
+            IntPtr childHandle = new IntPtr(6161);
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods
+            {
+                YikeRenderWidgetHandle = childHandle,
+                YikeRenderWidgetBounds = new PixelRect(100, 200, 800, 600)
+            };
+            RecordingHost host = new RecordingHost(CreateSnapshot(handle));
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            host.AttachCoordinator(coordinator);
+            coordinator.AttachHost(host);
+            coordinator.SetSyncBoth(true);
+            coordinator.AttachRuntime(new SyncSessionRuntimeDependencies
+            {
+                Host = host,
+                CaptureService = new RequestFrameCaptureService(),
+                RecognitionService = new StaticRecognitionService(),
+                PlacementService = new LegacyMovePlacementService(nativeMethods),
+                OverlayService = new PassiveOverlayService(),
+                WindowDescriptorFactory = new StaticWindowDescriptorFactory(handle)
+            });
+
+            try
+            {
+                coordinator.Start();
+                Assert.True(coordinator.TryStartKeepSync());
+                Assert.True(host.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+                Assert.True(transport.WaitForLine("end", TimeSpan.FromSeconds(1)));
+
+                transport.Emit("yikeGeometry left=100 top=200 width=250 height=250 board=5");
+                transport.Emit("place 1 2");
+
+                Assert.True(transport.WaitForLine("placeComplete", TimeSpan.FromSeconds(1)));
+            }
+            finally
+            {
+                coordinator.Stop();
+            }
+
+            Assert.Empty(nativeMethods.ForegroundClicks);
+            Assert.Empty(nativeMethods.SentMessages);
+            Assert.Equal(3, nativeMethods.PostedMessages.Count);
+            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(childHandle, message.Handle));
+        }
+
+        [Fact]
+        public void yike_place_without_geometry_fails_without_using_capture_frame()
         {
             IntPtr handle = new IntPtr(5151);
             IntPtr childHandle = new IntPtr(6161);
@@ -43,7 +92,7 @@ namespace Readboard.VerificationTests.Protocol
 
                 transport.Emit("place 1 2");
 
-                Assert.True(transport.WaitForLine("placeComplete", TimeSpan.FromSeconds(1)));
+                Assert.True(transport.WaitForLine("error place failed", TimeSpan.FromSeconds(1)));
             }
             finally
             {
@@ -52,8 +101,58 @@ namespace Readboard.VerificationTests.Protocol
 
             Assert.Empty(nativeMethods.ForegroundClicks);
             Assert.Empty(nativeMethods.SentMessages);
-            Assert.Equal(3, nativeMethods.PostedMessages.Count);
-            Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(childHandle, message.Handle));
+            Assert.Empty(nativeMethods.PostedMessages);
+            Assert.Contains(host.PlaceErrors, error => error.Contains("Yike geometry unavailable."));
+        }
+
+        [Fact]
+        public void yike_geometry_clear_prevents_reusing_previous_geometry()
+        {
+            IntPtr handle = new IntPtr(5151);
+            IntPtr childHandle = new IntPtr(6161);
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods
+            {
+                YikeRenderWidgetHandle = childHandle,
+                YikeRenderWidgetBounds = new PixelRect(100, 200, 800, 600)
+            };
+            RecordingHost host = new RecordingHost(CreateSnapshot(handle));
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            host.AttachCoordinator(coordinator);
+            coordinator.AttachHost(host);
+            coordinator.SetSyncBoth(true);
+            coordinator.AttachRuntime(new SyncSessionRuntimeDependencies
+            {
+                Host = host,
+                CaptureService = new RequestFrameCaptureService(),
+                RecognitionService = new StaticRecognitionService(),
+                PlacementService = new LegacyMovePlacementService(nativeMethods),
+                OverlayService = new PassiveOverlayService(),
+                WindowDescriptorFactory = new StaticWindowDescriptorFactory(handle)
+            });
+
+            try
+            {
+                coordinator.Start();
+                Assert.True(coordinator.TryStartKeepSync());
+                Assert.True(host.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+                Assert.True(transport.WaitForLine("end", TimeSpan.FromSeconds(1)));
+
+                transport.Emit("yikeGeometry left=100 top=200 width=250 height=250 board=5");
+                transport.Emit("yikeGeometry");
+                transport.Emit("place 1 2");
+
+                Assert.True(transport.WaitForLine("error place failed", TimeSpan.FromSeconds(1)));
+            }
+            finally
+            {
+                coordinator.Stop();
+            }
+
+            Assert.Empty(nativeMethods.ForegroundClicks);
+            Assert.Empty(nativeMethods.SentMessages);
+            Assert.Empty(nativeMethods.PostedMessages);
+            Assert.Contains(host.PlaceErrors, error => error.Contains("Yike geometry unavailable."));
         }
 
         [Fact]
@@ -237,6 +336,8 @@ namespace Readboard.VerificationTests.Protocol
 
             public ManualResetEventSlim KeepStarted { get; } = new ManualResetEventSlim(false);
 
+            public List<string> PlaceErrors { get; } = new List<string>();
+
             public void AttachCoordinator(SyncSessionCoordinator value)
             {
                 coordinator = value;
@@ -287,6 +388,8 @@ namespace Readboard.VerificationTests.Protocol
 
             public bool TrySendPlaceProtocolError(string message)
             {
+                lock (PlaceErrors)
+                    PlaceErrors.Add(message);
                 return true;
             }
 
