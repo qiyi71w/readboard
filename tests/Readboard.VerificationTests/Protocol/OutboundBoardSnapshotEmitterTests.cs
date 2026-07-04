@@ -24,6 +24,7 @@ namespace Readboard.VerificationTests.Protocol
                 },
                 true,
                 57,
+                LastMoveSource.FoxCornerFlip,
                 new[] { "re=000", "re=111" }));
 
             Assert.Equal(
@@ -33,6 +34,7 @@ namespace Readboard.VerificationTests.Protocol
                     "roomToken 43581号",
                     "forceRebuild",
                     "foxMoveNumber 57",
+                    "lastMoveSource foxCornerFlip",
                     "re=000",
                     "re=111",
                     "end"
@@ -53,12 +55,14 @@ namespace Readboard.VerificationTests.Protocol
                 new[] { protocolAdapter.CreateSyncPlatformMessage("generic") },
                 false,
                 null,
+                LastMoveSource.None,
                 new[] { "re=000" }));
 
             Assert.Equal(
                 new[]
                 {
                     "syncPlatform generic",
+                    "lastMoveSource none",
                     "re=000",
                     "end"
                 },
@@ -84,6 +88,7 @@ namespace Readboard.VerificationTests.Protocol
                 },
                 false,
                 null,
+                LastMoveSource.None,
                 new[] { "re=000" }));
 
             Assert.Empty(transport.SentLines);

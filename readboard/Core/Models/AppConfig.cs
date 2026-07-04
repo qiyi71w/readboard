@@ -45,6 +45,7 @@ namespace readboard
         public int WindowPosX { get; set; }
         public int WindowPosY { get; set; }
         public AutoPlayColorMode AutoPlayColorMode { get; set; }
+        public AutoPlayMoveMode AutoPlayMoveMode { get; set; }
         public string FoxAutoPlayNickname { get; set; }
         public string FoxAutoPlayNicknameSignature { get; set; }
 
@@ -82,6 +83,7 @@ namespace readboard
                 WindowPosX = -1,
                 WindowPosY = -1,
                 AutoPlayColorMode = AutoPlayColorMode.ManualBlack,
+                AutoPlayMoveMode = AutoPlayMoveMode.FirstCandidate,
                 FoxAutoPlayNickname = string.Empty,
                 FoxAutoPlayNicknameSignature = string.Empty
             };
@@ -108,6 +110,13 @@ namespace readboard
                 || value == AutoPlayColorMode.FoxAuto)
                 return value;
             return AutoPlayColorMode.ManualBlack;
+        }
+
+        internal static AutoPlayMoveMode NormalizeAutoPlayMoveMode(AutoPlayMoveMode value)
+        {
+            if (value == AutoPlayMoveMode.FirstCandidate || value == AutoPlayMoveMode.GenmoveAnalyze)
+                return value;
+            return AutoPlayMoveMode.FirstCandidate;
         }
 
         internal static int ResolveMoveVerifyTotalPlacementAttempts(int value)

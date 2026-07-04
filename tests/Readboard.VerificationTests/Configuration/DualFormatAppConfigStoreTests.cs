@@ -45,6 +45,7 @@ namespace Readboard.VerificationTests
                 config.UiThemeMode = 7;
                 config.ColorMode = AppConfig.ColorModeDark;
                 config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
+                config.AutoPlayMoveMode = AutoPlayMoveMode.GenmoveAnalyze;
                 config.FoxAutoPlayNickname = "野狐高段9D";
                 config.FoxAutoPlayNicknameSignature = "sig-abc";
 
@@ -60,6 +61,7 @@ namespace Readboard.VerificationTests
                 Assert.Contains("SECONDARY-HOST", json);
                 Assert.Contains("\"DebugDiagnosticsEnabled\"", json);
                 Assert.Contains("\"AutoPlayColorMode\"", json);
+                Assert.Contains("\"AutoPlayMoveMode\"", json);
                 Assert.Contains("\"FoxAutoPlayNickname\"", json);
                 Assert.Contains("\"FoxAutoPlayNicknameSignature\"", json);
                 using (JsonDocument doc = JsonDocument.Parse(json))
@@ -69,7 +71,7 @@ namespace Readboard.VerificationTests
                         doc.RootElement.GetProperty("MoveVerifyMaxAttempts").GetInt32());
                 }
                 Assert.Equal("96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5", legacyMain);
-                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc", legacyOther);
+                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc_1", legacyOther);
             }
         }
 
@@ -181,8 +183,25 @@ namespace Readboard.VerificationTests
                 Assert.Equal(-1, result.Config.WindowPosX);
                 Assert.Equal(-1, result.Config.WindowPosY);
                 Assert.Equal(AutoPlayColorMode.FoxAuto, result.Config.AutoPlayColorMode);
+                Assert.Equal(AutoPlayMoveMode.FirstCandidate, result.Config.AutoPlayMoveMode);
                 Assert.Equal("鳕鱼の让子", result.Config.FoxAutoPlayNickname);
                 Assert.Equal("sig-xyz", result.Config.FoxAutoPlayNicknameSignature);
+            }
+        }
+
+        [Fact]
+        public void Load_AppliesAutoPlayMoveModeFromPartialJson()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config.readboard.json"),
+                    "{\"MachineKey\":\"MACHINE-001\",\"AutoPlayMoveMode\":1}");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.Equal(AutoPlayMoveMode.GenmoveAnalyze, result.Config.AutoPlayMoveMode);
             }
         }
 
@@ -201,6 +220,24 @@ namespace Readboard.VerificationTests
                 AppConfigLoadResult result = store.Load();
 
                 Assert.Equal(AutoPlayColorMode.ManualBlack, result.Config.AutoPlayColorMode);
+            }
+        }
+
+        [Theory]
+        [InlineData(-1)]
+        [InlineData(99)]
+        public void Load_NormalizesInvalidAutoPlayMoveModeFromJson(int configuredValue)
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config.readboard.json"),
+                    "{\"MachineKey\":\"MACHINE-001\",\"AutoPlayMoveMode\":" + configuredValue + "}");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.Equal(AutoPlayMoveMode.FirstCandidate, result.Config.AutoPlayMoveMode);
             }
         }
 
@@ -259,13 +296,14 @@ namespace Readboard.VerificationTests
                     "101_42_77_18_1_0_1_0_1_1_MACHINE-001_4");
                 File.WriteAllText(
                     workspace.PathFor("config_readboard_others.txt"),
-                    "220430_13_13_15_16_150_1_61_320_240_1_0_1_1_0_2_鳕鱼の让子_sig-xyz");
+                    "220430_13_13_15_16_150_1_61_320_240_1_0_1_1_0_2_鳕鱼の让子_sig-xyz_1");
                 DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
 
                 AppConfigLoadResult result = store.Load();
 
                 Assert.True(result.HasExistingConfig);
                 Assert.Equal(AutoPlayColorMode.FoxAuto, result.Config.AutoPlayColorMode);
+                Assert.Equal(AutoPlayMoveMode.GenmoveAnalyze, result.Config.AutoPlayMoveMode);
                 Assert.Equal("鳕鱼の让子", result.Config.FoxAutoPlayNickname);
                 Assert.Equal("sig-xyz", result.Config.FoxAutoPlayNicknameSignature);
             }
@@ -290,6 +328,28 @@ namespace Readboard.VerificationTests
 
                 Assert.True(result.HasExistingConfig);
                 Assert.Equal(AutoPlayColorMode.ManualBlack, result.Config.AutoPlayColorMode);
+            }
+        }
+
+        [Theory]
+        [InlineData(-1)]
+        [InlineData(99)]
+        public void Load_NormalizesInvalidAutoPlayMoveModeFromLegacyOtherConfig(int configuredValue)
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard.txt"),
+                    "101_42_77_18_1_0_1_0_1_1_MACHINE-001_4");
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard_others.txt"),
+                    "220430_13_13_15_16_150_1_61_320_240_1_0_1_1_0_2_鳕鱼の让子_sig-xyz_" + configuredValue);
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfigLoadResult result = store.Load();
+
+                Assert.True(result.HasExistingConfig);
+                Assert.Equal(AutoPlayMoveMode.FirstCandidate, result.Config.AutoPlayMoveMode);
             }
         }
 
@@ -380,6 +440,7 @@ namespace Readboard.VerificationTests
             Assert.False(config.DebugDiagnosticsEnabled);
             Assert.Equal(1, config.UiThemeMode);
             Assert.Equal(0, config.ColorMode);
+            Assert.Equal(AutoPlayMoveMode.FirstCandidate, config.AutoPlayMoveMode);
             Assert.Equal(ProtocolVersion, config.ProtocolVersion);
             Assert.Equal(FixtureMachineKey, config.MachineKey);
         }
@@ -427,7 +488,7 @@ namespace Readboard.VerificationTests
                     Assert.True(doc.RootElement.GetProperty("DebugDiagnosticsEnabled").GetBoolean());
                 }
                 Assert.True(loaded.DebugDiagnosticsEnabled);
-                Assert.Equal(18, legacyOther.Split('_').Length);
+                Assert.Equal(19, legacyOther.Split('_').Length);
             }
         }
     }

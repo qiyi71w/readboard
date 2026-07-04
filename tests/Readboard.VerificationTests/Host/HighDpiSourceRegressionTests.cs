@@ -70,6 +70,10 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("radioAutoPlayColor", optionsSlice);
             Assert.Contains("btnFoxAutoPlayIdentity", optionsSlice);
             Assert.Contains("lblAutoPlayColorStatus", labelsSlice);
+            Assert.Contains("flowLayoutPanelAutoPlayMoveMode", content);
+            Assert.Contains("radioAutoPlayMoveFirst", optionsSlice);
+            Assert.Contains("radioAutoPlayMoveGma", optionsSlice);
+            Assert.Contains("lblAutoPlayMoveMode", labelsSlice);
         }
 
         [Fact]

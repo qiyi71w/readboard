@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using Xunit;
 
 namespace Readboard.VerificationTests
@@ -189,8 +190,11 @@ namespace Readboard.VerificationTests
                     WorkingDirectory = repositoryRoot,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
                     UseShellExecute = false
                 };
+                startInfo.Environment["NO_COLOR"] = "1";
                 startInfo.ArgumentList.Add("-NoProfile");
                 startInfo.ArgumentList.Add("-ExecutionPolicy");
                 startInfo.ArgumentList.Add("Bypass");

@@ -27,6 +27,7 @@ namespace readboard
         private bool forceRebuildArmed;
         private int? lastCapturedFoxMoveNumber;
         private int? lastSentBoardFoxMoveNumber;
+        private LastMoveSource lastSentBoardLastMoveSource;
         private string lastSentWindowContextSignature;
         private string lastSentPlayStateSignature;
         private SessionState sessionState;
@@ -523,10 +524,15 @@ namespace readboard
             SendProtocolMessage(protocolAdapter.CreateStartMessage(boardWidth, boardHeight, windowHandle, includeWindowHandle));
         }
 
-        public void SendPlay(string color, string time, string playouts, string firstPolicy)
+        public void SendPlay(
+            string color,
+            string time,
+            string playouts,
+            string firstPolicy,
+            AutoPlayMoveMode moveMode = AutoPlayMoveMode.FirstCandidate)
         {
-            RememberSentPlayState(color, time, playouts, firstPolicy);
-            SendProtocolMessage(protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy));
+            RememberSentPlayState(color, time, playouts, firstPolicy, moveMode);
+            SendProtocolMessage(protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode));
         }
 
         public void SendNoInBoard()
@@ -709,7 +715,8 @@ namespace readboard
             {
                 outboundContext = BuildOutboundWindowContextUnsafe();
                 if (string.Equals(sessionState.LastBoardPayload, snapshot.Payload, StringComparison.Ordinal)
-                    && lastSentBoardFoxMoveNumber == effectiveFoxMoveNumber)
+                    && lastSentBoardFoxMoveNumber == effectiveFoxMoveNumber
+                    && lastSentBoardLastMoveSource == snapshot.LastMoveSource)
                 {
                     if (string.Equals(lastSentWindowContextSignature, outboundContext.Signature, StringComparison.Ordinal)
                         && !outboundContext.ShouldForceRebuild)
@@ -720,6 +727,7 @@ namespace readboard
 
                 sessionState.LastBoardPayload = snapshot.Payload;
                 lastSentBoardFoxMoveNumber = effectiveFoxMoveNumber;
+                lastSentBoardLastMoveSource = snapshot.LastMoveSource;
                 lastSentWindowContextSignature = outboundContext.Signature;
                 if (outboundContext.ShouldForceRebuild)
                     forceRebuildArmed = false;
@@ -729,6 +737,7 @@ namespace readboard
                 outboundContext == null ? null : outboundContext.Messages,
                 outboundContext != null && outboundContext.ShouldForceRebuild,
                 effectiveFoxMoveNumber,
+                snapshot.LastMoveSource,
                 protocolLines);
         }
 
@@ -737,6 +746,7 @@ namespace readboard
             sessionState.LastBoardPayload = null;
             sessionState.LastOverlayProtocolLine = null;
             lastSentBoardFoxMoveNumber = null;
+            lastSentBoardLastMoveSource = LastMoveSource.None;
             lastSentWindowContextSignature = null;
             runtimeState.LastCapturedYikeContext = null;
             runtimeState.LastSentYikeContextSignature = null;

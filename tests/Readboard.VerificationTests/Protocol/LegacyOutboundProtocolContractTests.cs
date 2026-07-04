@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using Xunit;
 using readboard;
@@ -69,6 +70,7 @@ namespace Readboard.VerificationTests.Protocol
                     startLine,
                     visibleLine,
                     "syncPlatform generic",
+                    "lastMoveSource none",
                     replayLines[0],
                     replayLines[1],
                     "end",
@@ -76,6 +78,7 @@ namespace Readboard.VerificationTests.Protocol
                     hiddenLine,
                     visibleLine,
                     "syncPlatform generic",
+                    "lastMoveSource none",
                     replayLines[0],
                     replayLines[1],
                     "end"
@@ -96,6 +99,28 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("recordAtEnd 1", adapter.Serialize(adapter.CreateRecordAtEndMessage(true)));
             Assert.Equal("recordTitleFingerprint abc123", adapter.Serialize(adapter.CreateRecordTitleFingerprintMessage("abc123")));
             Assert.Equal("forceRebuild", adapter.Serialize(adapter.CreateForceRebuildMessage()));
+        }
+
+        [Fact]
+        public void CreatePlayMessage_SerializesLegacyFirstCandidateModeWithoutTailToken()
+        {
+            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
+
+            string serialized = adapter.Serialize(
+                adapter.CreatePlayMessage("black", "5", "1000", "0", AutoPlayMoveMode.FirstCandidate));
+
+            Assert.Equal("play>black>5 1000 0", serialized);
+        }
+
+        [Fact]
+        public void CreatePlayMessage_SerializesGenmoveAnalyzeModeWithGmaTailToken()
+        {
+            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
+
+            string serialized = adapter.Serialize(
+                adapter.CreatePlayMessage("black", "5", "1000", "0", AutoPlayMoveMode.GenmoveAnalyze));
+
+            Assert.Equal("play>black>5 1000 0 gma", serialized);
         }
 
         [Fact]
@@ -130,9 +155,16 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("recordTitleFingerprint ", ProtocolKeywords.RecordTitleFingerprintPrefix);
             Assert.Equal("forceRebuild", ProtocolKeywords.ForceRebuild);
             Assert.Equal("foxMoveNumber ", ProtocolKeywords.FoxMoveNumberPrefix);
+            Assert.Equal("lastMoveSource ", ProtocolKeywords.LastMoveSourcePrefix);
+            Assert.Equal("none", ProtocolKeywords.LastMoveSourceNone);
+            Assert.Equal("redBlueMarker", ProtocolKeywords.LastMoveSourceRedBlueMarker);
+            Assert.Equal("foxCornerFlip", ProtocolKeywords.LastMoveSourceFoxCornerFlip);
+            Assert.Equal("deviation", ProtocolKeywords.LastMoveSourceDeviation);
+            Assert.Equal("stoneCount", ProtocolKeywords.LastMoveSourceStoneCount);
             Assert.Equal("start ", ProtocolKeywords.StartPrefix);
             Assert.Equal("play>", ProtocolKeywords.PlayPrefix);
             Assert.Equal(">", ProtocolKeywords.PlaySeparator);
+            Assert.Equal("gma", ProtocolKeywords.GenmoveAnalyzePlayModeToken);
             Assert.Equal("noinboard", ProtocolKeywords.NoInBoard);
             Assert.Equal("placeComplete", ProtocolKeywords.PlaceComplete);
             Assert.Equal("error place failed", ProtocolKeywords.PlacementFailed);
@@ -148,6 +180,27 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("readboardUpdateInstalling", ProtocolKeywords.ReadboardUpdateInstalling);
             Assert.Equal("readboardUpdateCancelled", ProtocolKeywords.ReadboardUpdateCancelled);
             Assert.Equal("readboardUpdateFailed\t", ProtocolKeywords.ReadboardUpdateFailedPrefix);
+        }
+
+        [Fact]
+        public void ProtocolKeywords_SpecDocumentsNewWireTokens()
+        {
+            string spec = File.ReadAllText(Path.Combine(
+                VerificationFixtureLocator.RepositoryRoot(),
+                "docs",
+                "specs",
+                "2026-04-23-protocol-keyword-constants.md"));
+
+            Assert.Contains("`lastMoveSource `", spec);
+            Assert.Contains("`none`", spec);
+            Assert.Contains("`redBlueMarker`", spec);
+            Assert.Contains("`foxCornerFlip`", spec);
+            Assert.Contains("`deviation`", spec);
+            Assert.Contains("`stoneCount`", spec);
+            Assert.Contains("`gma`", spec);
+            Assert.Contains(
+                "Lizzie parser 必须容忍并消费 ReadBoard 新增的 outbound 行；旧端不能因为未知 `lastMoveSource` 行破坏普通同步。",
+                spec);
         }
 
         [Fact]

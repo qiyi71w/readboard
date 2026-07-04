@@ -37,7 +37,7 @@ namespace Readboard.VerificationTests.Protocol
             bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
             Assert.True(started);
             Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(transport.WaitForLines(6, TimeSpan.FromSeconds(1)));
+            Assert.True(transport.WaitForLines(7, TimeSpan.FromSeconds(1)));
 
             Invoke(coordinator, "StopSyncSession");
 
@@ -49,11 +49,43 @@ namespace Readboard.VerificationTests.Protocol
                     "sync",
                     "start 19 19",
                     "syncPlatform generic",
+                    "lastMoveSource none",
                     "re=foreground",
                     "end"
                 },
-                transport.SentLines.GetRange(0, 6));
+                transport.SentLines.GetRange(0, 7));
             Assert.True(hostRecorder.SnapshotRequests >= 2);
+        }
+
+        [Fact]
+        public void TryRunOneTimeSync_NotifiesHostOfRecognizedSnapshot()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+
+            BoardRecognitionResult recognition = CreateResultWithBoardState(
+                "re=foreground",
+                BoardCellState.BlackLastMove);
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Foreground, IntPtr.Zero);
+            HostRecorder hostRecorder = new HostRecorder(snapshot);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(recognition));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            Assert.True((bool)Invoke(coordinator, "TryRunOneTimeSync"));
+
+            Assert.Equal(1, hostRecorder.RecognizedSnapshotCount);
+            Assert.Same(recognition.Snapshot, hostRecorder.LastRecognizedSnapshot);
         }
 
         [Fact]
@@ -406,7 +438,7 @@ namespace Readboard.VerificationTests.Protocol
             bool started = (bool)Invoke(coordinator, "TryStartContinuousSync");
             Assert.True(started);
             Assert.True(hostRecorder.ContinuousStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(transport.WaitForLines(6, TimeSpan.FromSeconds(1)));
+            Assert.True(transport.WaitForLines(7, TimeSpan.FromSeconds(1)));
 
             Invoke(coordinator, "StopSyncSession");
 
@@ -420,10 +452,11 @@ namespace Readboard.VerificationTests.Protocol
                     "sync",
                     "start 19 19 4242",
                     "syncPlatform generic",
+                    "lastMoveSource none",
                     "re=fox",
                     "end"
                 },
-                transport.SentLines.GetRange(0, 6));
+                transport.SentLines.GetRange(0, 7));
         }
 
         [Fact]
@@ -1160,12 +1193,14 @@ namespace Readboard.VerificationTests.Protocol
                     "start 19 19",
                     "syncPlatform generic",
                     "foxMoveNumber 57",
+                    "lastMoveSource none",
                     "re=background",
                     "end",
                     "overlay-visible",
                     "start 19 19",
                     "syncPlatform generic",
                     "foxMoveNumber 57",
+                    "lastMoveSource none",
                     "re=background",
                     "end"
                 },
@@ -1364,6 +1399,17 @@ namespace Readboard.VerificationTests.Protocol
             };
         }
 
+        private static BoardRecognitionResult CreateResultWithBoardState(
+            string protocolLine,
+            params BoardCellState[] boardState)
+        {
+            BoardRecognitionResult result = CreateResult(protocolLine);
+            result.Snapshot.BoardState = boardState;
+            result.Snapshot.Width = boardState.Length;
+            result.Snapshot.Height = 1;
+            return result;
+        }
+
         private static BoardRecognitionResult CreateInvalidResult(string protocolLine)
         {
             BoardRecognitionResult result = CreateResult(protocolLine);
@@ -1496,6 +1542,8 @@ namespace Readboard.VerificationTests.Protocol
             public int ContinuousStartedCount { get; private set; }
             public int ContinuousStoppedCount { get; private set; }
             public int SyncCachesResetCount { get; private set; }
+            public int RecognizedSnapshotCount { get; private set; }
+            public BoardSnapshot LastRecognizedSnapshot { get; private set; }
 
             public object HandleCall(MethodInfo method, object[] args)
             {
@@ -1526,6 +1574,10 @@ namespace Readboard.VerificationTests.Protocol
                         return null;
                     case "OnSyncCachesReset":
                         SyncCachesResetCount++;
+                        return null;
+                    case "OnBoardSnapshotRecognized":
+                        RecognizedSnapshotCount++;
+                        LastRecognizedSnapshot = (BoardSnapshot)args[0];
                         return null;
                     case "ShowMissingSyncSourceMessage":
                     case "ShowRecognitionFailureMessage":

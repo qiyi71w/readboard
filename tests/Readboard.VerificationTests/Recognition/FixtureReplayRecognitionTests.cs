@@ -1,3 +1,4 @@
+using System.Reflection;
 using Xunit;
 using readboard;
 
@@ -19,6 +20,8 @@ namespace Readboard.VerificationTests.Recognition
             Assert.Equal(fixture.BaseProtocolLines, result.Snapshot.ProtocolLines);
             Assert.Equal(2, result.Snapshot.BlackStoneCount);
             Assert.Equal(2, result.Snapshot.WhiteStoneCount);
+            Assert.Null(result.Snapshot.LastMove);
+            Assert.Equal(LastMoveSource.None, result.Snapshot.LastMoveSource);
         }
 
         [Fact]
@@ -40,6 +43,29 @@ namespace Readboard.VerificationTests.Recognition
             Assert.True(second.UsedCachedSnapshot);
             Assert.False(changed.UsedCachedSnapshot);
             Assert.Equal(fixture.ChangedProtocolLines, changed.Snapshot.ProtocolLines);
+        }
+
+        [Fact]
+        public void CloneCachedSnapshot_PreservesLastMoveSource()
+        {
+            BoardSnapshot snapshot = new BoardSnapshot
+            {
+                LastMoveSource = LastMoveSource.FoxCornerFlip
+            };
+
+            BoardSnapshot clone = CloneCachedSnapshot(snapshot);
+
+            Assert.Equal(LastMoveSource.FoxCornerFlip, clone.LastMoveSource);
+        }
+
+        private static BoardSnapshot CloneCachedSnapshot(BoardSnapshot snapshot)
+        {
+            MethodInfo method = typeof(LegacyBoardRecognitionService).GetMethod(
+                "CloneCachedSnapshot",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            return (BoardSnapshot)method.Invoke(null, new object[] { snapshot, true });
         }
     }
 }

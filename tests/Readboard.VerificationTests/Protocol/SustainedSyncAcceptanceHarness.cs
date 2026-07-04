@@ -279,6 +279,10 @@ namespace Readboard.VerificationTests.Protocol
             {
             }
 
+            public void OnBoardSnapshotRecognized(BoardSnapshot snapshot)
+            {
+            }
+
             public bool WaitForKeepSyncStopped(TimeSpan timeout)
             {
                 return keepSyncStopped.Wait(timeout);
@@ -676,7 +680,7 @@ namespace Readboard.VerificationTests.Protocol
 
             lastPayload = snapshot.Payload;
             PayloadTransitionCount++;
-            dynamicOutboundLineCount += snapshot.ProtocolLines.Count + 2;
+            dynamicOutboundLineCount += snapshot.ProtocolLines.Count + 3;
             if (PayloadTransitionCount == 1)
                 dynamicOutboundLineCount += 2;
         }

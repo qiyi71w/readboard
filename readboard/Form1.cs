@@ -63,6 +63,7 @@ namespace readboard
         private IntPtr lastYikeContextWindowHandle = IntPtr.Zero;
         private FoxWindowBinding foxWindowBinding = null;
         private bool hasRetainedFoxTitleSnapshot = false;
+        private MainWindowTitleTurn lastMainWindowTitleTurn = MainWindowTitleTurn.None;
         private string lastAppliedMainWindowTitle = string.Empty;
         private readonly IBoardCapturePlatform foxAutoPlayCapturePlatform = new Win32BoardCapturePlatform();
         private AutoPlayColorResolution lastFoxAutoPlayColorDetection = null;
@@ -90,6 +91,7 @@ namespace readboard
         private bool hostedUpdateSupported = false;
         private FormUpdate activeHostedUpdateDialog = null;
         private bool suppressAutoPlayColorModeEvents = false;
+        private bool suppressAutoPlayMoveModeEvents = false;
         private AutoPlayColorMode lastManualAutoPlayColorMode = AutoPlayColorMode.ManualBlack;
         private static readonly System.Drawing.Size MainFormDefaultSize = new System.Drawing.Size(852, 374);
 
@@ -217,12 +219,12 @@ namespace readboard
 
         private IEnumerable<Control> MainThemeSurfaces()
         {
-            return new Control[] { flowLayoutPanel1, flowLayoutPanel2, panel1, panel2, panel3, panel4, pnlAutoPlayColorStatus, pnlFoxAutoPlayIdentity };
+            return new Control[] { flowLayoutPanel1, flowLayoutPanel2, flowLayoutPanelAutoPlayMoveMode, panel1, panel2, panel3, panel4, pnlAutoPlayColorStatus, pnlFoxAutoPlayIdentity };
         }
 
         private IEnumerable<ButtonBase> MainThemeOptions()
         {
-            return new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite, radioAutoPlayColor, btnFoxAutoPlayIdentity };
+            return new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite, radioAutoPlayColor, radioAutoPlayMoveFirst, radioAutoPlayMoveGma, btnFoxAutoPlayIdentity };
         }
 
         private IEnumerable<TextBox> MainThemeInputs()
@@ -232,7 +234,7 @@ namespace readboard
 
         private IEnumerable<Label> MainThemeLabels()
         {
-            return new[] { lblBoardSize, lblPlayCondition, lblTime, lblTotalVisits, lblBestMoveVisits, lblAutoPlayColorStatus, label6 };
+            return new[] { lblBoardSize, lblPlayCondition, lblTime, lblTotalVisits, lblBestMoveVisits, lblAutoPlayColorStatus, lblAutoPlayMoveMode, label6 };
         }
 
         private IEnumerable<Button> MainPrimaryButtons()
@@ -685,15 +687,20 @@ namespace readboard
             int conditionLabelWidth = GetMainSyncConditionTimeLabelWidth();
 
             ArrangeMainSyncFlowOrder();
-            groupBox4.SetBounds(left, top, groupWidth, ScaleValue(100));
+            groupBox4.SetBounds(left, top, groupWidth, ScaleValue(132));
             flowLayoutPanel1.SetBounds(ScaleValue(16), ScaleValue(28), rowWidth, ScaleValue(30));
             flowLayoutPanel2.SetBounds(ScaleValue(16), ScaleValue(62), rowWidth, ScaleValue(30));
+            flowLayoutPanelAutoPlayMoveMode.SetBounds(ScaleValue(16), ScaleValue(96), rowWidth, ScaleValue(30));
             flowLayoutPanel1.WrapContents = false;
             flowLayoutPanel2.WrapContents = false;
+            flowLayoutPanelAutoPlayMoveMode.WrapContents = false;
             chkBothSync.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             radioBlack.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             chkAutoPlay.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             radioWhite.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            lblAutoPlayMoveMode.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            radioAutoPlayMoveFirst.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            radioAutoPlayMoveGma.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             pnlAutoPlayColorStatus.Margin = new Padding(0, 0, 0, 0);
             pnlFoxAutoPlayIdentity.Margin = new Padding(0, 0, 0, 0);
             panel1.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
@@ -732,6 +739,7 @@ namespace readboard
             ArrangeMainSyncAutoStatusColumn(rowHeight);
             flowLayoutPanel1.Height = ScaleValue(30);
             flowLayoutPanel2.Height = ScaleValue(30);
+            flowLayoutPanelAutoPlayMoveMode.Height = ScaleValue(30);
             return groupBox4.Bottom;
         }
 
@@ -750,12 +758,17 @@ namespace readboard
             groupBox4.SetBounds(left, top, groupWidth, 0);
             flowLayoutPanel1.SetBounds(ScaleValue(16), ScaleValue(28), rowWidth, rowHeight);
             flowLayoutPanel2.SetBounds(ScaleValue(16), flowLayoutPanel1.Bottom + ScaleValue(8), rowWidth, rowHeight);
+            flowLayoutPanelAutoPlayMoveMode.SetBounds(ScaleValue(16), flowLayoutPanel2.Bottom + ScaleValue(8), rowWidth, rowHeight);
             flowLayoutPanel1.WrapContents = true;
             flowLayoutPanel2.WrapContents = true;
+            flowLayoutPanelAutoPlayMoveMode.WrapContents = true;
             chkBothSync.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             radioBlack.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             chkAutoPlay.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             radioWhite.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            lblAutoPlayMoveMode.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            radioAutoPlayMoveFirst.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
+            radioAutoPlayMoveGma.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
             pnlAutoPlayColorStatus.Margin = new Padding(0, 0, 0, 0);
             pnlFoxAutoPlayIdentity.Margin = new Padding(0, 0, 0, 0);
             panel1.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
@@ -795,7 +808,9 @@ namespace readboard
             flowLayoutPanel1.Height = flowLayoutPanel1.GetPreferredSize(new Size(rowWidth, 0)).Height;
             flowLayoutPanel2.Top = flowLayoutPanel1.Bottom + ScaleValue(8);
             flowLayoutPanel2.Height = flowLayoutPanel2.GetPreferredSize(new Size(rowWidth, 0)).Height;
-            groupBox4.Height = flowLayoutPanel2.Bottom + ScaleValue(10);
+            flowLayoutPanelAutoPlayMoveMode.Top = flowLayoutPanel2.Bottom + ScaleValue(8);
+            flowLayoutPanelAutoPlayMoveMode.Height = flowLayoutPanelAutoPlayMoveMode.GetPreferredSize(new Size(rowWidth, 0)).Height;
+            groupBox4.Height = flowLayoutPanelAutoPlayMoveMode.Bottom + ScaleValue(10);
             return groupBox4.Bottom;
         }
 
@@ -811,6 +826,12 @@ namespace readboard
                 flowLayoutPanel1.Controls.Add(pnlAutoPlayColorStatus);
             if (pnlFoxAutoPlayIdentity.Parent != flowLayoutPanel2)
                 flowLayoutPanel2.Controls.Add(pnlFoxAutoPlayIdentity);
+            if (lblAutoPlayMoveMode.Parent != flowLayoutPanelAutoPlayMoveMode)
+                flowLayoutPanelAutoPlayMoveMode.Controls.Add(lblAutoPlayMoveMode);
+            if (radioAutoPlayMoveFirst.Parent != flowLayoutPanelAutoPlayMoveMode)
+                flowLayoutPanelAutoPlayMoveMode.Controls.Add(radioAutoPlayMoveFirst);
+            if (radioAutoPlayMoveGma.Parent != flowLayoutPanelAutoPlayMoveMode)
+                flowLayoutPanelAutoPlayMoveMode.Controls.Add(radioAutoPlayMoveGma);
 
             flowLayoutPanel1.Controls.SetChildIndex(chkBothSync, 0);
             flowLayoutPanel1.Controls.SetChildIndex(radioBlack, 1);
@@ -826,6 +847,10 @@ namespace readboard
             flowLayoutPanel2.Controls.SetChildIndex(textBox1, 4);
             flowLayoutPanel2.Controls.SetChildIndex(panel4, 5);
             flowLayoutPanel2.Controls.SetChildIndex(textBox3, 6);
+
+            flowLayoutPanelAutoPlayMoveMode.Controls.SetChildIndex(lblAutoPlayMoveMode, 0);
+            flowLayoutPanelAutoPlayMoveMode.Controls.SetChildIndex(radioAutoPlayMoveFirst, 1);
+            flowLayoutPanelAutoPlayMoveMode.Controls.SetChildIndex(radioAutoPlayMoveGma, 2);
         }
 
         private void ArrangeMainSyncAutoStatusColumn(int rowHeight)
@@ -1164,7 +1189,13 @@ namespace readboard
                 + sharedVisitsPanelWidth
                 + ScaleValue(8)
                 + ScaleValue(92);
-            return left * 2 + ScaleValue(34) + Math.Max(row1Width, row2Width);
+            int moveModeWidth =
+                lblAutoPlayMoveMode.PreferredSize.Width
+                + buttonGap
+                + GetLayoutOptionPreferredSize(radioAutoPlayMoveFirst).Width
+                + buttonGap
+                + GetLayoutOptionPreferredSize(radioAutoPlayMoveGma).Width;
+            return left * 2 + ScaleValue(34) + Math.Max(Math.Max(row1Width, row2Width), moveModeWidth);
         }
 
         private int GetLegacyMainActionsRequiredWidth()
@@ -1367,7 +1398,8 @@ namespace readboard
                 autoPlayColor.PlayColor,
                 GetProtocolNumericValue(textBox1),
                 GetProtocolNumericValue(textBox2),
-                GetProtocolNumericValue(textBox3));
+                GetProtocolNumericValue(textBox3),
+                GetSelectedAutoPlayMoveMode());
         }
 
         private void SendPonderStatusCommand()
@@ -1539,6 +1571,13 @@ namespace readboard
             return AutoPlayColorMode.ManualBlack;
         }
 
+        private AutoPlayMoveMode GetSelectedAutoPlayMoveMode()
+        {
+            return radioAutoPlayMoveGma.Checked
+                ? AutoPlayMoveMode.GenmoveAnalyze
+                : AutoPlayMoveMode.FirstCandidate;
+        }
+
         private void ApplyAutoPlayColorMode(AutoPlayColorMode mode)
         {
             suppressAutoPlayColorModeEvents = true;
@@ -1560,6 +1599,30 @@ namespace readboard
                 ClearFoxAutoPlayColorDetectionState();
                 UpdateAutoPlayColorStatus(null);
             }
+        }
+
+        private void ApplyAutoPlayMoveMode(AutoPlayMoveMode mode)
+        {
+            suppressAutoPlayMoveModeEvents = true;
+            try
+            {
+                radioAutoPlayMoveFirst.Checked = mode == AutoPlayMoveMode.FirstCandidate;
+                radioAutoPlayMoveGma.Checked = mode == AutoPlayMoveMode.GenmoveAnalyze;
+                if (!radioAutoPlayMoveFirst.Checked && !radioAutoPlayMoveGma.Checked)
+                    radioAutoPlayMoveFirst.Checked = true;
+            }
+            finally
+            {
+                suppressAutoPlayMoveModeEvents = false;
+            }
+            ApplyAutoPlayMoveModeControlState();
+        }
+
+        private void ApplyAutoPlayMoveModeControlState()
+        {
+            radioAutoPlayMoveFirst.Enabled = chkAutoPlay.Checked;
+            radioAutoPlayMoveGma.Enabled = chkAutoPlay.Checked;
+            textBox3.Enabled = chkAutoPlay.Checked && GetSelectedAutoPlayMoveMode() == AutoPlayMoveMode.FirstCandidate;
         }
 
         private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)
@@ -1986,7 +2049,8 @@ namespace readboard
                 PlayColor = autoPlayColor.PlayColor,
                 AiTimeValue = GetProtocolNumericValue(textBox1),
                 PlayoutsValue = GetProtocolNumericValue(textBox2),
-                FirstPolicyValue = GetProtocolNumericValue(textBox3)
+                FirstPolicyValue = GetProtocolNumericValue(textBox3),
+                AutoPlayMoveMode = GetSelectedAutoPlayMoveMode()
             };
 
             sessionCoordinator.SetSyncPlatform(syncPlatform);
@@ -2088,6 +2152,7 @@ namespace readboard
         private void ResetMainWindowTitle()
         {
             hasRetainedFoxTitleSnapshot = false;
+            lastMainWindowTitleTurn = MainWindowTitleTurn.None;
             lastFoxWindowContext = FoxWindowContext.Unknown();
             if (CurrentSyncType != TYPE_YIKE)
                 lastYikeWindowContext = YikeWindowContext.Unknown();
@@ -2112,7 +2177,8 @@ namespace readboard
         {
             string baseTitle = MainWindowTitleFormatter.FormatBaseTitle(
                 getLangStr("MainForm_title"),
-                AppReleaseVersion.GetCurrentVersion());
+                AppReleaseVersion.GetCurrentVersion(),
+                lastMainWindowTitleTurn);
 
             if (CurrentSyncType == TYPE_YIKE)
             {
@@ -2176,6 +2242,7 @@ namespace readboard
             {
                 SetSelectedWindowHandle(handle);
                 hasRetainedFoxTitleSnapshot = false;
+                lastMainWindowTitleTurn = MainWindowTitleTurn.None;
                 lastFoxWindowContext = FoxWindowContext.Unknown();
                 InvalidateFoxWindowBinding();
                 if (HasActiveSyncOperation())
@@ -2228,6 +2295,16 @@ namespace readboard
         {
             InvokeUiHostAction(delegate
             {
+                lastMainWindowTitleTurn = MainWindowTitleTurn.None;
+                ApplyMainWindowTitle();
+            });
+        }
+
+        void ISyncCoordinatorHost.OnBoardSnapshotRecognized(BoardSnapshot snapshot)
+        {
+            InvokeUiHostAction(delegate
+            {
+                lastMainWindowTitleTurn = ResolveMainWindowTitleTurn(snapshot);
                 ApplyMainWindowTitle();
             });
         }
@@ -2269,7 +2346,31 @@ namespace readboard
             SetSyncConfigurationControlsEnabled(false);
             DisableBoardSelectionControls();
             hasRetainedFoxTitleSnapshot = false;
+            if (lastMainWindowTitleTurn == MainWindowTitleTurn.None)
+                lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
             RefreshMainWindowTitleFromCurrentWindow();
+        }
+
+        private static MainWindowTitleTurn ResolveMainWindowTitleTurn(BoardSnapshot snapshot)
+        {
+            if (snapshot == null || snapshot.BoardState == null)
+                return MainWindowTitleTurn.Unknown;
+
+            int blackLastMoveCount = 0;
+            int whiteLastMoveCount = 0;
+            for (int i = 0; i < snapshot.BoardState.Length; i++)
+            {
+                if (snapshot.BoardState[i] == BoardCellState.BlackLastMove)
+                    blackLastMoveCount++;
+                else if (snapshot.BoardState[i] == BoardCellState.WhiteLastMove)
+                    whiteLastMoveCount++;
+            }
+
+            if (blackLastMoveCount == 1 && whiteLastMoveCount == 0)
+                return MainWindowTitleTurn.White;
+            if (whiteLastMoveCount == 1 && blackLastMoveCount == 0)
+                return MainWindowTitleTurn.Black;
+            return MainWindowTitleTurn.Unknown;
         }
 
         private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)
@@ -2294,6 +2395,7 @@ namespace readboard
             SetSyncConfigurationControlsEnabled(false);
             DisableBoardSelectionControls();
             hasRetainedFoxTitleSnapshot = false;
+            lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
             RefreshMainWindowTitleFromCurrentWindow();
         }
 
@@ -2382,6 +2484,8 @@ namespace readboard
             radioWhite.Enabled = false;
             radioBlack.Enabled = false;
             radioAutoPlayColor.Enabled = false;
+            radioAutoPlayMoveFirst.Enabled = false;
+            radioAutoPlayMoveGma.Enabled = false;
             btnFoxAutoPlayIdentity.Enabled = false;
             textBox1.Enabled = false;
             textBox2.Enabled = false;
@@ -2416,6 +2520,9 @@ namespace readboard
             this.radioAutoPlayColor.Text = getLangStr("MainForm_radioAutoPlayColor");
             this.btnFoxAutoPlayIdentity.Text = getLangStr("MainForm_btnFoxAutoPlayIdentity");
             this.lblAutoPlayColorStatus.Text = string.Empty;
+            this.lblAutoPlayMoveMode.Text = getLangStr("MainForm_lblAutoPlayMoveMode");
+            this.radioAutoPlayMoveFirst.Text = getLangStr("MainForm_radioAutoPlayMoveFirst");
+            this.radioAutoPlayMoveGma.Text = getLangStr("MainForm_radioAutoPlayMoveGma");
             this.lblPlayCondition.Text = getLangStr("MainForm_lblPlayCondition");
             this.lblTime.Text = getLangStr("MainForm_lblTime");
             this.lblTotalVisits.Text = getLangStr("MainForm_lblTotalVisits");
@@ -3238,7 +3345,7 @@ namespace readboard
                 ApplyAutoPlayColorAvailability();
                 textBox1.Enabled = true;
                 textBox2.Enabled = true;
-                textBox3.Enabled = true;
+                ApplyAutoPlayMoveModeControlState();
                 ResolveCurrentAutoPlayColor(radioAutoPlayColor.Checked ? ResolveFoxWindowContext() : FoxWindowContext.Unknown());
             }
             else
@@ -3248,7 +3355,7 @@ namespace readboard
                 ApplyAutoPlayColorAvailability();
                 textBox1.Enabled = false;
                 textBox2.Enabled = false;
-                textBox3.Enabled = false;
+                ApplyAutoPlayMoveModeControlState();
                 UpdateAutoPlayColorStatus(null);
                 SendStopAutoPlayCommand();
             }
@@ -3399,6 +3506,24 @@ namespace readboard
                 ClearFoxAutoPlayColorDetectionState();
                 UpdateAutoPlayColorStatus(null);
             }
+            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
+                SendPlayCommandIfSelected();
+        }
+
+        private void radioAutoPlayMoveFirst_CheckedChanged(object sender, EventArgs e)
+        {
+            if (suppressAutoPlayMoveModeEvents || !radioAutoPlayMoveFirst.Checked)
+                return;
+            ApplyAutoPlayMoveModeControlState();
+            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
+                SendPlayCommandIfSelected();
+        }
+
+        private void radioAutoPlayMoveGma_CheckedChanged(object sender, EventArgs e)
+        {
+            if (suppressAutoPlayMoveModeEvents || !radioAutoPlayMoveGma.Checked)
+                return;
+            ApplyAutoPlayMoveModeControlState();
             if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
                 SendPlayCommandIfSelected();
         }

@@ -9,17 +9,20 @@ namespace readboard
             IList<ProtocolMessage> windowContextMessages,
             bool shouldForceRebuild,
             int? foxMoveNumber,
+            LastMoveSource lastMoveSource,
             IList<string> protocolLines)
         {
             WindowContextMessages = windowContextMessages;
             ShouldForceRebuild = shouldForceRebuild;
             FoxMoveNumber = foxMoveNumber;
+            LastMoveSource = lastMoveSource;
             ProtocolLines = protocolLines;
         }
 
         public IList<ProtocolMessage> WindowContextMessages { get; private set; }
         public bool ShouldForceRebuild { get; private set; }
         public int? FoxMoveNumber { get; private set; }
+        public LastMoveSource LastMoveSource { get; private set; }
         public IList<string> ProtocolLines { get; private set; }
     }
 
@@ -72,6 +75,9 @@ namespace readboard
                 outboundProtocolDispatcher.SendMessageWhileSynchronized(
                     protocolAdapter.CreateFoxMoveNumberMessage(batch.FoxMoveNumber.Value));
             }
+
+            outboundProtocolDispatcher.SendMessageWhileSynchronized(
+                protocolAdapter.CreateLastMoveSourceMessage(batch.LastMoveSource));
 
             IList<string> protocolLines = batch.ProtocolLines;
             if (protocolLines != null)

@@ -137,6 +137,7 @@ namespace readboard
                 BlackStoneCount = snapshot.BlackStoneCount,
                 WhiteStoneCount = snapshot.WhiteStoneCount,
                 LastMove = snapshot.LastMove,
+                LastMoveSource = snapshot.LastMoveSource,
                 NeedsPrintWindowFallback = snapshot.NeedsPrintWindowFallback,
                 Payload = snapshot.Payload,
                 ProtocolLines = snapshot.ProtocolLines,
@@ -294,6 +295,7 @@ namespace readboard
             StoneSummary blackSummary = new StoneSummary(BoardCellState.Black, BoardCellState.BlackLastMove);
             StoneSummary whiteSummary = new StoneSummary(BoardCellState.White, BoardCellState.WhiteLastMove);
             MarkerSummary markerSummary = new MarkerSummary();
+            FoxCornerFlipSummary foxCornerFlipSummary = new FoxCornerFlipSummary();
 
             for (int y = 0; y < boardSize.Height; y++)
             {
@@ -307,6 +309,7 @@ namespace readboard
                     blackSummary,
                     whiteSummary,
                     markerSummary,
+                    foxCornerFlipSummary,
                     inferLastMove,
                     cellWidth,
                     cellHeight,
@@ -314,16 +317,17 @@ namespace readboard
                     cellHeightInt);
             }
 
-            BoardCoordinate lastMove = inferLastMove
-                ? ApplyLastMoveInference(boardState, boardSize.Width, blackSummary, whiteSummary, markerSummary)
-                : null;
+            LastMoveInference lastMove = inferLastMove
+                ? LastMoveInferenceResolver.Apply(boardState, boardSize.Width, blackSummary, whiteSummary, markerSummary, foxCornerFlipSummary)
+                : LastMoveInference.None;
 
             return new LegacyBoardAnalysis
             {
                 BoardState = boardState,
                 BlackStoneCount = blackSummary.Count,
                 WhiteStoneCount = whiteSummary.Count,
-                LastMove = lastMove
+                LastMove = lastMove.Coordinate,
+                LastMoveSource = lastMove.Source
             };
         }
 
@@ -337,6 +341,7 @@ namespace readboard
             StoneSummary blackSummary,
             StoneSummary whiteSummary,
             MarkerSummary markerSummary,
+            FoxCornerFlipSummary foxCornerFlipSummary,
             bool inferLastMove,
             double cellWidth,
             double cellHeight,
@@ -360,7 +365,17 @@ namespace readboard
                 boardState[index] = state;
                 ObserveStone(state, metrics, x, y, blackSummary, whiteSummary);
                 if (inferLastMove && state != BoardCellState.Empty)
+                {
                     markerSummary.Observe(metrics.RedPercent, metrics.BluePercent, thresholds.RedBlueMarkerThreshold, x, y);
+                    foxCornerFlipSummary.Observe(
+                        state,
+                        metrics.InnerBlackPercent,
+                        metrics.InnerWhitePercent,
+                        metrics.BlackOppositePercent,
+                        metrics.WhiteOppositePercent,
+                        x,
+                        y);
+                }
             }
         }
 
@@ -385,8 +400,14 @@ namespace readboard
             int whiteCount = 0;
             int pureWhiteCount = 0;
             int almostWhiteCount = 0;
+            int innerBlackCount = 0;
+            int innerWhiteCount = 0;
+            int stoneColorSampleCount = 0;
             int redCount = 0;
             int blueCount = 0;
+            int cornerSampleCount = 0;
+            int blackOppositeCount = 0;
+            int whiteOppositeCount = 0;
             bool hasTrueWhiteEvidence = false;
 
             for (int y = 0; y < regionHeight; y++)
@@ -401,6 +422,8 @@ namespace readboard
                         almostWhiteValue,
                         sampleY,
                         sampleWidth,
+                        regionWidth,
+                        regionHeight,
                         x,
                         y,
                         rgb,
@@ -408,8 +431,14 @@ namespace readboard
                         ref whiteCount,
                         ref pureWhiteCount,
                         ref almostWhiteCount,
+                        ref innerBlackCount,
+                        ref innerWhiteCount,
+                        ref stoneColorSampleCount,
                         ref redCount,
                         ref blueCount,
+                        ref cornerSampleCount,
+                        ref blackOppositeCount,
+                        ref whiteOppositeCount,
                         ref hasTrueWhiteEvidence);
                 }
             }
@@ -421,6 +450,10 @@ namespace readboard
                 (100 * almostWhiteCount) / pixelCount,
                 (100 * redCount) / pixelCount,
                 (100 * blueCount) / pixelCount,
+                stoneColorSampleCount == 0 ? 0 : (100 * innerBlackCount) / stoneColorSampleCount,
+                stoneColorSampleCount == 0 ? 0 : (100 * innerWhiteCount) / stoneColorSampleCount,
+                cornerSampleCount == 0 ? 0 : (100 * blackOppositeCount) / cornerSampleCount,
+                cornerSampleCount == 0 ? 0 : (100 * whiteOppositeCount) / cornerSampleCount,
                 hasTrueWhiteEvidence);
         }
 
@@ -431,6 +464,8 @@ namespace readboard
             int almostWhiteValue,
             int sampleY,
             int sampleWidth,
+            int regionWidth,
+            int regionHeight,
             int x,
             int y,
             LegacyRgbInfo rgb,
@@ -438,8 +473,14 @@ namespace readboard
             ref int whiteCount,
             ref int pureWhiteCount,
             ref int almostWhiteCount,
+            ref int innerBlackCount,
+            ref int innerWhiteCount,
+            ref int stoneColorSampleCount,
             ref int redCount,
             ref int blueCount,
+            ref int cornerSampleCount,
+            ref int blackOppositeCount,
+            ref int whiteOppositeCount,
             ref bool hasTrueWhiteEvidence)
         {
             bool isGray = Math.Abs(rgb.Red - rgb.Green) < thresholds.GrayOffset
@@ -448,14 +489,45 @@ namespace readboard
             if (isGray)
                 CountGrayMetrics(rgb, thresholds.BlackOffset, whiteValue, pureWhiteValue, almostWhiteValue, ref blackCount, ref whiteCount, ref pureWhiteCount, ref almostWhiteCount);
 
+            if (IsStoneColorSample(x, y, regionWidth, regionHeight))
+            {
+                stoneColorSampleCount++;
+                if (isGray)
+                    CountInnerStoneMetrics(rgb, thresholds.BlackOffset, whiteValue, ref innerBlackCount, ref innerWhiteCount);
+            }
+
             if (rgb.Red <= StrongColorMaxValue && rgb.Green <= StrongColorMaxValue && rgb.Blue >= StrongColorMinValue)
                 blueCount++;
             if (rgb.Red >= StrongColorMinValue && rgb.Green <= StrongColorMaxValue && rgb.Blue <= StrongColorMaxValue)
                 redCount++;
 
+            if (IsLowerRightCornerSample(x, y, regionWidth, regionHeight))
+            {
+                cornerSampleCount++;
+                if (rgb.Red >= whiteValue && rgb.Green >= whiteValue && rgb.Blue >= whiteValue)
+                    blackOppositeCount++;
+                if (rgb.Red <= thresholds.BlackOffset && rgb.Green <= thresholds.BlackOffset && rgb.Blue <= thresholds.BlackOffset)
+                    whiteOppositeCount++;
+            }
+
             bool sampleCandidate = !hasTrueWhiteEvidence && y == sampleY && x < sampleWidth;
             if (sampleCandidate && (rgb.Red < pureWhiteValue || rgb.Green < pureWhiteValue || rgb.Blue < pureWhiteValue))
                 hasTrueWhiteEvidence = true;
+        }
+
+        private static bool IsLowerRightCornerSample(int x, int y, int regionWidth, int regionHeight)
+        {
+            return x > regionWidth / 2
+                && y > regionHeight / 2
+                && (x + y) * 40 >= (regionWidth + regionHeight) * 23;
+        }
+
+        private static bool IsStoneColorSample(int x, int y, int regionWidth, int regionHeight)
+        {
+            return x * 10 >= regionWidth
+                && y * 10 >= regionHeight
+                && x * 10 < regionWidth * 9
+                && y * 10 < regionHeight * 9;
         }
 
         private static void CountGrayMetrics(
@@ -477,6 +549,19 @@ namespace readboard
                 pureWhiteCount++;
             if (rgb.Red >= almostWhiteValue && rgb.Green >= almostWhiteValue && rgb.Blue >= almostWhiteValue)
                 almostWhiteCount++;
+        }
+
+        private static void CountInnerStoneMetrics(
+            LegacyRgbInfo rgb,
+            int blackOffset,
+            int whiteValue,
+            ref int innerBlackCount,
+            ref int innerWhiteCount)
+        {
+            if (rgb.Red <= blackOffset && rgb.Green <= blackOffset && rgb.Blue <= blackOffset)
+                innerBlackCount++;
+            if (rgb.Red >= whiteValue && rgb.Green >= whiteValue && rgb.Blue >= whiteValue)
+                innerWhiteCount++;
         }
 
         private static BoardCellState DetermineCellState(RegionMetrics metrics, RecognitionThresholds thresholds)
@@ -515,111 +600,6 @@ namespace readboard
                 whiteSummary.Observe(metrics.WhitePercent, x, y);
         }
 
-        private static BoardCoordinate ApplyLastMoveInference(
-            BoardCellState[] boardState,
-            int boardWidth,
-            StoneSummary blackSummary,
-            StoneSummary whiteSummary,
-            MarkerSummary markerSummary)
-        {
-            BoardCoordinate lastMove = TryApplyMarkerLastMove(boardState, boardWidth, blackSummary, whiteSummary, markerSummary);
-            if (lastMove != null)
-                return lastMove;
-
-            lastMove = TryApplyDeviationLastMove(boardState, boardWidth, blackSummary, whiteSummary);
-            if (lastMove != null)
-                return lastMove;
-
-            return TryApplyStoneCountLastMove(boardState, boardWidth, blackSummary, whiteSummary);
-        }
-
-        private static BoardCoordinate TryApplyMarkerLastMove(
-            BoardCellState[] boardState,
-            int boardWidth,
-            StoneSummary blackSummary,
-            StoneSummary whiteSummary,
-            MarkerSummary markerSummary)
-        {
-            bool redOnly = markerSummary.RedCount == 1 && markerSummary.BlueCount != 1;
-            bool blueOnly = markerSummary.RedCount != 1 && markerSummary.BlueCount == 1;
-            if (!redOnly && !blueOnly)
-                return null;
-
-            return PromoteLastMove(boardState, boardWidth, markerSummary.Candidate, blackSummary, whiteSummary);
-        }
-
-        private static BoardCoordinate TryApplyDeviationLastMove(
-            BoardCellState[] boardState,
-            int boardWidth,
-            StoneSummary blackSummary,
-            StoneSummary whiteSummary)
-        {
-            if (blackSummary.Count < 2 || whiteSummary.Count < 2)
-                return null;
-
-            double blackOffset = CalculateDeviation(blackSummary);
-            double whiteOffset = CalculateDeviation(whiteSummary);
-            BoardCoordinate candidate = blackOffset >= whiteOffset
-                ? blackSummary.MinCoordinate
-                : whiteSummary.MinCoordinate;
-
-            return PromoteLastMove(boardState, boardWidth, candidate, blackSummary, whiteSummary);
-        }
-
-        private static double CalculateDeviation(StoneSummary summary)
-        {
-            if (summary.Count <= 1)
-                return 0d;
-
-            double average = (summary.TotalPercent - summary.MinPercent) / (double)(summary.Count - 1);
-            return Math.Abs(summary.MinPercent - average);
-        }
-
-        private static BoardCoordinate TryApplyStoneCountLastMove(
-            BoardCellState[] boardState,
-            int boardWidth,
-            StoneSummary blackSummary,
-            StoneSummary whiteSummary)
-        {
-            if (blackSummary.Count <= 0 || whiteSummary.Count <= 0)
-                return null;
-
-            if (blackSummary.Count > whiteSummary.Count)
-                return PromoteLastMove(boardState, boardWidth, blackSummary.MinCoordinate, blackSummary, whiteSummary);
-            if (whiteSummary.Count > blackSummary.Count)
-                return PromoteLastMove(boardState, boardWidth, whiteSummary.MinCoordinate, blackSummary, whiteSummary);
-            return null;
-        }
-
-        private static BoardCoordinate PromoteLastMove(
-            BoardCellState[] boardState,
-            int boardWidth,
-            BoardCoordinate candidate,
-            StoneSummary blackSummary,
-            StoneSummary whiteSummary)
-        {
-            if (candidate == null)
-                return null;
-
-            int index = (candidate.Y * boardWidth) + candidate.X;
-            if (index < 0 || index >= boardState.Length)
-                return null;
-
-            if (boardState[index] == blackSummary.NormalState)
-            {
-                boardState[index] = blackSummary.LastMoveState;
-                return new BoardCoordinate(candidate.X, candidate.Y);
-            }
-
-            if (boardState[index] == whiteSummary.NormalState)
-            {
-                boardState[index] = whiteSummary.LastMoveState;
-                return new BoardCoordinate(candidate.X, candidate.Y);
-            }
-
-            return null;
-        }
-
         private static BoardSnapshot BuildSnapshot(BoardDimensions boardSize, LegacyBoardAnalysis analysis)
         {
             List<string> protocolLines = new List<string>(boardSize.Height);
@@ -649,6 +629,7 @@ namespace readboard
                 BlackStoneCount = analysis.BlackStoneCount,
                 WhiteStoneCount = analysis.WhiteStoneCount,
                 LastMove = analysis.LastMove,
+                LastMoveSource = analysis.LastMoveSource,
                 Payload = payloadBuilder.ToString(),
                 ProtocolLines = protocolLines,
                 StateSignature = stateSignature

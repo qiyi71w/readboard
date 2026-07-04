@@ -584,6 +584,7 @@ namespace readboard
         public int BlackStoneCount { get; set; }
         public int WhiteStoneCount { get; set; }
         public BoardCoordinate LastMove { get; set; }
+        public LastMoveSource LastMoveSource { get; set; }
     }
 
     internal sealed class StoneSummary
@@ -703,6 +704,10 @@ namespace readboard
             int almostWhitePercent,
             int redPercent,
             int bluePercent,
+            int innerBlackPercent,
+            int innerWhitePercent,
+            int blackOppositePercent,
+            int whiteOppositePercent,
             bool hasTrueWhiteEvidence)
         {
             BlackPercent = blackPercent;
@@ -711,6 +716,10 @@ namespace readboard
             AlmostWhitePercent = almostWhitePercent;
             RedPercent = redPercent;
             BluePercent = bluePercent;
+            InnerBlackPercent = innerBlackPercent;
+            InnerWhitePercent = innerWhitePercent;
+            BlackOppositePercent = blackOppositePercent;
+            WhiteOppositePercent = whiteOppositePercent;
             HasTrueWhiteEvidence = hasTrueWhiteEvidence;
         }
 
@@ -720,6 +729,10 @@ namespace readboard
         public int AlmostWhitePercent;
         public int RedPercent;
         public int BluePercent;
+        public int InnerBlackPercent;
+        public int InnerWhitePercent;
+        public int BlackOppositePercent;
+        public int WhiteOppositePercent;
         public bool HasTrueWhiteEvidence;
     }
 

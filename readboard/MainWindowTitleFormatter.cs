@@ -10,15 +10,29 @@ namespace readboard
         RetainedSnapshot = 2
     }
 
+    internal enum MainWindowTitleTurn
+    {
+        None = 0,
+        Black = 1,
+        White = 2,
+        Unknown = 3
+    }
+
     internal static class MainWindowTitleFormatter
     {
         public static string FormatBaseTitle(string baseTitle, string releaseVersion)
         {
+            return FormatBaseTitle(baseTitle, releaseVersion, MainWindowTitleTurn.None);
+        }
+
+        public static string FormatBaseTitle(string baseTitle, string releaseVersion, MainWindowTitleTurn turn)
+        {
             string normalizedBaseTitle = Normalize(baseTitle, "readboard");
             string normalizedVersion = NormalizeVersion(releaseVersion);
-            return string.IsNullOrEmpty(normalizedVersion)
+            string title = string.IsNullOrEmpty(normalizedVersion)
                 ? normalizedBaseTitle
                 : normalizedBaseTitle + " " + normalizedVersion;
+            return title + FormatTurnTag(turn);
         }
 
         public static string Format(
@@ -146,6 +160,21 @@ namespace readboard
         private static string LeadingTag(string value)
         {
             return string.IsNullOrWhiteSpace(value) ? string.Empty : " " + Tag(value);
+        }
+
+        private static string FormatTurnTag(MainWindowTitleTurn turn)
+        {
+            switch (turn)
+            {
+                case MainWindowTitleTurn.Black:
+                    return " [黑]";
+                case MainWindowTitleTurn.White:
+                    return " [白]";
+                case MainWindowTitleTurn.Unknown:
+                    return " [?]";
+                default:
+                    return string.Empty;
+            }
         }
 
         private static string Normalize(string value, string fallback)
