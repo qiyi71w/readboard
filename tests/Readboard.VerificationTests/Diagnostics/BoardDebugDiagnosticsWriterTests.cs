@@ -164,7 +164,7 @@ namespace Readboard.VerificationTests.Diagnostics
                         BoardWidth = 19,
                         BoardHeight = 19,
                         CapturePath = CapturePathKind.Unknown,
-                        FailureReason = "Yike geometry unavailable.",
+                        FailureReason = SyncSessionCoordinator.YikeGeometryUnavailableFailureReason,
                         PlacementCoordinate = new BoardCoordinate(1, 2)
                     });
                 }

@@ -8,6 +8,7 @@ namespace readboard
     internal sealed partial class SyncSessionCoordinator : ISyncSessionCoordinator
     {
         private const int PendingMoveWaitTimeoutMs = 250;
+        internal const string YikeGeometryUnavailableFailureReason = "Yike geometry unavailable.";
         private const int DisposeStateDisposed = 1;
 
         private readonly IReadBoardTransport transport;

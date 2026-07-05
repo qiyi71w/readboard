@@ -160,8 +160,8 @@ namespace readboard
             int boardPixelWidth = runtimeState.CurrentBoardPixelWidth;
             if (snapshot.SyncMode == SyncMode.Yike && !TryResolveYikePlacementBoardPixelWidth(out boardPixelWidth))
             {
-                RecordPlacementSkipped(GetRuntimeDependencies(), snapshot, request, "Yike geometry unavailable.");
-                TrySendPlaceProtocolError(GetRuntimeDependencies(), "Yike geometry unavailable.");
+                RecordPlacementSkipped(GetRuntimeDependencies(), snapshot, request, YikeGeometryUnavailableFailureReason);
+                TrySendPlaceProtocolError(GetRuntimeDependencies(), YikeGeometryUnavailableFailureReason);
                 return PlaceRequestExecutionResult.CreateResponse(false);
             }
             if (!TryQueuePendingMove(request, boardPixelWidth, boardWidth))
@@ -960,8 +960,8 @@ namespace readboard
             {
                 if (snapshot != null && snapshot.SyncMode == SyncMode.Yike && IsOperationCurrent(isOperationCurrent))
                 {
-                    RecordPlacementSkipped(runtime, snapshot, request, "Yike geometry unavailable.");
-                    runtime.Host.TrySendPlaceProtocolError("Yike geometry unavailable.");
+                    RecordPlacementSkipped(runtime, snapshot, request, YikeGeometryUnavailableFailureReason);
+                    TrySendPlaceProtocolError(runtime, YikeGeometryUnavailableFailureReason);
                 }
                 return false;
             }

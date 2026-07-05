@@ -111,7 +111,7 @@ namespace Readboard.VerificationTests.Protocol
                 Assert.Empty(nativeMethods.ForegroundClicks);
                 Assert.Empty(nativeMethods.SentMessages);
                 Assert.Empty(nativeMethods.PostedMessages);
-                Assert.Contains(host.PlaceErrors, error => error.Contains("Yike geometry unavailable."));
+                Assert.Contains(host.PlaceErrors, error => error.Contains(SyncSessionCoordinator.YikeGeometryUnavailableFailureReason));
                 AssertPlacementSkippedMetadata(diagnosticsRoot, 1, 2);
             }
             finally
@@ -167,7 +167,74 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Empty(nativeMethods.ForegroundClicks);
             Assert.Empty(nativeMethods.SentMessages);
             Assert.Empty(nativeMethods.PostedMessages);
-            Assert.Contains(host.PlaceErrors, error => error.Contains("Yike geometry unavailable."));
+            Assert.Contains(host.PlaceErrors, error => error.Contains(SyncSessionCoordinator.YikeGeometryUnavailableFailureReason));
+        }
+
+        [Fact]
+        public void yike_place_without_selected_window_handle_fails()
+        {
+            string diagnosticsRoot = CreateDiagnosticsRoot();
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods
+            {
+                YikeRenderWidgetHandle = new IntPtr(6161),
+                YikeRenderWidgetBounds = new PixelRect(100, 200, 800, 600)
+            };
+            RecordingHost host = new RecordingHost(CreateSnapshot(IntPtr.Zero))
+            {
+                ThrowOnPlaceError = true
+            };
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(new RecordingTransport(), new LegacyProtocolAdapter());
+            BoardDebugDiagnosticsWriter debugDiagnostics = new BoardDebugDiagnosticsWriter(diagnosticsRoot, () => true);
+            SyncSessionRuntimeDependencies runtime = new SyncSessionRuntimeDependencies
+            {
+                Host = host,
+                CaptureService = new RequestFrameCaptureService(),
+                RecognitionService = new StaticRecognitionService(),
+                PlacementService = new LegacyMovePlacementService(nativeMethods),
+                OverlayService = new PassiveOverlayService(),
+                WindowDescriptorFactory = new StaticWindowDescriptorFactory(IntPtr.Zero),
+                DebugDiagnostics = debugDiagnostics
+            };
+            coordinator.AttachRuntime(runtime);
+            coordinator.SetYikeGeometry(new YikeBoardGeometry
+            {
+                Bounds = new PixelRect(100, 200, 250, 250),
+                BoardSize = 5
+            });
+
+            try
+            {
+                bool success = true;
+                Exception exception = Record.Exception(() =>
+                    success = InvokePlacePendingMove(
+                        coordinator,
+                        runtime,
+                        host.CaptureSnapshot(),
+                        new MoveRequest { X = 1, Y = 2, VerifyMove = false },
+                        () => true));
+
+                Assert.Null(exception);
+                Assert.False(success);
+            }
+            finally
+            {
+                debugDiagnostics.Dispose();
+            }
+
+            try
+            {
+                Assert.Equal(1, host.PlaceErrorCallCount);
+                Assert.Contains(host.PlaceErrors, error => error.Contains(SyncSessionCoordinator.YikeGeometryUnavailableFailureReason));
+                Assert.Null(nativeMethods.LastRequestedChildClassName);
+                Assert.Empty(nativeMethods.ForegroundClicks);
+                Assert.Empty(nativeMethods.SentMessages);
+                Assert.Empty(nativeMethods.PostedMessages);
+                AssertPlacementSkippedMetadata(diagnosticsRoot, 1, 2);
+            }
+            finally
+            {
+                DeleteDiagnosticsRoot(diagnosticsRoot);
+            }
         }
 
         [Fact]
@@ -403,6 +470,20 @@ namespace Readboard.VerificationTests.Protocol
             };
         }
 
+        private static bool InvokePlacePendingMove(
+            SyncSessionCoordinator coordinator,
+            SyncSessionRuntimeDependencies runtime,
+            SyncCoordinatorHostSnapshot snapshot,
+            MoveRequest request,
+            Func<bool> isOperationCurrent)
+        {
+            MethodInfo method = typeof(SyncSessionCoordinator).GetMethod(
+                "PlacePendingMove",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+            return (bool)method.Invoke(coordinator, new object[] { runtime, snapshot, request, isOperationCurrent });
+        }
+
         private static string CreateDiagnosticsRoot()
         {
             string rootPath = Path.Combine(Path.GetTempPath(), "readboard-yike-place-tests-" + Guid.NewGuid().ToString("N"));
@@ -464,6 +545,10 @@ namespace Readboard.VerificationTests.Protocol
 
             public List<string> PlaceErrors { get; } = new List<string>();
 
+            public bool ThrowOnPlaceError { get; set; }
+
+            public int PlaceErrorCallCount { get; private set; }
+
             public void AttachCoordinator(SyncSessionCoordinator value)
             {
                 coordinator = value;
@@ -519,7 +604,12 @@ namespace Readboard.VerificationTests.Protocol
             public bool TrySendPlaceProtocolError(string message)
             {
                 lock (PlaceErrors)
+                {
+                    PlaceErrorCallCount++;
                     PlaceErrors.Add(message);
+                }
+                if (ThrowOnPlaceError)
+                    throw new InvalidOperationException("place error gate failed");
                 return true;
             }
 
