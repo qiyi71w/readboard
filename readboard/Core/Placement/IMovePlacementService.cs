@@ -369,8 +369,8 @@ namespace readboard
             bool downPosted = nativeMethods.TryPostMouseMessage(handle, NativePlacementConstants.WmLButtonDown, NativePlacementConstants.MkLButton, lParam);
             bool upPosted = nativeMethods.TryPostMouseMessage(handle, NativePlacementConstants.WmLButtonUp, 0, lParam);
             if (!downPosted || !upPosted)
-                return Failure(request, PlacementPathKind.BackgroundPost, MovePlacementFailureKind.PlacementFailed, "PostMessage placement failed.");
-            return Success(request, PlacementPathKind.BackgroundPost);
+                return Failure(request, PlacementPathKind.BackgroundPost, MovePlacementFailureKind.PlacementFailed, "PostMessage placement failed.", handle, point, lParam);
+            return Success(request, PlacementPathKind.BackgroundPost, handle, point, lParam);
         }
 
         private MovePlacementResult PlaceBackgroundSend(MovePlacementRequest request, PlacementPoint point)
@@ -381,12 +381,12 @@ namespace readboard
             IntPtr handle = ResolveTargetHandle(request);
             int lParam = BuildMouseLParam(point.X, point.Y);
             if (!nativeMethods.TrySendMouseMessage(handle, NativePlacementConstants.WmMouseMove, 0, lParam))
-                return Failure(request, PlacementPathKind.BackgroundSend, MovePlacementFailureKind.PlacementFailed, "SendMessage placement timed out or failed.");
+                return Failure(request, PlacementPathKind.BackgroundSend, MovePlacementFailureKind.PlacementFailed, "SendMessage placement timed out or failed.", handle, point, lParam);
             if (!nativeMethods.TrySendMouseMessage(handle, NativePlacementConstants.WmLButtonDown, NativePlacementConstants.MkLButton, lParam))
-                return Failure(request, PlacementPathKind.BackgroundSend, MovePlacementFailureKind.PlacementFailed, "SendMessage placement timed out or failed.");
+                return Failure(request, PlacementPathKind.BackgroundSend, MovePlacementFailureKind.PlacementFailed, "SendMessage placement timed out or failed.", handle, point, lParam);
             if (!nativeMethods.TrySendMouseMessage(handle, NativePlacementConstants.WmLButtonUp, 0, lParam))
-                return Failure(request, PlacementPathKind.BackgroundSend, MovePlacementFailureKind.PlacementFailed, "SendMessage placement timed out or failed.");
-            return Success(request, PlacementPathKind.BackgroundSend);
+                return Failure(request, PlacementPathKind.BackgroundSend, MovePlacementFailureKind.PlacementFailed, "SendMessage placement timed out or failed.", handle, point, lParam);
+            return Success(request, PlacementPathKind.BackgroundSend, handle, point, lParam);
         }
 
         private IntPtr ResolveTargetHandle(MovePlacementRequest request)
@@ -438,11 +438,25 @@ namespace readboard
 
         private static MovePlacementResult Success(MovePlacementRequest request, PlacementPathKind path)
         {
+            return Success(request, path, IntPtr.Zero, null, null);
+        }
+
+        private static MovePlacementResult Success(
+            MovePlacementRequest request,
+            PlacementPathKind path,
+            IntPtr targetHandle,
+            PlacementPoint? point,
+            int? mouseLParam)
+        {
             return new MovePlacementResult
             {
                 Success = true,
                 PlacementPath = path,
                 Coordinate = new BoardCoordinate(request.Move.X, request.Move.Y),
+                TargetHandle = targetHandle,
+                ClientX = point.HasValue ? point.Value.X : (int?)null,
+                ClientY = point.HasValue ? point.Value.Y : (int?)null,
+                MouseLParam = mouseLParam,
                 FailureKind = MovePlacementFailureKind.None,
                 FailureReason = null
             };
@@ -454,6 +468,18 @@ namespace readboard
             MovePlacementFailureKind failureKind,
             string failureReason)
         {
+            return Failure(request, path, failureKind, failureReason, IntPtr.Zero, null, null);
+        }
+
+        private static MovePlacementResult Failure(
+            MovePlacementRequest request,
+            PlacementPathKind path,
+            MovePlacementFailureKind failureKind,
+            string failureReason,
+            IntPtr targetHandle,
+            PlacementPoint? point,
+            int? mouseLParam)
+        {
             BoardCoordinate coordinate = null;
             if (request != null && request.Move != null)
                 coordinate = new BoardCoordinate(request.Move.X, request.Move.Y);
@@ -463,6 +489,10 @@ namespace readboard
                 Success = false,
                 PlacementPath = path,
                 Coordinate = coordinate,
+                TargetHandle = targetHandle,
+                ClientX = point.HasValue ? point.Value.X : (int?)null,
+                ClientY = point.HasValue ? point.Value.Y : (int?)null,
+                MouseLParam = mouseLParam,
                 FailureKind = failureKind,
                 FailureReason = failureReason
             };

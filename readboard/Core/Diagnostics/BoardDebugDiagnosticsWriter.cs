@@ -20,6 +20,12 @@ namespace readboard
         public CapturePathKind CapturePath { get; set; }
         public BoardFrame Frame { get; set; }
         public BoardSnapshot Snapshot { get; set; }
+        public BoardCoordinate PlacementCoordinate { get; set; }
+        public PlacementPathKind PlacementPath { get; set; }
+        public IntPtr PlacementTargetHandle { get; set; }
+        public int? PlacementClientX { get; set; }
+        public int? PlacementClientY { get; set; }
+        public int? PlacementMouseLParam { get; set; }
         public string FailureReason { get; set; }
     }
 
@@ -74,6 +80,30 @@ namespace readboard
 
                 if (EnqueueEvent("recognition-success", record, true))
                     RememberSuccess(record);
+            }
+        }
+
+        public void RecordPlacementSuccess(BoardDebugDiagnosticRecord record)
+        {
+            lock (syncRoot)
+            {
+                EnqueueEvent("placement-success", record, false);
+            }
+        }
+
+        public void RecordPlacementFailure(BoardDebugDiagnosticRecord record)
+        {
+            lock (syncRoot)
+            {
+                EnqueueEvent("placement-failure", record, false);
+            }
+        }
+
+        public void RecordPlacementSkipped(BoardDebugDiagnosticRecord record)
+        {
+            lock (syncRoot)
+            {
+                EnqueueEvent("placement-skipped", record, false);
             }
         }
 
@@ -258,7 +288,14 @@ namespace readboard
                 BlackStoneCount = snapshot == null ? 0 : snapshot.BlackStoneCount,
                 WhiteStoneCount = snapshot == null ? 0 : snapshot.WhiteStoneCount,
                 LastMove = snapshot == null || snapshot.LastMove == null ? null : snapshot.LastMove.ToString(),
-                LastMoveSource = snapshot == null ? null : LastMoveSourceToToken(snapshot.LastMoveSource)
+                LastMoveSource = snapshot == null ? null : LastMoveSourceToToken(snapshot.LastMoveSource),
+                PlacementX = record == null || record.PlacementCoordinate == null ? null : (int?)record.PlacementCoordinate.X,
+                PlacementY = record == null || record.PlacementCoordinate == null ? null : (int?)record.PlacementCoordinate.Y,
+                PlacementPath = record == null || record.PlacementPath == PlacementPathKind.Unknown ? null : record.PlacementPath.ToString(),
+                PlacementTargetHandle = record == null ? 0L : record.PlacementTargetHandle.ToInt64(),
+                PlacementClientX = record == null ? null : record.PlacementClientX,
+                PlacementClientY = record == null ? null : record.PlacementClientY,
+                PlacementMouseLParam = record == null ? null : record.PlacementMouseLParam
             };
         }
 
@@ -304,7 +341,29 @@ namespace readboard
                 + (record == null ? string.Empty : record.SyncMode.ToString())
                 + " failure="
                 + (record == null ? string.Empty : record.FailureReason ?? string.Empty)
+                + " placement="
+                + FormatBoardCoordinate(record)
+                + " client="
+                + FormatClientPoint(record)
                 + Environment.NewLine;
+        }
+
+        private static string FormatBoardCoordinate(BoardDebugDiagnosticRecord record)
+        {
+            if (record == null || record.PlacementCoordinate == null)
+                return string.Empty;
+            return record.PlacementCoordinate.X.ToString(CultureInfo.InvariantCulture)
+                + ","
+                + record.PlacementCoordinate.Y.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatClientPoint(BoardDebugDiagnosticRecord record)
+        {
+            if (record == null || !record.PlacementClientX.HasValue || !record.PlacementClientY.HasValue)
+                return string.Empty;
+            return record.PlacementClientX.Value.ToString(CultureInfo.InvariantCulture)
+                + ","
+                + record.PlacementClientY.Value.ToString(CultureInfo.InvariantCulture);
         }
 
         private static int ResolveFrameWidth(BoardFrame frame)

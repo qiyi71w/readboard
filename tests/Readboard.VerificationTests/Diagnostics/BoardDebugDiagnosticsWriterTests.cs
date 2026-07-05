@@ -106,6 +106,84 @@ namespace Readboard.VerificationTests.Diagnostics
         }
 
         [Fact]
+        public void RecordPlacementFailure_WritesPlacementMetadataAndLog()
+        {
+            using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())
+            {
+                using (BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => true))
+                {
+                    writer.RecordPlacementFailure(new BoardDebugDiagnosticRecord
+                    {
+                        SyncMode = SyncMode.Yike,
+                        BoardWidth = 19,
+                        BoardHeight = 19,
+                        CapturePath = CapturePathKind.Unknown,
+                        FailureReason = "PostMessage placement failed.",
+                        PlacementCoordinate = new BoardCoordinate(1, 2),
+                        PlacementPath = PlacementPathKind.BackgroundPost,
+                        PlacementTargetHandle = new IntPtr(6161),
+                        PlacementClientX = 113,
+                        PlacementClientY = 159,
+                        PlacementMouseLParam = BuildMouseLParam(113, 159)
+                    });
+                }
+
+                string eventDirectory = Assert.Single(Directory.GetDirectories(workspace.RootPath));
+                Assert.False(File.Exists(Path.Combine(eventDirectory, "frame.png")));
+                using (JsonDocument metadata = JsonDocument.Parse(File.ReadAllText(Path.Combine(eventDirectory, "metadata.json"))))
+                {
+                    Assert.Equal("placement-failure", metadata.RootElement.GetProperty("EventName").GetString());
+                    Assert.Equal("Yike", metadata.RootElement.GetProperty("SyncMode").GetString());
+                    Assert.Equal(1, metadata.RootElement.GetProperty("PlacementX").GetInt32());
+                    Assert.Equal(2, metadata.RootElement.GetProperty("PlacementY").GetInt32());
+                    Assert.Equal("BackgroundPost", metadata.RootElement.GetProperty("PlacementPath").GetString());
+                    Assert.Equal(6161, metadata.RootElement.GetProperty("PlacementTargetHandle").GetInt64());
+                    Assert.Equal(113, metadata.RootElement.GetProperty("PlacementClientX").GetInt32());
+                    Assert.Equal(159, metadata.RootElement.GetProperty("PlacementClientY").GetInt32());
+                    Assert.Equal(BuildMouseLParam(113, 159), metadata.RootElement.GetProperty("PlacementMouseLParam").GetInt32());
+                }
+
+                string debugLog = File.ReadAllText(Path.Combine(workspace.RootPath, "debug.log"));
+                Assert.Contains("placement-failure", debugLog);
+                Assert.Contains("placement=1,2", debugLog);
+                Assert.Contains("client=113,159", debugLog);
+                Assert.Contains("PostMessage placement failed.", debugLog);
+            }
+        }
+
+        [Fact]
+        public void RecordPlacementSkipped_WritesMoveCoordinateWithoutClickMetadata()
+        {
+            using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())
+            {
+                using (BoardDebugDiagnosticsWriter writer = new BoardDebugDiagnosticsWriter(workspace.RootPath, () => true))
+                {
+                    writer.RecordPlacementSkipped(new BoardDebugDiagnosticRecord
+                    {
+                        SyncMode = SyncMode.Yike,
+                        BoardWidth = 19,
+                        BoardHeight = 19,
+                        CapturePath = CapturePathKind.Unknown,
+                        FailureReason = SyncSessionCoordinator.YikeGeometryUnavailableFailureReason,
+                        PlacementCoordinate = new BoardCoordinate(1, 2)
+                    });
+                }
+
+                string eventDirectory = Assert.Single(Directory.GetDirectories(workspace.RootPath));
+                using (JsonDocument metadata = JsonDocument.Parse(File.ReadAllText(Path.Combine(eventDirectory, "metadata.json"))))
+                {
+                    Assert.Equal("placement-skipped", metadata.RootElement.GetProperty("EventName").GetString());
+                    Assert.Equal(1, metadata.RootElement.GetProperty("PlacementX").GetInt32());
+                    Assert.Equal(2, metadata.RootElement.GetProperty("PlacementY").GetInt32());
+                    Assert.Equal(0L, metadata.RootElement.GetProperty("PlacementTargetHandle").GetInt64());
+                    Assert.Equal(JsonValueKind.Null, metadata.RootElement.GetProperty("PlacementClientX").ValueKind);
+                    Assert.Equal(JsonValueKind.Null, metadata.RootElement.GetProperty("PlacementClientY").ValueKind);
+                    Assert.Equal(JsonValueKind.Null, metadata.RootElement.GetProperty("PlacementMouseLParam").ValueKind);
+                }
+            }
+        }
+
+        [Fact]
         public void Dispose_FlushesQueuedRecognitionSuccess()
         {
             using (DiagnosticWorkspace workspace = DiagnosticWorkspace.Create())
@@ -157,6 +235,11 @@ namespace Readboard.VerificationTests.Diagnostics
                 Assert.Empty(Directory.GetDirectories(workspace.RootPath));
                 Assert.False(File.Exists(Path.Combine(workspace.RootPath, "debug.log")));
             }
+        }
+
+        private static int BuildMouseLParam(int x, int y)
+        {
+            return (x & 0xFFFF) | ((y & 0xFFFF) << 16);
         }
 
         private static BoardDebugDiagnosticRecord CreateRecord()
