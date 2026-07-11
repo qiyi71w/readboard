@@ -220,6 +220,8 @@ namespace readboard
                     activeSessionCoordinator =>
                     {
                         MainForm mainForm = CreateMainForm(options, activeSessionCoordinator);
+                        if (!mainForm.EnsureWebViewRuntimeAvailable())
+                            return;
                         if (!TryStartSession(mainForm))
                             return;
                         mainForm.DrainStartupProtocolCommands();

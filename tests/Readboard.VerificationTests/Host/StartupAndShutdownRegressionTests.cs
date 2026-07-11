@@ -161,7 +161,8 @@ namespace Readboard.VerificationTests.Host
             string source = LoadSource("readboard", "MainForm.Configuration.cs");
             string methodSlice = GetMethodSlice(source, "private AppConfig BuildCurrentAppConfig()");
 
-            Assert.Contains("Point persistedWindowLocation = ResolvePersistableWindowLocation();", methodSlice);
+            Assert.Contains("Rectangle persistedWindowBounds = ResolvePersistableWindowBounds();", methodSlice);
+            Assert.Contains("Point persistedWindowLocation = ResolvePersistableWindowLocation(persistedWindowBounds);", methodSlice);
             Assert.Contains("config.WindowPosX = persistedWindowLocation.X;", methodSlice);
             Assert.Contains("config.WindowPosY = persistedWindowLocation.Y;", methodSlice);
         }
@@ -170,15 +171,16 @@ namespace Readboard.VerificationTests.Host
         public void ResolvePersistableWindowLocation_RejectsHiddenOrOffscreenCoordinates()
         {
             string source = LoadSource("readboard", "MainForm.Configuration.cs");
-            string methodSlice = GetMethodSlice(source, "private Point ResolvePersistableWindowLocation()");
+            string boundsSlice = GetMethodSlice(source, "private Rectangle ResolvePersistableWindowBounds()");
+            string locationSlice = GetMethodSlice(source, "private static Point ResolvePersistableWindowLocation(Rectangle boundsToPersist)");
 
-            Assert.Contains("WindowState == FormWindowState.Normal", methodSlice);
-            Assert.Contains("RestoreBounds", methodSlice);
-            Assert.Contains("location.X <= -16000", methodSlice);
-            Assert.Contains("location.Y <= -16000", methodSlice);
-            Assert.Contains("SystemInformation.VirtualScreen", methodSlice);
-            Assert.Contains("!virtualScreen.Contains(location)", methodSlice);
-            Assert.Contains("return new Point(-1, -1);", methodSlice);
+            Assert.Contains("WindowState == FormWindowState.Normal", boundsSlice);
+            Assert.Contains("RestoreBounds", boundsSlice);
+            Assert.Contains("location.X <= -16000", locationSlice);
+            Assert.Contains("location.Y <= -16000", locationSlice);
+            Assert.Contains("SystemInformation.VirtualScreen", locationSlice);
+            Assert.Contains("!virtualScreen.Contains(location)", locationSlice);
+            Assert.Contains("return new Point(-1, -1);", locationSlice);
         }
 
         [Fact]
@@ -361,84 +363,31 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void FoxAutoPlayIdentityDialogAndSettings_UsePlayerRowPreviewIdentity()
+        public void MainForm_FoxAutoPlayIdentity_UsesNonBlockingWebViewState()
         {
-            string dialogSource = LoadSource("readboard", "FoxAutoPlayIdentityDialog.cs");
-            string dialogDesignerSource = LoadSource("readboard", "FoxAutoPlayIdentityDialog.Designer.cs");
             string mainFormSource = LoadSource("readboard", "Form1.cs");
-            string settingsSource = LoadSource("readboard", "Form4.cs");
-            string settingsDesignerSource = LoadSource("readboard", "Form4.Designer.cs");
-            string programSource = LoadSource("readboard", "Program.cs");
-            string cnSource = LoadSource("readboard", "language_cn.txt");
-            string enSource = LoadSource("readboard", "language_en.txt");
-            string jpSource = LoadSource("readboard", "language_jp.txt");
-            string krSource = LoadSource("readboard", "language_kr.txt");
+            string identitySource = LoadSource("readboard", "MainForm.WebView.Identity.cs");
+            string identityModelSource = LoadSource("readboard", "ReadBoardIdentityUiModels.cs");
             string autoRadioSlice = GetMethodSlice(mainFormSource, "private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)");
-            string candidatesSlice = GetMethodSlice(mainFormSource, "private IList<FoxAutoPlayIdentityCandidate> BuildFoxAutoPlayIdentityCandidates()");
-            string configureSlice = GetMethodSlice(mainFormSource, "private bool TryConfigureFoxAutoPlayIdentity()");
             string clearSavedIdentitySlice = GetMethodSlice(mainFormSource, "private void ClearSavedFoxAutoPlayIdentity()");
             string buttonSlice = GetMethodSlice(mainFormSource, "private void btnFoxAutoPlayIdentity_Click(object sender, EventArgs e)");
 
-            Assert.DoesNotContain("internal string SelectedNickname {", dialogSource);
-            Assert.Contains("internal string SelectedNicknameSignature", dialogSource);
-            Assert.Contains("internal FoxAutoPlayIdentityDialogAction SelectedAction", dialogSource);
-            Assert.Contains("this.TopMost = true;", dialogDesignerSource);
-            Assert.Contains("this.pnlDetectedPlayerRows", dialogDesignerSource);
-            Assert.Contains("this.pnlDetectedPlayerRows.AutoScroll = true;", dialogDesignerSource);
-            Assert.Contains("this.btnUseOnce", dialogDesignerSource);
-            Assert.Contains("this.btnSaveAndUse", dialogDesignerSource);
-            Assert.Contains("this.btnClearSavedIdentity", dialogDesignerSource);
-            Assert.Contains("PictureBox", dialogSource);
-            Assert.Contains("candidate.PreviewImage", dialogSource);
-            Assert.Contains("public Bitmap PreviewImage", dialogSource);
-            Assert.Contains("public string DisplayName", dialogSource);
-            Assert.DoesNotContain("public string Nickname {", dialogSource);
-            Assert.DoesNotContain("string currentNickname,", dialogSource);
-            Assert.DoesNotContain("txtNickname", dialogDesignerSource);
-            Assert.DoesNotContain("lblManualNickname", dialogDesignerSource);
-            Assert.DoesNotContain("chkRememberNickname", dialogDesignerSource);
-            Assert.DoesNotContain("lstDetectedNicknames", dialogDesignerSource);
             Assert.Contains("string.IsNullOrWhiteSpace(ResolveCurrentFoxAutoPlayNicknameSignature())", autoRadioSlice);
             Assert.DoesNotContain("string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNickname)", autoRadioSlice);
-            Assert.Contains("TryConfigureFoxAutoPlayIdentity();", autoRadioSlice);
-            Assert.Contains("TryConfigureFoxAutoPlayIdentity();", buttonSlice);
-            Assert.Contains("using (FoxAutoPlayIdentityDialog dialog = new FoxAutoPlayIdentityDialog", mainFormSource);
-            Assert.Contains("ResolveFoxAutoPlayIdentityBoardHandle()", candidatesSlice);
-            Assert.Contains("Bitmap rowPreview = CropBitmap(bitmap, rows[i].RowBounds);", candidatesSlice);
-            Assert.Contains("new FoxAutoPlayIdentityCandidate(\"玩家行 \" + (i + 1), signature, rowPreview)", candidatesSlice);
-            Assert.DoesNotContain("|| hwnd == IntPtr.Zero", candidatesSlice);
+            Assert.Contains("OpenWebViewIdentity(true);", autoRadioSlice);
+            Assert.Contains("OpenWebViewIdentity(false);", buttonSlice);
+            Assert.DoesNotContain("FoxAutoPlayIdentityDialog", mainFormSource);
+            Assert.Contains("ResolveFoxAutoPlayIdentityBoardHandle()", identitySource);
+            Assert.Contains("using (Bitmap rowPreview = CropBitmap(bitmap, rows[i].RowBounds))", identitySource);
+            Assert.Contains("previewUrl = EncodeIdentityPreview(rowPreview);", identitySource);
+            Assert.Contains("webViewIdentitySignatures.Add(id, signature);", identitySource);
+            Assert.DoesNotContain("NicknameSignature", identityModelSource);
             Assert.Contains("new LegacySyncWindowLocator().FindWindowHandle(GetCurrentSyncMode())", mainFormSource);
-            Assert.Contains("currentFoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;", configureSlice);
-            Assert.Contains("updatedConfig.FoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;", configureSlice);
+            Assert.Contains("currentFoxAutoPlayNicknameSignature = signature;", identitySource);
+            Assert.Contains("updatedConfig.FoxAutoPlayNicknameSignature = signature;", identitySource);
             Assert.Contains("updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;", clearSavedIdentitySlice);
-            Assert.Contains("ClearFoxAutoPlayColorDetectionState();", configureSlice);
-            Assert.DoesNotContain("txtFoxAutoPlayNickname", settingsSource);
-            Assert.DoesNotContain("this.txtFoxAutoPlayNickname", settingsDesignerSource);
-            Assert.DoesNotContain("clearFoxAutoPlayIdentity", settingsSource);
-            Assert.DoesNotContain("btnClearFoxAutoPlayIdentity", settingsSource);
-            Assert.DoesNotContain("this.btnClearFoxAutoPlayIdentity", settingsDesignerSource);
-            Assert.DoesNotContain("lblFoxAutoPlayNickname", settingsDesignerSource);
-            Assert.DoesNotContain("SettingsForm_lblFoxAutoPlayNickname", programSource);
-            Assert.DoesNotContain("SettingsForm_btnClearFoxAutoPlayIdentity", programSource);
-            Assert.Contains("FoxAutoPlayIdentityDialog_title", programSource);
-            Assert.Contains("FoxAutoPlayIdentityDialog_btnUseOnce", programSource);
-            Assert.Contains("FoxAutoPlayIdentityDialog_btnSaveAndUse", programSource);
-            Assert.Contains("FoxAutoPlayIdentityDialog_btnClearSavedIdentity", programSource);
-            Assert.DoesNotContain("SettingsForm_lblFoxAutoPlayNickname=", cnSource);
-            Assert.DoesNotContain("SettingsForm_lblFoxAutoPlayNickname=", enSource);
-            Assert.DoesNotContain("SettingsForm_lblFoxAutoPlayNickname=", jpSource);
-            Assert.DoesNotContain("SettingsForm_lblFoxAutoPlayNickname=", krSource);
-            Assert.Contains("FoxAutoPlayIdentityDialog_title=", cnSource);
-            Assert.Contains("FoxAutoPlayIdentityDialog_title=", enSource);
-            Assert.Contains("FoxAutoPlayIdentityDialog_title=", jpSource);
-            Assert.Contains("FoxAutoPlayIdentityDialog_title=", krSource);
-            Assert.Contains("FoxAutoPlayIdentityDialog_btnUseOnce=", cnSource);
-            Assert.Contains("FoxAutoPlayIdentityDialog_btnUseOnce=", enSource);
-            Assert.Contains("FoxAutoPlayIdentityDialog_btnUseOnce=", jpSource);
-            Assert.Contains("FoxAutoPlayIdentityDialog_btnUseOnce=", krSource);
-            Assert.DoesNotContain("FoxAutoPlayIdentityDialog_lblManualNickname", programSource);
-            Assert.DoesNotContain("FoxAutoPlayIdentityDialog_chkRememberNickname", programSource);
-            Assert.DoesNotContain("FoxAutoPlayIdentityDialog_emptyNickname", programSource);
+            Assert.Contains("ClearFoxAutoPlayColorDetectionState();", identitySource);
+            Assert.Contains("ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);", identitySource);
         }
 
         [Fact]
@@ -490,122 +439,22 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void SettingsForm_LoadsAndPersistsShowInBoardShortcutToggle()
+        public void WebViewSettings_SavePersistsAndRefreshesRuntimeState()
         {
-            string source = LoadSource("readboard", "Form4.cs");
+            string source = LoadSource("readboard", "MainForm.WebView.Settings.cs");
+            string createSlice = GetMethodSlice(source, "internal static ReadBoardSettingsUiState CreateWebViewSettingsState(AppConfig config)");
+            string buildSlice = GetMethodSlice(source, "internal static bool TryBuildWebViewSettingsConfig(");
+            string saveSlice = GetMethodSlice(source, "private void SaveWebViewSettings()");
+            string updateSlice = GetMethodSlice(source, "private void UpdateWebViewSetting(JsonElement payload)");
 
-            Assert.Contains("chkDisableShowInBoardShortcut.Checked = config.DisableShowInBoardShortcut;", source);
-            Assert.Contains("updatedConfig.DisableShowInBoardShortcut = chkDisableShowInBoardShortcut.Checked;", source);
-        }
-
-        [Fact]
-        public void SettingsForm_LoadsPersistsAndOpensDebugDiagnostics()
-        {
-            string source = LoadSource("readboard", "Form4.cs");
-            string designerSource = LoadSource("readboard", "Form4.Designer.cs");
-            string programSource = LoadSource("readboard", "Program.cs");
-            string cnSource = LoadSource("readboard", "language_cn.txt");
-            string enSource = LoadSource("readboard", "language_en.txt");
-
-            Assert.Contains("chkDebugDiagnostics.Checked = config.DebugDiagnosticsEnabled;", source);
-            Assert.Contains("updatedConfig.DebugDiagnosticsEnabled = chkDebugDiagnostics.Checked;", source);
-            Assert.Contains("btnOpenDebugDiagnostics.Text = getLangStr(\"SettingsForm_btnOpenDebugDiagnostics\");", source);
-            Assert.Contains("OpenDebugDiagnosticsDirectory();", source);
-            Assert.Contains("this.chkDebugDiagnostics", designerSource);
-            Assert.Contains("this.btnOpenDebugDiagnostics", designerSource);
-            Assert.Contains("SettingsForm_chkDebugDiagnostics", programSource);
-            Assert.Contains("SettingsForm_btnOpenDebugDiagnostics", programSource);
-            Assert.Contains("SettingsForm_chkDebugDiagnostics=", cnSource);
-            Assert.Contains("SettingsForm_btnOpenDebugDiagnostics=", cnSource);
-            Assert.Contains("SettingsForm_chkDebugDiagnostics=", enSource);
-            Assert.Contains("SettingsForm_btnOpenDebugDiagnostics=", enSource);
-        }
-
-        [Fact]
-        public void SettingsForm_RefreshesMainFormShortcutTooltipAfterSaving()
-        {
-            string source = LoadSource("readboard", "Form4.cs");
-            string methodSlice = GetMethodSlice(source, "private void button1_Click(object sender, EventArgs e)");
-
-            Assert.Contains("mainForm.RefreshShowInBoardShortcutToolTip();", methodSlice);
-        }
-
-        [Fact]
-        public void SettingsForm_WarnsWhenEnablingDebugDiagnostics()
-        {
-            string source = LoadSource("readboard", "Form4.cs");
-
-            Assert.Contains("chkDebugDiagnostics.CheckedChanged += chkDebugDiagnostics_CheckedChanged;", source);
-            Assert.Contains("if (suppressDebugDiagnosticsPrompt || !chkDebugDiagnostics.Checked)", source);
-            Assert.Contains("getLangStr(\"SettingsForm_debugDiagnosticsWarning\")", source);
-            Assert.Contains("MessageBoxIcon.Warning", source);
-        }
-
-        [Fact]
-        public void SettingsForm_ArrangesShortcutToggleAlignedWithVerifyMove()
-        {
-            string source = LoadSource("readboard", "Form4.cs");
-            string layoutSlice = GetMethodSlice(source, "private void ArrangeSettingsLayout()");
-            string adaptiveSlice = GetMethodSlice(source, "private void ArrangeAdaptiveSettingsLayout()");
-            string legacySlice = GetMethodSlice(source, "private void ArrangeLegacySettingsLayout()");
-
-            Assert.Contains("CanUseLegacySettingsDesktopLayout()", layoutSlice);
-            Assert.Contains("ArrangeLegacySettingsLayout();", layoutSlice);
-            Assert.Contains("ArrangeAdaptiveSettingsLayout();", layoutSlice);
-            Assert.Contains("LayoutOptionRow(chkVerifyMove, chkDisableShowInBoardShortcut", adaptiveSlice);
-            Assert.Contains("btnOpenDebugDiagnostics.SetBounds(openDebugButtonLeft, top, openDebugButtonWidth, buttonHeight);", adaptiveSlice);
-            Assert.Contains("currentTop = LayoutSingleOption(chkDebugDiagnostics, left, currentTop, optionRowGap);", adaptiveSlice);
-            Assert.Contains("chkDisableShowInBoardShortcut.Location = new Point(ScaleValue(170), top + optionRowGap * 2);", legacySlice);
-            Assert.Contains("chkDebugDiagnostics.Location = new Point(left, top + optionRowGap * 3);", legacySlice);
-            Assert.Contains("btnOpenDebugDiagnostics.SetBounds(buttonLeft, top, buttonWidth, buttonHeight);", legacySlice);
-        }
-
-        [Fact]
-        public void SettingsForm_LegacyLayoutMeasurement_ClearsAdaptiveCheckboxWidthConstraintsBeforeDecision()
-        {
-            string source = LoadSource("readboard", "Form4.cs");
-            string decisionSlice = GetMethodSlice(source, "private bool CanUseLegacySettingsDesktopLayout()");
-            string helperSlice = GetMethodSlice(source, "private int GetLegacyOptionPreferredWidth(params CheckBox[] checkBoxes)");
-
-            Assert.Contains("GetLegacyOptionPreferredWidth(chkAutoMin, chkMag, chkVerifyMove)", decisionSlice);
-            Assert.Contains("GetLegacyOptionPreferredWidth(chkPonder, chkEnhanceScreen, chkDisableShowInBoardShortcut)", decisionSlice);
-            Assert.Contains("ConfigureLegacyOptionCheckBox(checkBox);", helperSlice);
-            Assert.Contains("checkBox.PreferredSize.Width", helperSlice);
-        }
-
-        [Fact]
-        public void TipsForm_PrefersLegacyDesktopLayoutBeforeAdaptiveFallback()
-        {
-            string source = LoadSource("readboard", "Form7.cs");
-            string layoutSlice = GetMethodSlice(source, "private void ArrangeTipsLayout()");
-            string legacySlice = GetMethodSlice(source, "private void ArrangeLegacyTipsLayout()");
-            string adaptiveSlice = GetMethodSlice(source, "private void ArrangeAdaptiveTipsLayout()");
-
-            Assert.Contains("CanUseLegacyTipsDesktopLayout()", layoutSlice);
-            Assert.Contains("ArrangeLegacyTipsLayout();", layoutSlice);
-            Assert.Contains("ArrangeAdaptiveTipsLayout();", layoutSlice);
-            Assert.Contains("btnConfirm.SetBounds(footerLeft, footerTop, primaryWidth, buttonHeight);", legacySlice);
-            Assert.Contains("btnNotAskAgain.SetBounds(btnConfirm.Right + buttonGap, footerTop, secondaryWidth, buttonHeight);", legacySlice);
-            Assert.Contains("btnConfirm.SetBounds(left, footerTop, contentWidth, buttonHeight);", adaptiveSlice);
-            Assert.Contains("btnNotAskAgain.SetBounds(left, btnConfirm.Bottom + rowGap, contentWidth, buttonHeight);", adaptiveSlice);
-        }
-
-        [Fact]
-        public void UpdateDialog_KeepsDesktopInformationOrderAndNonWrappingFooter()
-        {
-            string source = LoadSource("readboard", "FormUpdate.cs");
-            string designerSource = LoadSource("readboard", "FormUpdate.Designer.cs");
-
-            Assert.Contains("ApplyInfoPanelLayout();", source);
-            Assert.Contains("ConstrainUpdateDialogSize();", source);
-            Assert.Contains("buttonPanel.FlowDirection = System.Windows.Forms.FlowDirection.RightToLeft;", designerSource);
-            Assert.Contains("buttonPanel.WrapContents = false;", designerSource);
-            Assert.Contains("rootPanel.Controls.Add(lblTitle, 0, 0);", designerSource);
-            Assert.Contains("rootPanel.Controls.Add(infoPanel, 0, 1);", designerSource);
-            Assert.Contains("rootPanel.Controls.Add(lblReleaseNotes, 0, 2);", designerSource);
-            Assert.Contains("rootPanel.Controls.Add(txtReleaseNotes, 0, 3);", designerSource);
-            Assert.Contains("rootPanel.Controls.Add(lblHostedUpdateStatus, 0, 4);", designerSource);
-            Assert.Contains("rootPanel.Controls.Add(buttonPanel, 0, 5);", designerSource);
+            Assert.Contains("DisableShowShortcut = config.DisableShowInBoardShortcut", createSlice);
+            Assert.Contains("Diagnostics = config.DebugDiagnosticsEnabled", createSlice);
+            Assert.Contains("updated.DisableShowInBoardShortcut = settings.DisableShowShortcut;", buildSlice);
+            Assert.Contains("updated.DebugDiagnosticsEnabled = settings.Diagnostics;", buildSlice);
+            Assert.Contains("ShowWebViewSettingsDialog(\"diagnostics\");", updateSlice);
+            Assert.Contains("PersistConfiguration();", saveSlice);
+            Assert.Contains("RefreshShowInBoardShortcutToolTip();", saveSlice);
+            Assert.Contains("sendPonderStatus();", saveSlice);
         }
 
         [Fact]
@@ -701,15 +550,6 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Contains("runtime.Host.TrySendPlaceProtocolError(", methodSlice);
             Assert.DoesNotContain("SendError(result == null ? \"Move placement returned no result.\" : result.FailureReason);", methodSlice);
-        }
-
-        [Fact]
-        public void SettingsReset_UsesShutdownWithoutPersistingCurrentWindowState()
-        {
-            string source = LoadSource("readboard", "Form4.cs");
-
-            Assert.Contains("GetHost().shutdown(false);", source);
-            Assert.DoesNotContain("GetHost().shutdown();", source);
         }
 
         [Fact]

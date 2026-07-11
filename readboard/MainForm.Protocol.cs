@@ -16,6 +16,8 @@ namespace readboard
         public void NotifyProtocolReady()
         {
             sessionCoordinator.NotifyReady(Program.playPonder);
+            AddWebViewLog("INFO", "宿主已连接，ReadBoard 就绪");
+            PostWebViewState();
         }
 
         public void ReplayStartupProtocolState()
@@ -162,23 +164,17 @@ namespace readboard
 
         void IProtocolCommandHost.HandleReadboardUpdateInstalling()
         {
-            FormUpdate dialog = activeHostedUpdateDialog;
-            if (dialog != null && !dialog.IsDisposed)
-                dialog.MarkHostedInstalling();
+            MarkWebViewHostedUpdateInstalling();
         }
 
         void IProtocolCommandHost.HandleReadboardUpdateCancelled()
         {
-            FormUpdate dialog = activeHostedUpdateDialog;
-            if (dialog != null && !dialog.IsDisposed)
-                dialog.MarkHostedCancelled();
+            MarkWebViewHostedUpdateCancelled();
         }
 
         void IProtocolCommandHost.HandleReadboardUpdateFailed(string message)
         {
-            FormUpdate dialog = activeHostedUpdateDialog;
-            if (dialog != null && !dialog.IsDisposed)
-                dialog.MarkHostedFailed(message ?? string.Empty);
+            MarkWebViewHostedUpdateFailed(message ?? string.Empty);
         }
     }
 }

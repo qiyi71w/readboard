@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ReadBoard / 棋盘同步工具</title>
+  <link rel="icon" href="lizziey.ico">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="titlebar">
+      <div class="brand"><img src="lizziey.ico" alt=""><strong>ReadBoard / 棋盘同步工具</strong><span id="title-version">v3.0.8</span></div>
+      <div class="window-controls" aria-label="窗口控制">
+        <button type="button" data-command="window.minimize" aria-label="最小化"><i class="icon">&#xE921;</i></button>
+        <button type="button" data-command="window.maximize" aria-label="最大化"><i class="icon">&#xE922;</i></button>
+        <button type="button" data-command="window.close" aria-label="关闭"><i class="icon">&#xE8BB;</i></button>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <nav aria-label="主导航">
+        <button class="nav-item active" data-page="controlCenter" type="button"><i class="icon">&#xE80F;</i>控制中心</button>
+        <button class="nav-item" data-page="settings" type="button"><i class="icon">&#xE713;</i>参数设置</button>
+        <button class="nav-item" data-page="rules" type="button"><i class="icon">&#xE82D;</i>规则说明</button>
+        <button class="nav-item" data-page="about" type="button"><i class="icon">&#xE946;</i>关于</button>
+      </nav>
+      <div class="sidebar-rule"></div>
+      <h2>快速操作</h2>
+      <div class="quick-actions">
+        <button type="button" data-command="sync.quick"><i class="icon">&#xE945;</i>快速同步</button>
+        <button class="running" type="button" data-command="sync.continuous"><i class="icon">&#xE895;</i><span id="continuous-label">持续同步 (200ms)</span></button>
+        <button type="button" data-command="sync.once"><i class="icon">&#xE768;</i>单次同步</button>
+        <button type="button" data-command="sync.toggleAnalysis"><i class="icon">&#xE9D2;</i><span id="analysis-label">分析/停止</span></button>
+        <button type="button" data-command="sync.swapOrder"><i class="icon">&#xE8AB;</i>交换顺序</button>
+        <button type="button" data-command="sync.rebuild"><i class="icon">&#xE90F;</i>强制重建</button>
+        <button class="danger" type="button" data-command="sync.clearBoard"><i class="icon">&#xE74D;</i>清空棋盘</button>
+      </div>
+    </aside>
+
+    <main>
+      <div class="top-status">
+        <span><b class="dot" id="sync-dot"></b>状态： <strong id="sync-status">等待连接</strong></span>
+        <span>最后同步： <b id="last-sync">--:--:--</b></span>
+        <span>棋子数： <b id="stone-count">0</b></span>
+        <span>耗时： <b id="duration">--</b></span>
+        <span>版本： <b id="version">v3.0.8</b></span>
+        <div class="top-actions">
+          <button type="button" data-page="settings"><i class="icon">&#xE713;</i>设置</button>
+          <button type="button" data-command="rules.openManual"><i class="icon">&#xE897;</i>帮助</button>
+          <button type="button" data-command="shell.toggleTheme"><i class="icon">&#xE790;</i>主题<i class="icon small">&#xE70D;</i></button>
+        </div>
+      </div>
+
+      <section class="page active" data-page-panel="controlCenter">
+        <div class="context-strip card">
+          <span><i class="icon">&#xE7F4;</i>平台： <b id="context-platform">未选择</b></span>
+          <span>房间： <b id="context-room">--</b></span>
+          <span>手数： <b id="context-moves">--</b></span>
+          <span>下一手： <b id="context-turn">--</b></span>
+          <span>标题： <b class="dot" id="binding-dot"></b><b id="context-binding">未绑定</b></span>
+        </div>
+
+        <fieldset class="card compact"><legend>平台类型</legend>
+          <div class="choice-grid platforms">
+            <label><input type="radio" name="platform" value="fox">野狐</label>
+            <label><input type="radio" name="platform" value="foxBackground">野狐(后台落子)</label>
+            <label><input type="radio" name="platform" value="yike">弈客</label>
+            <label><input type="radio" name="platform" value="yicheng">弈城</label>
+            <label><input type="radio" name="platform" value="sina">新浪</label>
+            <label><input type="radio" name="platform" value="otherBackground">其他(后台)</label>
+            <label><input type="radio" name="platform" value="otherForeground">其他(前台)</label>
+          </div>
+        </fieldset>
+
+        <fieldset class="card compact"><legend>棋盘规格</legend>
+          <div class="board-size-row">
+            <label><input type="radio" name="boardSize" value="19">19×19</label>
+            <label><input type="radio" name="boardSize" value="13">13×13</label>
+            <label><input type="radio" name="boardSize" value="9">9×9</label>
+            <label><input type="radio" name="boardSize" value="custom">自定义</label>
+            <input id="board-width" type="number" min="2" max="25" value="19" aria-label="棋盘宽度"><b>×</b><input id="board-height" type="number" min="2" max="25" value="19" aria-label="棋盘高度">
+          </div>
+        </fieldset>
+
+        <fieldset class="card sync-card"><legend>同步与自动落子</legend>
+          <div class="sync-options">
+            <h3>同步与身份</h3>
+            <div class="sync-grid">
+              <label><input id="two-way" type="checkbox">双向同步</label>
+              <label><input type="radio" name="color" value="black">执黑</label>
+              <label><input type="radio" name="color" value="auto">自动</label>
+              <button type="button" data-command="identity.open">身份</button>
+              <label><input id="auto-play" type="checkbox">自动落子</label>
+              <label><input type="radio" name="color" value="white">执白</label>
+            </div>
+            <div class="placement-row"><b>落子方式</b><div class="segments"><label><input type="radio" name="placement" value="direct">一选落子</label><label><input type="radio" name="placement" value="engine">引擎决策落子</label></div></div>
+          </div>
+          <div class="engine-options">
+            <h3>引擎条件</h3>
+            <label>每手用时 <span class="engine-value"><input id="ai-time" type="number" min="1" value="2"><span class="engine-unit">秒</span></span></label>
+            <label>最大计算量(选填) <span class="engine-value"><input id="playouts" type="number" min="0"><span class="engine-unit" aria-hidden="true"></span></span></label>
+            <label>首选计算量(选填) <span class="engine-value"><input id="first-policy" type="number" min="0"><span class="engine-unit" aria-hidden="true"></span></span></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="card compact"><legend>棋盘选择方式</legend>
+          <div class="board-select-grid">
+            <button class="selected" type="button" data-command="board.select" data-payload='{"mode":"inside"}'><i class="icon">&#xE7C9;</i>选择棋盘(点击棋盘内部)</button>
+            <button type="button" data-command="board.select" data-payload='{"mode":"rectangle"}'><i class="icon">&#xE9A6;</i>框选棋盘</button>
+            <button type="button" data-command="board.select" data-payload='{"mode":"line1"}'><i class="icon">&#xE9A6;</i>框选1路线</button>
+            <label><input id="show-on-board" type="checkbox">原棋盘上显示选点</label>
+          </div>
+        </fieldset>
+
+        <fieldset class="card log-card"><legend>日志输出</legend><div id="log-list" role="log" aria-live="polite"></div></fieldset>
+      </section>
+
+      <section class="page" data-page-panel="settings">
+        <header class="page-heading"><h1>参数设置</h1><p>调整同步行为、识别参数和界面外观。修改仅在保存后生效。</p></header>
+        <fieldset class="card settings-card"><legend>常规行为</legend><div class="toggle-grid" id="behavior-settings">
+          <label><span><b>自动最小化</b><small>开始同步后收起窗口</small></span><input type="checkbox" data-setting="autoMinimize"></label>
+          <label><span><b>后台分析</b><small>同步时允许宿主继续分析</small></span><input type="checkbox" data-setting="backgroundAnalysis"></label>
+          <label><span><b>使用放大镜</b><small>框选棋盘时辅助精确定位</small></span><input type="checkbox" data-setting="magnifier"></label>
+          <label><span><b>增强截图</b><small>提高部分窗口的捕获兼容性</small></span><input type="checkbox" data-setting="enhancedCapture"></label>
+          <label><span><b>落子校验</b><small>自动落子后检查执行结果</small></span><input type="checkbox" data-setting="placementValidation"></label>
+          <label><span><b>禁用盘上显示快捷键</b><small>避免全局快捷键冲突</small></span><input type="checkbox" data-setting="disableShowShortcut"></label>
+        </div></fieldset>
+        <fieldset class="card settings-card"><legend>识别参数</legend><div class="input-grid">
+          <label>同步间隔<span><input type="number" min="20" data-setting="syncInterval"><i>ms</i></span><small class="field-error"></small></label>
+          <label>灰度偏移<input type="number" min="0" max="255" data-setting="grayOffset"><small class="field-error"></small></label>
+          <label>黑棋颜色偏移<span><input type="number" min="0" max="255" data-setting="blackOffset"><i>0–255</i></span><small class="field-error"></small></label>
+          <label>黑棋识别百分比<span><input type="number" min="0" max="100" data-setting="blackPercent"><i>%</i></span><small class="field-error"></small></label>
+          <label>白棋颜色偏移<span><input type="number" min="0" max="255" data-setting="whiteOffset"><i>0–255</i></span><small class="field-error"></small></label>
+          <label>白棋识别百分比<span><input type="number" min="0" max="100" data-setting="whitePercent"><i>%</i></span><small class="field-error"></small></label>
+        </div></fieldset>
+        <fieldset class="card settings-card"><legend>外观与诊断</legend><div class="appearance-grid">
+          <div class="appearance-theme"><b>颜色模式</b><div class="segments"><label><input type="radio" name="theme" value="system">跟随系统</label><label><input type="radio" name="theme" value="dark">深色</label><label><input type="radio" name="theme" value="light">浅色</label></div></div>
+          <label class="diagnostics"><span><b>调试诊断</b><small>可能生成较大的诊断文件</small></span><input type="checkbox" data-setting="diagnostics"></label>
+          <button type="button" data-command="settings.openDiagnostics">打开诊断目录</button>
+        </div></fieldset>
+        <div class="settings-actions card"><button class="danger-outline" type="button" data-command="settings.resetDefaults">恢复默认</button><span id="settings-dirty">当前没有未保存的更改</span><div><button type="button" data-command="settings.cancel">取消</button><button class="primary" type="button" data-command="settings.save">保存设置</button></div></div>
+      </section>
+
+      <section class="page" data-page-panel="rules">
+        <header class="page-heading"><h1>规则说明</h1><p>了解贴目模拟方式与完整说明入口。</p></header>
+        <fieldset class="card rules-card"><legend>贴目与规则限制</legend>
+          <div class="warning"><i class="icon">&#xE7BA;</i><span><b>同步时无法可靠获取历史提子数</b><small>按日本规则数目时，直接使用当前盘面计算可能产生偏差。</small></span></div>
+          <p><b>同步贴 6.5 目的日本规则棋局时，可在 KataGo 中使用以下组合模拟：</b></p>
+          <div class="formula"><b>数子</b><span>+</span><strong>贴目 7.0</strong><span>+</span><strong>收后方贴还 0.5 目</strong></div>
+        </fieldset>
+        <div class="card manual-card"><div><b>完整说明文档</b><p>根据当前界面语言打开随程序发布的 readme*.rtf 文档。</p></div><button class="primary" type="button" data-command="rules.openManual">打开完整说明</button></div>
+      </section>
+
+      <section class="page" data-page-panel="about">
+        <header class="page-heading"><h1>关于</h1><p>ReadBoard 版本与项目信息。</p></header>
+        <div class="card about-hero"><img src="lizziey.ico" alt="ReadBoard"><div><h1>ReadBoard</h1><span class="version-pill" id="about-version">v3.0.8</span><h3>LizzieYzy-Next 的 Windows 棋盘同步工具</h3><p>负责捕获第三方棋盘窗口、识别盘面，并把同步结果交给宿主。</p></div><div class="host-state"><b><i class="dot" id="host-dot"></i><span id="host-state">等待宿主</span></b><p>当前通过 LizzieYzy-Next 启动</p></div></div>
+        <fieldset class="card project-info"><legend>项目信息</legend><dl><dt>当前版本</dt><dd id="project-version">v3.0.8</dd><dt>宿主项目</dt><dd>LizzieYzy-Next</dd><dt>运行平台</dt><dd>Windows 10 / Windows 11</dd><dt>上游仓库</dt><dd>github.com/yzyray/readboard</dd></dl></fieldset>
+        <div class="card update-card"><div><b>项目与更新</b><p>打开上游仓库，或检查当前版本是否有可用更新。</p></div><div><button type="button" data-command="about.openRepository">打开上游仓库</button><button class="primary" type="button" data-command="about.checkUpdate">检查更新</button></div></div>
+      </section>
+    </main>
+
+    <footer><span><i class="dot" id="target-dot"></i><b id="target-status">等待选择目标窗口</b></span><span><i class="dot" id="board-dot"></i><b id="board-status">等待首次棋盘识别</b></span><span><i class="dot" id="placement-dot"></i><b id="placement-status">落子区域暂不可用</b></span></footer>
+  </div>
+
+  <div class="modal-layer" id="modal-layer" hidden>
+    <section class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <header><h2 id="modal-title"></h2><button type="button" data-command="modal.close" aria-label="关闭"><i class="icon">&#xE8BB;</i></button></header>
+      <div class="modal-body" id="modal-body"></div>
+      <footer class="modal-actions" id="modal-actions"></footer>
+    </section>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

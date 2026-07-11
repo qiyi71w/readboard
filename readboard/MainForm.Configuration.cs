@@ -35,7 +35,8 @@ namespace readboard
             AppConfig config = Program.CurrentContext.Config.Clone();
             int customBoardWidth;
             int customBoardHeight;
-            Point persistedWindowLocation = ResolvePersistableWindowLocation();
+            Rectangle persistedWindowBounds = ResolvePersistableWindowBounds();
+            Point persistedWindowLocation = ResolvePersistableWindowLocation(persistedWindowBounds);
             GetCustomBoardDimensions(out customBoardWidth, out customBoardHeight);
             config.BoardWidth = boardW;
             config.BoardHeight = boardH;
@@ -45,17 +46,27 @@ namespace readboard
             config.SyncMode = (SyncMode)CurrentSyncType;
             config.WindowPosX = persistedWindowLocation.X;
             config.WindowPosY = persistedWindowLocation.Y;
+            Size logicalWindowSize = WebViewWindowLayoutPolicy.UnscalePhysicalSize(
+                persistedWindowBounds.Size,
+                DeviceDpi);
+            config.WindowClientWidth = Math.Max(AppConfig.MinimumWindowClientWidth, logicalWindowSize.Width);
+            config.WindowClientHeight = Math.Max(AppConfig.MinimumWindowClientHeight, logicalWindowSize.Height);
+            config.WindowMaximized = WindowState == FormWindowState.Maximized;
             config.AutoPlayColorMode = GetSelectedAutoPlayColorMode();
             config.AutoPlayMoveMode = GetSelectedAutoPlayMoveMode();
             return config;
         }
 
-        private Point ResolvePersistableWindowLocation()
+        private Rectangle ResolvePersistableWindowBounds()
         {
-            Rectangle boundsToPersist =
+            return
                 WindowState == FormWindowState.Normal && Bounds.Width > 0 && Bounds.Height > 0
                     ? Bounds
                     : RestoreBounds;
+        }
+
+        private static Point ResolvePersistableWindowLocation(Rectangle boundsToPersist)
+        {
             Point location = boundsToPersist.Location;
             Rectangle virtualScreen = SystemInformation.VirtualScreen;
             if (location.X <= -16000

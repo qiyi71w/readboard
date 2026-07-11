@@ -9,7 +9,7 @@ namespace Readboard.VerificationTests
 {
     public sealed class FrameworkContractTests
     {
-        private const string ExpectedTargetFramework = "net10.0-windows";
+        private const string ExpectedTargetFramework = "net10.0-windows10.0.17763.0";
 
         [Fact]
         public void Project_DeclaresNet10WindowsTargetFramework()
@@ -39,7 +39,12 @@ namespace Readboard.VerificationTests
             Assert.Contains("dotnet publish", scriptContent);
             Assert.Contains("--self-contained true", scriptContent);
             Assert.Contains("$publishRuntimeIdentifier = 'win-x64'", scriptContent);
+            Assert.Contains("$publishTargetFramework = '" + ExpectedTargetFramework + "'", scriptContent);
             Assert.Contains("-r $publishRuntimeIdentifier", scriptContent);
+            Assert.Contains("WebView\\index.html", scriptContent);
+            Assert.Contains("WebView\\fonts\\InterVariable.woff2", scriptContent);
+            Assert.Contains("WebView\\fonts\\LICENSE-Inter.txt", scriptContent);
+            Assert.Contains("runtimes\\win-x64\\native\\WebView2Loader.dll", scriptContent);
             Assert.DoesNotContain("TargetFrameworkVersion=v4.8", scriptContent);
             Assert.Contains("./scripts/package-readboard-release.local.ps1", workflowContent);
             Assert.Contains("Readboard.VerificationTests.csproj", workflowContent);

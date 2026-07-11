@@ -1323,6 +1323,41 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal(new[] { "clear" }, transport.SentLines);
         }
 
+        [Fact]
+        public void AreaChangeCacheReset_DoesNotReportRuntimeFrameCleared()
+        {
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(
+                new RecordingTransport(),
+                new LegacyProtocolAdapter());
+            WebViewHostRecorder host = new WebViewHostRecorder();
+            SyncSessionRuntimeDependencies runtime = new SyncSessionRuntimeDependencies { Host = host };
+            SetRuntimeBoardPixelDimensions(coordinator, 200, 200);
+
+            Type sampleType = typeof(SyncSessionCoordinator).GetNestedType(
+                "RecognizedSyncSample",
+                BindingFlags.NonPublic);
+            Assert.NotNull(sampleType);
+            object sample = Activator.CreateInstance(
+                sampleType,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                null,
+                new object[] { 100, CreateFrame(), null },
+                null);
+
+            Invoke(
+                coordinator,
+                "BuildRecognizedSampleProtocolDispatch",
+                new SyncCoordinatorHostSnapshot { BoardWidth = 19, BoardHeight = 19 },
+                sample,
+                false);
+
+            Assert.Equal(0, host.RuntimeFrameClearedCount);
+
+            Invoke(coordinator, "ClearRuntimeFrame", runtime);
+
+            Assert.Equal(1, host.RuntimeFrameClearedCount);
+        }
+
         private static object CreateProxy(Type interfaceType, Func<MethodInfo, object[], object> handler)
         {
             MethodInfo createMethod = null;
@@ -1452,6 +1487,19 @@ namespace Readboard.VerificationTests.Protocol
             object runtimeState = runtimeStateField.GetValue(coordinator);
             Assert.NotNull(runtimeState);
             SetProperty(runtimeState, "CurrentBoardPixelWidth", boardPixelWidth);
+        }
+
+        private static void SetRuntimeBoardPixelDimensions(
+            SyncSessionCoordinator coordinator,
+            int boardPixelWidth,
+            int boardPixelHeight)
+        {
+            FieldInfo runtimeStateField = typeof(SyncSessionCoordinator).GetField("runtimeState", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.True(runtimeStateField != null, "Missing coordinator field: runtimeState");
+            object runtimeState = runtimeStateField.GetValue(coordinator);
+            Assert.NotNull(runtimeState);
+            SetProperty(runtimeState, "CurrentBoardPixelWidth", boardPixelWidth);
+            SetProperty(runtimeState, "CurrentBoardPixelHeight", boardPixelHeight);
         }
 
         private static object GetOutboundProtocolDispatcher(SyncSessionCoordinator coordinator)
@@ -1586,6 +1634,37 @@ namespace Readboard.VerificationTests.Protocol
                     default:
                         return GetDefault(method.ReturnType);
                 }
+            }
+        }
+
+        private sealed class WebViewHostRecorder : ISyncCoordinatorHost, IWebViewSyncCoordinatorHost
+        {
+            public int RuntimeFrameClearedCount { get; private set; }
+
+            public SyncCoordinatorHostSnapshot CaptureSnapshot() { return new SyncCoordinatorHostSnapshot(); }
+            public void UpdateSelectedWindowHandle(IntPtr handle) { }
+            public void OnKeepSyncStarted() { }
+            public void OnKeepSyncStopped(bool continuousSyncActive) { }
+            public void OnContinuousSyncStarted() { }
+            public void OnContinuousSyncStopped() { }
+            public void OnSyncCachesReset() { }
+            public void OnBoardSnapshotRecognized(BoardSnapshot snapshot) { }
+            public void ShowMissingSyncSourceMessage() { }
+            public void ShowRecognitionFailureMessage() { }
+            public void MinimizeWindow() { }
+            public bool TrySendPlaceProtocolError(string message) { return false; }
+
+            public void OnRuntimeFrameCleared()
+            {
+                RuntimeFrameClearedCount++;
+            }
+
+            public void OnBoardFrameRecognized(
+                BoardFrame frame,
+                int boardPixelWidth,
+                int boardPixelHeight,
+                bool placementRegionResolved)
+            {
             }
         }
 
@@ -2060,6 +2139,11 @@ namespace Readboard.VerificationTests.Protocol
 
         private sealed class PassivePlacementService : IMovePlacementService
         {
+            public bool CanResolvePlacementRegion(BoardFrame frame)
+            {
+                return false;
+            }
+
             public MovePlacementResult Place(MovePlacementRequest request)
             {
                 return new MovePlacementResult { Success = true };
@@ -2069,6 +2153,11 @@ namespace Readboard.VerificationTests.Protocol
         private sealed class ThrowingPlacementService : IMovePlacementService
         {
             public ManualResetEventSlim PlaceCalled { get; } = new ManualResetEventSlim(false);
+
+            public bool CanResolvePlacementRegion(BoardFrame frame)
+            {
+                return false;
+            }
 
             public MovePlacementResult Place(MovePlacementRequest request)
             {
@@ -2080,6 +2169,11 @@ namespace Readboard.VerificationTests.Protocol
         private sealed class SingleLightweightPlacementService : IMovePlacementService
         {
             public int PlaceCallCount { get; private set; }
+
+            public bool CanResolvePlacementRegion(BoardFrame frame)
+            {
+                return false;
+            }
 
             public MovePlacementResult Place(MovePlacementRequest request)
             {
@@ -2104,6 +2198,11 @@ namespace Readboard.VerificationTests.Protocol
             public ManualResetEventSlim BlockedPlacementStarted { get; } = new ManualResetEventSlim(false);
             public int PlaceCallCount { get; private set; }
             public int ActualPlacementCount { get; private set; }
+
+            public bool CanResolvePlacementRegion(BoardFrame frame)
+            {
+                return false;
+            }
 
             public MovePlacementResult Place(MovePlacementRequest request)
             {
@@ -2136,6 +2235,11 @@ namespace Readboard.VerificationTests.Protocol
             private readonly ManualResetEventSlim releaseEvent = new ManualResetEventSlim(false);
 
             public ManualResetEventSlim SideEffectApplied { get; } = new ManualResetEventSlim(false);
+
+            public bool CanResolvePlacementRegion(BoardFrame frame)
+            {
+                return false;
+            }
 
             public MovePlacementResult Place(MovePlacementRequest request)
             {

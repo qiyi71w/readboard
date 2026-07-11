@@ -7,6 +7,8 @@ namespace readboard
 {
     internal interface IMovePlacementService
     {
+        bool CanResolvePlacementRegion(BoardFrame frame);
+
         MovePlacementResult Place(MovePlacementRequest request);
     }
 
@@ -29,13 +31,30 @@ namespace readboard
                 new User32PlacementNativeMethods());
         }
 
+        public bool CanResolvePlacementRegion(BoardFrame frame)
+        {
+            if (frame == null
+                || frame.Viewport == null
+                || frame.BoardSize == null
+                || frame.BoardSize.Width <= 0
+                || frame.BoardSize.Height <= 0)
+            {
+                return false;
+            }
+
+            PlacementPathKind path = ResolvePath(frame);
+            PixelRect bounds;
+            return path != PlacementPathKind.Unknown
+                && TryResolveBounds(frame, path, out bounds);
+        }
+
         public MovePlacementResult Place(MovePlacementRequest request)
         {
             MovePlacementResult validationFailure = Validate(request);
             if (validationFailure != null)
                 return validationFailure;
 
-            PlacementPathKind path = ResolvePath(request);
+            PlacementPathKind path = ResolvePath(request.Frame);
             if (path == PlacementPathKind.Unknown)
                 return Failure(request, path, MovePlacementFailureKind.UnsupportedPath, "Unsupported placement path.");
 
@@ -71,12 +90,12 @@ namespace readboard
             return null;
         }
 
-        private static PlacementPathKind ResolvePath(MovePlacementRequest request)
+        private static PlacementPathKind ResolvePath(BoardFrame frame)
         {
-            SyncMode syncMode = request.Frame.SyncMode;
+            SyncMode syncMode = frame.SyncMode;
             if (syncMode == SyncMode.Yike)
                 return PlacementPathKind.BackgroundPost;
-            if (request.Frame.Window != null && request.Frame.Window.IsJavaWindow)
+            if (frame.Window != null && frame.Window.IsJavaWindow)
                 return PlacementPathKind.Foreground;
             if (syncMode == SyncMode.Foreground || syncMode == SyncMode.Fox)
                 return PlacementPathKind.Foreground;

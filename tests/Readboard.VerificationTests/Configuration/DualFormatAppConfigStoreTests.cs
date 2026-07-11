@@ -71,7 +71,7 @@ namespace Readboard.VerificationTests
                         doc.RootElement.GetProperty("MoveVerifyMaxAttempts").GetInt32());
                 }
                 Assert.Equal("96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5", legacyMain);
-                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc_1", legacyOther);
+                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc_1_1100_680_0", legacyOther);
             }
         }
 
@@ -95,6 +95,31 @@ namespace Readboard.VerificationTests
                 }
                 Assert.Equal(SyncMode.Yike, loaded.SyncMode);
                 Assert.EndsWith("_6", legacyMain);
+            }
+        }
+
+        [Fact]
+        public void Save_RoundTripsLogicalWindowBoundsAndMaximizedState()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, SaveMachineKey, ProtocolVersion);
+                AppConfig config = AppConfig.CreateDefault(ProtocolVersion, SaveMachineKey);
+                config.WindowPosX = 320;
+                config.WindowPosY = 180;
+                config.WindowClientWidth = 1234;
+                config.WindowClientHeight = 777;
+                config.WindowMaximized = true;
+
+                store.Save(config);
+                AppConfig loaded = store.Load().Config;
+
+                Assert.Equal(320, loaded.WindowPosX);
+                Assert.Equal(180, loaded.WindowPosY);
+                Assert.Equal(1234, loaded.WindowClientWidth);
+                Assert.Equal(777, loaded.WindowClientHeight);
+                Assert.True(loaded.WindowMaximized);
+                Assert.EndsWith("_1234_777_1", File.ReadAllText(workspace.PathFor("config_readboard_others.txt")));
             }
         }
 
@@ -488,7 +513,7 @@ namespace Readboard.VerificationTests
                     Assert.True(doc.RootElement.GetProperty("DebugDiagnosticsEnabled").GetBoolean());
                 }
                 Assert.True(loaded.DebugDiagnosticsEnabled);
-                Assert.Equal(19, legacyOther.Split('_').Length);
+                Assert.Equal(22, legacyOther.Split('_').Length);
             }
         }
     }

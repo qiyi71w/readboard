@@ -14,6 +14,10 @@ namespace readboard
         internal const int MinMoveVerifyMaxAttempts = 1;
         internal const int MaxMoveVerifyMaxAttempts = 10;
         internal const int DefaultMoveVerifyMaxAttempts = 1;
+        internal const int DefaultWindowClientWidth = 1100;
+        internal const int DefaultWindowClientHeight = 680;
+        internal const int MinimumWindowClientWidth = 960;
+        internal const int MinimumWindowClientHeight = 600;
 
         public string ProtocolVersion { get; set; }
         public string MachineKey { get; set; }
@@ -44,6 +48,9 @@ namespace readboard
         public int CustomBoardHeight { get; set; }
         public int WindowPosX { get; set; }
         public int WindowPosY { get; set; }
+        public int WindowClientWidth { get; set; }
+        public int WindowClientHeight { get; set; }
+        public bool WindowMaximized { get; set; }
         public AutoPlayColorMode AutoPlayColorMode { get; set; }
         public AutoPlayMoveMode AutoPlayMoveMode { get; set; }
         public string FoxAutoPlayNickname { get; set; }
@@ -82,6 +89,9 @@ namespace readboard
                 CustomBoardHeight = -1,
                 WindowPosX = -1,
                 WindowPosY = -1,
+                WindowClientWidth = DefaultWindowClientWidth,
+                WindowClientHeight = DefaultWindowClientHeight,
+                WindowMaximized = false,
                 AutoPlayColorMode = AutoPlayColorMode.ManualBlack,
                 AutoPlayMoveMode = AutoPlayMoveMode.FirstCandidate,
                 FoxAutoPlayNickname = string.Empty,

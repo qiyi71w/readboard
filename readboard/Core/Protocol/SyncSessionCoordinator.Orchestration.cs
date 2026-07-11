@@ -299,7 +299,7 @@ namespace readboard
             bool restoreUi)
         {
             ResetRuntimeSyncCaches(runtime);
-            ClearRuntimeFrame();
+            ClearRuntimeFrame(runtime);
             runtimeState.ResetProbeState();
             CancelPendingMove();
             if (restoreUi)
@@ -407,7 +407,7 @@ namespace readboard
                 keepSyncStopRequestedEvent.Set();
                 ResetRuntimeSyncCaches(runtime);
                 shouldSendStopSync = true;
-                ClearRuntimeFrame();
+                ClearRuntimeFrame(runtime);
                 keepSyncThread = null;
                 continuousSyncActive = IsContinuousSyncing;
                 notifyStop = true;
@@ -616,6 +616,13 @@ namespace readboard
             UpdateBoardGeometry(frame, snapshot);
             ReplaceRuntimeFrame(frame);
             runtimeState.InitialProbePending = false;
+            IWebViewSyncCoordinatorHost webViewHost = runtime.Host as IWebViewSyncCoordinatorHost;
+            if (webViewHost != null)
+                webViewHost.OnBoardFrameRecognized(
+                    frame,
+                    runtimeState.CurrentBoardPixelWidth,
+                    runtimeState.CurrentBoardPixelHeight,
+                    runtime.PlacementService.CanResolvePlacementRegion(frame));
             runtime.Host.OnBoardSnapshotRecognized(recognition.Snapshot);
             return new RecognizedSyncSample(previousArea, frame, recognition.Snapshot);
         }
@@ -1075,7 +1082,7 @@ namespace readboard
         private void CompleteStopCleanup()
         {
             Volatile.Write(ref activeKeepSyncSessionId, 0);
-            ClearRuntimeFrame();
+            ClearRuntimeFrame(runtimeDependencies);
             runtimeState.ResetProbeState();
             if (runtimeDependencies != null)
                 ResetRuntimeSyncCaches(runtimeDependencies);
@@ -1338,11 +1345,16 @@ namespace readboard
             DisposeBoardFrame(previous);
         }
 
-        private void ClearRuntimeFrame()
+        private void ClearRuntimeFrame(SyncSessionRuntimeDependencies runtime)
         {
             ReplaceRuntimeFrame(null);
             runtimeState.CurrentBoardPixelWidth = 0;
             runtimeState.CurrentBoardPixelHeight = 0;
+            IWebViewSyncCoordinatorHost webViewHost = runtime == null
+                ? null
+                : runtime.Host as IWebViewSyncCoordinatorHost;
+            if (webViewHost != null)
+                webViewHost.OnRuntimeFrameCleared();
         }
 
         private static void DisposeBoardFrame(BoardFrame frame)

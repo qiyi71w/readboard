@@ -172,6 +172,15 @@ namespace Readboard.VerificationTests
                 WriteFile("readboard.exe");
                 WriteFile("readboard.dll");
                 WriteFile("readboard.runtimeconfig.json");
+                WriteFile("Microsoft.Web.WebView2.Core.dll");
+                WriteFile("Microsoft.Web.WebView2.WinForms.dll");
+                WriteFile("runtimes\\win-x64\\native\\WebView2Loader.dll");
+                WriteFile("WebView\\index.html");
+                WriteFile("WebView\\styles.css");
+                WriteFile("WebView\\app.js");
+                WriteFile("WebView\\lizziey.ico");
+                WriteFile("WebView\\fonts\\InterVariable.woff2");
+                WriteFile("WebView\\fonts\\LICENSE-Inter.txt");
             }
 
             public void SetBuildOutputTimestamp(string relativePath, DateTime timestampUtc)

@@ -415,6 +415,11 @@ namespace Readboard.VerificationTests.Protocol
 
         private sealed class PassivePlacementService : IMovePlacementService
         {
+            public bool CanResolvePlacementRegion(BoardFrame frame)
+            {
+                return false;
+            }
+
             public MovePlacementResult Place(MovePlacementRequest request)
             {
                 return new MovePlacementResult { Success = true };

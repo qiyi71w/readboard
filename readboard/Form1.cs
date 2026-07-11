@@ -9,12 +9,10 @@ using System.Threading;
 using System.Runtime.InteropServices;
 using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.ComponentModel;
 
 namespace readboard
 {
-    public partial class MainForm : Form, IProtocolCommandHost, ISyncCoordinatorHost
+    public partial class MainForm : Form, IProtocolCommandHost, ISyncCoordinatorHost, IWebViewSyncCoordinatorHost
     {
         // Boolean showDebugImage = true;
         Boolean clicked = false;
@@ -89,7 +87,6 @@ namespace readboard
         private bool closeRequestedBeforeHandle = false;
         private bool isInitializingProtocolState = true;
         private bool hostedUpdateSupported = false;
-        private FormUpdate activeHostedUpdateDialog = null;
         private bool suppressAutoPlayColorModeEvents = false;
         private bool suppressAutoPlayMoveModeEvents = false;
         private AutoPlayColorMode lastManualAutoPlayColorMode = AutoPlayColorMode.ManualBlack;
@@ -142,7 +139,10 @@ namespace readboard
         private void SetCurrentSyncType(int syncType)
         {
             if (currentSyncType != syncType)
+            {
                 ClearFoxAutoPlayColorDetectionState();
+                ResetWebViewSyncState();
+            }
             currentSyncType = syncType;
         }
 
@@ -1754,84 +1754,12 @@ namespace readboard
             lblAutoPlayColorStatus.Text = text;
         }
 
-        private bool TryConfigureFoxAutoPlayIdentity()
-        {
-            using (FoxAutoPlayIdentityDialog dialog = new FoxAutoPlayIdentityDialog(
-                ResolveCurrentFoxAutoPlayNicknameSignature(),
-                HasSavedFoxAutoPlayIdentity(),
-                BuildFoxAutoPlayIdentityCandidates()))
-            {
-                if (dialog.ShowDialog(this) != DialogResult.OK)
-                    return false;
-
-                if (dialog.SelectedAction == FoxAutoPlayIdentityDialogAction.ClearSaved)
-                {
-                    ClearSavedFoxAutoPlayIdentity();
-                    ClearFoxAutoPlayColorDetectionState();
-                    return true;
-                }
-
-                currentFoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;
-                if (dialog.SelectedAction == FoxAutoPlayIdentityDialogAction.SaveAndUse)
-                {
-                    AppConfig updatedConfig = Program.CurrentConfig.Clone();
-                    updatedConfig.FoxAutoPlayNickname = string.Empty;
-                    updatedConfig.FoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;
-                    Program.SaveAppConfig(updatedConfig);
-                }
-                ClearFoxAutoPlayColorDetectionState();
-                return true;
-            }
-        }
-
         private void ClearSavedFoxAutoPlayIdentity()
         {
             AppConfig updatedConfig = Program.CurrentConfig.Clone();
             updatedConfig.FoxAutoPlayNickname = string.Empty;
             updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;
             Program.SaveAppConfig(updatedConfig);
-        }
-
-        private static bool HasSavedFoxAutoPlayIdentity()
-        {
-            AppConfig config = Program.CurrentContext.Config;
-            return config != null
-                && (!string.IsNullOrWhiteSpace(config.FoxAutoPlayNickname)
-                    || !string.IsNullOrWhiteSpace(config.FoxAutoPlayNicknameSignature));
-        }
-
-        private IList<FoxAutoPlayIdentityCandidate> BuildFoxAutoPlayIdentityCandidates()
-        {
-            List<FoxAutoPlayIdentityCandidate> candidates = new List<FoxAutoPlayIdentityCandidate>();
-            if (!IsFoxSyncType(CurrentSyncType))
-                return candidates;
-
-            IntPtr boardHandle = ResolveFoxAutoPlayIdentityBoardHandle();
-            if (boardHandle == IntPtr.Zero)
-                return candidates;
-
-            IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(boardHandle);
-            if (captureHandle == IntPtr.Zero)
-                return candidates;
-
-            using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(captureHandle))
-            {
-                IList<FoxPlayerRowCandidate> rows = FoxPlayerRowLocator.LocatePlayerListPanel(bitmap);
-                for (int i = 0; i < rows.Count; i++)
-                {
-                    using (Bitmap nicknameSnippet = CropBitmap(bitmap, rows[i].NicknameBounds))
-                    {
-                        string signature = FoxPlayerNicknameSignature.FromBitmap(nicknameSnippet).Serialize();
-                        if (!string.IsNullOrWhiteSpace(signature))
-                        {
-                            Bitmap rowPreview = CropBitmap(bitmap, rows[i].RowBounds);
-                            candidates.Add(new FoxAutoPlayIdentityCandidate("玩家行 " + (i + 1), signature, rowPreview));
-                        }
-                    }
-                }
-            }
-
-            return candidates;
         }
 
         private IntPtr ResolveFoxAutoPlayIdentityBoardHandle()
@@ -2258,7 +2186,10 @@ namespace readboard
             if (CurrentSyncType == TYPE_YIKE && hwnd != handle)
                 ClearYikeContext();
             if (hwnd != handle)
+            {
                 ClearFoxAutoPlayColorDetectionState();
+                ResetWebViewSyncState();
+            }
             hwnd = handle;
         }
 
@@ -2299,12 +2230,34 @@ namespace readboard
             });
         }
 
+        void IWebViewSyncCoordinatorHost.OnRuntimeFrameCleared()
+        {
+            InvokeUiHostAction(ResetWebViewSyncState);
+        }
+
+        void IWebViewSyncCoordinatorHost.OnBoardFrameRecognized(
+            BoardFrame frame,
+            int boardPixelWidth,
+            int boardPixelHeight,
+            bool placementRegionResolved)
+        {
+            InvokeUiHostAction(delegate
+            {
+                UpdateWebViewBoardFrameState(
+                    frame,
+                    boardPixelWidth,
+                    boardPixelHeight,
+                    placementRegionResolved);
+            });
+        }
+
         void ISyncCoordinatorHost.OnBoardSnapshotRecognized(BoardSnapshot snapshot)
         {
             InvokeUiHostAction(delegate
             {
                 lastMainWindowTitleTurn = ResolveMainWindowTitleTurn(snapshot);
                 ApplyMainWindowTitle();
+                UpdateWebViewSnapshotState(snapshot);
             });
         }
 
@@ -2312,7 +2265,7 @@ namespace readboard
         {
             InvokeUiHostAction(delegate
             {
-                MessageBox.Show(getLangStr("noSelectedBoardAndFailed"));
+                ShowWebViewMessage("无法同步", getLangStr("noSelectedBoardAndFailed"));
             });
         }
 
@@ -2320,7 +2273,7 @@ namespace readboard
         {
             InvokeUiHostAction(delegate
             {
-                MessageBox.Show(getLangStr("recgnizeFaild"));
+                ShowWebViewMessage("识别失败", getLangStr("recgnizeFaild"));
             });
         }
 
@@ -2348,6 +2301,8 @@ namespace readboard
             if (lastMainWindowTitleTurn == MainWindowTitleTurn.None)
                 lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
             RefreshMainWindowTitleFromCurrentWindow();
+            AddWebViewLog("SYNC", "开始持续同步");
+            PostWebViewState();
         }
 
         private static MainWindowTitleTurn ResolveMainWindowTitleTurn(BoardSnapshot snapshot)
@@ -2375,6 +2330,8 @@ namespace readboard
         private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)
         {
             btnKeepSync.Text = getLangStr("keepSync") + "(" + Program.timename + "ms)";
+            AddWebViewLog("SYNC", "持续同步已停止");
+            PostWebViewState();
             if (!SyncToolbarTextResolver.ShouldRestoreIdleUiAfterKeepSyncStop(continuousSyncActive))
             {
                 ApplyMainWindowTitle();
@@ -2396,11 +2353,15 @@ namespace readboard
             hasRetainedFoxTitleSnapshot = false;
             lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
             RefreshMainWindowTitleFromCurrentWindow();
+            AddWebViewLog("SYNC", "开始快速同步");
+            PostWebViewState();
         }
 
         private void ApplyContinuousSyncStoppedUi()
         {
             bool keepSyncActive = sessionCoordinator.StartedSync;
+            AddWebViewLog("SYNC", "快速同步已停止");
+            PostWebViewState();
             btnFastSync.Text = SyncToolbarTextResolver.ResolveFastSyncTextAfterContinuousStop(
                 keepSyncActive,
                 getLangStr("stopSync"),
@@ -2539,6 +2500,7 @@ namespace readboard
             ResetMainWindowTitle();
             ApplyMainFormUi();
             RefreshShowInBoardShortcutToolTip();
+            InitializeWebViewShell();
             isInitializingProtocolState = false;
         }
 
@@ -2555,178 +2517,9 @@ namespace readboard
             return result;
         }
 
-        private void SetCheckUpdateButtonBusy(Boolean isChecking)
+        private void btnCheckUpdate_Click(object sender, EventArgs e)
         {
-            this.btnCheckUpdate.Enabled = !isChecking;
-            this.btnCheckUpdate.Text = isChecking
-                ? getLangStr("MainForm_btnCheckUpdate_Checking")
-                : getLangStr("MainForm_btnCheckUpdate");
-        }
-
-        private void ApplyUpdateDialogLanguage(FormUpdate formUpdate)
-        {
-            formUpdate.Text = getLangStr("Update_dialogTitle");
-            SetControlText(formUpdate, "lblTitle", getLangStr("Update_dialogTitle"));
-            SetControlText(formUpdate, "lblCurrentVersion", getLangStr("Update_currentVersion"));
-            SetControlText(formUpdate, "lblLatestVersion", getLangStr("Update_latestVersion"));
-            SetControlText(formUpdate, "lblReleaseDate", getLangStr("Update_releaseDate"));
-            SetControlText(formUpdate, "lblReleaseNotes", getLangStr("Update_releaseNotes"));
-            SetControlText(formUpdate, "btnClose", getLangStr("Update_close"));
-        }
-
-        private void SetControlText(Control root, string controlName, string text)
-        {
-            Control control = FindControl(root, controlName);
-            if (control == null)
-                return;
-            control.Text = text;
-        }
-
-        private static Control FindControl(Control root, string controlName)
-        {
-            if (root == null || string.IsNullOrEmpty(controlName))
-                return null;
-
-            if (root.Name == controlName)
-                return root;
-            foreach (Control child in root.Controls)
-            {
-                Control result = FindControl(child, controlName);
-                if (result != null)
-                    return result;
-            }
-            return null;
-        }
-
-        private void ShowUpdateAvailable(UpdateCheckResult result)
-        {
-            string hostedReleaseTag = result.Tag;
-            bool hostedInstallAvailable =
-                launchOptions.TransportKind == TransportKind.Pipe &&
-                sessionCoordinator.IsProtocolSessionActive &&
-                hostedUpdateSupported &&
-                !string.IsNullOrWhiteSpace(result.AssetDownloadUrl) &&
-                !string.IsNullOrWhiteSpace(result.AssetName) &&
-                !string.IsNullOrWhiteSpace(hostedReleaseTag);
-            UpdateDialogModel model = new UpdateDialogModel
-            {
-                CurrentVersion = result.CurrentVersion,
-                LatestVersion = result.LatestVersion,
-                PublishedAt = result.PublishedAt,
-                ReleaseNotes = result.ReleaseNotes,
-                DownloadUrl = result.ReleaseUrl,
-                UnavailableText = getLangStr("Update_notProvided"),
-                EmptyReleaseNotesText = getLangStr("Update_releaseNotesUnavailable"),
-                MissingDownloadUrlMessage = getLangStr("Update_missingDownloadUrl"),
-                InvalidDownloadUrlFormatMessage = getLangStr("Update_invalidDownloadUrlFormat"),
-                UnsupportedDownloadUrlSchemeMessage = getLangStr("Update_unsupportedDownloadUrlScheme"),
-                OpenDownloadUrlFailedMessage = getLangStr("Update_openDownloadFailed"),
-                HostedInstallAvailable = hostedInstallAvailable,
-                HostedReleaseTag = hostedReleaseTag,
-                HostedAssetName = result.AssetName,
-                HostedAssetDownloadUrl = result.AssetDownloadUrl,
-                DownloadButtonText = getLangStr("Update_download"),
-                DownloadAndInstallButtonText = getLangStr("Update_downloadAndInstall"),
-                DownloadingButtonText = getLangStr("Update_downloading"),
-                DownloadingPackageStatusText = getLangStr("Update_downloadingPackage"),
-                VerifyingPackageStatusText = getLangStr("Update_verifyingPackage"),
-                NotifyingHostStatusText = getLangStr("Update_notifyingHost"),
-                WaitingForHostInstallText = getLangStr("Update_waitingForHostInstall"),
-                HostInstallingStatusText = getLangStr("Update_hostInstalling"),
-                HostCancelledText = getLangStr("Update_hostCancelled"),
-                HostFailedText = getLangStr("Update_hostFailed"),
-                HostTimedOutText = getLangStr("Update_hostTimedOut"),
-                ManualDownloadFallbackMessage = getLangStr("Update_manualDownloadFallback"),
-                PrepareHostedUpdateAsync = PrepareHostedUpdatePackageAsync,
-                NotifyHostedUpdateReady = NotifyHostedUpdateReady
-            };
-            using (FormUpdate formUpdate = new FormUpdate(model))
-            {
-                activeHostedUpdateDialog = formUpdate;
-                formUpdate.FormClosed += delegate
-                {
-                    if (ReferenceEquals(activeHostedUpdateDialog, formUpdate))
-                        activeHostedUpdateDialog = null;
-                };
-                ApplyUpdateDialogLanguage(formUpdate);
-                formUpdate.ShowDialog(this);
-                if (ReferenceEquals(activeHostedUpdateDialog, formUpdate))
-                    activeHostedUpdateDialog = null;
-            }
-        }
-
-        private async Task<string> PrepareHostedUpdatePackageAsync(UpdateDialogModel model)
-        {
-            if (model == null)
-                throw new ArgumentNullException("model");
-
-            HostedUpdatePackageDownloader downloader = new HostedUpdatePackageDownloader();
-            string zipPath = await downloader.DownloadAsync(
-                model.HostedReleaseTag,
-                model.HostedAssetName,
-                model.HostedAssetDownloadUrl);
-            model.ReportHostedUpdateStatus?.Invoke(
-                model.VerifyingPackageStatusText,
-                "Verifying update package...");
-            new HostedUpdatePackageVerifier().Verify(model.HostedReleaseTag, zipPath);
-            return zipPath;
-        }
-
-        private void NotifyHostedUpdateReady(string tag, string absoluteZipPath)
-        {
-            sessionCoordinator.SendReadboardUpdateReady(tag, absoluteZipPath);
-        }
-
-        private void ShowUpdateUpToDate()
-        {
-            MessageBox.Show(this, getLangStr("Update_upToDate"), getLangStr("MainForm_btnCheckUpdate"), MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-
-        private void ShowUpdateCheckFailed(string errorMessage)
-        {
-            string reason = string.IsNullOrWhiteSpace(errorMessage)
-                ? getLangStr("Update_unknownError")
-                : errorMessage;
-            string message = getLangStr("Update_checkFailed") + Environment.NewLine + reason;
-            MessageBox.Show(this, message, getLangStr("MainForm_btnCheckUpdate"), MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-
-        private void HandleUpdateCheckResult(UpdateCheckResult result)
-        {
-            switch (result.Status)
-            {
-                case UpdateCheckStatus.UpdateAvailable:
-                    ShowUpdateAvailable(result);
-                    return;
-                case UpdateCheckStatus.UpToDate:
-                    ShowUpdateUpToDate();
-                    return;
-                case UpdateCheckStatus.Failed:
-                    ShowUpdateCheckFailed(result.ErrorMessage);
-                    return;
-                default:
-                    throw new InvalidEnumArgumentException("result.Status", (int)result.Status, typeof(UpdateCheckStatus));
-            }
-        }
-
-        private async void btnCheckUpdate_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                SetCheckUpdateButtonBusy(true);
-                UpdateCheckResult result = await updateChecker.CheckAsync();
-                if (result == null)
-                    throw new InvalidOperationException("Update check returned no result.");
-                HandleUpdateCheckResult(result);
-            }
-            catch (Exception ex)
-            {
-                ShowUpdateCheckFailed(ex.Message);
-            }
-            finally
-            {
-                SetCheckUpdateButtonBusy(false);
-            }
+            _ = CheckForWebViewUpdateAsync();
         }
 
         public void sendPonderStatus()
@@ -2790,7 +2583,7 @@ namespace readboard
                 Math.Max(y1, y2));
             if (!TryFinalizeSelectionBounds())
             {
-                MessageBox.Show(getLangStr("recgnizeFaild"));// Program.isChn ? "不能识别棋盘,请调整被同步棋盘大小后重新选择或尝试[框选1路线]" : "Can not detect board,Please zoom the board and try again or use [CircleRow1]");
+                ShowWebViewMessage("识别失败", getLangStr("recgnizeFaild"));
                 RestoreMainWindowAfterSelection();
             }
             else if (CurrentSyncType == TYPE_BACKGROUND)
@@ -3041,6 +2834,7 @@ namespace readboard
             RunShutdownStep(shutdownExceptions, delegate { SendShutdownProtocol(); });
             RunShutdownStep(shutdownExceptions, delegate { Program.DisposeBitmap(); });
             RunShutdownStep(shutdownExceptions, delegate { sessionCoordinator.Stop(); });
+            RunShutdownStep(shutdownExceptions, delegate { DisposeWebViewUpdateBridge(); });
             RunShutdownStep(shutdownExceptions, delegate
             {
                 if (!IsHandleCreated)
@@ -3058,7 +2852,7 @@ namespace readboard
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            if (!isShuttingDown && !IsDisposed && !Disposing)
+            if (!isShuttingDown && !IsDisposed && !Disposing && webView == null)
                 ApplyMainFormUi();
             FlushPendingProtocolCommands();
             if (!closeRequestedBeforeHandle || IsDisposed)
@@ -3072,7 +2866,10 @@ namespace readboard
             if (isShuttingDown || IsDisposed || Disposing)
                 return;
             factor = GetCurrentDpiScale();
-            ApplyMainFormUi();
+            if (webView == null)
+                ApplyMainFormUi();
+            else
+                UpdateWebViewMinimumSizeForCurrentDpi();
         }
 
         private void DisposeInputHooks()
@@ -3132,6 +2929,7 @@ namespace readboard
             {
                 boardW = 19;
                 boardH = 19;
+                ResetWebViewSyncState();
                 this.txtBoardHeight.BackColor = System.Drawing.SystemColors.Menu;
                 this.txtBoardWidth.BackColor = System.Drawing.SystemColors.Menu;
             }
@@ -3146,6 +2944,7 @@ namespace readboard
             {
                 boardW = 13;
                 boardH = 13;
+                ResetWebViewSyncState();
                 this.txtBoardHeight.BackColor = System.Drawing.SystemColors.Menu;
                 this.txtBoardWidth.BackColor = System.Drawing.SystemColors.Menu;
             }
@@ -3160,6 +2959,7 @@ namespace readboard
             {
                 boardW = 9;
                 boardH = 9;
+                ResetWebViewSyncState();
                 this.txtBoardHeight.BackColor = System.Drawing.SystemColors.Menu;
                 this.txtBoardWidth.BackColor = System.Drawing.SystemColors.Menu;
             }
@@ -3362,8 +3162,9 @@ namespace readboard
 
         private void btnSettings_Click(object sender, EventArgs e)
         {
-            SettingsForm form4 = new SettingsForm(this);
-            form4.Show(this);
+            webViewState.Page = "settings";
+            GetWebViewSettingsState();
+            PostWebViewState();
         }
 
         private void radioButton8_CheckedChanged(object sender, EventArgs e)
@@ -3381,6 +3182,7 @@ namespace readboard
                 {
                     // MessageBox.Show(Program.isChn?"错误的棋盘大小":"Wrong goban size!");
                 }
+                ResetWebViewSyncState();
             }
             saveOtherConfig();
         }
@@ -3491,12 +3293,8 @@ namespace readboard
                 if (IsFoxSyncType(CurrentSyncType)
                     && string.IsNullOrWhiteSpace(ResolveCurrentFoxAutoPlayNicknameSignature()))
                 {
-                    bool configured = TryConfigureFoxAutoPlayIdentity();
-                    if (!configured)
-                    {
-                        ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);
-                        return;
-                    }
+                    OpenWebViewIdentity(true);
+                    return;
                 }
                 ResolveCurrentAutoPlayColor(ResolveFoxWindowContext());
             }
@@ -3532,11 +3330,7 @@ namespace readboard
             if (!IsFoxSyncType(CurrentSyncType))
                 return;
 
-            TryConfigureFoxAutoPlayIdentity();
-            if (radioAutoPlayColor.Checked)
-                ResolveCurrentAutoPlayColor(ResolveFoxWindowContext());
-            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
-                SendPlayCommandIfSelected();
+            OpenWebViewIdentity(false);
         }
 
 
@@ -3561,10 +3355,7 @@ namespace readboard
             if (chkShowInBoard.Checked)
             {
                 if (Program.showInBoardHint)
-                {
-                    TipsForm form7 = new TipsForm(this);
-                    form7.ShowDialog(this);
-                }
+                    webViewSettingsDialog = new ReadBoardDialogUiState { Open = true, Kind = "showInBoardHint" };
             }
             else
             {

@@ -153,6 +153,9 @@ namespace readboard
             config.CustomBoardHeight = ReadIntValue(values, "CustomBoardHeight", config.CustomBoardHeight);
             config.WindowPosX = ReadIntValue(values, "WindowPosX", config.WindowPosX);
             config.WindowPosY = ReadIntValue(values, "WindowPosY", config.WindowPosY);
+            config.WindowClientWidth = ReadIntValue(values, "WindowClientWidth", config.WindowClientWidth);
+            config.WindowClientHeight = ReadIntValue(values, "WindowClientHeight", config.WindowClientHeight);
+            config.WindowMaximized = ReadBoolValue(values, "WindowMaximized", config.WindowMaximized);
             config.AutoPlayColorMode = (AutoPlayColorMode)ReadIntValue(values, "AutoPlayColorMode", (int)config.AutoPlayColorMode);
             config.AutoPlayMoveMode = (AutoPlayMoveMode)ReadIntValue(values, "AutoPlayMoveMode", (int)config.AutoPlayMoveMode);
             config.FoxAutoPlayNickname = ReadStringValue(values, "FoxAutoPlayNickname", config.FoxAutoPlayNickname);
@@ -190,6 +193,7 @@ namespace readboard
         //   15: + ColorMode @ 14
         //   18: + AutoPlayColorMode @ 15, FoxAutoPlayNickname @ 16, FoxAutoPlayNicknameSignature @ 17
         //   19: + AutoPlayMoveMode @ 18
+        //   22: + WindowClientWidth @ 19, WindowClientHeight @ 20, WindowMaximized @ 21
         private bool ApplyLegacyOtherConfig(AppConfig config)
         {
             string[] parts = ReadLegacyParts(LegacyOtherFileName);
@@ -230,6 +234,12 @@ namespace readboard
                 config.FoxAutoPlayNicknameSignature = ReadString(parts[17], config.FoxAutoPlayNicknameSignature);
             if (parts.Length >= 19)
                 config.AutoPlayMoveMode = (AutoPlayMoveMode)ReadInt(parts[18], (int)config.AutoPlayMoveMode);
+            if (parts.Length >= 22)
+            {
+                config.WindowClientWidth = ReadInt(parts[19], config.WindowClientWidth);
+                config.WindowClientHeight = ReadInt(parts[20], config.WindowClientHeight);
+                config.WindowMaximized = ReadBool(parts[21], config.WindowMaximized);
+            }
             return true;
         }
 
@@ -304,6 +314,9 @@ namespace readboard
             builder.Append('_').Append(EscapeLegacyToken(config.FoxAutoPlayNickname));
             builder.Append('_').Append(EscapeLegacyToken(config.FoxAutoPlayNicknameSignature));
             builder.Append('_').Append((int)config.AutoPlayMoveMode);
+            builder.Append('_').Append(config.WindowClientWidth);
+            builder.Append('_').Append(config.WindowClientHeight);
+            builder.Append('_').Append(ToLegacyBool(config.WindowMaximized));
             File.WriteAllText(GetPath(LegacyOtherFileName), builder.ToString(), Encoding.UTF8);
         }
 
@@ -317,6 +330,12 @@ namespace readboard
                 AppConfig.NormalizeAutoPlayColorMode(config.AutoPlayColorMode);
             config.AutoPlayMoveMode =
                 AppConfig.NormalizeAutoPlayMoveMode(config.AutoPlayMoveMode);
+            config.WindowClientWidth = Math.Max(
+                AppConfig.MinimumWindowClientWidth,
+                config.WindowClientWidth);
+            config.WindowClientHeight = Math.Max(
+                AppConfig.MinimumWindowClientHeight,
+                config.WindowClientHeight);
         }
 
         private static void NormalizeWindowPosition(AppConfig config)

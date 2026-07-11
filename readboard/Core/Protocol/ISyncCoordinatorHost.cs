@@ -17,4 +17,14 @@ namespace readboard
         void MinimizeWindow();
         bool TrySendPlaceProtocolError(string message);
     }
+
+    internal interface IWebViewSyncCoordinatorHost
+    {
+        void OnRuntimeFrameCleared();
+        void OnBoardFrameRecognized(
+            BoardFrame frame,
+            int boardPixelWidth,
+            int boardPixelHeight,
+            bool placementRegionResolved);
+    }
 }

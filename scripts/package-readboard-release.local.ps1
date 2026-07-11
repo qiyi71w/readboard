@@ -18,7 +18,7 @@ $projectFile = Join-Path $projectRoot 'readboard.csproj'
 $assemblyInfoPath = Join-Path $projectRoot 'Properties\AssemblyInfo.cs'
 
 $publishRuntimeIdentifier = 'win-x64'
-$publishTargetFramework = 'net10.0-windows'
+$publishTargetFramework = 'net10.0-windows10.0.17763.0'
 
 if (-not $ReleaseRoot) {
     $ReleaseRoot = Join-Path $repoRoot 'release'
@@ -30,7 +30,16 @@ if (-not $BuildOutputDir) {
 
 $requiredBuildFiles = @(
     'readboard.exe',
-    'readboard.dll'
+    'readboard.dll',
+    'Microsoft.Web.WebView2.Core.dll',
+    'Microsoft.Web.WebView2.WinForms.dll',
+    'runtimes\win-x64\native\WebView2Loader.dll',
+    'WebView\index.html',
+    'WebView\styles.css',
+    'WebView\app.js',
+    'WebView\lizziey.ico',
+    'WebView\fonts\InterVariable.woff2',
+    'WebView\fonts\LICENSE-Inter.txt'
 )
 
 function Get-ReleaseVersion {

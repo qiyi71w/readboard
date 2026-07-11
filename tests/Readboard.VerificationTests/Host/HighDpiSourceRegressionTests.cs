@@ -24,9 +24,6 @@ namespace Readboard.VerificationTests.Host
 
         [Theory]
         [InlineData("Form1.cs")]
-        [InlineData("Form4.cs")]
-        [InlineData("Form7.cs")]
-        [InlineData("FormUpdate.cs")]
         public void HighDpiForms_DoNotDisableAutoscaling(string fileName)
         {
             string content = LoadSource("readboard", fileName);
@@ -36,8 +33,6 @@ namespace Readboard.VerificationTests.Host
 
         [Theory]
         [InlineData("Form1.cs", "AutoScroll = true;", "ApplyMainFormClientHeight(chkShowInBoard.Bottom + ScaleValue(12));")]
-        [InlineData("Form4.cs", "AutoScroll = true;", "ApplySettingsClientHeight(btnConfirm.Bottom + bottomPadding);")]
-        [InlineData("Form7.cs", "AutoScroll = true;", "ApplyTipsClientHeight(Math.Max(btnConfirm.Bottom, btnNotAskAgain.Bottom) + bottomPadding);")]
         public void LayoutDrivenForms_ClampFinalHeightAndEnableScrollFallback(
             string fileName,
             string scrollMarker,
@@ -74,29 +69,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("radioAutoPlayMoveFirst", optionsSlice);
             Assert.Contains("radioAutoPlayMoveGma", optionsSlice);
             Assert.Contains("lblAutoPlayMoveMode", labelsSlice);
-        }
-
-        [Fact]
-        public void SettingsForm_PlacesOpenDebugDirectoryButtonInTopRightSlot()
-        {
-            string content = LoadSource("readboard", "Form4.cs");
-
-            Assert.Contains("btnOpenDebugDiagnostics.SetBounds(buttonLeft, top, buttonWidth, buttonHeight);", content);
-            Assert.Contains("currentTop = LayoutSingleOption(chkDebugDiagnostics, left, currentTop, optionRowGap);", content);
-            Assert.DoesNotContain("LayoutOptionRow(chkDebugDiagnostics, btnOpenDebugDiagnostics", content);
-        }
-
-        [Fact]
-        public void SettingsForm_FoxAutoPlayIdentityControls_AreNotInSettings()
-        {
-            string content = LoadSource("readboard", "Form4.cs");
-            string designerSource = LoadSource("readboard", "Form4.Designer.cs");
-
-            Assert.DoesNotContain("lblFoxAutoPlayNickname", designerSource);
-            Assert.DoesNotContain("txtFoxAutoPlayNickname", designerSource);
-            Assert.DoesNotContain("btnClearFoxAutoPlayIdentity", designerSource);
-            Assert.DoesNotContain("LayoutFoxAutoPlayIdentityRow", content);
-            Assert.DoesNotContain("MeasureButtonWidth(btnClearFoxAutoPlayIdentity", content);
         }
 
         [Fact]
