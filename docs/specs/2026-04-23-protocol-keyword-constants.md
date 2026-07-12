@@ -19,6 +19,12 @@
 - Lizzie parser 必须容忍并消费 ReadBoard 新增的 outbound 行；旧端不能因为未知 `lastMoveSource` 行破坏普通同步。
 - 仅常量化不允许改 `LegacyProtocolAdapter` 的 parse / emit 语义。
 
+## 2026-07-12 清空棋盘增量命令
+
+- `clearBoard`：ReadBoard 请求宿主停止同步后的显式主棋盘清空。它不能复用旧 `clear`；旧 `clear` 仍只重置同步缓存和临时状态。
+- 新 ReadBoard 连接旧宿主时，旧宿主可能按历史 `startsWith("clear")` 逻辑把 `clearBoard` 降级为缓存清理，因此真正清空 Lizzie 主棋盘要求宿主与 ReadBoard 同时升级。
+- 当前 `lizzieyzy-next` 解析端已接入 `clearBoard -> Lizzie.board.clear(false)`，因此 ReadBoard 侧只需发出专用 wire token。
+
 ## 2026-04-23 实现结果
 
 - 新增 `readboard/Core/Protocol/ProtocolKeywords.cs`，集中定义旧协议 wire 文本。
@@ -38,6 +44,7 @@
 | inbound command | `quit` |
 | outbound command | `ready` |
 | outbound command | `clear` |
+| outbound command | `clearBoard` |
 | outbound command | `end` |
 | outbound command | `playponder on` |
 | outbound command | `playponder off` |

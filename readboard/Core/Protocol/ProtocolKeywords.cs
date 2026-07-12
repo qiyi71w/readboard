@@ -9,6 +9,7 @@ namespace readboard
         internal const string Quit = "quit";
         internal const string Ready = "ready";
         internal const string Clear = "clear";
+        internal const string ClearBoard = "clearBoard";
         internal const string BoardEnd = "end";
         internal const string PlayPonderOn = "playponder on";
         internal const string PlayPonderOff = "playponder off";

@@ -42,6 +42,15 @@ namespace Readboard.VerificationTests
             Assert.Equal("foxMoveNumber 57", line);
         }
 
+        [Fact]
+        public void ClearBoard_SerializesDedicatedOutboundCommandWithoutChangingClear()
+        {
+            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
+
+            Assert.Equal("clear", adapter.Serialize(adapter.CreateClearMessage()));
+            Assert.Equal("clearBoard", adapter.Serialize(adapter.CreateClearBoardMessage()));
+        }
+
         [Theory]
         [InlineData(0, "lastMoveSource none")]
         [InlineData(1, "lastMoveSource redBlueMarker")]

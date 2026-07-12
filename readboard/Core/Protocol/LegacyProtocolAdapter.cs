@@ -56,6 +56,11 @@ namespace readboard
             return CreateLegacyMessage(ProtocolKeywords.Clear);
         }
 
+        public ProtocolMessage CreateClearBoardMessage()
+        {
+            return CreateLegacyMessage(ProtocolKeywords.ClearBoard);
+        }
+
         public ProtocolMessage CreateBoardEndMessage()
         {
             return CreateLegacyMessage(ProtocolKeywords.BoardEnd);
