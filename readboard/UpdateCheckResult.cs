@@ -10,6 +10,10 @@ namespace readboard
 
         public string LatestVersion { get; internal set; }
 
+        public string ChannelId { get; internal set; }
+
+        public string ChannelStatus { get; internal set; }
+
         public string Tag { get; internal set; }
 
         public DateTime? PublishedAt { get; internal set; }

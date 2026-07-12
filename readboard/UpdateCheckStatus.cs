@@ -4,6 +4,8 @@ namespace readboard
     {
         UpToDate = 0,
         UpdateAvailable = 1,
-        Failed = 2
+        Failed = 2,
+        OutsideChannel = 3,
+        NoMatchingChannel = 4
     }
 }

@@ -2602,6 +2602,16 @@ namespace readboard
         private void ShowUpdateAvailable(UpdateCheckResult result)
         {
             string hostedReleaseTag = result.Tag;
+            string releaseNotes = result.ReleaseNotes;
+            if (string.Equals(result.ChannelStatus, "retired", StringComparison.Ordinal))
+            {
+                string finalVersionMessage = string.Format(
+                    getLangStr("Update_retiredFinalVersion"),
+                    result.LatestVersion);
+                releaseNotes = string.IsNullOrWhiteSpace(releaseNotes)
+                    ? finalVersionMessage
+                    : finalVersionMessage + Environment.NewLine + Environment.NewLine + releaseNotes;
+            }
             bool hostedInstallAvailable =
                 launchOptions.TransportKind == TransportKind.Pipe &&
                 sessionCoordinator.IsProtocolSessionActive &&
@@ -2614,7 +2624,7 @@ namespace readboard
                 CurrentVersion = result.CurrentVersion,
                 LatestVersion = result.LatestVersion,
                 PublishedAt = result.PublishedAt,
-                ReleaseNotes = result.ReleaseNotes,
+                ReleaseNotes = releaseNotes,
                 DownloadUrl = result.ReleaseUrl,
                 UnavailableText = getLangStr("Update_notProvided"),
                 EmptyReleaseNotesText = getLangStr("Update_releaseNotesUnavailable"),
@@ -2678,9 +2688,20 @@ namespace readboard
             sessionCoordinator.SendReadboardUpdateReady(tag, absoluteZipPath);
         }
 
-        private void ShowUpdateUpToDate()
+        private void ShowUpdateUpToDate(UpdateCheckResult result)
         {
-            MessageBox.Show(this, getLangStr("Update_upToDate"), getLangStr("MainForm_btnCheckUpdate"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+            string messageKey = string.Equals(
+                result.ChannelStatus,
+                "retired",
+                StringComparison.Ordinal)
+                ? "Update_upToDateRetired"
+                : "Update_upToDate";
+            ShowUpdateInformation(getLangStr(messageKey));
+        }
+
+        private void ShowUpdateInformation(string message)
+        {
+            MessageBox.Show(this, message, getLangStr("MainForm_btnCheckUpdate"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void ShowUpdateCheckFailed(string errorMessage)
@@ -2700,7 +2721,13 @@ namespace readboard
                     ShowUpdateAvailable(result);
                     return;
                 case UpdateCheckStatus.UpToDate:
-                    ShowUpdateUpToDate();
+                    ShowUpdateUpToDate(result);
+                    return;
+                case UpdateCheckStatus.OutsideChannel:
+                    ShowUpdateInformation(getLangStr("Update_outsideChannel"));
+                    return;
+                case UpdateCheckStatus.NoMatchingChannel:
+                    ShowUpdateInformation(getLangStr("Update_noMatchingChannel"));
                     return;
                 case UpdateCheckStatus.Failed:
                     ShowUpdateCheckFailed(result.ErrorMessage);

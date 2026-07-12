@@ -4,113 +4,132 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace readboard
 {
     public sealed class GitHubUpdateChecker
     {
-        private const string LatestReleaseApiUrl = "https://api.github.com/repos/qiyi71w/readboard/releases/latest";
+        private const string ChannelManifestUrl =
+            "https://raw.githubusercontent.com/qiyi71w/readboard/main/update-channels.json";
+        private const string ReleaseApiUrlPrefix =
+            "https://api.github.com/repos/qiyi71w/readboard/releases/tags/";
         private const string GitHubAcceptHeader = "application/vnd.github+json";
         private const string GitHubUserAgent = "readboard-update-checker";
         private const int RequestTimeoutMilliseconds = 15000;
-        private const string HostedReleaseAssetPrefix = "readboard-github-release-";
-        private const string HostedReleaseAssetSuffix = ".zip";
+        private const int SupportedSchemaVersion = 1;
 
         private readonly Func<string> _currentVersionProvider;
-        private readonly Func<Task<string>> _latestReleaseJsonProvider;
+        private readonly Func<Version> _windowsVersionProvider;
+        private readonly Func<Task<string>> _channelManifestJsonProvider;
+        private readonly Func<string, Task<string>> _releaseJsonProvider;
 
         public GitHubUpdateChecker()
-            : this(AppReleaseVersion.GetCurrentVersion, DownloadLatestReleaseJsonAsync)
+            : this(
+                AppReleaseVersion.GetCurrentVersion,
+                () => Environment.OSVersion.Version,
+                DownloadChannelManifestJsonAsync,
+                DownloadReleaseJsonAsync)
         {
         }
 
         internal GitHubUpdateChecker(
             Func<string> currentVersionProvider,
-            Func<Task<string>> latestReleaseJsonProvider)
+            Func<Version> windowsVersionProvider,
+            Func<Task<string>> channelManifestJsonProvider,
+            Func<string, Task<string>> releaseJsonProvider)
         {
-            if (currentVersionProvider == null)
-            {
+            _currentVersionProvider = currentVersionProvider ??
                 throw new ArgumentNullException("currentVersionProvider");
-            }
-
-            if (latestReleaseJsonProvider == null)
-            {
-                throw new ArgumentNullException("latestReleaseJsonProvider");
-            }
-
-            _currentVersionProvider = currentVersionProvider;
-            _latestReleaseJsonProvider = latestReleaseJsonProvider;
+            _windowsVersionProvider = windowsVersionProvider ??
+                throw new ArgumentNullException("windowsVersionProvider");
+            _channelManifestJsonProvider = channelManifestJsonProvider ??
+                throw new ArgumentNullException("channelManifestJsonProvider");
+            _releaseJsonProvider = releaseJsonProvider ??
+                throw new ArgumentNullException("releaseJsonProvider");
         }
 
-        public Task<UpdateCheckResult> CheckAsync()
+        public async Task<UpdateCheckResult> CheckAsync()
         {
             string currentVersion = null;
-            SemanticVersion currentSemanticVersion;
-
             try
             {
                 currentVersion = _currentVersionProvider();
-                currentSemanticVersion = ParseSemanticVersion(currentVersion, "Current version");
-            }
-            catch (Exception exception)
-            {
-                return CreateCompletedTask(CreateFailureResult(currentVersion, exception));
-            }
+                SemanticVersion currentSemanticVersion =
+                    ParseSemanticVersion(currentVersion, "Current version");
+                Version windowsVersion = _windowsVersionProvider() ??
+                    throw new InvalidOperationException("Windows version is unavailable.");
 
-            Task<string> latestReleaseJsonTask;
-            try
-            {
-                latestReleaseJsonTask = _latestReleaseJsonProvider();
-            }
-            catch (Exception exception)
-            {
-                return CreateCompletedTask(CreateFailureResult(currentVersion, exception));
-            }
+                string manifestJson = await RequireTask(
+                    _channelManifestJsonProvider(),
+                    "Channel manifest request");
+                UpdateChannel channel = SelectChannel(ParseManifest(manifestJson), windowsVersion);
+                if (channel == null)
+                {
+                    return new UpdateCheckResult
+                    {
+                        Status = UpdateCheckStatus.NoMatchingChannel,
+                        CurrentVersion = currentSemanticVersion.ToString()
+                    };
+                }
 
-            if (latestReleaseJsonTask == null)
-            {
-                return CreateCompletedTask(
-                    CreateFailureResult(
-                        currentVersion,
-                        new InvalidOperationException("Latest release request returned no task.")));
-            }
+                string releaseJson = await RequireTask(
+                    _releaseJsonProvider(channel.LatestTag),
+                    "Release request");
+                GitHubReleaseInfo release = ParseRelease(releaseJson, channel);
+                SemanticVersion latestVersion =
+                    ParseSemanticVersion(channel.LatestTag, "Channel latest tag");
 
-            var completion = new TaskCompletionSource<UpdateCheckResult>();
-            latestReleaseJsonTask.ContinueWith(
-                task => CompleteCheck(
-                    completion,
-                    currentVersion,
+                return CreateSuccessResult(
                     currentSemanticVersion,
-                    task),
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-            return completion.Task;
+                    latestVersion,
+                    channel,
+                    release);
+            }
+            catch (Exception exception)
+            {
+                return CreateFailureResult(currentVersion, exception);
+            }
+        }
+
+        private static async Task<string> RequireTask(Task<string> task, string label)
+        {
+            if (task == null)
+            {
+                throw new InvalidOperationException(label + " returned no task.");
+            }
+
+            return await task;
         }
 
         private static UpdateCheckResult CreateSuccessResult(
             SemanticVersion currentVersion,
             SemanticVersion latestVersion,
-            GitHubReleaseInfo latestRelease)
+            UpdateChannel channel,
+            GitHubReleaseInfo release)
         {
+            int comparison = currentVersion.CompareTo(latestVersion);
+            UpdateCheckStatus status = comparison < 0
+                ? UpdateCheckStatus.UpdateAvailable
+                : comparison == 0
+                    ? UpdateCheckStatus.UpToDate
+                    : UpdateCheckStatus.OutsideChannel;
+
             return new UpdateCheckResult
             {
-                Status = latestVersion.CompareTo(currentVersion) > 0
-                    ? UpdateCheckStatus.UpdateAvailable
-                    : UpdateCheckStatus.UpToDate,
+                Status = status,
                 CurrentVersion = currentVersion.ToString(),
                 LatestVersion = latestVersion.ToString(),
-                Tag = latestRelease.Tag,
-                PublishedAt = latestRelease.PublishedAt,
-                ReleaseNotes = latestRelease.Body,
-                ReleaseUrl = latestRelease.HtmlUrl,
-                AssetName = latestRelease.AssetName,
-                AssetDownloadUrl = latestRelease.AssetDownloadUrl,
-                AssetSize = latestRelease.AssetSize,
-                ErrorMessage = null
+                ChannelId = channel.Id,
+                ChannelStatus = channel.Status,
+                Tag = release.Tag,
+                PublishedAt = release.PublishedAt,
+                ReleaseNotes = release.Body,
+                ReleaseUrl = release.HtmlUrl,
+                AssetName = release.AssetName,
+                AssetDownloadUrl = release.AssetDownloadUrl,
+                AssetSize = release.AssetSize
             };
         }
 
@@ -121,391 +140,437 @@ namespace readboard
             Exception baseException = exception is AggregateException
                 ? exception.GetBaseException()
                 : exception;
-
             return new UpdateCheckResult
             {
                 Status = UpdateCheckStatus.Failed,
                 CurrentVersion = currentVersion,
-                LatestVersion = null,
-                PublishedAt = null,
-                ReleaseNotes = null,
-                ReleaseUrl = null,
-                AssetName = null,
-                AssetDownloadUrl = null,
-                AssetSize = null,
                 ErrorMessage = baseException.Message
             };
         }
 
-        private static Task<UpdateCheckResult> CreateCompletedTask(UpdateCheckResult result)
-        {
-            var completion = new TaskCompletionSource<UpdateCheckResult>();
-            completion.SetResult(result);
-            return completion.Task;
-        }
-
-        private static void CompleteCheck(
-            TaskCompletionSource<UpdateCheckResult> completion,
-            string currentVersion,
-            SemanticVersion currentSemanticVersion,
-            Task<string> latestReleaseJsonTask)
-        {
-            try
-            {
-                if (latestReleaseJsonTask.IsCanceled)
-                {
-                    throw new TaskCanceledException("Latest release request was canceled.");
-                }
-
-                if (latestReleaseJsonTask.IsFaulted)
-                {
-                    throw latestReleaseJsonTask.Exception;
-                }
-
-                GitHubReleaseInfo latestRelease =
-                    ParseLatestRelease(latestReleaseJsonTask.Result);
-                SemanticVersion latestSemanticVersion =
-                    ParseSemanticVersion(latestRelease.Tag, "Latest release tag");
-                completion.SetResult(
-                    CreateSuccessResult(
-                        currentSemanticVersion,
-                        latestSemanticVersion,
-                        latestRelease));
-            }
-            catch (Exception exception)
-            {
-                completion.SetResult(CreateFailureResult(currentVersion, exception));
-            }
-        }
-
-        private static SemanticVersion ParseSemanticVersion(string value, string label)
-        {
-            SemanticVersion semanticVersion;
-            if (SemanticVersion.TryParse(value, out semanticVersion))
-            {
-                return semanticVersion;
-            }
-
-            throw new InvalidOperationException(
-                label + " is not a valid semantic version: " + value);
-        }
-
-        private static GitHubReleaseInfo ParseLatestRelease(string json)
+        private static List<UpdateChannel> ParseManifest(string json)
         {
             if (string.IsNullOrWhiteSpace(json))
             {
-                throw new InvalidOperationException("Latest release response is empty.");
+                throw new InvalidOperationException("Channel manifest response is empty.");
             }
 
-            var payload = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
-            if (payload == null)
+            using JsonDocument document = JsonDocument.Parse(json);
+            JsonElement root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
             {
-                throw new InvalidOperationException("Latest release response is not a JSON object.");
+                throw new InvalidOperationException("Channel manifest is not a JSON object.");
             }
 
-            string tag = ReadRequiredString(payload, "tag_name", false);
-            GitHubReleaseAssetInfo asset = ReadMatchingAsset(payload, tag);
-
-            return new GitHubReleaseInfo
+            int schemaVersion = ReadRequiredInt32(root, "schemaVersion", "Channel manifest");
+            if (schemaVersion != SupportedSchemaVersion)
             {
-                Tag = tag,
-                Name = ReadOptionalString(payload, "name"),
-                Body = ReadOptionalString(payload, "body"),
-                HtmlUrl = ReadRequiredString(payload, "html_url", false),
-                PublishedAt = ReadPublishedAt(payload),
-                AssetName = asset == null ? null : asset.Name,
-                AssetDownloadUrl = asset == null ? null : asset.DownloadUrl,
-                AssetSize = asset == null ? (long?)null : asset.Size
+                throw new InvalidOperationException(
+                    "Unsupported channel manifest schema version: " + schemaVersion);
+            }
+
+            JsonElement channelsElement = ReadRequiredProperty(root, "channels", "Channel manifest");
+            if (channelsElement.ValueKind != JsonValueKind.Array)
+            {
+                throw new InvalidOperationException("Channel manifest field 'channels' is not an array.");
+            }
+
+            var channels = new List<UpdateChannel>();
+            var channelIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (JsonElement channelElement in channelsElement.EnumerateArray())
+            {
+                if (channelElement.ValueKind != JsonValueKind.Object)
+                {
+                    throw new InvalidOperationException("Channel entry is not a JSON object.");
+                }
+
+                UpdateChannel channel = ParseChannel(channelElement);
+                if (!channelIds.Add(channel.Id))
+                {
+                    throw new InvalidOperationException("Duplicate update channel id: " + channel.Id);
+                }
+
+                channels.Add(channel);
+            }
+
+            ValidateNoOverlappingRanges(channels);
+            return channels;
+        }
+
+        private static UpdateChannel ParseChannel(JsonElement element)
+        {
+            string id = ReadRequiredString(element, "id", "Channel");
+            string status = ReadRequiredString(element, "status", "Channel '" + id + "'");
+            if (!string.Equals(status, "active", StringComparison.Ordinal) &&
+                !string.Equals(status, "retired", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Channel '" + id + "' has invalid status: " + status);
+            }
+
+            string latestTag = ReadRequiredString(element, "latestTag", "Channel '" + id + "'");
+            ParseSemanticVersion(latestTag, "Channel '" + id + "' latest tag");
+
+            Version minimum = ReadOptionalVersion(element, "minimumWindowsVersion", id);
+            Version maximum = ReadOptionalVersion(
+                element,
+                "maximumWindowsVersionExclusive",
+                id);
+            if (minimum != null && maximum != null && minimum.CompareTo(maximum) >= 0)
+            {
+                throw new InvalidOperationException(
+                    "Channel '" + id + "' has an empty or reversed Windows range.");
+            }
+
+            return new UpdateChannel
+            {
+                Id = id,
+                Status = status,
+                MinimumWindowsVersion = minimum,
+                MaximumWindowsVersionExclusive = maximum,
+                LatestTag = latestTag,
+                AssetName = ReadRequiredString(element, "assetName", "Channel '" + id + "'"),
+                Sha256 = ReadRequiredString(element, "sha256", "Channel '" + id + "'")
             };
         }
 
-        private static GitHubReleaseAssetInfo ReadMatchingAsset(
-            IDictionary<string, object> payload,
-            string tag)
+        private static void ValidateNoOverlappingRanges(IList<UpdateChannel> channels)
         {
-            object rawAssets;
-            if (!payload.TryGetValue("assets", out rawAssets) || rawAssets == null)
+            for (int firstIndex = 0; firstIndex < channels.Count; firstIndex++)
             {
-                return null;
+                for (int secondIndex = firstIndex + 1; secondIndex < channels.Count; secondIndex++)
+                {
+                    if (RangesOverlap(channels[firstIndex], channels[secondIndex]))
+                    {
+                        throw new InvalidOperationException(
+                            "Update channel Windows ranges overlap: " +
+                            channels[firstIndex].Id + " and " + channels[secondIndex].Id);
+                    }
+                }
             }
+        }
 
-            if (!(rawAssets is JsonElement assetsElement) ||
-                assetsElement.ValueKind != JsonValueKind.Array)
-            {
-                return null;
-            }
+        private static bool RangesOverlap(UpdateChannel first, UpdateChannel second)
+        {
+            bool firstEndsAfterSecondStarts =
+                first.MaximumWindowsVersionExclusive == null ||
+                second.MinimumWindowsVersion == null ||
+                second.MinimumWindowsVersion.CompareTo(first.MaximumWindowsVersionExclusive) < 0;
+            bool secondEndsAfterFirstStarts =
+                second.MaximumWindowsVersionExclusive == null ||
+                first.MinimumWindowsVersion == null ||
+                first.MinimumWindowsVersion.CompareTo(second.MaximumWindowsVersionExclusive) < 0;
+            return firstEndsAfterSecondStarts && secondEndsAfterFirstStarts;
+        }
 
-            string expectedName = HostedReleaseAssetPrefix + tag + HostedReleaseAssetSuffix;
-            foreach (JsonElement assetElement in assetsElement.EnumerateArray())
+        private static UpdateChannel SelectChannel(
+            IEnumerable<UpdateChannel> channels,
+            Version windowsVersion)
+        {
+            UpdateChannel match = null;
+            foreach (UpdateChannel channel in channels)
             {
-                if (assetElement.ValueKind != JsonValueKind.Object)
+                if (!channel.Matches(windowsVersion))
                 {
                     continue;
                 }
 
-                string assetName = ReadOptionalString(assetElement, "name");
-                if (!string.Equals(assetName, expectedName, StringComparison.Ordinal))
+                if (match != null)
+                {
+                    throw new InvalidOperationException(
+                        "Multiple update channels match Windows " + windowsVersion + ".");
+                }
+
+                match = channel;
+            }
+
+            return match;
+        }
+
+        private static GitHubReleaseInfo ParseRelease(string json, UpdateChannel channel)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                throw new InvalidOperationException("Release response is empty.");
+            }
+
+            using JsonDocument document = JsonDocument.Parse(json);
+            JsonElement root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                throw new InvalidOperationException("Release response is not a JSON object.");
+            }
+
+            string tag = ReadRequiredString(root, "tag_name", "Release");
+            if (!string.Equals(tag, channel.LatestTag, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Release tag does not match channel tag '" + channel.LatestTag + "'.");
+            }
+
+            if (ReadRequiredBoolean(root, "draft", "Release") ||
+                ReadRequiredBoolean(root, "prerelease", "Release"))
+            {
+                throw new InvalidOperationException("Channel release is not a published stable release.");
+            }
+
+            GitHubReleaseAssetInfo asset = ReadRequiredAsset(root, channel.AssetName);
+            return new GitHubReleaseInfo
+            {
+                Tag = tag,
+                Name = ReadOptionalString(root, "name", "Release"),
+                Body = ReadOptionalString(root, "body", "Release"),
+                HtmlUrl = ReadRequiredHttpsUrl(root, "html_url", "Release"),
+                PublishedAt = ReadPublishedAt(root),
+                AssetName = asset.Name,
+                AssetDownloadUrl = asset.DownloadUrl,
+                AssetSize = asset.Size
+            };
+        }
+
+        private static GitHubReleaseAssetInfo ReadRequiredAsset(JsonElement root, string assetName)
+        {
+            JsonElement assets = ReadRequiredProperty(root, "assets", "Release");
+            if (assets.ValueKind != JsonValueKind.Array)
+            {
+                throw new InvalidOperationException("Release field 'assets' is not an array.");
+            }
+
+            foreach (JsonElement asset in assets.EnumerateArray())
+            {
+                if (asset.ValueKind != JsonValueKind.Object)
                 {
                     continue;
                 }
 
-                string assetDownloadUrl = ReadOptionalString(assetElement, "browser_download_url");
-                if (!IsAbsoluteHttpsUrl(assetDownloadUrl))
+                string candidateName = ReadOptionalString(asset, "name", "Release asset");
+                if (!string.Equals(candidateName, assetName, StringComparison.Ordinal))
                 {
                     continue;
                 }
 
                 return new GitHubReleaseAssetInfo
                 {
-                    Name = assetName,
-                    DownloadUrl = assetDownloadUrl,
-                    Size = ReadOptionalInt64(assetElement, "size")
+                    Name = candidateName,
+                    DownloadUrl = ReadRequiredHttpsUrl(
+                        asset,
+                        "browser_download_url",
+                        "Release asset '" + assetName + "'"),
+                    Size = ReadOptionalInt64(asset, "size", "Release asset '" + assetName + "'")
                 };
             }
 
-            return null;
+            throw new InvalidOperationException(
+                "Release does not contain channel asset '" + assetName + "'.");
         }
 
-        private static string ReadOptionalString(
-            IDictionary<string, object> payload,
-            string key)
+        private static JsonElement ReadRequiredProperty(
+            JsonElement element,
+            string name,
+            string label)
         {
-            object value;
-            if (!payload.TryGetValue(key, out value) || value == null)
+            if (!element.TryGetProperty(name, out JsonElement value))
             {
-                return null;
+                throw new InvalidOperationException(label + " is missing '" + name + "'.");
             }
 
-            if (value is JsonElement element)
-            {
-                return element.ValueKind == JsonValueKind.Null ? null : element.GetString();
-            }
-
-            string stringValue = value as string;
-            if (stringValue == null)
-            {
-                throw new InvalidOperationException(
-                    "Latest release field '" + key + "' is not a string.");
-            }
-
-            return stringValue;
+            return value;
         }
 
-        private static string ReadRequiredString(
-            IDictionary<string, object> payload,
-            string key,
-            bool allowEmpty)
+        private static string ReadRequiredString(JsonElement element, string name, string label)
         {
-            object value;
-            if (!payload.TryGetValue(key, out value))
+            JsonElement value = ReadRequiredProperty(element, name, label);
+            if (value.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(value.GetString()))
             {
-                throw new InvalidOperationException(
-                    "Latest release JSON is missing '" + key + "'.");
+                throw new InvalidOperationException(label + " field '" + name + "' is not a non-empty string.");
             }
 
-            string stringValue;
-            if (value is JsonElement element)
-            {
-                stringValue = element.ValueKind == JsonValueKind.Null ? null : element.GetString();
-            }
-            else
-            {
-                stringValue = value as string;
-            }
-
-            if (stringValue == null)
-            {
-                throw new InvalidOperationException(
-                    "Latest release field '" + key + "' is not a string.");
-            }
-
-            if (!allowEmpty && string.IsNullOrWhiteSpace(stringValue))
-            {
-                throw new InvalidOperationException(
-                    "Latest release field '" + key + "' is empty.");
-            }
-
-            return stringValue;
+            return value.GetString();
         }
 
-        private static string ReadOptionalString(JsonElement payload, string key)
+        private static string ReadOptionalString(JsonElement element, string name, string label)
         {
-            JsonElement value;
-            if (!payload.TryGetProperty(key, out value) || value.ValueKind == JsonValueKind.Null)
+            if (!element.TryGetProperty(name, out JsonElement value) ||
+                value.ValueKind == JsonValueKind.Null)
             {
                 return null;
             }
 
             if (value.ValueKind != JsonValueKind.String)
             {
-                return null;
+                throw new InvalidOperationException(label + " field '" + name + "' is not a string.");
             }
 
             return value.GetString();
         }
 
-        private static long? ReadOptionalInt64(JsonElement payload, string key)
+        private static int ReadRequiredInt32(JsonElement element, string name, string label)
         {
-            JsonElement value;
-            if (!payload.TryGetProperty(key, out value) || value.ValueKind == JsonValueKind.Null)
+            JsonElement value = ReadRequiredProperty(element, name, label);
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out int result))
             {
-                return null;
+                throw new InvalidOperationException(label + " field '" + name + "' is not an integer.");
             }
 
-            long result;
-            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out result))
-            {
-                return result;
-            }
-
-            return null;
+            return result;
         }
 
-        private static DateTime? ReadPublishedAt(IDictionary<string, object> payload)
+        private static bool ReadRequiredBoolean(JsonElement element, string name, string label)
         {
-            object rawValue;
-            if (!payload.TryGetValue("published_at", out rawValue) || rawValue == null)
+            JsonElement value = ReadRequiredProperty(element, name, label);
+            if (value.ValueKind != JsonValueKind.True && value.ValueKind != JsonValueKind.False)
+            {
+                throw new InvalidOperationException(label + " field '" + name + "' is not a boolean.");
+            }
+
+            return value.GetBoolean();
+        }
+
+        private static long? ReadOptionalInt64(JsonElement element, string name, string label)
+        {
+            if (!element.TryGetProperty(name, out JsonElement value) ||
+                value.ValueKind == JsonValueKind.Null)
             {
                 return null;
             }
 
-            string publishedAtValue;
-            if (rawValue is JsonElement element)
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out long result))
             {
-                publishedAtValue = element.ValueKind == JsonValueKind.Null ? null : element.GetString();
-            }
-            else
-            {
-                publishedAtValue = rawValue as string;
+                throw new InvalidOperationException(label + " field '" + name + "' is not an integer.");
             }
 
-            if (string.IsNullOrWhiteSpace(publishedAtValue))
+            return result;
+        }
+
+        private static Version ReadOptionalVersion(JsonElement element, string name, string channelId)
+        {
+            if (!element.TryGetProperty(name, out JsonElement value))
             {
                 return null;
             }
 
-            DateTime publishedAt;
-            bool isValidDate = DateTime.TryParse(
-                publishedAtValue,
+            if (value.ValueKind != JsonValueKind.String ||
+                !Version.TryParse(value.GetString(), out Version version))
+            {
+                throw new InvalidOperationException(
+                    "Channel '" + channelId + "' field '" + name + "' is not a valid Windows version.");
+            }
+
+            return version;
+        }
+
+        private static string ReadRequiredHttpsUrl(JsonElement element, string name, string label)
+        {
+            string value = ReadRequiredString(element, name, label);
+            if (!Uri.TryCreate(value, UriKind.Absolute, out Uri uri) ||
+                !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(label + " field '" + name + "' is not an HTTPS URL.");
+            }
+
+            return value;
+        }
+
+        private static DateTime? ReadPublishedAt(JsonElement root)
+        {
+            string value = ReadOptionalString(root, "published_at", "Release");
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            if (DateTime.TryParse(
+                value,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                out publishedAt);
-            if (isValidDate)
+                out DateTime publishedAt))
             {
                 return publishedAt;
             }
 
-            return null;
+            throw new InvalidOperationException("Release field 'published_at' is not a valid date.");
         }
 
-        private static bool IsAbsoluteHttpsUrl(string value)
+        private static SemanticVersion ParseSemanticVersion(string value, string label)
         {
-            if (string.IsNullOrWhiteSpace(value))
+            if (SemanticVersion.TryParse(value, out SemanticVersion version))
             {
-                return false;
+                return version;
             }
 
-            Uri uri;
-            return Uri.TryCreate(value, UriKind.Absolute, out uri) &&
-                string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+            throw new InvalidOperationException(
+                label + " is not a valid semantic version: " + value);
         }
 
-        private static Task<string> DownloadLatestReleaseJsonAsync()
+        private static Task<string> DownloadChannelManifestJsonAsync()
+        {
+            return DownloadJsonAsync(ChannelManifestUrl);
+        }
+
+        private static Task<string> DownloadReleaseJsonAsync(string tag)
+        {
+            return DownloadJsonAsync(ReleaseApiUrlPrefix + Uri.EscapeDataString(tag));
+        }
+
+        private static async Task<string> DownloadJsonAsync(string url)
         {
             var handler = new HttpClientHandler
             {
-                AutomaticDecompression =
-                    DecompressionMethods.GZip | DecompressionMethods.Deflate
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
             };
-            HttpClient client = CreateLatestReleaseClient(handler);
-
-            Task<string> downloadTask;
-            try
+            using (handler)
+            using (var client = new HttpClient(handler))
             {
-                downloadTask = client.GetStringAsync(LatestReleaseApiUrl);
-            }
-            catch
-            {
-                DisposeHttpResources(client, handler);
-                throw;
-            }
-
-            var completion = new TaskCompletionSource<string>();
-            downloadTask.ContinueWith(
-                task => CompleteDownload(completion, client, handler, task),
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-            return completion.Task;
-        }
-
-        private static HttpClient CreateLatestReleaseClient(HttpClientHandler handler)
-        {
-            var client = new HttpClient(handler);
-            client.Timeout = TimeSpan.FromMilliseconds(RequestTimeoutMilliseconds);
-            client.DefaultRequestHeaders.Accept.Add(
-                new MediaTypeWithQualityHeaderValue(GitHubAcceptHeader));
-            client.DefaultRequestHeaders.UserAgent.ParseAdd(GitHubUserAgent);
-            return client;
-        }
-
-        private static void CompleteDownload(
-            TaskCompletionSource<string> completion,
-            HttpClient client,
-            HttpClientHandler handler,
-            Task<string> downloadTask)
-        {
-            try
-            {
-                if (downloadTask.IsCanceled)
-                {
-                    throw new TaskCanceledException("Latest release request was canceled.");
-                }
-
-                if (downloadTask.IsFaulted)
-                {
-                    throw downloadTask.Exception;
-                }
-
-                completion.SetResult(downloadTask.Result);
-            }
-            catch (Exception exception)
-            {
-                completion.SetException(exception);
-            }
-            finally
-            {
-                DisposeHttpResources(client, handler);
+                client.Timeout = TimeSpan.FromMilliseconds(RequestTimeoutMilliseconds);
+                client.DefaultRequestHeaders.Accept.Add(
+                    new MediaTypeWithQualityHeaderValue(GitHubAcceptHeader));
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(GitHubUserAgent);
+                return await client.GetStringAsync(url);
             }
         }
 
-        private static void DisposeHttpResources(
-            HttpClient client,
-            HttpClientHandler handler)
+        private sealed class UpdateChannel
         {
-            if (client != null)
-            {
-                client.Dispose();
-            }
+            public string Id { get; set; }
 
-            if (handler != null)
+            public string Status { get; set; }
+
+            public Version MinimumWindowsVersion { get; set; }
+
+            public Version MaximumWindowsVersionExclusive { get; set; }
+
+            public string LatestTag { get; set; }
+
+            public string AssetName { get; set; }
+
+            public string Sha256 { get; set; }
+
+            public bool Matches(Version windowsVersion)
             {
-                handler.Dispose();
+                return (MinimumWindowsVersion == null ||
+                        windowsVersion.CompareTo(MinimumWindowsVersion) >= 0) &&
+                    (MaximumWindowsVersionExclusive == null ||
+                        windowsVersion.CompareTo(MaximumWindowsVersionExclusive) < 0);
             }
         }
 
-        private struct SemanticVersion : IComparable<SemanticVersion>
+        private sealed class GitHubReleaseAssetInfo
         {
-            private const int VersionSegmentCount = 3;
-            private const int VersionPrefixLength = 1;
-            private const char PreReleaseSeparator = '-';
-            private const char BuildMetadataSeparator = '+';
+            public string Name { get; set; }
 
+            public string DownloadUrl { get; set; }
+
+            public long? Size { get; set; }
+        }
+
+        private readonly struct SemanticVersion : IComparable<SemanticVersion>
+        {
             private readonly int _major;
             private readonly int _minor;
             private readonly int _patch;
 
-            public SemanticVersion(int major, int minor, int patch)
+            private SemanticVersion(int major, int minor, int patch)
             {
                 _major = major;
                 _minor = minor;
@@ -514,19 +579,13 @@ namespace readboard
 
             public int CompareTo(SemanticVersion other)
             {
-                int majorComparison = _major.CompareTo(other._major);
-                if (majorComparison != 0)
+                int result = _major.CompareTo(other._major);
+                if (result == 0)
                 {
-                    return majorComparison;
+                    result = _minor.CompareTo(other._minor);
                 }
 
-                int minorComparison = _minor.CompareTo(other._minor);
-                if (minorComparison != 0)
-                {
-                    return minorComparison;
-                }
-
-                return _patch.CompareTo(other._patch);
+                return result == 0 ? _patch.CompareTo(other._patch) : result;
             }
 
             public override string ToString()
@@ -539,92 +598,38 @@ namespace readboard
                     _patch);
             }
 
-            public static bool TryParse(string value, out SemanticVersion semanticVersion)
+            public static bool TryParse(string value, out SemanticVersion version)
             {
-                semanticVersion = default(SemanticVersion);
-
-                string normalizedValue = Normalize(value);
-                if (normalizedValue == null)
-                {
-                    return false;
-                }
-
-                string[] segments = normalizedValue.Split('.');
-                if (segments.Length != VersionSegmentCount)
-                {
-                    return false;
-                }
-
-                int major;
-                int minor;
-                int patch;
-                if (!TryParseSegment(segments[0], out major) ||
-                    !TryParseSegment(segments[1], out minor) ||
-                    !TryParseSegment(segments[2], out patch))
-                {
-                    return false;
-                }
-
-                semanticVersion = new SemanticVersion(major, minor, patch);
-                return true;
-            }
-
-            private static string Normalize(string value)
-            {
+                version = default;
                 if (string.IsNullOrWhiteSpace(value))
                 {
-                    return null;
+                    return false;
                 }
 
-                string normalizedValue = value.Trim();
-                if (normalizedValue.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                string normalized = value.Trim();
+                if (normalized.StartsWith("v", StringComparison.OrdinalIgnoreCase))
                 {
-                    normalizedValue = normalizedValue.Substring(VersionPrefixLength);
+                    normalized = normalized.Substring(1);
                 }
 
-                int suffixIndex = FindSuffixIndex(normalizedValue);
+                int suffixIndex = normalized.IndexOfAny(new[] { '-', '+' });
                 if (suffixIndex >= 0)
                 {
-                    normalizedValue = normalizedValue.Substring(0, suffixIndex);
+                    normalized = normalized.Substring(0, suffixIndex);
                 }
 
-                return normalizedValue;
-            }
-
-            private static int FindSuffixIndex(string value)
-            {
-                int preReleaseIndex = value.IndexOf(PreReleaseSeparator);
-                int buildMetadataIndex = value.IndexOf(BuildMetadataSeparator);
-                if (preReleaseIndex < 0)
+                string[] segments = normalized.Split('.');
+                if (segments.Length != 3 ||
+                    !int.TryParse(segments[0], NumberStyles.None, CultureInfo.InvariantCulture, out int major) ||
+                    !int.TryParse(segments[1], NumberStyles.None, CultureInfo.InvariantCulture, out int minor) ||
+                    !int.TryParse(segments[2], NumberStyles.None, CultureInfo.InvariantCulture, out int patch))
                 {
-                    return buildMetadataIndex;
+                    return false;
                 }
 
-                if (buildMetadataIndex < 0)
-                {
-                    return preReleaseIndex;
-                }
-
-                return Math.Min(preReleaseIndex, buildMetadataIndex);
+                version = new SemanticVersion(major, minor, patch);
+                return true;
             }
-
-            private static bool TryParseSegment(string value, out int number)
-            {
-                return int.TryParse(
-                    value,
-                    NumberStyles.None,
-                    CultureInfo.InvariantCulture,
-                    out number);
-            }
-        }
-
-        private sealed class GitHubReleaseAssetInfo
-        {
-            public string Name { get; set; }
-
-            public string DownloadUrl { get; set; }
-
-            public long? Size { get; set; }
         }
     }
 }

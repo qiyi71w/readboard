@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using readboard;
 using Xunit;
@@ -7,204 +8,359 @@ namespace Readboard.VerificationTests.Host
 {
     public sealed class GitHubUpdateCheckerTests
     {
-        private const string TypicalReleaseJson =
-            "{\"tag_name\":\"v2.0.3\",\"name\":\"readboard v2.0.3\"," +
-            "\"body\":\"Bug fixes and improvements.\"," +
-            "\"html_url\":\"https://github.com/qiyi71w/readboard/releases/tag/v2.0.3\"," +
-            "\"published_at\":\"2025-03-15T10:30:00Z\"}";
-
-        private const string ReleaseWithMatchingAssetJson =
-            "{\"tag_name\":\"v3.0.2\",\"name\":\"readboard v3.0.2\"," +
-            "\"body\":\"Hosted update asset.\"," +
-            "\"html_url\":\"https://github.com/qiyi71w/readboard/releases/tag/v3.0.2\"," +
-            "\"published_at\":\"2026-05-01T10:30:00Z\"," +
-            "\"assets\":[{" +
-            "\"name\":\"readboard-github-release-v3.0.2.zip\"," +
-            "\"browser_download_url\":\"https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip\"," +
-            "\"size\":12345" +
-            "}]}";
+        private const string LegacyAssetName = "readboard-github-release-v3.0.9.zip";
+        private const string MainAssetName = "readboard-webview2-v3.1.0.zip";
 
         [Fact]
-        public async Task CheckAsync_ParsesTypicalReleaseResponse()
+        public async Task CheckAsync_SelectsMainAtWindows10Version1809Boundary()
         {
-            GitHubUpdateChecker checker = new GitHubUpdateChecker(
-                () => "v1.0.0",
-                () => Task.FromResult(TypicalReleaseJson));
+            string requestedTag = null;
+            GitHubUpdateChecker checker = CreateChecker(
+                "v3.0.8",
+                new Version(10, 0, 17763),
+                BuildTwoChannelManifest(),
+                tag =>
+                {
+                    requestedTag = tag;
+                    return BuildRelease("v3.1.0", MainAssetName);
+                });
 
             UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
-            Assert.Equal("1.0.0", result.CurrentVersion);
-            Assert.Equal("2.0.3", result.LatestVersion);
-            Assert.Equal("https://github.com/qiyi71w/readboard/releases/tag/v2.0.3", result.ReleaseUrl);
-            Assert.Equal("Bug fixes and improvements.", result.ReleaseNotes);
-            Assert.NotNull(result.PublishedAt);
-            Assert.Null(result.ErrorMessage);
+            Assert.Equal("main", result.ChannelId);
+            Assert.Equal("active", result.ChannelStatus);
+            Assert.Equal("v3.1.0", requestedTag);
+            Assert.Equal(MainAssetName, result.AssetName);
         }
 
         [Fact]
-        public async Task CheckAsync_ParsesMatchingReleaseAsset()
+        public async Task CheckAsync_SelectsLegacyChannelBeforeWindows10Version1809()
         {
-            GitHubUpdateChecker checker = new GitHubUpdateChecker(
-                () => "v3.0.1",
-                () => Task.FromResult(ReleaseWithMatchingAssetJson));
+            GitHubUpdateChecker checker = CreateChecker(
+                "v3.0.8",
+                new Version(10, 0, 17762),
+                BuildTwoChannelManifest(),
+                tag => BuildRelease(tag, LegacyAssetName));
 
             UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
-            Assert.Equal("readboard-github-release-v3.0.2.zip", result.AssetName);
-            Assert.Equal(
-                "https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip",
-                result.AssetDownloadUrl);
-            Assert.Equal(12345L, result.AssetSize);
+            Assert.Equal("legacy-windows", result.ChannelId);
+            Assert.Equal(LegacyAssetName, result.AssetName);
         }
 
         [Fact]
-        public async Task CheckAsync_LeavesAssetFieldsEmptyWhenNoMatchingAssetExists()
+        public async Task CheckAsync_RetiredChannelStillOffersItsFinalPromotedVersion()
         {
-            string json =
-                "{\"tag_name\":\"v3.0.2\"," +
-                "\"html_url\":\"https://github.com/qiyi71w/readboard/releases/tag/v3.0.2\"," +
-                "\"assets\":[{" +
-                "\"name\":\"readboard-github-release-vv3.0.2.zip\"," +
-                "\"browser_download_url\":\"https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-vv3.0.2.zip\"," +
-                "\"size\":12345" +
-                "}]}";
-            GitHubUpdateChecker checker = new GitHubUpdateChecker(
-                () => "v3.0.1",
-                () => Task.FromResult(json));
+            string manifest = BuildManifest(
+                BuildChannel(
+                    "legacy-windows",
+                    "retired",
+                    null,
+                    "10.0.17763",
+                    "v3.0.9",
+                    LegacyAssetName));
+            GitHubUpdateChecker checker = CreateChecker(
+                "v3.0.8",
+                new Version(6, 1, 7601),
+                manifest,
+                tag => BuildRelease(tag, LegacyAssetName));
 
             UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
-            Assert.Equal("https://github.com/qiyi71w/readboard/releases/tag/v3.0.2", result.ReleaseUrl);
-            Assert.Null(result.AssetName);
-            Assert.Null(result.AssetDownloadUrl);
-            Assert.Null(result.AssetSize);
+            Assert.Equal("retired", result.ChannelStatus);
+            Assert.Equal("3.0.9", result.LatestVersion);
         }
 
-        [Fact]
-        public async Task CheckAsync_LeavesAssetFieldsEmptyWhenMatchingAssetUrlIsNotHttps()
+        [Theory]
+        [InlineData("v3.0.8", UpdateCheckStatus.UpdateAvailable)]
+        [InlineData("v3.0.9", UpdateCheckStatus.UpToDate)]
+        [InlineData("v3.0.10", UpdateCheckStatus.OutsideChannel)]
+        public async Task CheckAsync_ReturnsDistinctResultForVersionPosition(
+            string currentVersion,
+            UpdateCheckStatus expectedStatus)
         {
-            string json =
-                "{\"tag_name\":\"v3.0.2\"," +
-                "\"html_url\":\"https://github.com/qiyi71w/readboard/releases/tag/v3.0.2\"," +
-                "\"assets\":[{" +
-                "\"name\":\"readboard-github-release-v3.0.2.zip\"," +
-                "\"browser_download_url\":\"http://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip\"," +
-                "\"size\":12345" +
-                "}]}";
-            GitHubUpdateChecker checker = new GitHubUpdateChecker(
-                () => "v3.0.1",
-                () => Task.FromResult(json));
+            string manifest = BuildManifest(
+                BuildChannel(
+                    "legacy-windows",
+                    "active",
+                    null,
+                    "10.0.17763",
+                    "v3.0.9",
+                    LegacyAssetName));
+            GitHubUpdateChecker checker = CreateChecker(
+                currentVersion,
+                new Version(6, 1, 7601),
+                manifest,
+                tag => BuildRelease(tag, LegacyAssetName));
 
             UpdateCheckResult result = await checker.CheckAsync();
 
-            Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
-            Assert.Null(result.AssetName);
-            Assert.Null(result.AssetDownloadUrl);
-            Assert.Null(result.AssetSize);
+            Assert.Equal(expectedStatus, result.Status);
         }
 
         [Fact]
-        public async Task CheckAsync_ReturnsUpToDateWhenVersionsMatch()
+        public async Task CheckAsync_ReturnsNoMatchingChannelWithoutRequestingARelease()
         {
-            GitHubUpdateChecker checker = new GitHubUpdateChecker(
-                () => "v2.0.3",
-                () => Task.FromResult(TypicalReleaseJson));
+            bool releaseRequested = false;
+            string manifest = BuildManifest(
+                BuildChannel(
+                    "future",
+                    "active",
+                    "11.0.0",
+                    null,
+                    "v4.0.0",
+                    "future.zip"));
+            GitHubUpdateChecker checker = CreateChecker(
+                "v3.0.9",
+                new Version(10, 0, 19045),
+                manifest,
+                tag =>
+                {
+                    releaseRequested = true;
+                    return BuildRelease(tag, "future.zip");
+                });
 
             UpdateCheckResult result = await checker.CheckAsync();
 
-            Assert.Equal(UpdateCheckStatus.UpToDate, result.Status);
-            Assert.Equal("2.0.3", result.CurrentVersion);
-            Assert.Equal("2.0.3", result.LatestVersion);
+            Assert.Equal(UpdateCheckStatus.NoMatchingChannel, result.Status);
+            Assert.False(releaseRequested);
         }
 
         [Fact]
-        public async Task CheckAsync_HandlesNullOptionalFields()
+        public async Task CheckAsync_RejectsOverlappingWindowsRanges()
         {
-            string json =
-                "{\"tag_name\":\"v1.0.0\",\"name\":null,\"body\":null," +
-                "\"html_url\":\"https://example.com/release\",\"published_at\":null}";
-            GitHubUpdateChecker checker = new GitHubUpdateChecker(
-                () => "v1.0.0",
-                () => Task.FromResult(json));
+            string manifest = BuildManifest(
+                BuildChannel("legacy", "active", null, "10.0.19000", "v3.0.9", "legacy.zip"),
+                BuildChannel("main", "active", "10.0.17763", null, "v3.1.0", "main.zip"));
 
-            UpdateCheckResult result = await checker.CheckAsync();
+            UpdateCheckResult result = await CreateChecker(
+                "v3.0.9",
+                new Version(10, 0, 18000),
+                manifest,
+                tag => BuildRelease(tag, "main.zip")).CheckAsync();
 
-            Assert.Equal(UpdateCheckStatus.UpToDate, result.Status);
-            Assert.Null(result.ReleaseNotes);
-            Assert.Null(result.PublishedAt);
+            Assert.Equal(UpdateCheckStatus.Failed, result.Status);
+            Assert.Contains("overlap", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
-        public async Task CheckAsync_HandlesMissingOptionalFields()
+        public async Task CheckAsync_RejectsUnknownManifestSchema()
         {
-            string json =
-                "{\"tag_name\":\"v1.0.0\"," +
-                "\"html_url\":\"https://example.com/release\"}";
-            GitHubUpdateChecker checker = new GitHubUpdateChecker(
-                () => "v1.0.0",
-                () => Task.FromResult(json));
+            string manifest = "{\"schemaVersion\":2,\"channels\":[]}";
 
-            UpdateCheckResult result = await checker.CheckAsync();
+            UpdateCheckResult result = await CreateChecker(
+                "v3.0.9",
+                new Version(10, 0, 19045),
+                manifest,
+                tag => BuildRelease(tag, MainAssetName)).CheckAsync();
 
-            Assert.Equal(UpdateCheckStatus.UpToDate, result.Status);
-            Assert.Null(result.ReleaseNotes);
-            Assert.Null(result.PublishedAt);
+            Assert.Equal(UpdateCheckStatus.Failed, result.Status);
+            Assert.Contains("schema", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
-        public async Task CheckAsync_ReportsFailureForEmptyResponse()
+        public async Task CheckAsync_RejectsInvalidChannelStatus()
         {
+            string manifest = BuildManifest(
+                BuildChannel("main", "paused", null, null, "v3.1.0", MainAssetName));
+
+            UpdateCheckResult result = await CreateChecker(
+                "v3.0.9",
+                new Version(10, 0, 19045),
+                manifest,
+                tag => BuildRelease(tag, MainAssetName)).CheckAsync();
+
+            Assert.Equal(UpdateCheckStatus.Failed, result.Status);
+            Assert.Contains("status", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Theory]
+        [InlineData("not-windows", "v3.1.0", "Windows version")]
+        [InlineData("10.0.17763", "release-3.1", "semantic version")]
+        public async Task CheckAsync_RejectsInvalidManifestVersions(
+            string minimumWindowsVersion,
+            string latestTag,
+            string expectedError)
+        {
+            string manifest = BuildManifest(
+                BuildChannel(
+                    "main",
+                    "active",
+                    minimumWindowsVersion,
+                    null,
+                    latestTag,
+                    MainAssetName));
+
+            UpdateCheckResult result = await CreateChecker(
+                "v3.0.9",
+                new Version(10, 0, 19045),
+                manifest,
+                tag => BuildRelease(tag, MainAssetName)).CheckAsync();
+
+            Assert.Equal(UpdateCheckStatus.Failed, result.Status);
+            Assert.Contains(expectedError, result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task CheckAsync_RejectsMissingRequiredChannelField()
+        {
+            string manifest =
+                "{\"schemaVersion\":1,\"channels\":[{" +
+                "\"id\":\"main\",\"status\":\"active\"," +
+                "\"latestTag\":\"v3.1.0\",\"sha256\":\"hash\"}]}";
+
+            UpdateCheckResult result = await CreateChecker(
+                "v3.0.9",
+                new Version(10, 0, 19045),
+                manifest,
+                tag => BuildRelease(tag, MainAssetName)).CheckAsync();
+
+            Assert.Equal(UpdateCheckStatus.Failed, result.Status);
+            Assert.Contains("assetName", result.ErrorMessage);
+        }
+
+        [Fact]
+        public async Task CheckAsync_ManifestRequestFailureDoesNotRequestAnyRelease()
+        {
+            bool releaseRequested = false;
             GitHubUpdateChecker checker = new GitHubUpdateChecker(
-                () => "v1.0.0",
-                () => Task.FromResult(""));
+                () => "v3.0.9",
+                () => new Version(10, 0, 19045),
+                () => Task.FromException<string>(new Exception("manifest unavailable")),
+                tag =>
+                {
+                    releaseRequested = true;
+                    return Task.FromResult(BuildRelease(tag, MainAssetName));
+                });
 
             UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.Failed, result.Status);
-            Assert.NotNull(result.ErrorMessage);
+            Assert.Equal("manifest unavailable", result.ErrorMessage);
+            Assert.False(releaseRequested);
         }
 
         [Fact]
-        public async Task CheckAsync_ReportsFailureForMissingRequiredField()
+        public async Task CheckAsync_ReleaseRequestFailureReturnsFailureWithoutAnotherSelectionPath()
         {
-            string json = "{\"name\":\"release\",\"html_url\":\"https://example.com\"}";
-            GitHubUpdateChecker checker = new GitHubUpdateChecker(
-                () => "v1.0.0",
-                () => Task.FromResult(json));
+            int releaseRequestCount = 0;
+            GitHubUpdateChecker checker = CreateChecker(
+                "v3.0.9",
+                new Version(10, 0, 19045),
+                BuildTwoChannelManifest(),
+                tag =>
+                {
+                    releaseRequestCount++;
+                    throw new Exception("release unavailable");
+                });
 
             UpdateCheckResult result = await checker.CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.Failed, result.Status);
-            Assert.Contains("tag_name", result.ErrorMessage);
+            Assert.Equal("release unavailable", result.ErrorMessage);
+            Assert.Equal(1, releaseRequestCount);
         }
 
-        [Fact]
-        public async Task CheckAsync_ReportsFailureForInvalidJson()
+        [Theory]
+        [InlineData("{\"tag_name\":\"v9.9.9\",\"draft\":false,\"prerelease\":false,\"html_url\":\"https://example.com\",\"assets\":[]}", "tag")]
+        [InlineData("{\"tag_name\":\"v3.1.0\",\"draft\":true,\"prerelease\":false,\"html_url\":\"https://example.com\",\"assets\":[]}", "stable")]
+        [InlineData("{\"tag_name\":\"v3.1.0\",\"draft\":false,\"prerelease\":true,\"html_url\":\"https://example.com\",\"assets\":[]}", "stable")]
+        [InlineData("{\"tag_name\":\"v3.1.0\",\"draft\":false,\"prerelease\":false,\"html_url\":\"https://example.com\",\"assets\":[]}", "asset")]
+        public async Task CheckAsync_RejectsReleaseThatDoesNotMatchPromotedChannel(
+            string releaseJson,
+            string expectedError)
         {
-            GitHubUpdateChecker checker = new GitHubUpdateChecker(
-                () => "v1.0.0",
-                () => Task.FromResult("{broken json"));
-
-            UpdateCheckResult result = await checker.CheckAsync();
+            UpdateCheckResult result = await CreateChecker(
+                "v3.0.9",
+                new Version(10, 0, 19045),
+                BuildTwoChannelManifest(),
+                tag => releaseJson).CheckAsync();
 
             Assert.Equal(UpdateCheckStatus.Failed, result.Status);
-            Assert.NotNull(result.ErrorMessage);
+            Assert.Contains(expectedError, result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         }
 
-        [Fact]
-        public async Task CheckAsync_ReportsFailureForNetworkException()
+        private static GitHubUpdateChecker CreateChecker(
+            string currentVersion,
+            Version windowsVersion,
+            string manifestJson,
+            Func<string, string> releaseJsonProvider)
         {
-            GitHubUpdateChecker checker = new GitHubUpdateChecker(
-                () => "v1.0.0",
-                () => { throw new Exception("Network error"); });
+            return new GitHubUpdateChecker(
+                () => currentVersion,
+                () => windowsVersion,
+                () => Task.FromResult(manifestJson),
+                tag => Task.FromResult(releaseJsonProvider(tag)));
+        }
 
-            UpdateCheckResult result = await checker.CheckAsync();
+        private static string BuildTwoChannelManifest()
+        {
+            return BuildManifest(
+                BuildChannel(
+                    "legacy-windows",
+                    "active",
+                    null,
+                    "10.0.17763",
+                    "v3.0.9",
+                    LegacyAssetName),
+                BuildChannel(
+                    "main",
+                    "active",
+                    "10.0.17763",
+                    null,
+                    "v3.1.0",
+                    MainAssetName));
+        }
 
-            Assert.Equal(UpdateCheckStatus.Failed, result.Status);
-            Assert.Equal("Network error", result.ErrorMessage);
+        private static string BuildManifest(params string[] channels)
+        {
+            return "{\"schemaVersion\":1,\"channels\":[" +
+                string.Join(",", channels) + "]}";
+        }
+
+        private static string BuildChannel(
+            string id,
+            string status,
+            string minimumWindowsVersion,
+            string maximumWindowsVersionExclusive,
+            string latestTag,
+            string assetName)
+        {
+            var fields = new List<string>
+            {
+                "\"id\":\"" + id + "\"",
+                "\"status\":\"" + status + "\"",
+                "\"latestTag\":\"" + latestTag + "\"",
+                "\"assetName\":\"" + assetName + "\"",
+                "\"sha256\":\"hash\""
+            };
+            if (minimumWindowsVersion != null)
+            {
+                fields.Add("\"minimumWindowsVersion\":\"" + minimumWindowsVersion + "\"");
+            }
+            if (maximumWindowsVersionExclusive != null)
+            {
+                fields.Add(
+                    "\"maximumWindowsVersionExclusive\":\"" +
+                    maximumWindowsVersionExclusive + "\"");
+            }
+
+            return "{" + string.Join(",", fields) + "}";
+        }
+
+        private static string BuildRelease(string tag, string assetName)
+        {
+            return
+                "{\"tag_name\":\"" + tag + "\",\"draft\":false,\"prerelease\":false," +
+                "\"name\":\"ReadBoard " + tag + "\",\"body\":\"Release notes.\"," +
+                "\"html_url\":\"https://github.com/qiyi71w/readboard/releases/tag/" + tag + "\"," +
+                "\"published_at\":\"2026-07-13T10:30:00Z\",\"assets\":[{" +
+                "\"name\":\"" + assetName + "\"," +
+                "\"browser_download_url\":\"https://github.com/qiyi71w/readboard/releases/download/" +
+                tag + "/" + assetName + "\",\"size\":12345}]}";
         }
     }
 }

@@ -131,6 +131,56 @@ namespace Readboard.VerificationTests.Host
             Assert.DoesNotContain("Host installation", krSource);
         }
 
+        [Fact]
+        public void ManualUpdateResultsExposeRetiredOutsideAndNoChannelSemantics()
+        {
+            string source = LoadReadboardSource("Form1.cs");
+            string availableSlice = GetMethodSlice(
+                source,
+                "private void ShowUpdateAvailable(UpdateCheckResult result)");
+            string resultSlice = GetMethodSlice(
+                source,
+                "private void HandleUpdateCheckResult(UpdateCheckResult result)");
+            string upToDateSlice = GetMethodSlice(
+                source,
+                "private void ShowUpdateUpToDate(UpdateCheckResult result)");
+
+            Assert.Contains("Update_retiredFinalVersion", availableSlice);
+            Assert.Contains("UpdateCheckStatus.OutsideChannel", resultSlice);
+            Assert.Contains("Update_outsideChannel", resultSlice);
+            Assert.Contains("UpdateCheckStatus.NoMatchingChannel", resultSlice);
+            Assert.Contains("Update_noMatchingChannel", resultSlice);
+            Assert.Contains("Update_upToDateRetired", upToDateSlice);
+        }
+
+        [Fact]
+        public void ManualUpdateResultLanguageKeysExistInEveryLanguage()
+        {
+            string programSource = LoadReadboardSource("Program.cs");
+            string[] languageSources =
+            {
+                LoadReadboardSource("language_cn.txt"),
+                LoadReadboardSource("language_en.txt"),
+                LoadReadboardSource("language_jp.txt"),
+                LoadReadboardSource("language_kr.txt")
+            };
+
+            foreach (string key in new[]
+            {
+                "Update_retiredFinalVersion",
+                "Update_upToDateRetired",
+                "Update_outsideChannel",
+                "Update_noMatchingChannel"
+            })
+            {
+                Assert.Contains("langItems[\"" + key + "\"]", programSource);
+                foreach (string languageSource in languageSources)
+                {
+                    Assert.Contains(key + "=", languageSource);
+                }
+            }
+        }
+
         private static string LoadReadboardSource(string fileName)
         {
             string directory = AppContext.BaseDirectory;
