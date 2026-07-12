@@ -64,7 +64,8 @@ namespace readboard
                 string manifestJson = await RequireTask(
                     _channelManifestJsonProvider(),
                     "Channel manifest request");
-                UpdateChannel channel = SelectChannel(ParseManifest(manifestJson), windowsVersion);
+                List<UpdateChannel> channels = ParseManifest(manifestJson);
+                UpdateChannel channel = SelectChannel(channels, windowsVersion);
                 if (channel == null)
                 {
                     return new UpdateCheckResult
@@ -80,11 +81,16 @@ namespace readboard
                 GitHubReleaseInfo release = ParseRelease(releaseJson, channel);
                 SemanticVersion latestVersion =
                     ParseSemanticVersion(channel.LatestTag, "Channel latest tag");
+                UpdateChannel incompatibleNewerChannel = FindIncompatibleNewerChannel(
+                    channels,
+                    channel,
+                    windowsVersion);
 
                 return CreateSuccessResult(
                     currentSemanticVersion,
                     latestVersion,
                     channel,
+                    incompatibleNewerChannel,
                     release);
             }
             catch (Exception exception)
@@ -107,6 +113,7 @@ namespace readboard
             SemanticVersion currentVersion,
             SemanticVersion latestVersion,
             UpdateChannel channel,
+            UpdateChannel incompatibleNewerChannel,
             GitHubReleaseInfo release)
         {
             int comparison = currentVersion.CompareTo(latestVersion);
@@ -123,6 +130,12 @@ namespace readboard
                 LatestVersion = latestVersion.ToString(),
                 ChannelId = channel.Id,
                 ChannelStatus = channel.Status,
+                IncompatibleNewerVersion = incompatibleNewerChannel == null
+                    ? null
+                    : incompatibleNewerChannel.LatestSemanticVersion.ToString(),
+                IncompatibleMinimumWindowsVersion = incompatibleNewerChannel == null
+                    ? null
+                    : incompatibleNewerChannel.MinimumWindowsVersion.ToString(),
                 Tag = release.Tag,
                 PublishedAt = release.PublishedAt,
                 ReleaseNotes = release.Body,
@@ -209,7 +222,8 @@ namespace readboard
             }
 
             string latestTag = ReadRequiredString(element, "latestTag", "Channel '" + id + "'");
-            ParseSemanticVersion(latestTag, "Channel '" + id + "' latest tag");
+            SemanticVersion latestVersion =
+                ParseSemanticVersion(latestTag, "Channel '" + id + "' latest tag");
 
             Version minimum = ReadOptionalVersion(element, "minimumWindowsVersion", id);
             Version maximum = ReadOptionalVersion(
@@ -229,6 +243,7 @@ namespace readboard
                 MinimumWindowsVersion = minimum,
                 MaximumWindowsVersionExclusive = maximum,
                 LatestTag = latestTag,
+                LatestSemanticVersion = latestVersion,
                 AssetName = ReadRequiredString(element, "assetName", "Channel '" + id + "'"),
                 Sha256 = ReadRequiredString(element, "sha256", "Channel '" + id + "'")
             };
@@ -285,6 +300,34 @@ namespace readboard
             }
 
             return match;
+        }
+
+        private static UpdateChannel FindIncompatibleNewerChannel(
+            IEnumerable<UpdateChannel> channels,
+            UpdateChannel selectedChannel,
+            Version windowsVersion)
+        {
+            UpdateChannel newerChannel = null;
+            foreach (UpdateChannel channel in channels)
+            {
+                if (ReferenceEquals(channel, selectedChannel) ||
+                    channel.MinimumWindowsVersion == null ||
+                    windowsVersion.CompareTo(channel.MinimumWindowsVersion) >= 0 ||
+                    channel.LatestSemanticVersion.CompareTo(
+                        selectedChannel.LatestSemanticVersion) <= 0)
+                {
+                    continue;
+                }
+
+                if (newerChannel == null ||
+                    channel.LatestSemanticVersion.CompareTo(
+                        newerChannel.LatestSemanticVersion) > 0)
+                {
+                    newerChannel = channel;
+                }
+            }
+
+            return newerChannel;
         }
 
         private static GitHubReleaseInfo ParseRelease(string json, UpdateChannel channel)
@@ -541,6 +584,8 @@ namespace readboard
             public Version MaximumWindowsVersionExclusive { get; set; }
 
             public string LatestTag { get; set; }
+
+            public SemanticVersion LatestSemanticVersion { get; set; }
 
             public string AssetName { get; set; }
 

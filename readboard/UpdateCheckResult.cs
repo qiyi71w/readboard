@@ -14,6 +14,10 @@ namespace readboard
 
         public string ChannelStatus { get; internal set; }
 
+        public string IncompatibleNewerVersion { get; internal set; }
+
+        public string IncompatibleMinimumWindowsVersion { get; internal set; }
+
         public string Tag { get; internal set; }
 
         public DateTime? PublishedAt { get; internal set; }

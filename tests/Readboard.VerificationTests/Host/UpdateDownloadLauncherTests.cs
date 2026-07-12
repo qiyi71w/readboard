@@ -144,13 +144,18 @@ namespace Readboard.VerificationTests.Host
             string upToDateSlice = GetMethodSlice(
                 source,
                 "private void ShowUpdateUpToDate(UpdateCheckResult result)");
+            string outsideSlice = GetMethodSlice(
+                source,
+                "private string BuildOutsideChannelMessage(UpdateCheckResult result)");
 
             Assert.Contains("Update_retiredFinalVersion", availableSlice);
             Assert.Contains("UpdateCheckStatus.OutsideChannel", resultSlice);
-            Assert.Contains("Update_outsideChannel", resultSlice);
+            Assert.Contains("Update_outsideChannel", outsideSlice);
             Assert.Contains("UpdateCheckStatus.NoMatchingChannel", resultSlice);
             Assert.Contains("Update_noMatchingChannel", resultSlice);
             Assert.Contains("Update_upToDateRetired", upToDateSlice);
+            Assert.Contains("Update_retiredFinalVersion", outsideSlice);
+            Assert.Contains("Update_newerVersionRequiresWindows", source);
         }
 
         [Fact]
@@ -170,7 +175,8 @@ namespace Readboard.VerificationTests.Host
                 "Update_retiredFinalVersion",
                 "Update_upToDateRetired",
                 "Update_outsideChannel",
-                "Update_noMatchingChannel"
+                "Update_noMatchingChannel",
+                "Update_newerVersionRequiresWindows"
             })
             {
                 Assert.Contains("langItems[\"" + key + "\"]", programSource);

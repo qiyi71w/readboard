@@ -74,6 +74,7 @@ Update_retiredFinalVersion=This channel is retired; v{0} is its final maintained
 Update_upToDateRetired=You already have the final maintained release for this system channel.
 Update_outsideChannel=Your current version is newer than this system channel's promoted release. ReadBoard will not downgrade automatically.
 Update_noMatchingChannel=No maintained update channel matches this Windows version.
+Update_newerVersionRequiresWindows=Mainline v{0} requires Windows {1} or later and cannot be installed on this system.
 Update_checkFailed=Update check failed
 Update_unknownError=Unknown error.
 Update_dialogTitle=New version available

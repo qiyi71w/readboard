@@ -386,6 +386,7 @@ namespace readboard
             langItems["Update_upToDateRetired"] = "已是此系统通道的最终维护版本。";
             langItems["Update_outsideChannel"] = "当前版本高于此系统通道的已晋升版本；不会自动降级。";
             langItems["Update_noMatchingChannel"] = "当前 Windows 版本没有可用的维护通道。";
+            langItems["Update_newerVersionRequiresWindows"] = "主线 v{0} 需要 Windows {1} 或更高版本，当前系统不能安装。";
             langItems["Update_checkFailed"] = "检查更新失败";
             langItems["Update_unknownError"] = "未知错误";
             langItems["Update_dialogTitle"] = "发现新版本";

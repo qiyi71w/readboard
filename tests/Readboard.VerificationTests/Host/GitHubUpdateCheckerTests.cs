@@ -48,6 +48,11 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
             Assert.Equal("legacy-windows", result.ChannelId);
             Assert.Equal(LegacyAssetName, result.AssetName);
+            Assert.Equal("3.1.0", result.IncompatibleNewerVersion);
+            Assert.Equal("10.0.17763", result.IncompatibleMinimumWindowsVersion);
+            Assert.Equal(
+                "https://github.com/qiyi71w/readboard/releases/tag/v3.0.9",
+                result.ReleaseUrl);
         }
 
         [Fact]
@@ -72,6 +77,36 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
             Assert.Equal("retired", result.ChannelStatus);
             Assert.Equal("3.0.9", result.LatestVersion);
+        }
+
+        [Fact]
+        public async Task CheckAsync_DoesNotReportAnIncompatibleChannelUnlessItsVersionIsNewer()
+        {
+            string manifest = BuildManifest(
+                BuildChannel(
+                    "legacy-windows",
+                    "active",
+                    null,
+                    "10.0.17763",
+                    "v3.0.9",
+                    LegacyAssetName),
+                BuildChannel(
+                    "main",
+                    "active",
+                    "10.0.17763",
+                    null,
+                    "v3.0.9",
+                    LegacyAssetName));
+            GitHubUpdateChecker checker = CreateChecker(
+                "v3.0.9",
+                new Version(6, 1, 7601),
+                manifest,
+                tag => BuildRelease(tag, LegacyAssetName));
+
+            UpdateCheckResult result = await checker.CheckAsync();
+
+            Assert.Null(result.IncompatibleNewerVersion);
+            Assert.Null(result.IncompatibleMinimumWindowsVersion);
         }
 
         [Theory]

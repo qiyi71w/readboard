@@ -2603,15 +2603,18 @@ namespace readboard
         {
             string hostedReleaseTag = result.Tag;
             string releaseNotes = result.ReleaseNotes;
+            string channelNotice = null;
             if (string.Equals(result.ChannelStatus, "retired", StringComparison.Ordinal))
             {
-                string finalVersionMessage = string.Format(
+                channelNotice = string.Format(
                     getLangStr("Update_retiredFinalVersion"),
                     result.LatestVersion);
-                releaseNotes = string.IsNullOrWhiteSpace(releaseNotes)
-                    ? finalVersionMessage
-                    : finalVersionMessage + Environment.NewLine + Environment.NewLine + releaseNotes;
             }
+            channelNotice = AppendIncompatibleNewerVersionMessage(result, channelNotice);
+            if (!string.IsNullOrWhiteSpace(channelNotice))
+                releaseNotes = string.IsNullOrWhiteSpace(releaseNotes)
+                    ? channelNotice
+                    : channelNotice + Environment.NewLine + Environment.NewLine + releaseNotes;
             bool hostedInstallAvailable =
                 launchOptions.TransportKind == TransportKind.Pipe &&
                 sessionCoordinator.IsProtocolSessionActive &&
@@ -2696,7 +2699,42 @@ namespace readboard
                 StringComparison.Ordinal)
                 ? "Update_upToDateRetired"
                 : "Update_upToDate";
-            ShowUpdateInformation(getLangStr(messageKey));
+            ShowUpdateInformation(
+                AppendIncompatibleNewerVersionMessage(
+                    result,
+                    getLangStr(messageKey)));
+        }
+
+        private string BuildOutsideChannelMessage(UpdateCheckResult result)
+        {
+            string message = getLangStr("Update_outsideChannel");
+            if (string.Equals(result.ChannelStatus, "retired", StringComparison.Ordinal))
+            {
+                message += Environment.NewLine + string.Format(
+                    getLangStr("Update_retiredFinalVersion"),
+                    result.LatestVersion);
+            }
+
+            return AppendIncompatibleNewerVersionMessage(result, message);
+        }
+
+        private string AppendIncompatibleNewerVersionMessage(
+            UpdateCheckResult result,
+            string message)
+        {
+            if (string.IsNullOrWhiteSpace(result.IncompatibleNewerVersion) ||
+                string.IsNullOrWhiteSpace(result.IncompatibleMinimumWindowsVersion))
+            {
+                return message;
+            }
+
+            string incompatibleMessage = string.Format(
+                getLangStr("Update_newerVersionRequiresWindows"),
+                result.IncompatibleNewerVersion,
+                result.IncompatibleMinimumWindowsVersion);
+            return string.IsNullOrWhiteSpace(message)
+                ? incompatibleMessage
+                : message + Environment.NewLine + incompatibleMessage;
         }
 
         private void ShowUpdateInformation(string message)
@@ -2724,7 +2762,7 @@ namespace readboard
                     ShowUpdateUpToDate(result);
                     return;
                 case UpdateCheckStatus.OutsideChannel:
-                    ShowUpdateInformation(getLangStr("Update_outsideChannel"));
+                    ShowUpdateInformation(BuildOutsideChannelMessage(result));
                     return;
                 case UpdateCheckStatus.NoMatchingChannel:
                     ShowUpdateInformation(getLangStr("Update_noMatchingChannel"));

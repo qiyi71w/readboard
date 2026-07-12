@@ -74,6 +74,7 @@ Update_retiredFinalVersion=このチャンネルのメンテナンスは終了�
 Update_upToDateRetired=このシステム向けチャンネルの最終メンテナンス版を使用しています。
 Update_outsideChannel=現在のバージョンは、このシステム向けチャンネルで公開済みのバージョンより新しいため、自動ダウングレードしません。
 Update_noMatchingChannel=この Windows バージョンに対応するメンテナンス中の更新チャンネルはありません。
+Update_newerVersionRequiresWindows=メインライン v{0} には Windows {1} 以降が必要なため、このシステムにはインストールできません。
 Update_checkFailed=更新確認に失敗しました
 Update_unknownError=不明なエラーです
 Update_dialogTitle=新しいバージョンがあります
