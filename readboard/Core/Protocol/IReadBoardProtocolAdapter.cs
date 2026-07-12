@@ -8,6 +8,7 @@ namespace readboard
         string Serialize(ProtocolMessage message);
         ProtocolMessage CreateReadyMessage();
         ProtocolMessage CreateClearMessage();
+        ProtocolMessage CreateClearBoardMessage();
         ProtocolMessage CreateBoardEndMessage();
         ProtocolMessage CreatePonderStatusMessage(bool playPonderEnabled);
         ProtocolMessage CreateVersionMessage(string version);

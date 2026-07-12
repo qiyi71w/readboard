@@ -73,6 +73,17 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
+        public void SendClearBoard_UsesDedicatedOutboundCommand()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SendClearBoard();
+
+            Assert.Equal(new[] { "clearBoard" }, transport.SentLines);
+        }
+
+        [Fact]
         public void runtime_state_carries_yike_context()
         {
             SyncSessionRuntimeState state = new SyncSessionRuntimeState();

@@ -431,6 +431,12 @@ namespace readboard
             SendProtocolMessage(protocolAdapter.CreateClearMessage());
         }
 
+        public void SendClearBoard()
+        {
+            ResetSyncCaches();
+            SendProtocolMessage(protocolAdapter.CreateClearBoardMessage());
+        }
+
         public void SendOverlayLine(string protocolLine)
         {
             protocolLine = ReserveOverlayProtocolLine(protocolLine);
