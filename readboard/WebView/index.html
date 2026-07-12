@@ -40,7 +40,7 @@
 
     <main>
       <div class="top-status">
-        <span><b class="dot" id="sync-dot"></b>状态： <strong id="sync-status">等待连接</strong></span>
+        <span><b class="dot" id="sync-dot"></b>状态： <strong id="sync-status">宿主模式已启动</strong></span>
         <span>最后同步： <b id="last-sync">--:--:--</b></span>
         <span>棋子数： <b id="stone-count">0</b></span>
         <span>耗时： <b id="duration">--</b></span>
@@ -124,7 +124,6 @@
           <label><span><b>使用放大镜</b><small>框选棋盘时辅助精确定位</small></span><input type="checkbox" data-setting="magnifier"></label>
           <label><span><b>增强截图</b><small>提高部分窗口的捕获兼容性</small></span><input type="checkbox" data-setting="enhancedCapture"></label>
           <label><span><b>落子校验</b><small>自动落子后检查执行结果</small></span><input type="checkbox" data-setting="placementValidation"></label>
-          <label><span><b>禁用盘上显示快捷键</b><small>避免全局快捷键冲突</small></span><input type="checkbox" data-setting="disableShowShortcut"></label>
         </div></fieldset>
         <fieldset class="card settings-card"><legend>识别参数</legend><div class="input-grid">
           <label>同步间隔<span><input type="number" min="20" data-setting="syncInterval"><i>ms</i></span><small class="field-error"></small></label>
@@ -154,9 +153,9 @@
 
       <section class="page" data-page-panel="about">
         <header class="page-heading"><h1>关于</h1><p>ReadBoard 版本与项目信息。</p></header>
-        <div class="card about-hero"><img src="lizziey.ico" alt="ReadBoard"><div><h1>ReadBoard</h1><span class="version-pill" id="about-version">v3.0.8</span><h3>LizzieYzy-Next 的 Windows 棋盘同步工具</h3><p>负责捕获第三方棋盘窗口、识别盘面，并把同步结果交给宿主。</p></div><div class="host-state"><b><i class="dot" id="host-dot"></i><span id="host-state">等待宿主</span></b><p>当前通过 LizzieYzy-Next 启动</p></div></div>
-        <fieldset class="card project-info"><legend>项目信息</legend><dl><dt>当前版本</dt><dd id="project-version">v3.0.8</dd><dt>宿主项目</dt><dd>LizzieYzy-Next</dd><dt>运行平台</dt><dd>Windows 10 / Windows 11</dd><dt>上游仓库</dt><dd>github.com/yzyray/readboard</dd></dl></fieldset>
-        <div class="card update-card"><div><b>项目与更新</b><p>打开上游仓库，或检查当前版本是否有可用更新。</p></div><div><button type="button" data-command="about.openRepository">打开上游仓库</button><button class="primary" type="button" data-command="about.checkUpdate">检查更新</button></div></div>
+        <div class="card about-hero"><img src="lizziey.ico" alt="ReadBoard"><div><h1>ReadBoard</h1><span class="version-pill" id="about-version">v3.0.8</span><h3>LizzieYzy-Next 的 Windows 棋盘同步工具</h3><p>负责捕获第三方棋盘窗口、识别盘面，并把同步结果交给宿主。</p></div><div class="host-state"><b><i class="dot" id="host-dot"></i><span id="host-state">宿主模式已启动</span></b><p>LizzieYzy-Next 棋盘同步工具</p></div></div>
+        <fieldset class="card project-info"><legend>项目信息</legend><dl><dt>当前版本</dt><dd id="project-version">v3.0.8</dd><dt>宿主项目</dt><dd>LizzieYzy-Next</dd><dt>运行平台</dt><dd>Windows 10 / Windows 11</dd><dt>项目仓库</dt><dd>github.com/qiyi71w/readboard</dd></dl></fieldset>
+        <div class="card update-card"><div><b>项目与更新</b><p>打开项目仓库，或检查当前版本是否有可用更新。</p></div><div><button type="button" data-command="about.openRepository">打开项目仓库</button><button class="primary" type="button" data-command="about.checkUpdate">检查更新</button></div></div>
       </section>
     </main>
 

@@ -41,7 +41,6 @@ namespace readboard
         //Boolean noLw = false;
         Boolean isMannulCircle = false;
         float factor = 1.0f;
-        private GlobalKeyboardHook keyboardHook;
         private readonly LaunchOptions launchOptions;
         private readonly ISyncSessionCoordinator sessionCoordinator;
         private readonly ILegacySelectionCalibrationService selectionCalibrationService;
@@ -50,7 +49,6 @@ namespace readboard
         private readonly object placeProtocolSyncRoot = new object();
         private readonly object protocolCommandSyncRoot = new object();
         private readonly GitHubUpdateChecker updateChecker = new GitHubUpdateChecker();
-        private readonly ToolTip showInBoardShortcutToolTip = new ToolTip();
         private readonly Queue<Action> pendingProtocolCommands = new Queue<Action>();
         private readonly BackgroundSelectionWindowBindingCoordinator backgroundSelectionWindowBindingCoordinator =
             new BackgroundSelectionWindowBindingCoordinator();
@@ -195,11 +193,6 @@ namespace readboard
                 Bounds,
                 Location,
                 TryGetStartupReferencePoint());
-        }
-
-        internal void RefreshShowInBoardShortcutToolTip()
-        {
-            showInBoardShortcutToolTip.SetToolTip(this.chkShowInBoard, Program.disableShowInBoardShortcut ? string.Empty : "Ctrl+X");
         }
 
         private bool IsOptimizedTheme()
@@ -2375,23 +2368,6 @@ namespace readboard
             ApplyKeepSyncStoppedUi(false);
         }
 
-        private Boolean isCtrlDown = false;
-
-        private void HookListener_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)
-        {
-            // Console.Out.WriteLine(e.KeyValue);
-            if (e.KeyValue == 162 || e.KeyValue == 163)
-                isCtrlDown = true;
-            if (isCtrlDown && e.KeyValue == 88 && SupportsShowInBoard() && !Program.disableShowInBoardShortcut)
-                chkShowInBoard.Checked = !chkShowInBoard.Checked;
-        }
-
-        private void HookListener_KeyUp(object sender, System.Windows.Forms.KeyEventArgs e)
-        {
-            if (e.KeyValue == 162 || e.KeyValue == 163)
-                isCtrlDown = false;
-        }
-
         internal bool IsShutdownRequested
         {
             get { return isShuttingDown; }
@@ -2420,10 +2396,6 @@ namespace readboard
             this.uiThreadInvoker = new UiThreadInvoker(this);
             this.placeRequestQueue = new SerialBackgroundWorkQueue("ReadboardPlaceRequestQueue");
             InitializeComponent();
-            keyboardHook = new GlobalKeyboardHook();
-            keyboardHook.KeyDown += HookListener_KeyDown;
-            keyboardHook.KeyUp += HookListener_KeyUp;
-            keyboardHook.Start();
             using (System.Drawing.Bitmap bitmap = new Bitmap(1, 1))
             using (System.Drawing.Graphics graphics2 = Graphics.FromImage(bitmap))
             {
@@ -2499,7 +2471,6 @@ namespace readboard
             this.btnClearBoard.Text = getLangStr("MainForm_btnClearBoard");
             ResetMainWindowTitle();
             ApplyMainFormUi();
-            RefreshShowInBoardShortcutToolTip();
             InitializeWebViewShell();
             isInitializingProtocolState = false;
         }
@@ -2874,14 +2845,6 @@ namespace readboard
 
         private void DisposeInputHooks()
         {
-            if (keyboardHook != null)
-            {
-                keyboardHook.KeyDown -= HookListener_KeyDown;
-                keyboardHook.KeyUp -= HookListener_KeyUp;
-                keyboardHook.Stop();
-                keyboardHook.Dispose();
-                keyboardHook = null;
-            }
             if (mouseHook == null)
                 return;
             mouseHook.MouseMove -= mh_MouseMoveEvent;

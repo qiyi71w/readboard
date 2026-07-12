@@ -13,7 +13,7 @@
     shell: {
       version: "v3.0.8",
       connected: false,
-      syncStatus: "等待宿主连接",
+      syncStatus: "宿主模式已启动",
       lastSync: "--:--:--",
       stoneCount: 0,
       duration: "--",
@@ -38,6 +38,7 @@
       aiTime: 2,
       playouts: "",
       firstPolicy: "",
+      firstPolicyEnabled: false,
       showOnBoard: false,
       continuousSync: false,
       syncInterval: 200,
@@ -56,7 +57,6 @@
       magnifier: false,
       enhancedCapture: false,
       placementValidation: true,
-      disableShowShortcut: false,
       syncInterval: 200,
       grayOffset: 0,
       blackOffset: 0,
@@ -166,11 +166,11 @@
     const shell = state.shell || {};
     const version = shell.version || "v3.0.8";
     ["title-version", "version", "about-version", "project-version"].forEach(id => text(id, version));
-    text("sync-status", shell.syncStatus || (shell.connected ? "已连接" : "等待宿主连接"));
+    text("sync-status", shell.syncStatus || (shell.connected ? "就绪" : "宿主模式已启动"));
     text("last-sync", shell.lastSync || "--:--:--");
     text("stone-count", shell.stoneCount ?? 0);
     text("duration", shell.duration || "--");
-    text("host-state", shell.connected ? "宿主已连接" : "等待宿主");
+    text("host-state", shell.connected ? "宿主通信正常" : "宿主模式已启动");
     const maximizeButton = $('[data-command="window.maximize"]');
     if (maximizeButton) {
       maximizeButton.setAttribute("aria-label", shell.maximized ? "还原" : "最大化");
@@ -218,7 +218,8 @@
     setDisabled("#board-width, #board-height", !control.customBoardDimensionsEnabled);
     setDisabled("#two-way", !control.twoWaySyncEnabled);
     setDisabled("#auto-play", !control.autoPlayToggleEnabled);
-    setDisabled('input[name="color"], input[name="placement"], #ai-time, #playouts, #first-policy', !control.autoPlayControlsEnabled);
+    setDisabled('input[name="color"], input[name="placement"], #ai-time, #playouts', !control.autoPlayControlsEnabled);
+    setDisabled("#first-policy", !control.firstPolicyEnabled);
     setDisabled('[data-command="identity.open"]', !control.identityEnabled);
     setDisabled("#show-on-board", !control.showOnBoardEnabled);
     text("continuous-label", `${control.continuousSync ? "停止持续同步" : "持续同步"} (${control.syncInterval ?? 200}ms)`);
@@ -359,11 +360,15 @@
       resetDefaults: ["恢复默认设置", "将当前设置草稿恢复为默认值。此操作不会立即写入配置，仍需点击保存设置。", "恢复默认"],
       diagnostics: ["开启调试诊断", "调试诊断可能产生较大的文件。确认后仅修改当前设置草稿，保存设置后生效。", "继续开启"],
       themeRestart: ["需要重新启动", "颜色模式已保存。重新启动 ReadBoard 后可完整应用新的界面外观。", "知道了"],
-      showInBoardHint: ["原棋盘上显示选点", "此模式依赖前台同步状态；关闭后可恢复双向同步。", "确定"]
+      showInBoardHint: ["原棋盘上显示选点", "[前台]方式同步时不支持此功能。选点显示在原棋盘上后，原棋盘将无法落子。", "确定"]
     }[dialog.kind] || [dialog.title || "提示", dialog.message || "", "确定"];
     let actions = button("dialog.cancel", dialog.cancelLabel || "取消");
     if (dialog.kind === "themeRestart") actions = "";
-    if (dialog.kind === "showInBoardHint") actions += button("dialog.dontShowAgain", "不再提示");
+    if (dialog.kind === "showInBoardHint") {
+      actions = button("dialog.dontShowAgain", "不再提示") + button("dialog.confirm", dialog.confirmLabel || content[2], "primary");
+      openModal("dialog show-in-board-hint", "提示", `<div class="dialog-copy"><p>${escapeHtml(dialog.message || content[1])}</p><p>可通过勾选“双向同步”选项恢复落子功能。</p></div>`, actions, "min(520px, calc(100vw - 48px))");
+      return;
+    }
     actions += button("dialog.confirm", dialog.confirmLabel || content[2], "primary");
     openModal("dialog", content[0], `<div class="dialog-copy"><h3>${escapeHtml(dialog.heading || content[0])}</h3><p>${escapeHtml(dialog.message || content[1])}</p></div>`, actions, "min(580px, calc(100vw - 48px))");
   }

@@ -46,8 +46,9 @@ namespace readboard
             config.SyncMode = (SyncMode)CurrentSyncType;
             config.WindowPosX = persistedWindowLocation.X;
             config.WindowPosY = persistedWindowLocation.Y;
+            Size persistedWindowClientSize = ResolvePersistableWindowClientSize(persistedWindowBounds);
             Size logicalWindowSize = WebViewWindowLayoutPolicy.UnscalePhysicalSize(
-                persistedWindowBounds.Size,
+                persistedWindowClientSize,
                 DeviceDpi);
             config.WindowClientWidth = Math.Max(AppConfig.MinimumWindowClientWidth, logicalWindowSize.Width);
             config.WindowClientHeight = Math.Max(AppConfig.MinimumWindowClientHeight, logicalWindowSize.Height);
@@ -63,6 +64,22 @@ namespace readboard
                 WindowState == FormWindowState.Normal && Bounds.Width > 0 && Bounds.Height > 0
                     ? Bounds
                     : RestoreBounds;
+        }
+
+        private Size ResolvePersistableWindowClientSize(Rectangle persistedWindowBounds)
+        {
+            if (WindowState == FormWindowState.Normal && ClientSize.Width > 0 && ClientSize.Height > 0)
+                return ClientSize;
+
+            Size nonClientSize = SizeFromClientSize(Size.Empty);
+            return ResolveClientSizeFromOuterBounds(persistedWindowBounds.Size, nonClientSize);
+        }
+
+        internal static Size ResolveClientSizeFromOuterBounds(Size outerSize, Size nonClientSize)
+        {
+            return new Size(
+                Math.Max(0, outerSize.Width - nonClientSize.Width),
+                Math.Max(0, outerSize.Height - nonClientSize.Height));
         }
 
         private static Point ResolvePersistableWindowLocation(Rectangle boundsToPersist)

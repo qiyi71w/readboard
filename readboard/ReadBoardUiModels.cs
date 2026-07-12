@@ -46,6 +46,7 @@ namespace readboard
         public string AiTime { get; set; }
         public string Playouts { get; set; }
         public string FirstPolicy { get; set; }
+        public bool FirstPolicyEnabled { get; set; }
         public bool ShowOnBoard { get; set; }
         public bool ContinuousSync { get; set; }
         public int SyncInterval { get; set; }

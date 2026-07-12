@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
@@ -165,6 +166,22 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("Point persistedWindowLocation = ResolvePersistableWindowLocation(persistedWindowBounds);", methodSlice);
             Assert.Contains("config.WindowPosX = persistedWindowLocation.X;", methodSlice);
             Assert.Contains("config.WindowPosY = persistedWindowLocation.Y;", methodSlice);
+            Assert.Contains("Size persistedWindowClientSize = ResolvePersistableWindowClientSize(persistedWindowBounds);", methodSlice);
+            Assert.Contains("persistedWindowClientSize,", methodSlice);
+        }
+
+        [Fact]
+        public void ResolveClientSizeFromOuterBounds_RemovesNativeFrameWithoutCumulativeGrowth()
+        {
+            Size clientSize = new Size(1100, 600);
+            Size nonClientSize = new Size(16, 39);
+            Size outerSize = new Size(
+                clientSize.Width + nonClientSize.Width,
+                clientSize.Height + nonClientSize.Height);
+
+            Size restoredClientSize = readboard.MainForm.ResolveClientSizeFromOuterBounds(outerSize, nonClientSize);
+
+            Assert.Equal(clientSize, restoredClientSize);
         }
 
         [Fact]
@@ -221,13 +238,13 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void ShowInBoardHotkey_OnlyTogglesWhenCurrentModeSupportsIt()
+        public void ShowInBoardHotkey_IsNotRegisteredGlobally()
         {
             string source = LoadSource("readboard", "Form1.cs");
-            string methodSlice = GetMethodSlice(source, "private void HookListener_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)");
 
-            Assert.Contains("SupportsShowInBoard()", methodSlice);
-            Assert.Contains("!Program.disableShowInBoardShortcut", methodSlice);
+            Assert.DoesNotContain("e.KeyValue == 88", source);
+            Assert.DoesNotContain("disableShowInBoardShortcut", source);
+            Assert.DoesNotContain("GlobalKeyboardHook", source);
         }
 
         [Fact]
@@ -431,29 +448,32 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void ShowInBoardTooltip_ClearsCtrlXHintWhenShortcutIsDisabled()
+        public void ShowInBoardTooltip_DoesNotAdvertiseRemovedShortcut()
         {
             string source = LoadSource("readboard", "Form1.cs");
 
-            Assert.Contains("showInBoardShortcutToolTip.SetToolTip(this.chkShowInBoard, Program.disableShowInBoardShortcut ? string.Empty : \"Ctrl+X\");", source);
+            Assert.DoesNotContain("showInBoardShortcutToolTip", source);
+            Assert.DoesNotContain("Ctrl+X", source);
         }
 
         [Fact]
-        public void WebViewSettings_SavePersistsAndRefreshesRuntimeState()
+        public void WebViewSettings_DoesNotExposeRemovedShortcutSetting()
         {
             string source = LoadSource("readboard", "MainForm.WebView.Settings.cs");
+            string modelSource = LoadSource("readboard", "ReadBoardSettingsUiModels.cs");
             string createSlice = GetMethodSlice(source, "internal static ReadBoardSettingsUiState CreateWebViewSettingsState(AppConfig config)");
             string buildSlice = GetMethodSlice(source, "internal static bool TryBuildWebViewSettingsConfig(");
             string saveSlice = GetMethodSlice(source, "private void SaveWebViewSettings()");
             string updateSlice = GetMethodSlice(source, "private void UpdateWebViewSetting(JsonElement payload)");
 
-            Assert.Contains("DisableShowShortcut = config.DisableShowInBoardShortcut", createSlice);
+            Assert.DoesNotContain("DisableShowShortcut", modelSource);
+            Assert.DoesNotContain("DisableShowShortcut", createSlice);
+            Assert.DoesNotContain("DisableShowInBoardShortcut", buildSlice);
+            Assert.DoesNotContain("disableShowShortcut", source);
             Assert.Contains("Diagnostics = config.DebugDiagnosticsEnabled", createSlice);
-            Assert.Contains("updated.DisableShowInBoardShortcut = settings.DisableShowShortcut;", buildSlice);
             Assert.Contains("updated.DebugDiagnosticsEnabled = settings.Diagnostics;", buildSlice);
             Assert.Contains("ShowWebViewSettingsDialog(\"diagnostics\");", updateSlice);
             Assert.Contains("PersistConfiguration();", saveSlice);
-            Assert.Contains("RefreshShowInBoardShortcutToolTip();", saveSlice);
             Assert.Contains("sendPonderStatus();", saveSlice);
         }
 
@@ -617,17 +637,14 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void MainForm_ShutdownStopsAndDisposesGlobalHooks()
+        public void MainForm_ShutdownStopsAndDisposesMouseHook()
         {
             string source = LoadSource("readboard", "Form1.cs");
             string shutdownSlice = GetMethodSlice(source, "public void shutdown(bool persistConfiguration)");
             string helperSlice = GetMethodSlice(source, "private void DisposeInputHooks()");
 
             Assert.Contains("DisposeInputHooks();", shutdownSlice);
-            Assert.Contains("keyboardHook.KeyDown -= HookListener_KeyDown;", helperSlice);
-            Assert.Contains("keyboardHook.KeyUp -= HookListener_KeyUp;", helperSlice);
-            Assert.Contains("keyboardHook.Stop();", helperSlice);
-            Assert.Contains("keyboardHook.Dispose();", helperSlice);
+            Assert.DoesNotContain("keyboardHook", helperSlice);
             Assert.Contains("mouseHook.MouseMove -= mh_MouseMoveEvent;", helperSlice);
             Assert.Contains("mouseHook.MouseClick -= mh_MouseMoveEvent2;", helperSlice);
             Assert.Contains("mouseHook.Enabled = false;", helperSlice);
@@ -808,8 +825,9 @@ namespace Readboard.VerificationTests.Host
             string source = LoadSource("readboard", "MainForm.Protocol.cs");
             string methodSlice = GetMethodSlice(source, "void IProtocolCommandHost.DispatchProtocolCommand(Action command)");
 
-            Assert.Contains("if (TryDispatchProtocolCommand(command))", methodSlice);
-            Assert.Contains("EnqueuePendingProtocolCommand(command);", methodSlice);
+            Assert.Contains("MarkHostCommunicationEstablished();", methodSlice);
+            Assert.Contains("if (TryDispatchProtocolCommand(trackedCommand))", methodSlice);
+            Assert.Contains("EnqueuePendingProtocolCommand(trackedCommand);", methodSlice);
         }
 
         [Fact]

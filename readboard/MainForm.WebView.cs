@@ -13,7 +13,7 @@ namespace readboard
     public partial class MainForm
     {
         private const string WebViewHostName = "app.readboard";
-        private const string ReadBoardRepositoryUrl = "https://github.com/yzyray/readboard";
+        private const string ReadBoardRepositoryUrl = "https://github.com/qiyi71w/readboard";
         private static readonly JsonSerializerOptions WebViewJsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -22,8 +22,12 @@ namespace readboard
         private readonly ReadBoardUiState webViewState = new ReadBoardUiState();
         private readonly Queue<ReadBoardUiLogEntry> webViewLogs = new Queue<ReadBoardUiLogEntry>();
         private WebView2 webView;
+        private bool hostCommunicationEstablished;
 
         private const int WmNcHitTest = 0x0084;
+        internal const int WsThickFrame = 0x00040000;
+        internal const int WsMinimizeBox = 0x00020000;
+        internal const int WsMaximizeBox = 0x00010000;
         internal const int HtClient = 1;
         internal const int HtMaxButton = 9;
         internal const int HtLeft = 10;
@@ -34,6 +38,21 @@ namespace readboard
         internal const int HtBottom = 15;
         internal const int HtBottomLeft = 16;
         internal const int HtBottomRight = 17;
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams parameters = base.CreateParams;
+                parameters.Style = ResolveWebViewWindowStyle(parameters.Style);
+                return parameters;
+            }
+        }
+
+        internal static int ResolveWebViewWindowStyle(int style)
+        {
+            return style | WsThickFrame | WsMinimizeBox | WsMaximizeBox;
+        }
 
         internal bool EnsureWebViewRuntimeAvailable()
         {
@@ -78,12 +97,14 @@ namespace readboard
         {
             AppConfig config = Program.CurrentContext.Config;
             int dpi = Math.Max(96, DeviceDpi);
-            Size minimumSize = WebViewWindowLayoutPolicy.ScaleLogicalSize(
+            Size minimumClientSize = WebViewWindowLayoutPolicy.ScaleLogicalSize(
                 WebViewWindowLayoutPolicy.MinimumLogicalClientSize,
                 dpi);
-            Size desiredSize = WebViewWindowLayoutPolicy.ScaleLogicalSize(
+            Size desiredClientSize = WebViewWindowLayoutPolicy.ScaleLogicalSize(
                 new Size(config.WindowClientWidth, config.WindowClientHeight),
                 dpi);
+            Size minimumSize = SizeFromClientSize(minimumClientSize);
+            Size desiredSize = SizeFromClientSize(desiredClientSize);
             Point desiredLocation = config.WindowPosX == -1 || config.WindowPosY == -1
                 ? Location
                 : new Point(config.WindowPosX, config.WindowPosY);
@@ -102,9 +123,10 @@ namespace readboard
 
         private void UpdateWebViewMinimumSizeForCurrentDpi()
         {
-            Size minimumSize = WebViewWindowLayoutPolicy.ScaleLogicalSize(
+            Size minimumClientSize = WebViewWindowLayoutPolicy.ScaleLogicalSize(
                 WebViewWindowLayoutPolicy.MinimumLogicalClientSize,
                 DeviceDpi);
+            Size minimumSize = SizeFromClientSize(minimumClientSize);
             Rectangle workingArea = Screen.FromControl(this).WorkingArea;
             MinimumSize = new Size(
                 Math.Min(minimumSize.Width, workingArea.Width),
@@ -674,8 +696,10 @@ namespace readboard
                 Shell = new ReadBoardShellState
                 {
                     Version = "v" + AppReleaseVersion.GetCurrentVersion(),
-                    Connected = sessionCoordinator.IsProtocolSessionActive,
-                    SyncStatus = HasActiveSyncOperation() ? "同步中" : sessionCoordinator.IsProtocolSessionActive ? "就绪" : "等待宿主连接",
+                    Connected = hostCommunicationEstablished,
+                    SyncStatus = ResolveWebViewSyncStatus(
+                        hostCommunicationEstablished,
+                        HasActiveSyncOperation()),
                     LastSync = webViewState.Shell.LastSync ?? "--:--:--",
                     StoneCount = webViewState.Shell.StoneCount,
                     Duration = "--",
@@ -725,6 +749,7 @@ namespace readboard
                 AiTime = textBox1.Text,
                 Playouts = textBox2.Text,
                 FirstPolicy = textBox3.Text,
+                FirstPolicyEnabled = textBox3.Enabled,
                 ShowOnBoard = Program.showInBoard,
                 ContinuousSync = sessionCoordinator.StartedSync,
                 SyncInterval = Program.timeinterval,
@@ -737,6 +762,15 @@ namespace readboard
                 IdentityEnabled = btnFoxAutoPlayIdentity.Enabled,
                 ShowOnBoardEnabled = chkShowInBoard.Enabled
             };
+        }
+
+        internal static string ResolveWebViewSyncStatus(
+            bool communicationEstablished,
+            bool activeSync)
+        {
+            if (activeSync)
+                return "同步中";
+            return communicationEstablished ? "就绪" : "宿主模式已启动";
         }
 
         private string ResolveWebViewPlatform()

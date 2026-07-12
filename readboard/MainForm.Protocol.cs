@@ -8,15 +8,29 @@ namespace readboard
         {
             if (command == null)
                 throw new ArgumentNullException("command");
-            if (TryDispatchProtocolCommand(command))
+            Action trackedCommand = delegate
+            {
+                MarkHostCommunicationEstablished();
+                command();
+            };
+            if (TryDispatchProtocolCommand(trackedCommand))
                 return;
-            EnqueuePendingProtocolCommand(command);
+            EnqueuePendingProtocolCommand(trackedCommand);
+        }
+
+        private void MarkHostCommunicationEstablished()
+        {
+            if (hostCommunicationEstablished)
+                return;
+            hostCommunicationEstablished = true;
+            AddWebViewLog("INFO", "宿主通信正常");
+            PostWebViewState();
         }
 
         public void NotifyProtocolReady()
         {
             sessionCoordinator.NotifyReady(Program.playPonder);
-            AddWebViewLog("INFO", "宿主已连接，ReadBoard 就绪");
+            AddWebViewLog("INFO", "宿主模式已启动，ReadBoard 就绪");
             PostWebViewState();
         }
 

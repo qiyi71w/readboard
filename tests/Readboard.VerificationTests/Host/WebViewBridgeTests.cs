@@ -200,5 +200,29 @@ namespace Readboard.VerificationTests.Host
                     48,
                     maximized));
         }
+
+        [Fact]
+        public void ResolveWebViewWindowStyle_EnablesNativeBorderlessResizeAndWindowCommands()
+        {
+            int style = MainForm.ResolveWebViewWindowStyle(0);
+
+            Assert.Equal(MainForm.WsThickFrame, style & MainForm.WsThickFrame);
+            Assert.Equal(MainForm.WsMinimizeBox, style & MainForm.WsMinimizeBox);
+            Assert.Equal(MainForm.WsMaximizeBox, style & MainForm.WsMaximizeBox);
+        }
+
+        [Theory]
+        [InlineData(false, false, "宿主模式已启动")]
+        [InlineData(true, false, "就绪")]
+        [InlineData(true, true, "同步中")]
+        public void ResolveWebViewSyncStatus_DistinguishesHostModeFromConfirmedCommunication(
+            bool communicationEstablished,
+            bool activeSync,
+            string expected)
+        {
+            Assert.Equal(
+                expected,
+                MainForm.ResolveWebViewSyncStatus(communicationEstablished, activeSync));
+        }
     }
 }

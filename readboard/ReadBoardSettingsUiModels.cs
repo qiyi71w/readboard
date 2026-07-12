@@ -9,7 +9,6 @@ namespace readboard
         public bool Magnifier { get; set; }
         public bool EnhancedCapture { get; set; }
         public bool PlacementValidation { get; set; }
-        public bool DisableShowShortcut { get; set; }
         public string SyncInterval { get; set; }
         public string GrayOffset { get; set; }
         public string BlackOffset { get; set; }

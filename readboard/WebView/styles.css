@@ -120,6 +120,8 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .sync-grid label { display: flex; min-height: 37px; align-items: center; white-space: nowrap; }
 .sync-grid button { height: 37px; min-height: 37px; }
 .placement-row { display: flex; min-width: 0; min-height: 37px; align-items: center; gap: 14px; margin-top: 0; white-space: nowrap; }
+.placement-row > b { font-size: 14px; }
+.placement-row .segments label { min-height: 32px; padding: 6px 12px; font-size: 14px; }
 .segments { display: flex; min-width: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .segments label { min-height: 37px; padding: 9px 18px; border-right: 1px solid var(--line); text-align: center; white-space: nowrap; }
 .segments label:last-child { border-right: 0; }
@@ -206,6 +208,10 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .modal h2 { margin: 0; font-size: 17px; }
 .modal > header button { min-width: 37px; min-height: 37px; padding: 0; border: 0; }
 .modal-body { min-height: 160px; padding: 18px; overflow: auto; }
+.modal.show-in-board-hint { grid-template-rows: 44px auto 52px; }
+.modal.show-in-board-hint .modal-body { min-height: 0; padding: 12px 16px; overflow: hidden; }
+.modal.show-in-board-hint .dialog-copy p { margin: 0 0 10px; line-height: 1.5; }
+.modal.show-in-board-hint .dialog-copy p:last-child { margin-bottom: 0; }
 .modal-actions { display: flex; min-height: 0; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 18px; border-top: 1px solid var(--line); }
 .modal.compact { width: min(600px, calc(100% - 36px)); }
 .modal.identity { width: min(760px, calc(100% - 36px)); height: min(590px, calc(100% - 36px)); }

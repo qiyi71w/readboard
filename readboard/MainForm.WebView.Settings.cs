@@ -97,7 +97,6 @@ namespace readboard
                 Magnifier = config.UseMagnifier,
                 EnhancedCapture = config.UseEnhanceScreen,
                 PlacementValidation = config.VerifyMove,
-                DisableShowShortcut = config.DisableShowInBoardShortcut,
                 SyncInterval = config.SyncIntervalMs.ToString(),
                 GrayOffset = config.GrayOffset.ToString(),
                 BlackOffset = config.BlackOffset.ToString(),
@@ -155,7 +154,6 @@ namespace readboard
             updated.UseMagnifier = settings.Magnifier;
             updated.UseEnhanceScreen = settings.EnhancedCapture;
             updated.VerifyMove = settings.PlacementValidation;
-            updated.DisableShowInBoardShortcut = settings.DisableShowShortcut;
             updated.DebugDiagnosticsEnabled = settings.Diagnostics;
             updated.ColorMode = ResolveColorMode(settings.Theme);
             return true;
@@ -178,7 +176,6 @@ namespace readboard
                 || key == "magnifier"
                 || key == "enhancedCapture"
                 || key == "placementValidation"
-                || key == "disableShowShortcut"
                 || key == "diagnostics")
                 return value.ValueKind == JsonValueKind.True || value.ValueKind == JsonValueKind.False;
             if (key == "syncInterval"
@@ -209,7 +206,6 @@ namespace readboard
                 case "magnifier": settings.Magnifier = value.GetBoolean(); break;
                 case "enhancedCapture": settings.EnhancedCapture = value.GetBoolean(); break;
                 case "placementValidation": settings.PlacementValidation = value.GetBoolean(); break;
-                case "disableShowShortcut": settings.DisableShowShortcut = value.GetBoolean(); break;
                 case "diagnostics": settings.Diagnostics = value.GetBoolean(); break;
                 case "syncInterval": settings.SyncInterval = value.GetString(); break;
                 case "grayOffset": settings.GrayOffset = value.GetString(); break;
@@ -233,7 +229,6 @@ namespace readboard
             bool colorModeChanged = updated.ColorMode != Program.CurrentConfig.ColorMode;
             Program.CurrentContext.Config = updated;
             PersistConfiguration();
-            RefreshShowInBoardShortcutToolTip();
             resetBtnKeepSyncName();
             sendPonderStatus();
             webViewSettingsDraft = CreateWebViewSettingsState(Program.CurrentConfig);

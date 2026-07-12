@@ -142,12 +142,6 @@ namespace readboard
             set { Config.PlayPonder = value; }
         }
 
-        public static bool disableShowInBoardShortcut
-        {
-            get { return Config.DisableShowInBoardShortcut; }
-            set { Config.DisableShowInBoardShortcut = value; }
-        }
-
         public static int uiThemeMode
         {
             get { return Config.UiThemeMode; }
@@ -430,7 +424,6 @@ namespace readboard
             langItems["SettingsForm_btnConfirm"] = "确认";
             langItems["SettingsForm_btnCancel"] = "取消";
             langItems["SettingsForm_chkEnhanceScreen"] = "强化截图";
-            langItems["SettingsForm_chkDisableShowInBoardShortcut"] = "关闭显示选点快捷键";
             langItems["SettingsForm_chkDebugDiagnostics"] = "保存调试诊断";
             langItems["SettingsForm_btnOpenDebugDiagnostics"] = "打开调试目录";
             langItems["SettingsForm_debugDiagnosticsWarning"] = "保存调试诊断会产生大量文件，仅在排查问题时开启；不需要时请务必关闭。";
