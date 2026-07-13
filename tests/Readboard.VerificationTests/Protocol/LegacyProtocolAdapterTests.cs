@@ -76,12 +76,15 @@ namespace Readboard.VerificationTests
             LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
 
             ProtocolMessage supported = adapter.ParseInbound("readboardUpdateSupported");
+            ProtocolMessage packageV2Supported = adapter.ParseInbound("readboardUpdatePackageV2Supported");
             ProtocolMessage installing = adapter.ParseInbound("readboardUpdateInstalling");
             ProtocolMessage cancelled = adapter.ParseInbound("readboardUpdateCancelled");
             ProtocolMessage failed = adapter.ParseInbound("readboardUpdateFailed\tbad zip");
 
             Assert.Equal(ProtocolMessageKind.ReadboardUpdateSupported, supported.Kind);
             Assert.Equal("readboardUpdateSupported", supported.RawText);
+            Assert.Equal(ProtocolMessageKind.ReadboardUpdatePackageV2Supported, packageV2Supported.Kind);
+            Assert.Equal("readboardUpdatePackageV2Supported", packageV2Supported.RawText);
             Assert.Equal(ProtocolMessageKind.ReadboardUpdateInstalling, installing.Kind);
             Assert.Equal("readboardUpdateInstalling", installing.RawText);
             Assert.Equal(ProtocolMessageKind.ReadboardUpdateCancelled, cancelled.Kind);

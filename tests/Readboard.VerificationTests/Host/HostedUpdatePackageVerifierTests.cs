@@ -30,6 +30,17 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void Verify_AllowsWebView2ReleasePackage()
+        {
+            using (var workspace = new ZipWorkspace("readboard-webview2-v3.1.0.zip"))
+            {
+                workspace.CreateZip(RequiredEntries);
+
+                new HostedUpdatePackageVerifier().Verify("v3.1.0", workspace.ZipPath);
+            }
+        }
+
+        [Fact]
         public void Verify_AllowsSingleTopLevelDirectory()
         {
             using (var workspace = new ZipWorkspace("readboard-github-release-v3.0.2.zip"))
@@ -131,6 +142,18 @@ namespace Readboard.VerificationTests.Host
                     () => new HostedUpdatePackageVerifier().Verify("v3.0.2", workspace.ZipPath));
 
                 Assert.Contains("readboard-github-release-v3.0.2.zip", exception.Message);
+            }
+        }
+
+        [Fact]
+        public void Verify_RejectsArbitraryZipFileName()
+        {
+            using (var workspace = new ZipWorkspace("readboard-v3.0.2.zip"))
+            {
+                workspace.CreateZip(RequiredEntries);
+
+                Assert.Throws<InvalidOperationException>(
+                    () => new HostedUpdatePackageVerifier().Verify("v3.0.2", workspace.ZipPath));
             }
         }
 

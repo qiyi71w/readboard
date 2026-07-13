@@ -89,6 +89,7 @@ namespace readboard
         private bool closeRequestedBeforeHandle = false;
         private bool isInitializingProtocolState = true;
         private bool hostedUpdateSupported = false;
+        private bool hostedUpdatePackageV2Supported = false;
         private FormUpdate activeHostedUpdateDialog = null;
         private bool suppressAutoPlayColorModeEvents = false;
         private bool suppressAutoPlayMoveModeEvents = false;
@@ -2619,6 +2620,10 @@ namespace readboard
                 launchOptions.TransportKind == TransportKind.Pipe &&
                 sessionCoordinator.IsProtocolSessionActive &&
                 hostedUpdateSupported &&
+                IsHostedUpdateAssetSupported(
+                    result.AssetName,
+                    hostedReleaseTag,
+                    hostedUpdatePackageV2Supported) &&
                 !string.IsNullOrWhiteSpace(result.AssetDownloadUrl) &&
                 !string.IsNullOrWhiteSpace(result.AssetName) &&
                 !string.IsNullOrWhiteSpace(result.AssetSha256) &&
@@ -2669,6 +2674,17 @@ namespace readboard
                 if (ReferenceEquals(activeHostedUpdateDialog, formUpdate))
                     activeHostedUpdateDialog = null;
             }
+        }
+
+        internal static bool IsHostedUpdateAssetSupported(
+            string assetName,
+            string versionTag,
+            bool packageV2Supported)
+        {
+            return HostedUpdatePackageVerifier.IsSupportedFileName(
+                versionTag,
+                assetName,
+                packageV2Supported);
         }
 
         private async Task<string> PrepareHostedUpdatePackageAsync(UpdateDialogModel model)

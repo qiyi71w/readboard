@@ -304,6 +304,10 @@ namespace Readboard.VerificationTests.Protocol
             {
             }
 
+            public void HandleReadboardUpdatePackageV2Supported()
+            {
+            }
+
             public void HandleReadboardUpdateInstalling()
             {
             }

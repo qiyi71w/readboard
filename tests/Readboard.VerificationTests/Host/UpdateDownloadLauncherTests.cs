@@ -72,6 +72,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("launchOptions.TransportKind == TransportKind.Pipe", methodSlice);
             Assert.Contains("sessionCoordinator.IsProtocolSessionActive", methodSlice);
             Assert.Contains("hostedUpdateSupported", methodSlice);
+            Assert.Contains("IsHostedUpdateAssetSupported(", methodSlice);
             Assert.Contains("HostedInstallAvailable = hostedInstallAvailable", methodSlice);
             Assert.Contains("HostedAssetSha256 = result.AssetSha256", methodSlice);
             Assert.Contains("DownloadingPackageStatusText = getLangStr(\"Update_downloadingPackage\")", methodSlice);
@@ -88,6 +89,24 @@ namespace Readboard.VerificationTests.Host
             Assert.True(
                 prepareSlice.IndexOf("downloader.DownloadAsync(", StringComparison.Ordinal) <
                 prepareSlice.IndexOf("new HostedUpdatePackageVerifier().Verify", StringComparison.Ordinal));
+        }
+
+        [Theory]
+        [InlineData("readboard-github-release-v3.0.9.zip", "v3.0.9", false, true)]
+        [InlineData("readboard-github-release-v3.0.9.zip", "v3.0.9", true, true)]
+        [InlineData("readboard-webview2-v3.1.0.zip", "v3.1.0", false, false)]
+        [InlineData("readboard-webview2-v3.1.0.zip", "v3.1.0", true, true)]
+        [InlineData("readboard-v3.1.0.zip", "v3.1.0", true, false)]
+        [InlineData("readboard-webview2-v3.1.1.zip", "v3.1.0", true, false)]
+        public void HostedInstallEligibility_RequiresV2ForWebView2Packages(
+            string assetName,
+            string versionTag,
+            bool packageV2Supported,
+            bool expected)
+        {
+            Assert.Equal(
+                expected,
+                MainForm.IsHostedUpdateAssetSupported(assetName, versionTag, packageV2Supported));
         }
 
         [Fact]

@@ -8,6 +8,9 @@ namespace readboard
 {
     internal sealed class HostedUpdatePackageVerifier
     {
+        private const string LegacyPackagePrefix = "readboard-github-release-";
+        private const string WebView2PackagePrefix = "readboard-webview2-";
+
         private static readonly string[] RequiredFiles =
         {
             "readboard.exe",
@@ -29,18 +32,47 @@ namespace readboard
                 throw new ArgumentException("Zip path is required.", nameof(zipPath));
             }
 
-            string expectedFileName = "readboard-github-release-" + versionTag + ".zip";
+            string expectedLegacyFileName = BuildFileName(LegacyPackagePrefix, versionTag);
+            string expectedWebView2FileName = BuildFileName(WebView2PackagePrefix, versionTag);
             string actualFileName = Path.GetFileName(zipPath);
-            if (!string.Equals(actualFileName, expectedFileName, StringComparison.Ordinal))
+            if (!IsSupportedFileName(versionTag, actualFileName, true))
             {
                 throw new InvalidOperationException(
-                    "Hosted update package file name must be " + expectedFileName + ".");
+                    "Hosted update package file name must be " + expectedLegacyFileName +
+                    " or " + expectedWebView2FileName + ".");
             }
 
             using (ZipArchive archive = ZipFile.OpenRead(zipPath))
             {
                 VerifyArchiveEntries(archive);
             }
+        }
+
+        internal static bool IsSupportedFileName(
+            string versionTag,
+            string fileName,
+            bool webView2Supported)
+        {
+            if (string.IsNullOrWhiteSpace(versionTag) || string.IsNullOrWhiteSpace(fileName))
+                return false;
+
+            if (string.Equals(
+                fileName,
+                BuildFileName(LegacyPackagePrefix, versionTag),
+                StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return webView2Supported && string.Equals(
+                fileName,
+                BuildFileName(WebView2PackagePrefix, versionTag),
+                StringComparison.Ordinal);
+        }
+
+        private static string BuildFileName(string prefix, string versionTag)
+        {
+            return prefix + versionTag + ".zip";
         }
 
         private static void VerifyArchiveEntries(ZipArchive archive)
