@@ -126,10 +126,19 @@ function New-ReleaseArchive {
 }
 
 $versionInfo = Get-ReleaseVersion -Path $assemblyInfoPath
-$releaseDirectoryName = "readboard-github-release-$($versionInfo.TagVersion)"
+$numericVersion = [Version]::Parse($versionInfo.NumericVersion)
+$releaseAssetPrefix = if ($numericVersion -lt [Version]'3.1.0') {
+    'readboard-github-release-'
+} else {
+    'readboard-webview2-'
+}
+$releaseDirectoryName = "$releaseAssetPrefix$($versionInfo.TagVersion)"
 $releaseDirectory = Join-Path $ReleaseRoot $releaseDirectoryName
 $releaseZipPath = Join-Path $ReleaseRoot ($releaseDirectoryName + '.zip')
 $resolvedReleaseZipPath = $releaseZipPath
+$resolvedChecksumPath = $resolvedReleaseZipPath + '.sha256'
+$releaseChecksumPath = $resolvedChecksumPath
+$releaseSha256 = [string]::Empty
 $releaseAppDirectory = Join-Path $releaseDirectory 'readboard'
 
 if (-not $SkipBuild) {
@@ -156,12 +165,21 @@ if ($SkipZip) {
     if (Test-Path -LiteralPath $resolvedReleaseZipPath) {
         Remove-Item -LiteralPath $resolvedReleaseZipPath -Force
     }
+    if (Test-Path -LiteralPath $resolvedChecksumPath) {
+        Remove-Item -LiteralPath $resolvedChecksumPath -Force
+    }
     $releaseZipPath = [string]::Empty
+    $releaseChecksumPath = [string]::Empty
 }
 if (-not $SkipZip) {
     New-ReleaseArchive -SourceDirectory $releaseDirectory -DestinationZipPath $resolvedReleaseZipPath
+    $releaseSha256 = (Get-FileHash -LiteralPath $resolvedReleaseZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $checksumLine = "$releaseSha256  $([System.IO.Path]::GetFileName($resolvedReleaseZipPath))"
+    Set-Content -LiteralPath $resolvedChecksumPath -Value $checksumLine -Encoding utf8NoBOM
 }
 
-Write-Host "PackageDir=$releaseDirectory"
-Write-Host "PackageZip=$releaseZipPath"
-Write-Host "PackageVersion=$($versionInfo.TagVersion)"
+Write-Output "PackageDir=$releaseDirectory"
+Write-Output "PackageZip=$releaseZipPath"
+Write-Output "PackageVersion=$($versionInfo.TagVersion)"
+Write-Output "PackageSha256=$releaseSha256"
+Write-Output "PackageChecksumFile=$releaseChecksumPath"
