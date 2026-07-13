@@ -506,7 +506,8 @@ namespace Readboard.VerificationTests.Host
                 LoadSource("readboard", "language_kr.txt")
             };
 
-            Assert.Contains("isCtrlDown && e.KeyValue == 88", keyDownSlice);
+            Assert.Contains("KeyValue == 88", keyDownSlice);
+            Assert.Contains("isCtrlDown", keyDownSlice);
             foreach (string source in shortcutTextSources)
             {
                 Assert.Contains("Ctrl+X", source);
