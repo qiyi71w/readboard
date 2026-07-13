@@ -2621,6 +2621,7 @@ namespace readboard
                 hostedUpdateSupported &&
                 !string.IsNullOrWhiteSpace(result.AssetDownloadUrl) &&
                 !string.IsNullOrWhiteSpace(result.AssetName) &&
+                !string.IsNullOrWhiteSpace(result.AssetSha256) &&
                 !string.IsNullOrWhiteSpace(hostedReleaseTag);
             UpdateDialogModel model = new UpdateDialogModel
             {
@@ -2639,6 +2640,7 @@ namespace readboard
                 HostedReleaseTag = hostedReleaseTag,
                 HostedAssetName = result.AssetName,
                 HostedAssetDownloadUrl = result.AssetDownloadUrl,
+                HostedAssetSha256 = result.AssetSha256,
                 DownloadButtonText = getLangStr("Update_download"),
                 DownloadAndInstallButtonText = getLangStr("Update_downloadAndInstall"),
                 DownloadingButtonText = getLangStr("Update_downloading"),
@@ -2678,7 +2680,8 @@ namespace readboard
             string zipPath = await downloader.DownloadAsync(
                 model.HostedReleaseTag,
                 model.HostedAssetName,
-                model.HostedAssetDownloadUrl);
+                model.HostedAssetDownloadUrl,
+                model.HostedAssetSha256);
             model.ReportHostedUpdateStatus?.Invoke(
                 model.VerifyingPackageStatusText,
                 "Verifying update package...");

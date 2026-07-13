@@ -3,6 +3,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 
 namespace readboard
@@ -42,7 +43,8 @@ namespace readboard
         public async Task<string> DownloadAsync(
             string versionTag,
             string assetName,
-            string assetDownloadUrl)
+            string assetDownloadUrl,
+            string expectedSha256)
         {
             if (string.IsNullOrWhiteSpace(versionTag))
             {
@@ -77,6 +79,17 @@ namespace readboard
             try
             {
                 await _downloadAsync(downloadUri, tempPath).ConfigureAwait(false);
+                string actualSha256;
+                using (FileStream stream = File.OpenRead(tempPath))
+                {
+                    actualSha256 = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+                }
+
+                if (!string.Equals(actualSha256, expectedSha256, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "Downloaded update package SHA-256 does not match the promoted package.");
+                }
 
                 if (File.Exists(finalPath))
                 {

@@ -32,6 +32,8 @@ namespace readboard
 
         public long? AssetSize { get; internal set; }
 
+        public string AssetSha256 { get; internal set; }
+
         public string ErrorMessage { get; internal set; }
     }
 }

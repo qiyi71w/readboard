@@ -35,6 +35,8 @@ namespace readboard
 
         public string HostedAssetDownloadUrl { get; set; }
 
+        public string HostedAssetSha256 { get; set; }
+
         public string DownloadButtonText { get; set; }
 
         public string DownloadAndInstallButtonText { get; set; }

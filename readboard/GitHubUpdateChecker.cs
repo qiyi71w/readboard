@@ -142,7 +142,8 @@ namespace readboard
                 ReleaseUrl = release.HtmlUrl,
                 AssetName = release.AssetName,
                 AssetDownloadUrl = release.AssetDownloadUrl,
-                AssetSize = release.AssetSize
+                AssetSize = release.AssetSize,
+                AssetSha256 = channel.Sha256
             };
         }
 
@@ -224,6 +225,12 @@ namespace readboard
             string latestTag = ReadRequiredString(element, "latestTag", "Channel '" + id + "'");
             SemanticVersion latestVersion =
                 ParseSemanticVersion(latestTag, "Channel '" + id + "' latest tag");
+            string sha256 = ReadRequiredString(element, "sha256", "Channel '" + id + "'");
+            if (!IsLowercaseSha256(sha256))
+            {
+                throw new InvalidOperationException(
+                    "Channel '" + id + "' has invalid SHA-256: expected 64 lowercase hexadecimal characters.");
+            }
 
             Version minimum = ReadOptionalVersion(element, "minimumWindowsVersion", id);
             Version maximum = ReadOptionalVersion(
@@ -245,8 +252,27 @@ namespace readboard
                 LatestTag = latestTag,
                 LatestSemanticVersion = latestVersion,
                 AssetName = ReadRequiredString(element, "assetName", "Channel '" + id + "'"),
-                Sha256 = ReadRequiredString(element, "sha256", "Channel '" + id + "'")
+                Sha256 = sha256
             };
+        }
+
+        private static bool IsLowercaseSha256(string value)
+        {
+            if (value == null || value.Length != 64)
+            {
+                return false;
+            }
+
+            foreach (char character in value)
+            {
+                if (!((character >= '0' && character <= '9') ||
+                      (character >= 'a' && character <= 'f')))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static void ValidateNoOverlappingRanges(IList<UpdateChannel> channels)

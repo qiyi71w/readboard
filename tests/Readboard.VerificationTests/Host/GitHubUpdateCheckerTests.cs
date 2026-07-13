@@ -10,6 +10,8 @@ namespace Readboard.VerificationTests.Host
     {
         private const string LegacyAssetName = "readboard-github-release-v3.0.9.zip";
         private const string MainAssetName = "readboard-webview2-v3.1.0.zip";
+        private const string PromotedSha256 =
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
         [Fact]
         public async Task CheckAsync_SelectsMainAtWindows10Version1809Boundary()
@@ -32,6 +34,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal("active", result.ChannelStatus);
             Assert.Equal("v3.1.0", requestedTag);
             Assert.Equal(MainAssetName, result.AssetName);
+            Assert.Equal(PromotedSha256, result.AssetSha256);
         }
 
         [Fact]
@@ -213,6 +216,34 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Theory]
+        [InlineData("active", "hash")]
+        [InlineData("retired", "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF")]
+        [InlineData("active", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg")]
+        public async Task CheckAsync_RejectsInvalidSha256ForInstallableChannel(
+            string status,
+            string sha256)
+        {
+            string manifest = BuildManifest(
+                BuildChannel(
+                    "legacy-windows",
+                    status,
+                    null,
+                    "10.0.17763",
+                    "v3.0.9",
+                    LegacyAssetName,
+                    sha256));
+
+            UpdateCheckResult result = await CreateChecker(
+                "v3.0.8",
+                new Version(6, 1, 7601),
+                manifest,
+                tag => BuildRelease(tag, LegacyAssetName)).CheckAsync();
+
+            Assert.Equal(UpdateCheckStatus.Failed, result.Status);
+            Assert.Contains("SHA-256", result.ErrorMessage);
+        }
+
+        [Theory]
         [InlineData("not-windows", "v3.1.0", "Windows version")]
         [InlineData("10.0.17763", "release-3.1", "semantic version")]
         public async Task CheckAsync_RejectsInvalidManifestVersions(
@@ -245,7 +276,7 @@ namespace Readboard.VerificationTests.Host
             string manifest =
                 "{\"schemaVersion\":1,\"channels\":[{" +
                 "\"id\":\"main\",\"status\":\"active\"," +
-                "\"latestTag\":\"v3.1.0\",\"sha256\":\"hash\"}]}";
+                "\"latestTag\":\"v3.1.0\",\"sha256\":\"" + PromotedSha256 + "\"}]}";
 
             UpdateCheckResult result = await CreateChecker(
                 "v3.0.9",
@@ -362,7 +393,8 @@ namespace Readboard.VerificationTests.Host
             string minimumWindowsVersion,
             string maximumWindowsVersionExclusive,
             string latestTag,
-            string assetName)
+            string assetName,
+            string sha256 = PromotedSha256)
         {
             var fields = new List<string>
             {
@@ -370,7 +402,7 @@ namespace Readboard.VerificationTests.Host
                 "\"status\":\"" + status + "\"",
                 "\"latestTag\":\"" + latestTag + "\"",
                 "\"assetName\":\"" + assetName + "\"",
-                "\"sha256\":\"hash\""
+                "\"sha256\":\"" + sha256 + "\""
             };
             if (minimumWindowsVersion != null)
             {

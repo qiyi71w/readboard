@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using readboard;
 using Xunit;
 
@@ -71,6 +73,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("sessionCoordinator.IsProtocolSessionActive", methodSlice);
             Assert.Contains("hostedUpdateSupported", methodSlice);
             Assert.Contains("HostedInstallAvailable = hostedInstallAvailable", methodSlice);
+            Assert.Contains("HostedAssetSha256 = result.AssetSha256", methodSlice);
             Assert.Contains("DownloadingPackageStatusText = getLangStr(\"Update_downloadingPackage\")", methodSlice);
             Assert.Contains("VerifyingPackageStatusText = getLangStr(\"Update_verifyingPackage\")", methodSlice);
             Assert.Contains("NotifyingHostStatusText = getLangStr(\"Update_notifyingHost\")", methodSlice);
@@ -81,6 +84,10 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("model.ReportHostedUpdateStatus?.Invoke(", prepareSlice);
             Assert.Contains("model.VerifyingPackageStatusText,", prepareSlice);
             Assert.Contains("\"Verifying update package...\"", prepareSlice);
+            Assert.Contains("model.HostedAssetSha256", prepareSlice);
+            Assert.True(
+                prepareSlice.IndexOf("downloader.DownloadAsync(", StringComparison.Ordinal) <
+                prepareSlice.IndexOf("new HostedUpdatePackageVerifier().Verify", StringComparison.Ordinal));
         }
 
         [Fact]
@@ -94,9 +101,56 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("lblHostedUpdateStatus", designerSource);
             Assert.Contains("model.ReportHostedUpdateStatus = UpdateHostedStatus;", formSource);
             Assert.Contains("UpdateHostedStatus(model.DownloadingPackageStatusText, DefaultDownloadingPackageStatusText);", beginSlice);
-            Assert.Contains("UpdateHostedStatus(model.NotifyingHostStatusText, DefaultNotifyingHostStatusText);", beginSlice);
+            Assert.Contains("model.NotifyingHostStatusText", beginSlice);
+            Assert.Contains("DefaultNotifyingHostStatusText", beginSlice);
             Assert.Contains("UpdateHostedStatus(model.WaitingForHostInstallText, DefaultWaitingForHostInstallText);", beginSlice);
+            Assert.Contains("await PrepareAndNotifyHostedUpdateAsync(", beginSlice);
             Assert.Contains("UpdateHostedStatus(model.HostInstallingStatusText, DefaultHostInstallingStatusText);", installingSlice);
+        }
+
+        [Fact]
+        public async Task PrepareAndNotifyHostedUpdateAsync_DoesNotNotifyWhenPreparationFails()
+        {
+            bool notified = false;
+            var model = new UpdateDialogModel
+            {
+                HostedReleaseTag = "v3.0.2",
+                PrepareHostedUpdateAsync = ignored =>
+                    Task.FromException<string>(new InvalidOperationException("SHA-256 mismatch")),
+                NotifyHostedUpdateReady = (tag, path) => notified = true
+            };
+
+            InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => FormUpdate.PrepareAndNotifyHostedUpdateAsync(model, null));
+
+            Assert.Equal("SHA-256 mismatch", exception.Message);
+            Assert.False(notified);
+        }
+
+        [Fact]
+        public async Task PrepareAndNotifyHostedUpdateAsync_NotifiesOnlyAfterPreparationCompletes()
+        {
+            var stages = new List<string>();
+            var model = new UpdateDialogModel
+            {
+                HostedReleaseTag = "v3.0.2",
+                PrepareHostedUpdateAsync = ignored =>
+                {
+                    stages.Add("prepare");
+                    return Task.FromResult("package.zip");
+                },
+                NotifyHostedUpdateReady = (tag, path) => stages.Add("notify")
+            };
+
+            await FormUpdate.PrepareAndNotifyHostedUpdateAsync(
+                model,
+                () =>
+                {
+                    stages.Add("before-notify");
+                    return true;
+                });
+
+            Assert.Equal(new[] { "prepare", "before-notify", "notify" }, stages);
         }
 
         [Fact]
