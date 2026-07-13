@@ -457,7 +457,7 @@ namespace readboard
             langItems["SettingsForm_outOfRange"] = "输入的值超过范围";
             langItems["SettingsForm_resetDefaultTip"] = "已恢复默认设置,请重新打开";
             langItems["TipsForm_title"] = "提示";
-            langItems["TipsForm_lblTips"] = "注意: 快捷键Ctrl+D,[前台]方式同步时不支持此功能,选点显示在原棋盘上后,原棋盘将无法落子";
+            langItems["TipsForm_lblTips"] = "注意: 快捷键Ctrl+X,[前台]方式同步时不支持此功能,选点显示在原棋盘上后,原棋盘将无法落子";
             langItems["TipsForm_lblTips1"] = "可通过勾选双向同步选项恢复落子功能";
             langItems["TipsForm_btnConfirm"] = "确定";
             langItems["TipsForm_btnNotAskAgain"] = "不再提示";
