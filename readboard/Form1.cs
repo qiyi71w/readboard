@@ -1454,8 +1454,7 @@ namespace readboard
 
         private void SendClearCommand()
         {
-            stopSync();
-            sessionCoordinator.SendClearBoard();
+            sessionCoordinator.StopSyncSessionAndClearBoard();
         }
 
         private void SendNoInBoardCommand()
