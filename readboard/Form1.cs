@@ -2341,9 +2341,9 @@ namespace readboard
             btnKeepSync.Text = getLangStr("keepSync") + "(" + Program.timename + "ms)";
             if (!suppressKeepSyncLifecycleLog && logKeepSyncLifecycle)
                 AddWebViewLog("SYNC", "持续同步已停止");
-            PostWebViewState();
             if (!SyncToolbarTextResolver.ShouldRestoreIdleUiAfterKeepSyncStop(continuousSyncActive))
             {
+                PostWebViewState();
                 ApplyMainWindowTitle();
                 return;
             }
@@ -2352,6 +2352,7 @@ namespace readboard
             SetSyncConfigurationControlsEnabled(true);
             RestoreBoardSelectionControls();
             ResetMainWindowTitle();
+            PostWebViewState();
         }
 
         private void ApplyContinuousSyncStartedUi()
