@@ -657,6 +657,8 @@ namespace readboard
                     return currentHost.HandleQuitRequest;
                 case ProtocolMessageKind.ReadboardUpdateSupported:
                     return currentHost.HandleReadboardUpdateSupported;
+                case ProtocolMessageKind.ReadboardUpdatePackageV2Supported:
+                    return currentHost.HandleReadboardUpdatePackageV2Supported;
                 case ProtocolMessageKind.ReadboardUpdateInstalling:
                     return currentHost.HandleReadboardUpdateInstalling;
                 case ProtocolMessageKind.ReadboardUpdateCancelled:

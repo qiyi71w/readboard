@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using readboard;
 using Xunit;
 
@@ -65,12 +67,17 @@ namespace Readboard.VerificationTests.Host
         {
             string source = LoadReadboardSource("Form1.cs");
             string methodSlice = GetMethodSlice(source, "private void ShowUpdateAvailable(UpdateCheckResult result)");
+            string eligibilitySlice = GetMethodSlice(source, "internal static bool IsHostedInstallAvailable(");
             string prepareSlice = GetMethodSlice(source, "private async Task<string> PrepareHostedUpdatePackageAsync(UpdateDialogModel model)");
 
-            Assert.Contains("launchOptions.TransportKind == TransportKind.Pipe", methodSlice);
-            Assert.Contains("sessionCoordinator.IsProtocolSessionActive", methodSlice);
-            Assert.Contains("hostedUpdateSupported", methodSlice);
+            Assert.Contains("IsHostedInstallAvailable(", methodSlice);
             Assert.Contains("HostedInstallAvailable = hostedInstallAvailable", methodSlice);
+            Assert.Contains("HostedAssetSha256 = result.AssetSha256", methodSlice);
+            Assert.Contains("transportKind == TransportKind.Pipe", eligibilitySlice);
+            Assert.Contains("protocolSessionActive", eligibilitySlice);
+            Assert.Contains("hostedUpdateSupported", eligibilitySlice);
+            Assert.Contains("IsHostedUpdateAssetSupported(", eligibilitySlice);
+            Assert.Contains("!string.IsNullOrWhiteSpace(result.AssetSha256)", eligibilitySlice);
             Assert.Contains("DownloadingPackageStatusText = getLangStr(\"Update_downloadingPackage\")", methodSlice);
             Assert.Contains("VerifyingPackageStatusText = getLangStr(\"Update_verifyingPackage\")", methodSlice);
             Assert.Contains("NotifyingHostStatusText = getLangStr(\"Update_notifyingHost\")", methodSlice);
@@ -81,6 +88,56 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("model.ReportHostedUpdateStatus?.Invoke(", prepareSlice);
             Assert.Contains("model.VerifyingPackageStatusText,", prepareSlice);
             Assert.Contains("\"Verifying update package...\"", prepareSlice);
+            Assert.Contains("model.HostedAssetSha256", prepareSlice);
+            Assert.True(
+                prepareSlice.IndexOf("downloader.DownloadAsync(", StringComparison.Ordinal) <
+                prepareSlice.IndexOf("new HostedUpdatePackageVerifier().Verify", StringComparison.Ordinal));
+        }
+
+        [Theory]
+        [InlineData(null, false)]
+        [InlineData("", false)]
+        [InlineData(" ", false)]
+        [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", true)]
+        public void HostedInstallEligibility_RequiresAssetSha256(
+            string assetSha256,
+            bool expected)
+        {
+            var result = new UpdateCheckResult
+            {
+                Tag = "v3.0.9",
+                AssetName = "readboard-github-release-v3.0.9.zip",
+                AssetDownloadUrl =
+                    "https://github.com/qiyi71w/readboard/releases/download/v3.0.9/readboard-github-release-v3.0.9.zip",
+                AssetSha256 = assetSha256
+            };
+
+            Assert.Equal(
+                expected,
+                MainForm.IsHostedInstallAvailable(
+                    result,
+                    TransportKind.Pipe,
+                    true,
+                    true,
+                    false));
+        }
+
+        [Theory]
+        [InlineData("readboard-github-release-v3.0.9.zip", "v3.0.9", false, true)]
+        [InlineData("readboard-github-release-v3.0.9.zip", "v3.0.9", true, true)]
+        [InlineData("readboard-webview2-v3.1.0.zip", "v3.1.0", false, false)]
+        [InlineData("readboard-webview2-v3.1.0.zip", "v3.1.0", true, true)]
+        [InlineData("readboard-v3.1.0.zip", "v3.1.0", true, false)]
+        [InlineData("readboard-webview2-v3.1.1.zip", "v3.1.0", true, false)]
+        public void HostedInstallEligibility_RequiresV2ForWebView2Packages(
+            string assetName,
+            string versionTag,
+            bool packageV2Supported,
+            bool expected)
+        {
+            Assert.Equal(
+                expected,
+                MainForm.IsHostedUpdateAssetSupported(assetName, versionTag, packageV2Supported));
         }
 
         [Fact]
@@ -94,9 +151,56 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("lblHostedUpdateStatus", designerSource);
             Assert.Contains("model.ReportHostedUpdateStatus = UpdateHostedStatus;", formSource);
             Assert.Contains("UpdateHostedStatus(model.DownloadingPackageStatusText, DefaultDownloadingPackageStatusText);", beginSlice);
-            Assert.Contains("UpdateHostedStatus(model.NotifyingHostStatusText, DefaultNotifyingHostStatusText);", beginSlice);
+            Assert.Contains("model.NotifyingHostStatusText", beginSlice);
+            Assert.Contains("DefaultNotifyingHostStatusText", beginSlice);
             Assert.Contains("UpdateHostedStatus(model.WaitingForHostInstallText, DefaultWaitingForHostInstallText);", beginSlice);
+            Assert.Contains("await PrepareAndNotifyHostedUpdateAsync(", beginSlice);
             Assert.Contains("UpdateHostedStatus(model.HostInstallingStatusText, DefaultHostInstallingStatusText);", installingSlice);
+        }
+
+        [Fact]
+        public async Task PrepareAndNotifyHostedUpdateAsync_DoesNotNotifyWhenPreparationFails()
+        {
+            bool notified = false;
+            var model = new UpdateDialogModel
+            {
+                HostedReleaseTag = "v3.0.2",
+                PrepareHostedUpdateAsync = ignored =>
+                    Task.FromException<string>(new InvalidOperationException("SHA-256 mismatch")),
+                NotifyHostedUpdateReady = (tag, path) => notified = true
+            };
+
+            InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => FormUpdate.PrepareAndNotifyHostedUpdateAsync(model, null));
+
+            Assert.Equal("SHA-256 mismatch", exception.Message);
+            Assert.False(notified);
+        }
+
+        [Fact]
+        public async Task PrepareAndNotifyHostedUpdateAsync_NotifiesOnlyAfterPreparationCompletes()
+        {
+            var stages = new List<string>();
+            var model = new UpdateDialogModel
+            {
+                HostedReleaseTag = "v3.0.2",
+                PrepareHostedUpdateAsync = ignored =>
+                {
+                    stages.Add("prepare");
+                    return Task.FromResult("package.zip");
+                },
+                NotifyHostedUpdateReady = (tag, path) => stages.Add("notify")
+            };
+
+            await FormUpdate.PrepareAndNotifyHostedUpdateAsync(
+                model,
+                () =>
+                {
+                    stages.Add("before-notify");
+                    return true;
+                });
+
+            Assert.Equal(new[] { "prepare", "before-notify", "notify" }, stages);
         }
 
         [Fact]
@@ -129,6 +233,62 @@ namespace Readboard.VerificationTests.Host
             Assert.DoesNotContain("Download and Install", krSource);
             Assert.DoesNotContain("Waiting for Host Install", krSource);
             Assert.DoesNotContain("Host installation", krSource);
+        }
+
+        [Fact]
+        public void ManualUpdateResultsExposeRetiredOutsideAndNoChannelSemantics()
+        {
+            string source = LoadReadboardSource("Form1.cs");
+            string availableSlice = GetMethodSlice(
+                source,
+                "private void ShowUpdateAvailable(UpdateCheckResult result)");
+            string resultSlice = GetMethodSlice(
+                source,
+                "private void HandleUpdateCheckResult(UpdateCheckResult result)");
+            string upToDateSlice = GetMethodSlice(
+                source,
+                "private void ShowUpdateUpToDate(UpdateCheckResult result)");
+            string outsideSlice = GetMethodSlice(
+                source,
+                "private string BuildOutsideChannelMessage(UpdateCheckResult result)");
+
+            Assert.Contains("Update_retiredFinalVersion", availableSlice);
+            Assert.Contains("UpdateCheckStatus.OutsideChannel", resultSlice);
+            Assert.Contains("Update_outsideChannel", outsideSlice);
+            Assert.Contains("UpdateCheckStatus.NoMatchingChannel", resultSlice);
+            Assert.Contains("Update_noMatchingChannel", resultSlice);
+            Assert.Contains("Update_upToDateRetired", upToDateSlice);
+            Assert.Contains("Update_retiredFinalVersion", outsideSlice);
+            Assert.Contains("Update_newerVersionRequiresWindows", source);
+        }
+
+        [Fact]
+        public void ManualUpdateResultLanguageKeysExistInEveryLanguage()
+        {
+            string programSource = LoadReadboardSource("Program.cs");
+            string[] languageSources =
+            {
+                LoadReadboardSource("language_cn.txt"),
+                LoadReadboardSource("language_en.txt"),
+                LoadReadboardSource("language_jp.txt"),
+                LoadReadboardSource("language_kr.txt")
+            };
+
+            foreach (string key in new[]
+            {
+                "Update_retiredFinalVersion",
+                "Update_upToDateRetired",
+                "Update_outsideChannel",
+                "Update_noMatchingChannel",
+                "Update_newerVersionRequiresWindows"
+            })
+            {
+                Assert.Contains("langItems[\"" + key + "\"]", programSource);
+                foreach (string languageSource in languageSources)
+                {
+                    Assert.Contains(key + "=", languageSource);
+                }
+            }
         }
 
         private static string LoadReadboardSource(string fileName)

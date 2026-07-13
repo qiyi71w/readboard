@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using Xunit;
 
@@ -71,6 +72,7 @@ namespace Readboard.VerificationTests
             {
                 workspace.CreateBuildOutputs();
                 File.WriteAllText(Path.Combine(workspace.ReleaseRoot, workspace.ExpectedZipFileName), "stale zip");
+                File.WriteAllText(Path.Combine(workspace.ReleaseRoot, workspace.ExpectedChecksumFileName), "stale checksum");
 
                 PackagingResult result = workspace.RunPackagingScript(skipZip: true);
 
@@ -79,6 +81,64 @@ namespace Readboard.VerificationTests
                 Assert.True(File.Exists(Path.Combine(releaseDirectory, "readboard", "readboard.exe")));
                 Assert.DoesNotContain(".zip", result.Output, StringComparison.OrdinalIgnoreCase);
                 Assert.Empty(Directory.GetFiles(workspace.ReleaseRoot, "*.zip"));
+                Assert.Empty(Directory.GetFiles(workspace.ReleaseRoot, "*.sha256"));
+            }
+        }
+
+        [Fact]
+        public void SkipBuild_Version30_UsesLegacyAssetName()
+        {
+            using (PackagingWorkspace workspace = PackagingWorkspace.Create("v3.0.9"))
+            {
+                workspace.CreateBuildOutputs();
+
+                PackagingResult result = workspace.RunPackagingScript();
+
+                Assert.True(result.ExitCode == 0, result.Output);
+                Assert.True(File.Exists(Path.Combine(
+                    workspace.ReleaseRoot,
+                    "readboard-github-release-v3.0.9.zip")));
+            }
+        }
+
+        [Fact]
+        public void SkipBuild_Version31_UsesWebView2AssetName()
+        {
+            using (PackagingWorkspace workspace = PackagingWorkspace.Create("v3.1.0"))
+            {
+                workspace.CreateBuildOutputs();
+
+                PackagingResult result = workspace.RunPackagingScript();
+
+                Assert.True(result.ExitCode == 0, result.Output);
+                Assert.True(File.Exists(Path.Combine(
+                    workspace.ReleaseRoot,
+                    "readboard-webview2-v3.1.0.zip")));
+            }
+        }
+
+        [Fact]
+        public void SkipBuild_WritesSha256SidecarMatchingZip()
+        {
+            using (PackagingWorkspace workspace = PackagingWorkspace.Create())
+            {
+                workspace.CreateBuildOutputs();
+
+                PackagingResult result = workspace.RunPackagingScript();
+
+                Assert.True(result.ExitCode == 0, result.Output);
+                string zipPath = Path.Combine(workspace.ReleaseRoot, workspace.ExpectedZipFileName);
+                string checksumPath = Path.Combine(workspace.ReleaseRoot, workspace.ExpectedChecksumFileName);
+                string expectedHash;
+                using (SHA256 sha256 = SHA256.Create())
+                using (FileStream stream = File.OpenRead(zipPath))
+                    expectedHash = Convert.ToHexString(sha256.ComputeHash(stream)).ToLowerInvariant();
+
+                Assert.Equal(
+                    expectedHash + "  " + workspace.ExpectedZipFileName,
+                    File.ReadAllText(checksumPath).Trim());
+                Assert.Contains("PackageSha256=" + expectedHash, result.Output);
+                Assert.Contains("PackageChecksumFile=" + checksumPath, result.Output);
             }
         }
 
@@ -130,22 +190,27 @@ namespace Readboard.VerificationTests
                 RootPath = rootPath;
                 BuildOutputDir = Path.Combine(rootPath, "build");
                 ReleaseRoot = Path.Combine(rootPath, "release");
+                ScriptPath = Path.Combine(rootPath, "scripts", "package-readboard-release.local.ps1");
                 Directory.CreateDirectory(BuildOutputDir);
                 Directory.CreateDirectory(ReleaseRoot);
+                Directory.CreateDirectory(Path.GetDirectoryName(ScriptPath));
+                File.Copy(
+                    Path.Combine(
+                        VerificationFixtureLocator.RepositoryRoot(),
+                        "scripts",
+                        "package-readboard-release.local.ps1"),
+                    ScriptPath);
             }
 
             public string RootPath { get; private set; }
             public string BuildOutputDir { get; private set; }
             public string ReleaseRoot { get; private set; }
+            public string ScriptPath { get; private set; }
             public string ExpectedZipFileName
             {
                 get
                 {
-                    string assemblyInfoPath = Path.Combine(
-                        VerificationFixtureLocator.RepositoryRoot(),
-                        "readboard",
-                        "Properties",
-                        "AssemblyInfo.cs");
+                    string assemblyInfoPath = Path.Combine(RootPath, "readboard", "Properties", "AssemblyInfo.cs");
                     string content = File.ReadAllText(assemblyInfoPath);
                     string token = "AssemblyInformationalVersion(\"";
                     int startIndex = content.IndexOf(token, StringComparison.Ordinal);
@@ -154,17 +219,35 @@ namespace Readboard.VerificationTests
                     int endIndex = content.IndexOf('"', startIndex);
                     Assert.True(endIndex > startIndex, "Expected closing quote for AssemblyInformationalVersion.");
                     string version = content.Substring(startIndex, endIndex - startIndex);
-                    return "readboard-github-release-" + version + ".zip";
+                    Version numericVersion = Version.Parse(version.TrimStart('v', 'V'));
+                    string prefix = numericVersion < new Version(3, 1, 0)
+                        ? "readboard-github-release-"
+                        : "readboard-webview2-";
+                    return prefix + version + ".zip";
                 }
             }
 
-            public static PackagingWorkspace Create()
+            public string ExpectedChecksumFileName
+            {
+                get { return ExpectedZipFileName + ".sha256"; }
+            }
+
+            public static PackagingWorkspace Create(string version = "v3.0.9")
             {
                 string rootPath = Path.Combine(
                     Path.GetTempPath(),
                     "readboard-package-tests-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(rootPath);
-                return new PackagingWorkspace(rootPath);
+                PackagingWorkspace workspace = new PackagingWorkspace(rootPath);
+                workspace.WriteAssemblyVersion(version);
+                return workspace;
+            }
+
+            private void WriteAssemblyVersion(string version)
+            {
+                string path = Path.Combine(RootPath, "readboard", "Properties", "AssemblyInfo.cs");
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllText(path, "[assembly: AssemblyInformationalVersion(\"" + version + "\")]\r\n");
             }
 
             public void CreateBuildOutputs()
@@ -183,11 +266,9 @@ namespace Readboard.VerificationTests
 
             public PackagingResult RunPackagingScript(bool skipZip = false)
             {
-                string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
-                string scriptPath = Path.Combine(repositoryRoot, "scripts", "package-readboard-release.local.ps1");
                 ProcessStartInfo startInfo = new ProcessStartInfo("pwsh.exe")
                 {
-                    WorkingDirectory = repositoryRoot,
+                    WorkingDirectory = RootPath,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     StandardOutputEncoding = Encoding.UTF8,
@@ -199,7 +280,7 @@ namespace Readboard.VerificationTests
                 startInfo.ArgumentList.Add("-ExecutionPolicy");
                 startInfo.ArgumentList.Add("Bypass");
                 startInfo.ArgumentList.Add("-File");
-                startInfo.ArgumentList.Add(scriptPath);
+                startInfo.ArgumentList.Add(ScriptPath);
                 startInfo.ArgumentList.Add("-SkipBuild");
                 startInfo.ArgumentList.Add("-BuildOutputDir");
                 startInfo.ArgumentList.Add(BuildOutputDir);

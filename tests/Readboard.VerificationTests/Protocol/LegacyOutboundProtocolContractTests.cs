@@ -177,6 +177,9 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("pass", ProtocolKeywords.Pass);
             Assert.Equal("0", ProtocolKeywords.DefaultNumericValue);
             Assert.Equal("readboardUpdateSupported", ProtocolKeywords.ReadboardUpdateSupported);
+            Assert.Equal(
+                "readboardUpdatePackageV2Supported",
+                ProtocolKeywords.ReadboardUpdatePackageV2Supported);
             Assert.Equal("readboardUpdateReady\t", ProtocolKeywords.ReadboardUpdateReadyPrefix);
             Assert.Equal("readboardUpdateInstalling", ProtocolKeywords.ReadboardUpdateInstalling);
             Assert.Equal("readboardUpdateCancelled", ProtocolKeywords.ReadboardUpdateCancelled);

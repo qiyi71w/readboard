@@ -13,6 +13,8 @@ namespace readboard
             string trimmed = rawLine.Trim();
             if (string.Equals(trimmed, ProtocolKeywords.ReadboardUpdateSupported, StringComparison.Ordinal))
                 return new ProtocolMessage { Kind = ProtocolMessageKind.ReadboardUpdateSupported, RawText = trimmed };
+            if (string.Equals(trimmed, ProtocolKeywords.ReadboardUpdatePackageV2Supported, StringComparison.Ordinal))
+                return new ProtocolMessage { Kind = ProtocolMessageKind.ReadboardUpdatePackageV2Supported, RawText = trimmed };
             if (string.Equals(trimmed, ProtocolKeywords.ReadboardUpdateInstalling, StringComparison.Ordinal))
                 return new ProtocolMessage { Kind = ProtocolMessageKind.ReadboardUpdateInstalling, RawText = trimmed };
             if (string.Equals(trimmed, ProtocolKeywords.ReadboardUpdateCancelled, StringComparison.Ordinal))

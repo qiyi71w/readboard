@@ -317,12 +317,21 @@ namespace readboard
 
             try
             {
-                string zipPath = await model.PrepareHostedUpdateAsync(model);
-                if (IsDisposed || Disposing)
+                bool notificationSent = await PrepareAndNotifyHostedUpdateAsync(
+                    model,
+                    () =>
+                    {
+                        if (IsDisposed || Disposing)
+                            return false;
+
+                        UpdateHostedStatus(
+                            model.NotifyingHostStatusText,
+                            DefaultNotifyingHostStatusText);
+                        return true;
+                    });
+                if (!notificationSent)
                     return;
 
-                UpdateHostedStatus(model.NotifyingHostStatusText, DefaultNotifyingHostStatusText);
-                model.NotifyHostedUpdateReady(model.HostedReleaseTag, zipPath);
                 UpdateHostedStatus(model.WaitingForHostInstallText, DefaultWaitingForHostInstallText);
                 UpdateDownloadButtonState(false, model.WaitingForHostInstallText, DefaultWaitingForHostInstallText);
                 hostedUpdateResponseTimer.Stop();
@@ -339,6 +348,21 @@ namespace readboard
                         DefaultManualDownloadFallbackMessage),
                     MessageBoxIcon.Error);
             }
+        }
+
+        internal static async Task<bool> PrepareAndNotifyHostedUpdateAsync(
+            UpdateDialogModel model,
+            Func<bool> beforeNotify)
+        {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+
+            string zipPath = await model.PrepareHostedUpdateAsync(model);
+            if (beforeNotify != null && !beforeNotify())
+                return false;
+
+            model.NotifyHostedUpdateReady(model.HostedReleaseTag, zipPath);
+            return true;
         }
 
         private void OpenManualDownload()

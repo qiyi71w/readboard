@@ -89,6 +89,7 @@ namespace readboard
         private bool closeRequestedBeforeHandle = false;
         private bool isInitializingProtocolState = true;
         private bool hostedUpdateSupported = false;
+        private bool hostedUpdatePackageV2Supported = false;
         private FormUpdate activeHostedUpdateDialog = null;
         private bool suppressAutoPlayColorModeEvents = false;
         private bool suppressAutoPlayMoveModeEvents = false;
@@ -2602,19 +2603,31 @@ namespace readboard
         private void ShowUpdateAvailable(UpdateCheckResult result)
         {
             string hostedReleaseTag = result.Tag;
-            bool hostedInstallAvailable =
-                launchOptions.TransportKind == TransportKind.Pipe &&
-                sessionCoordinator.IsProtocolSessionActive &&
-                hostedUpdateSupported &&
-                !string.IsNullOrWhiteSpace(result.AssetDownloadUrl) &&
-                !string.IsNullOrWhiteSpace(result.AssetName) &&
-                !string.IsNullOrWhiteSpace(hostedReleaseTag);
+            string releaseNotes = result.ReleaseNotes;
+            string channelNotice = null;
+            if (string.Equals(result.ChannelStatus, "retired", StringComparison.Ordinal))
+            {
+                channelNotice = string.Format(
+                    getLangStr("Update_retiredFinalVersion"),
+                    result.LatestVersion);
+            }
+            channelNotice = AppendIncompatibleNewerVersionMessage(result, channelNotice);
+            if (!string.IsNullOrWhiteSpace(channelNotice))
+                releaseNotes = string.IsNullOrWhiteSpace(releaseNotes)
+                    ? channelNotice
+                    : channelNotice + Environment.NewLine + Environment.NewLine + releaseNotes;
+            bool hostedInstallAvailable = IsHostedInstallAvailable(
+                result,
+                launchOptions.TransportKind,
+                sessionCoordinator.IsProtocolSessionActive,
+                hostedUpdateSupported,
+                hostedUpdatePackageV2Supported);
             UpdateDialogModel model = new UpdateDialogModel
             {
                 CurrentVersion = result.CurrentVersion,
                 LatestVersion = result.LatestVersion,
                 PublishedAt = result.PublishedAt,
-                ReleaseNotes = result.ReleaseNotes,
+                ReleaseNotes = releaseNotes,
                 DownloadUrl = result.ReleaseUrl,
                 UnavailableText = getLangStr("Update_notProvided"),
                 EmptyReleaseNotesText = getLangStr("Update_releaseNotesUnavailable"),
@@ -2626,6 +2639,7 @@ namespace readboard
                 HostedReleaseTag = hostedReleaseTag,
                 HostedAssetName = result.AssetName,
                 HostedAssetDownloadUrl = result.AssetDownloadUrl,
+                HostedAssetSha256 = result.AssetSha256,
                 DownloadButtonText = getLangStr("Update_download"),
                 DownloadAndInstallButtonText = getLangStr("Update_downloadAndInstall"),
                 DownloadingButtonText = getLangStr("Update_downloading"),
@@ -2656,6 +2670,37 @@ namespace readboard
             }
         }
 
+        internal static bool IsHostedUpdateAssetSupported(
+            string assetName,
+            string versionTag,
+            bool packageV2Supported)
+        {
+            return HostedUpdatePackageVerifier.IsSupportedFileName(
+                versionTag,
+                assetName,
+                packageV2Supported);
+        }
+
+        internal static bool IsHostedInstallAvailable(
+            UpdateCheckResult result,
+            TransportKind transportKind,
+            bool protocolSessionActive,
+            bool hostedUpdateSupported,
+            bool packageV2Supported)
+        {
+            return transportKind == TransportKind.Pipe &&
+                protocolSessionActive &&
+                hostedUpdateSupported &&
+                IsHostedUpdateAssetSupported(
+                    result.AssetName,
+                    result.Tag,
+                    packageV2Supported) &&
+                !string.IsNullOrWhiteSpace(result.AssetDownloadUrl) &&
+                !string.IsNullOrWhiteSpace(result.AssetName) &&
+                !string.IsNullOrWhiteSpace(result.AssetSha256) &&
+                !string.IsNullOrWhiteSpace(result.Tag);
+        }
+
         private async Task<string> PrepareHostedUpdatePackageAsync(UpdateDialogModel model)
         {
             if (model == null)
@@ -2665,7 +2710,8 @@ namespace readboard
             string zipPath = await downloader.DownloadAsync(
                 model.HostedReleaseTag,
                 model.HostedAssetName,
-                model.HostedAssetDownloadUrl);
+                model.HostedAssetDownloadUrl,
+                model.HostedAssetSha256);
             model.ReportHostedUpdateStatus?.Invoke(
                 model.VerifyingPackageStatusText,
                 "Verifying update package...");
@@ -2678,9 +2724,55 @@ namespace readboard
             sessionCoordinator.SendReadboardUpdateReady(tag, absoluteZipPath);
         }
 
-        private void ShowUpdateUpToDate()
+        private void ShowUpdateUpToDate(UpdateCheckResult result)
         {
-            MessageBox.Show(this, getLangStr("Update_upToDate"), getLangStr("MainForm_btnCheckUpdate"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+            string messageKey = string.Equals(
+                result.ChannelStatus,
+                "retired",
+                StringComparison.Ordinal)
+                ? "Update_upToDateRetired"
+                : "Update_upToDate";
+            ShowUpdateInformation(
+                AppendIncompatibleNewerVersionMessage(
+                    result,
+                    getLangStr(messageKey)));
+        }
+
+        private string BuildOutsideChannelMessage(UpdateCheckResult result)
+        {
+            string message = getLangStr("Update_outsideChannel");
+            if (string.Equals(result.ChannelStatus, "retired", StringComparison.Ordinal))
+            {
+                message += Environment.NewLine + string.Format(
+                    getLangStr("Update_retiredFinalVersion"),
+                    result.LatestVersion);
+            }
+
+            return AppendIncompatibleNewerVersionMessage(result, message);
+        }
+
+        private string AppendIncompatibleNewerVersionMessage(
+            UpdateCheckResult result,
+            string message)
+        {
+            if (string.IsNullOrWhiteSpace(result.IncompatibleNewerVersion) ||
+                string.IsNullOrWhiteSpace(result.IncompatibleMinimumWindowsVersion))
+            {
+                return message;
+            }
+
+            string incompatibleMessage = string.Format(
+                getLangStr("Update_newerVersionRequiresWindows"),
+                result.IncompatibleNewerVersion,
+                result.IncompatibleMinimumWindowsVersion);
+            return string.IsNullOrWhiteSpace(message)
+                ? incompatibleMessage
+                : message + Environment.NewLine + incompatibleMessage;
+        }
+
+        private void ShowUpdateInformation(string message)
+        {
+            MessageBox.Show(this, message, getLangStr("MainForm_btnCheckUpdate"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void ShowUpdateCheckFailed(string errorMessage)
@@ -2700,7 +2792,13 @@ namespace readboard
                     ShowUpdateAvailable(result);
                     return;
                 case UpdateCheckStatus.UpToDate:
-                    ShowUpdateUpToDate();
+                    ShowUpdateUpToDate(result);
+                    return;
+                case UpdateCheckStatus.OutsideChannel:
+                    ShowUpdateInformation(BuildOutsideChannelMessage(result));
+                    return;
+                case UpdateCheckStatus.NoMatchingChannel:
+                    ShowUpdateInformation(getLangStr("Update_noMatchingChannel"));
                     return;
                 case UpdateCheckStatus.Failed:
                     ShowUpdateCheckFailed(result.ErrorMessage);

@@ -56,6 +56,25 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
+        public void PackagingWorkflow_RequiresVersionedChangelogAndPublishesExactAssets()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string workflowContent = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "package-release.yml"));
+
+            Assert.Contains("docs/releases/$env:GITHUB_REF_NAME.md", workflowContent);
+            Assert.Contains("IsNullOrWhiteSpace", workflowContent);
+            Assert.Contains("$expectedChangelogHeading = \"# $version\"", workflowContent);
+            Assert.Contains("Release changelog must start with", workflowContent);
+            Assert.Contains("expected_asset_name", workflowContent);
+            Assert.Contains("steps.package.outputs.package_zip", workflowContent);
+            Assert.Contains("steps.package.outputs.package_checksum_file", workflowContent);
+            Assert.Contains("body_path: docs/releases/${{ github.ref_name }}.md", workflowContent);
+            Assert.Contains("generate_release_notes: true", workflowContent);
+            Assert.Contains("draft: false", workflowContent);
+            Assert.Contains("prerelease: false", workflowContent);
+        }
+
+        [Fact]
         public void PackagingScript_DoesNotUseLegacyPackagesConfigRestore()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();

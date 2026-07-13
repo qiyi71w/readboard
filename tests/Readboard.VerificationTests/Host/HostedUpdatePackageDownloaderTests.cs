@@ -9,6 +9,11 @@ namespace Readboard.VerificationTests.Host
 {
     public sealed class HostedUpdatePackageDownloaderTests
     {
+        private const string PayloadSha256 =
+            "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5";
+        private const string EmptySha256 =
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
         [Fact]
         public async Task DownloadAsync_SavesPackageUnderVersionDirectory()
         {
@@ -28,7 +33,8 @@ namespace Readboard.VerificationTests.Host
                 string resultPath = await downloader.DownloadAsync(
                     "v3.0.2",
                     "readboard-github-release-v3.0.2.zip",
-                    "https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip");
+                    "https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip",
+                    PayloadSha256);
 
                 Assert.Equal(
                     "https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip",
@@ -40,6 +46,49 @@ namespace Readboard.VerificationTests.Host
                     resultPath);
                 Assert.True(File.Exists(resultPath));
                 Assert.Equal("payload", File.ReadAllText(resultPath));
+            }
+        }
+
+        [Fact]
+        public async Task DownloadAsync_DeletesTemporaryFileWhenSha256DoesNotMatch()
+        {
+            using (var workspace = new DownloadWorkspace())
+            {
+                HostedUpdatePackageDownloader downloader = new HostedUpdatePackageDownloader(
+                    workspace.RootPath,
+                    (downloadUri, destinationPath) =>
+                        File.WriteAllTextAsync(destinationPath, "payload"));
+
+                InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                    () => downloader.DownloadAsync(
+                        "v3.0.2",
+                        "readboard-github-release-v3.0.2.zip",
+                        "https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip",
+                        "0000000000000000000000000000000000000000000000000000000000000000"));
+
+                Assert.Contains("SHA-256", exception.Message);
+                Assert.Empty(Directory.GetFiles(workspace.RootPath, "*", SearchOption.AllDirectories));
+            }
+        }
+
+        [Fact]
+        public async Task DownloadAndVerify_RejectsEmptyPromotedFileAfterSha256Passes()
+        {
+            using (var workspace = new DownloadWorkspace())
+            {
+                HostedUpdatePackageDownloader downloader = new HostedUpdatePackageDownloader(
+                    workspace.RootPath,
+                    (downloadUri, destinationPath) =>
+                        File.WriteAllBytesAsync(destinationPath, Array.Empty<byte>()));
+
+                string zipPath = await downloader.DownloadAsync(
+                    "v3.0.2",
+                    "readboard-github-release-v3.0.2.zip",
+                    "https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip",
+                    EmptySha256);
+
+                Assert.Throws<InvalidDataException>(
+                    () => new HostedUpdatePackageVerifier().Verify("v3.0.2", zipPath));
             }
         }
 
@@ -60,7 +109,8 @@ namespace Readboard.VerificationTests.Host
                     () => downloader.DownloadAsync(
                         "v3.0.2",
                         "readboard-github-release-v3.0.2.zip",
-                        "https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip"));
+                        "https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip",
+                        PayloadSha256));
 
                 Assert.Equal("download failed", exception.Message);
                 Assert.Empty(Directory.GetFiles(workspace.RootPath, "*", SearchOption.AllDirectories));

@@ -160,6 +160,11 @@ namespace readboard
             hostedUpdateSupported = true;
         }
 
+        void IProtocolCommandHost.HandleReadboardUpdatePackageV2Supported()
+        {
+            hostedUpdatePackageV2Supported = true;
+        }
+
         void IProtocolCommandHost.HandleReadboardUpdateInstalling()
         {
             FormUpdate dialog = activeHostedUpdateDialog;
