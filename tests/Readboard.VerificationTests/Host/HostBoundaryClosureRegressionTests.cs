@@ -135,17 +135,14 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void ClearBoardButton_StopsSyncBeforeDedicatedOutboundCommand()
+        public void ClearBoardButton_UsesAtomicStopAndClearOperation()
         {
             string source = LoadSource("readboard", "Form1.cs");
-            int commandIndex = source.IndexOf("private void SendClearCommand()", StringComparison.Ordinal);
-            int stopIndex = source.IndexOf("stopSync();", commandIndex, StringComparison.Ordinal);
-            int clearIndex = source.IndexOf("sessionCoordinator.SendClearBoard();", commandIndex, StringComparison.Ordinal);
+            string methodSource = GetMethodSlice(source, "private void SendClearCommand()");
 
-            Assert.True(commandIndex >= 0);
-            Assert.True(stopIndex > commandIndex);
-            Assert.True(clearIndex > stopIndex);
-            Assert.DoesNotContain("sessionCoordinator.SendClear();", source.Substring(commandIndex, clearIndex - commandIndex));
+            Assert.Contains("sessionCoordinator.StopSyncSessionAndClearBoard();", methodSource);
+            Assert.DoesNotContain("stopSync();", methodSource);
+            Assert.DoesNotContain("SendClearBoard();", methodSource);
         }
 
         [Fact]
@@ -171,6 +168,30 @@ namespace Readboard.VerificationTests.Host
         {
             string path = Path.Combine(VerificationFixtureLocator.RepositoryRoot(), Path.Combine(segments));
             return File.ReadAllText(path);
+        }
+
+        private static string GetMethodSlice(string source, string methodSignature)
+        {
+            int start = source.IndexOf(methodSignature, StringComparison.Ordinal);
+            Assert.True(start >= 0, "Missing method: " + methodSignature);
+
+            int braceStart = source.IndexOf('{', start);
+            Assert.True(braceStart >= 0, "Missing opening brace for: " + methodSignature);
+
+            int depth = 0;
+            for (int i = braceStart; i < source.Length; i++)
+            {
+                if (source[i] == '{')
+                    depth++;
+                else if (source[i] == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                        return source.Substring(start, i - start + 1);
+                }
+            }
+
+            throw new Xunit.Sdk.XunitException("Unbalanced braces for: " + methodSignature);
         }
     }
 }
