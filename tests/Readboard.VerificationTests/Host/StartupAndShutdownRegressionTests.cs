@@ -490,6 +490,33 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void ShowInBoardShortcutText_MatchesCtrlXHotkey()
+        {
+            string mainFormSource = LoadSource("readboard", "Form1.cs");
+            string keyDownSlice = GetMethodSlice(
+                mainFormSource,
+                "private void HookListener_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)");
+            string[] shortcutTextSources =
+            {
+                LoadSource("readboard", "Form7.Designer.cs"),
+                LoadSource("readboard", "Program.cs"),
+                LoadSource("readboard", "language_cn.txt"),
+                LoadSource("readboard", "language_en.txt"),
+                LoadSource("readboard", "language_jp.txt"),
+                LoadSource("readboard", "language_kr.txt")
+            };
+
+            Assert.Contains("isCtrlDown && e.KeyValue == 88", keyDownSlice);
+            foreach (string source in shortcutTextSources)
+            {
+                Assert.Contains("Ctrl+X", source);
+                Assert.DoesNotContain("Ctrl+D", source);
+                Assert.DoesNotContain("Crtl+D", source);
+                Assert.DoesNotContain("Ctrl + D", source);
+            }
+        }
+
+        [Fact]
         public void SettingsForm_LoadsAndPersistsShowInBoardShortcutToggle()
         {
             string source = LoadSource("readboard", "Form4.cs");

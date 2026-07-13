@@ -65,7 +65,7 @@
             this.lblTips.Name = "lblTips";
             this.lblTips.Size = new System.Drawing.Size(503, 12);
             this.lblTips.TabIndex = 2;
-            this.lblTips.Text = "注: 快捷键Ctrl+D,[前台]方式同步时不支持此功能,选点显示在原棋盘上后,原棋盘将无法落子";
+            this.lblTips.Text = "注: 快捷键Ctrl+X,[前台]方式同步时不支持此功能,选点显示在原棋盘上后,原棋盘将无法落子";
             // 
             // lblTips1
             // 
