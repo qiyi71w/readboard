@@ -85,16 +85,13 @@
 
         <fieldset class="card sync-card"><legend>同步与自动落子</legend>
           <div class="sync-options">
-            <h3>同步与身份</h3>
-            <div class="sync-grid">
+            <h3>同步设置</h3>
+            <div class="sync-toggle-row">
               <label><input id="two-way" type="checkbox">双向同步</label>
-              <label><input type="radio" name="color" value="black">执黑</label>
-              <label><input type="radio" name="color" value="auto">自动</label>
-              <button type="button" data-command="identity.open">身份</button>
               <label><input id="auto-play" type="checkbox">自动落子</label>
-              <label><input type="radio" name="color" value="white">执白</label>
             </div>
-            <div class="placement-row"><b>落子方式</b><div class="segments"><label><input type="radio" name="placement" value="direct">一选落子</label><label><input type="radio" name="placement" value="engine">引擎决策落子</label></div></div>
+            <div class="color-row"><b>执子颜色</b><div class="segments color-segments" role="radiogroup" aria-label="执子颜色"><label><input type="radio" name="color" value="black">执黑</label><label><input type="radio" name="color" value="white">执白</label><label><input type="radio" name="color" value="auto">自动</label></div><button type="button" data-command="identity.open">身份</button></div>
+            <div class="placement-row"><b>落子方式</b><div class="segments" role="radiogroup" aria-label="落子方式"><label><input type="radio" name="placement" value="direct">一选落子</label><label><input type="radio" name="placement" value="engine">引擎决策落子</label></div></div>
           </div>
           <div class="engine-options">
             <h3>引擎条件</h3>

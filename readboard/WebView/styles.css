@@ -115,13 +115,17 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .sync-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .82fr); gap: 16px; padding: 0 14px 2px; }
 .sync-card legend { grid-column: 1 / -1; }
 .sync-card h3 { margin: 0; font-size: 14px; font-weight: 500; white-space: nowrap; }
-.sync-options { min-width: 0; padding-right: 16px; border-right: 1px solid var(--line); }
-.sync-grid { display: grid; grid-template-columns: 1.15fr .8fr .75fr 90px; gap: 4px 12px; align-items: center; }
-.sync-grid label { display: flex; min-height: 37px; align-items: center; white-space: nowrap; }
-.sync-grid button { height: 37px; min-height: 37px; }
-.placement-row { display: flex; min-width: 0; min-height: 37px; align-items: center; gap: 14px; margin-top: 0; white-space: nowrap; }
+.sync-options { display: grid; min-width: 0; grid-template-rows: auto repeat(3, 37px); gap: 4px; padding-right: 16px; border-right: 1px solid var(--line); }
+.sync-toggle-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.sync-toggle-row label { display: flex; min-width: 0; min-height: 37px; align-items: center; white-space: nowrap; }
+.color-row { display: grid; grid-template-columns: 62px minmax(0, 1fr) 90px; gap: 8px; min-width: 0; min-height: 37px; align-items: center; white-space: nowrap; }
+.color-row > b { font-size: 14px; }
+.color-row button { width: 90px; height: 34px; min-height: 34px; }
+.color-row .segments label { display: flex; flex: 1; min-width: 0; min-height: 32px; align-items: center; justify-content: center; padding: 6px 10px; font-size: 14px; }
+.placement-row { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 8px; min-width: 0; min-height: 37px; align-items: center; margin-top: 0; white-space: nowrap; }
 .placement-row > b { font-size: 14px; }
-.placement-row .segments label { min-height: 32px; padding: 6px 12px; font-size: 14px; }
+.placement-row .segments { flex: 1; max-width: 424px; }
+.placement-row .segments label { display: flex; flex: 1; min-width: 0; min-height: 32px; align-items: center; justify-content: center; padding: 6px 10px; font-size: 14px; }
 .segments { display: flex; min-width: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .segments label { min-height: 37px; padding: 9px 18px; border-right: 1px solid var(--line); text-align: center; white-space: nowrap; }
 .segments label:last-child { border-right: 0; }

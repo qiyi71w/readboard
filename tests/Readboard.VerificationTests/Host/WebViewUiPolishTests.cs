@@ -7,13 +7,31 @@ namespace Readboard.VerificationTests.Host
     public sealed class WebViewUiPolishTests
     {
         [Fact]
-        public void MovePlacementSelector_UsesApprovedTypographyAndSpacing()
+        public void MovePlacementSelector_UsesApprovedCompactSegmentLayout()
         {
             string styles = LoadWebViewAsset("styles.css");
 
             Assert.Contains(".placement-row > b { font-size: 14px; }", styles);
-            Assert.Contains(".placement-row { display: flex; min-width: 0; min-height: 37px; align-items: center; gap: 14px;", styles);
-            Assert.Contains(".placement-row .segments label { min-height: 32px; padding: 6px 12px; font-size: 14px; }", styles);
+            Assert.Contains(".placement-row { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 8px;", styles);
+            Assert.Contains(".placement-row .segments { flex: 1; max-width: 424px; }", styles);
+            Assert.Contains(".placement-row .segments label { display: flex; flex: 1; min-width: 0; min-height: 32px; align-items: center; justify-content: center; padding: 6px 10px; font-size: 14px; }", styles);
+        }
+
+        [Fact]
+        public void SyncControls_GroupRelatedOptionsIntoAlignedRows()
+        {
+            string html = LoadWebViewAsset("index.html");
+            string styles = LoadWebViewAsset("styles.css");
+
+            Assert.Contains("<h3>同步设置</h3>", html);
+            Assert.Contains("<div class=\"sync-toggle-row\">", html);
+            Assert.Contains("<div class=\"color-row\"><b>执子颜色</b>", html);
+            Assert.Contains("<div class=\"segments color-segments\" role=\"radiogroup\" aria-label=\"执子颜色\">", html);
+            Assert.Contains(".sync-toggle-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }", styles);
+            Assert.Contains(".sync-options { display: grid; min-width: 0; grid-template-rows: auto repeat(3, 37px); gap: 4px;", styles);
+            Assert.Contains(".color-row { display: grid; grid-template-columns: 62px minmax(0, 1fr) 90px; gap: 8px;", styles);
+            Assert.Contains(".color-row button { width: 90px; height: 34px; min-height: 34px; }", styles);
+            Assert.Contains(".color-row .segments label { display: flex; flex: 1; min-width: 0; min-height: 32px; align-items: center; justify-content: center; padding: 6px 10px; font-size: 14px; }", styles);
         }
 
         [Fact]
