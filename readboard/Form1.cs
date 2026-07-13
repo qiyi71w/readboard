@@ -2616,18 +2616,12 @@ namespace readboard
                 releaseNotes = string.IsNullOrWhiteSpace(releaseNotes)
                     ? channelNotice
                     : channelNotice + Environment.NewLine + Environment.NewLine + releaseNotes;
-            bool hostedInstallAvailable =
-                launchOptions.TransportKind == TransportKind.Pipe &&
-                sessionCoordinator.IsProtocolSessionActive &&
-                hostedUpdateSupported &&
-                IsHostedUpdateAssetSupported(
-                    result.AssetName,
-                    hostedReleaseTag,
-                    hostedUpdatePackageV2Supported) &&
-                !string.IsNullOrWhiteSpace(result.AssetDownloadUrl) &&
-                !string.IsNullOrWhiteSpace(result.AssetName) &&
-                !string.IsNullOrWhiteSpace(result.AssetSha256) &&
-                !string.IsNullOrWhiteSpace(hostedReleaseTag);
+            bool hostedInstallAvailable = IsHostedInstallAvailable(
+                result,
+                launchOptions.TransportKind,
+                sessionCoordinator.IsProtocolSessionActive,
+                hostedUpdateSupported,
+                hostedUpdatePackageV2Supported);
             UpdateDialogModel model = new UpdateDialogModel
             {
                 CurrentVersion = result.CurrentVersion,
@@ -2685,6 +2679,26 @@ namespace readboard
                 versionTag,
                 assetName,
                 packageV2Supported);
+        }
+
+        internal static bool IsHostedInstallAvailable(
+            UpdateCheckResult result,
+            TransportKind transportKind,
+            bool protocolSessionActive,
+            bool hostedUpdateSupported,
+            bool packageV2Supported)
+        {
+            return transportKind == TransportKind.Pipe &&
+                protocolSessionActive &&
+                hostedUpdateSupported &&
+                IsHostedUpdateAssetSupported(
+                    result.AssetName,
+                    result.Tag,
+                    packageV2Supported) &&
+                !string.IsNullOrWhiteSpace(result.AssetDownloadUrl) &&
+                !string.IsNullOrWhiteSpace(result.AssetName) &&
+                !string.IsNullOrWhiteSpace(result.AssetSha256) &&
+                !string.IsNullOrWhiteSpace(result.Tag);
         }
 
         private async Task<string> PrepareHostedUpdatePackageAsync(UpdateDialogModel model)

@@ -67,14 +67,17 @@ namespace Readboard.VerificationTests.Host
         {
             string source = LoadReadboardSource("Form1.cs");
             string methodSlice = GetMethodSlice(source, "private void ShowUpdateAvailable(UpdateCheckResult result)");
+            string eligibilitySlice = GetMethodSlice(source, "internal static bool IsHostedInstallAvailable(");
             string prepareSlice = GetMethodSlice(source, "private async Task<string> PrepareHostedUpdatePackageAsync(UpdateDialogModel model)");
 
-            Assert.Contains("launchOptions.TransportKind == TransportKind.Pipe", methodSlice);
-            Assert.Contains("sessionCoordinator.IsProtocolSessionActive", methodSlice);
-            Assert.Contains("hostedUpdateSupported", methodSlice);
-            Assert.Contains("IsHostedUpdateAssetSupported(", methodSlice);
+            Assert.Contains("IsHostedInstallAvailable(", methodSlice);
             Assert.Contains("HostedInstallAvailable = hostedInstallAvailable", methodSlice);
             Assert.Contains("HostedAssetSha256 = result.AssetSha256", methodSlice);
+            Assert.Contains("transportKind == TransportKind.Pipe", eligibilitySlice);
+            Assert.Contains("protocolSessionActive", eligibilitySlice);
+            Assert.Contains("hostedUpdateSupported", eligibilitySlice);
+            Assert.Contains("IsHostedUpdateAssetSupported(", eligibilitySlice);
+            Assert.Contains("!string.IsNullOrWhiteSpace(result.AssetSha256)", eligibilitySlice);
             Assert.Contains("DownloadingPackageStatusText = getLangStr(\"Update_downloadingPackage\")", methodSlice);
             Assert.Contains("VerifyingPackageStatusText = getLangStr(\"Update_verifyingPackage\")", methodSlice);
             Assert.Contains("NotifyingHostStatusText = getLangStr(\"Update_notifyingHost\")", methodSlice);
@@ -89,6 +92,34 @@ namespace Readboard.VerificationTests.Host
             Assert.True(
                 prepareSlice.IndexOf("downloader.DownloadAsync(", StringComparison.Ordinal) <
                 prepareSlice.IndexOf("new HostedUpdatePackageVerifier().Verify", StringComparison.Ordinal));
+        }
+
+        [Theory]
+        [InlineData(null, false)]
+        [InlineData("", false)]
+        [InlineData(" ", false)]
+        [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", true)]
+        public void HostedInstallEligibility_RequiresAssetSha256(
+            string assetSha256,
+            bool expected)
+        {
+            var result = new UpdateCheckResult
+            {
+                Tag = "v3.0.9",
+                AssetName = "readboard-github-release-v3.0.9.zip",
+                AssetDownloadUrl =
+                    "https://github.com/qiyi71w/readboard/releases/download/v3.0.9/readboard-github-release-v3.0.9.zip",
+                AssetSha256 = assetSha256
+            };
+
+            Assert.Equal(
+                expected,
+                MainForm.IsHostedInstallAvailable(
+                    result,
+                    TransportKind.Pipe,
+                    true,
+                    true,
+                    false));
         }
 
         [Theory]
