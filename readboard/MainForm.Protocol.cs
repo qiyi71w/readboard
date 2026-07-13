@@ -4,6 +4,8 @@ namespace readboard
 {
     public partial class MainForm
     {
+        private bool? hostAnalysisRunning;
+
         void IProtocolCommandHost.DispatchProtocolCommand(Action command)
         {
             if (command == null)
@@ -179,6 +181,12 @@ namespace readboard
         void IProtocolCommandHost.HandleReadboardUpdateInstalling()
         {
             MarkWebViewHostedUpdateInstalling();
+        }
+
+        void IAnalysisStateProtocolHost.HandleAnalysisState(bool running)
+        {
+            hostAnalysisRunning = running;
+            PostWebViewState();
         }
 
         void IProtocolCommandHost.HandleReadboardUpdateCancelled()

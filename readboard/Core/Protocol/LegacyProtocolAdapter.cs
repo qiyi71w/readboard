@@ -34,6 +34,10 @@ namespace readboard
                 return new ProtocolMessage { Kind = ProtocolMessageKind.Quit, RawText = trimmed };
             if (string.Equals(trimmed, ProtocolKeywords.YikeBrowserSyncStop, StringComparison.Ordinal))
                 return new ProtocolMessage { Kind = ProtocolMessageKind.YikeBrowserSyncStop, RawText = trimmed };
+            if (string.Equals(trimmed, ProtocolKeywords.AnalysisStateRunning, StringComparison.Ordinal))
+                return new ProtocolMessage { Kind = ProtocolMessageKind.AnalysisState, RawText = trimmed, AnalysisRunning = true };
+            if (string.Equals(trimmed, ProtocolKeywords.AnalysisStatePaused, StringComparison.Ordinal))
+                return new ProtocolMessage { Kind = ProtocolMessageKind.AnalysisState, RawText = trimmed, AnalysisRunning = false };
             if (trimmed == ProtocolKeywords.YikeGeometry || trimmed.StartsWith(ProtocolKeywords.YikeGeometry + " ", StringComparison.Ordinal))
                 return ParseYikeGeometry(trimmed);
             if (trimmed == ProtocolKeywords.Yike || trimmed.StartsWith(ProtocolKeywords.Yike + " ", StringComparison.Ordinal))
@@ -54,6 +58,11 @@ namespace readboard
         public ProtocolMessage CreateClearMessage()
         {
             return CreateLegacyMessage(ProtocolKeywords.Clear);
+        }
+
+        public ProtocolMessage CreateClearBoardMessage()
+        {
+            return CreateLegacyMessage(ProtocolKeywords.ClearBoard);
         }
 
         public ProtocolMessage CreateBoardEndMessage()
@@ -235,6 +244,11 @@ namespace readboard
         public ProtocolMessage CreateNoPonderMessage()
         {
             return CreateLegacyMessage(ProtocolKeywords.NoPonder);
+        }
+
+        public ProtocolMessage CreateResumePonderMessage()
+        {
+            return CreateLegacyMessage(ProtocolKeywords.ResumePonder);
         }
 
         public ProtocolMessage CreateStopAutoPlayMessage()

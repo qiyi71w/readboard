@@ -1649,6 +1649,7 @@ namespace Readboard.VerificationTests.Protocol
             public void OnContinuousSyncStopped() { }
             public void OnSyncCachesReset() { }
             public void OnBoardSnapshotRecognized(BoardSnapshot snapshot) { }
+            public void OnBoardSnapshotSent(BoardSnapshot snapshot) { }
             public void ShowMissingSyncSourceMessage() { }
             public void ShowRecognitionFailureMessage() { }
             public void MinimizeWindow() { }

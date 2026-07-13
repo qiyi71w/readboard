@@ -35,6 +35,7 @@ namespace readboard
         void CancelPendingMove();
         void ResetSyncCaches();
         void SendClear();
+        void SendClearBoard();
         void SendOverlayLine(string protocolLine);
         void SendBoardSnapshot(BoardSnapshot snapshot);
         void NotifyReady(bool playPonderEnabled);
@@ -60,6 +61,7 @@ namespace readboard
         void SendPlayoutsChanged(string numericValue);
         void SendFirstPolicyChanged(string numericValue);
         void SendNoPonder();
+        void SendResumePonder();
         void SendStopAutoPlay();
         void SendPass();
         void SendShutdownProtocol();

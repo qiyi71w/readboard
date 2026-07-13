@@ -234,18 +234,20 @@ namespace readboard
                     HandleControlUpdate(command.Payload);
                     break;
                 case "sync.quick":
-                    if (SupportsFastSyncType(CurrentSyncType))
+                    if (SupportsFastSyncType(CurrentSyncType)
+                        && (!sessionCoordinator.StartedSync || sessionCoordinator.IsContinuousSyncing))
                         button10_Click(this, EventArgs.Empty);
                     break;
                 case "sync.continuous":
-                    button5_Click(this, EventArgs.Empty);
+                    if (!sessionCoordinator.IsContinuousSyncing)
+                        button5_Click(this, EventArgs.Empty);
                     break;
                 case "sync.once":
                     if (!HasActiveSyncOperation())
                         button4_Click(this, EventArgs.Empty);
                     break;
                 case "sync.toggleAnalysis":
-                    button7_Click_1(this, EventArgs.Empty);
+                    HandleWebViewToggleAnalysis();
                     break;
                 case "sync.swapOrder":
                     button8_Click(this, EventArgs.Empty);
@@ -254,7 +256,8 @@ namespace readboard
                     btnForceRebuild_Click(this, EventArgs.Empty);
                     break;
                 case "sync.clearBoard":
-                    button6_Click(this, EventArgs.Empty);
+                    stopSync();
+                    sessionCoordinator.SendClearBoard();
                     break;
                 case "board.select":
                     HandleBoardSelect(command.Payload);
@@ -751,9 +754,15 @@ namespace readboard
                 FirstPolicy = textBox3.Text,
                 FirstPolicyEnabled = textBox3.Enabled,
                 ShowOnBoard = Program.showInBoard,
-                ContinuousSync = sessionCoordinator.StartedSync,
+                QuickSyncActive = sessionCoordinator.IsContinuousSyncing,
+                ContinuousSyncActive = sessionCoordinator.StartedSync && !sessionCoordinator.IsContinuousSyncing,
+                QuickSyncEnabled = SupportsFastSyncType(CurrentSyncType)
+                    && (!sessionCoordinator.StartedSync || sessionCoordinator.IsContinuousSyncing),
+                ContinuousSyncEnabled = !sessionCoordinator.IsContinuousSyncing,
                 SyncInterval = Program.timeinterval,
-                AnalysisRunning = Program.playPonder,
+                AnalysisRunning = hostAnalysisRunning != false,
+                AnalysisStateAvailable = hostAnalysisRunning.HasValue,
+                AnalysisToggleEnabled = hostAnalysisRunning != false || hostAnalysisRunning.HasValue,
                 ConfigurationEnabled = rdoFox.Enabled,
                 TwoWaySyncEnabled = chkBothSync.Enabled,
                 AutoPlayToggleEnabled = chkAutoPlay.Enabled,
@@ -833,8 +842,25 @@ namespace readboard
                 return;
             webViewState.Shell.LastSync = DateTime.Now.ToString("HH:mm:ss");
             webViewState.Shell.StoneCount = snapshot.BlackStoneCount + snapshot.WhiteStoneCount;
+            PostWebViewState();
+        }
+
+        private void UpdateWebViewSnapshotSentState(BoardSnapshot snapshot)
+        {
+            if (snapshot == null || !snapshot.IsValid)
+                return;
             AddWebViewLog("SYNC", "已识别并发送棋盘状态");
             PostWebViewState();
+        }
+
+        private void HandleWebViewToggleAnalysis()
+        {
+            if (hostAnalysisRunning == false)
+            {
+                sessionCoordinator.SendResumePonder();
+                return;
+            }
+            sessionCoordinator.SendNoPonder();
         }
 
         private void ResetWebViewSyncState()

@@ -48,9 +48,14 @@ namespace readboard
         public string FirstPolicy { get; set; }
         public bool FirstPolicyEnabled { get; set; }
         public bool ShowOnBoard { get; set; }
-        public bool ContinuousSync { get; set; }
+        public bool QuickSyncActive { get; set; }
+        public bool ContinuousSyncActive { get; set; }
+        public bool QuickSyncEnabled { get; set; }
+        public bool ContinuousSyncEnabled { get; set; }
         public int SyncInterval { get; set; }
         public bool AnalysisRunning { get; set; }
+        public bool AnalysisStateAvailable { get; set; }
+        public bool AnalysisToggleEnabled { get; set; }
         public bool ConfigurationEnabled { get; set; }
         public bool TwoWaySyncEnabled { get; set; }
         public bool AutoPlayToggleEnabled { get; set; }

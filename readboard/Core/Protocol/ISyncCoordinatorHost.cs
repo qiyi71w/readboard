@@ -26,5 +26,6 @@ namespace readboard
             int boardPixelWidth,
             int boardPixelHeight,
             bool placementRegionResolved);
+        void OnBoardSnapshotSent(BoardSnapshot snapshot);
     }
 }

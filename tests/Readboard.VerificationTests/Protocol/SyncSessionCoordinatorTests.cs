@@ -62,6 +62,32 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
+        public void Start_DispatchesAnalysisStateCapabilityThroughHostCallback()
+        {
+            FakeTransport transport = new FakeTransport();
+            CapturingHost host = new CapturingHost();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.AttachHost(host);
+
+            coordinator.Start();
+            transport.Emit("analysisState paused");
+
+            Assert.Equal(false, host.AnalysisRunning);
+        }
+
+        [Fact]
+        public void SendClearBoardAndResumePonder_UseDedicatedOutboundCommands()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SendClearBoard();
+            coordinator.SendResumePonder();
+
+            Assert.Equal(new[] { "clearBoard", "resumeponder" }, transport.SentLines);
+        }
+
+        [Fact]
         public void SendError_ForwardsToTransport()
         {
             FakeTransport transport = new FakeTransport();
@@ -540,7 +566,7 @@ namespace Readboard.VerificationTests
             }
         }
 
-        private sealed class CapturingHost : IProtocolCommandHost
+        private sealed class CapturingHost : IProtocolCommandHost, IAnalysisStateProtocolHost
         {
             public int DispatchCount { get; private set; }
             public MoveRequest LastMoveRequest { get; private set; }
@@ -548,6 +574,7 @@ namespace Readboard.VerificationTests
             public int ReadboardUpdateInstallingCount { get; private set; }
             public int ReadboardUpdateCancelledCount { get; private set; }
             public string LastReadboardUpdateFailedMessage { get; private set; }
+            public bool? AnalysisRunning { get; private set; }
 
 
             public void DispatchProtocolCommand(Action command)
@@ -558,6 +585,11 @@ namespace Readboard.VerificationTests
 
             public void HandleLossFocus()
             {
+            }
+
+            public void HandleAnalysisState(bool running)
+            {
+                AnalysisRunning = running;
             }
 
             public void HandlePlaceRequest(MoveRequest request)

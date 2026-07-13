@@ -15,7 +15,8 @@ namespace readboard
         ReadboardUpdateFailed = 10,
         YikeContext = 11,
         YikeGeometry = 12,
-        YikeBrowserSyncStop = 13
+        YikeBrowserSyncStop = 13,
+        AnalysisState = 14
     }
 
     internal sealed class ProtocolMessage
@@ -26,6 +27,7 @@ namespace readboard
         public string YikeRoomToken { get; set; }
         public int? YikeMoveNumber { get; set; }
         public YikeBoardGeometry YikeGeometry { get; set; }
+        public bool AnalysisRunning { get; set; }
 
         public static ProtocolMessage CreateLegacyLine(string rawText)
         {

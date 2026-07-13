@@ -40,9 +40,14 @@
       firstPolicy: "",
       firstPolicyEnabled: false,
       showOnBoard: false,
-      continuousSync: false,
+      quickSyncActive: false,
+      continuousSyncActive: false,
+      quickSyncEnabled: true,
+      continuousSyncEnabled: true,
       syncInterval: 200,
       analysisRunning: false,
+      analysisStateAvailable: false,
+      analysisToggleEnabled: true,
       configurationEnabled: true,
       twoWaySyncEnabled: true,
       autoPlayToggleEnabled: true,
@@ -222,12 +227,21 @@
     setDisabled("#first-policy", !control.firstPolicyEnabled);
     setDisabled('[data-command="identity.open"]', !control.identityEnabled);
     setDisabled("#show-on-board", !control.showOnBoardEnabled);
-    text("continuous-label", `${control.continuousSync ? "停止持续同步" : "持续同步"} (${control.syncInterval ?? 200}ms)`);
-    text("analysis-label", control.analysisRunning ? "停止分析" : "分析/停止");
+    text("quick-label", control.quickSyncActive ? "停止快速同步" : "快速同步");
+    text("continuous-label", `${control.continuousSyncActive ? "停止持续同步" : "持续同步"} (${control.syncInterval ?? 200}ms)`);
+    text("analysis-label", control.analysisRunning ? "暂停分析" : "继续分析");
+    setDisabled('[data-command="sync.quick"]', !control.quickSyncEnabled);
+    setDisabled('[data-command="sync.continuous"]', !control.continuousSyncEnabled);
+    setDisabled('[data-command="sync.toggleAnalysis"]', !control.analysisToggleEnabled || (!control.analysisRunning && !control.analysisStateAvailable));
+    const quick = $("[data-command='sync.quick']");
+    if (quick) {
+      quick.classList.toggle("running", Boolean(control.quickSyncActive));
+      quick.setAttribute("aria-pressed", String(Boolean(control.quickSyncActive)));
+    }
     const continuous = $("[data-command='sync.continuous']");
     if (continuous) {
-      continuous.classList.toggle("running", Boolean(control.continuousSync));
-      continuous.setAttribute("aria-pressed", String(Boolean(control.continuousSync)));
+      continuous.classList.toggle("running", Boolean(control.continuousSyncActive));
+      continuous.setAttribute("aria-pressed", String(Boolean(control.continuousSyncActive)));
     }
     $("[data-command='sync.toggleAnalysis']")?.setAttribute("aria-pressed", String(Boolean(control.analysisRunning)));
   }

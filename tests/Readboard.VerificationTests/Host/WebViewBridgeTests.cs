@@ -129,6 +129,24 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void SerializeWebViewState_SeparatesSyncModesAndAnalysisCapability()
+        {
+            ReadBoardUiState state = new ReadBoardUiState();
+            state.ControlCenter.QuickSyncActive = true;
+            state.ControlCenter.ContinuousSyncActive = false;
+            state.ControlCenter.AnalysisRunning = false;
+            state.ControlCenter.AnalysisStateAvailable = true;
+
+            using JsonDocument json = JsonDocument.Parse(MainForm.SerializeWebViewState(state));
+            JsonElement control = json.RootElement.GetProperty("payload").GetProperty("controlCenter");
+
+            Assert.True(control.GetProperty("quickSyncActive").GetBoolean());
+            Assert.False(control.GetProperty("continuousSyncActive").GetBoolean());
+            Assert.False(control.GetProperty("analysisRunning").GetBoolean());
+            Assert.True(control.GetProperty("analysisStateAvailable").GetBoolean());
+        }
+
+        [Fact]
         public void IsBoardRegionRecognized_RequiresViewportAndPositiveCapturedDimensions()
         {
             BoardFrame frame = new BoardFrame

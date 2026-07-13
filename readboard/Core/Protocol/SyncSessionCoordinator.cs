@@ -431,6 +431,12 @@ namespace readboard
             SendProtocolMessage(protocolAdapter.CreateClearMessage());
         }
 
+        public void SendClearBoard()
+        {
+            ResetSyncCaches();
+            SendProtocolMessage(protocolAdapter.CreateClearBoardMessage());
+        }
+
         public void SendOverlayLine(string protocolLine)
         {
             protocolLine = ReserveOverlayProtocolLine(protocolLine);
@@ -564,6 +570,11 @@ namespace readboard
             SendProtocolMessage(protocolAdapter.CreateNoPonderMessage());
         }
 
+        public void SendResumePonder()
+        {
+            SendProtocolMessage(protocolAdapter.CreateResumePonderMessage());
+        }
+
         public void SendStopAutoPlay()
         {
             SendProtocolMessage(protocolAdapter.CreateStopAutoPlayMessage());
@@ -634,6 +645,11 @@ namespace readboard
                         if (IsYikeSyncPlatform())
                             StopSyncSession();
                     };
+                case ProtocolMessageKind.AnalysisState:
+                    IAnalysisStateProtocolHost analysisHost = currentHost as IAnalysisStateProtocolHost;
+                    return analysisHost == null
+                        ? null
+                        : () => analysisHost.HandleAnalysisState(message.AnalysisRunning);
                 case ProtocolMessageKind.LossFocus:
                     return currentHost.HandleLossFocus;
                 case ProtocolMessageKind.StopInBoard:

@@ -8,6 +8,7 @@ namespace readboard
         string Serialize(ProtocolMessage message);
         ProtocolMessage CreateReadyMessage();
         ProtocolMessage CreateClearMessage();
+        ProtocolMessage CreateClearBoardMessage();
         ProtocolMessage CreateBoardEndMessage();
         ProtocolMessage CreatePonderStatusMessage(bool playPonderEnabled);
         ProtocolMessage CreateVersionMessage(string version);
@@ -44,6 +45,7 @@ namespace readboard
         ProtocolMessage CreatePlayoutsChangedMessage(string value);
         ProtocolMessage CreateFirstPolicyChangedMessage(string value);
         ProtocolMessage CreateNoPonderMessage();
+        ProtocolMessage CreateResumePonderMessage();
         ProtocolMessage CreateStopAutoPlayMessage();
         ProtocolMessage CreatePassMessage();
         ProtocolMessage CreateReadboardUpdateReadyMessage(string tag, string absoluteZipPath);

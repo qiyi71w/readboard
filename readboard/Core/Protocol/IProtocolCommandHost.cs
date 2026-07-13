@@ -17,4 +17,9 @@ namespace readboard
         void HandleReadboardUpdateCancelled();
         void HandleReadboardUpdateFailed(string message);
     }
+
+    internal interface IAnalysisStateProtocolHost
+    {
+        void HandleAnalysisState(bool running);
+    }
 }

@@ -67,6 +67,17 @@ namespace Readboard.VerificationTests.Host
             Assert.DoesNotContain("当前通过 LizzieYzy-Next 启动", html);
         }
 
+        [Fact]
+        public void SyncAndAnalysisActions_RenderIndependentHostState()
+        {
+            string script = LoadWebViewAsset("app.js");
+
+            Assert.Contains("control.quickSyncActive ? \"停止快速同步\" : \"快速同步\"", script);
+            Assert.Contains("control.continuousSyncActive ? \"停止持续同步\" : \"持续同步\"", script);
+            Assert.Contains("control.analysisRunning ? \"暂停分析\" : \"继续分析\"", script);
+            Assert.Contains("!control.analysisRunning && !control.analysisStateAvailable", script);
+        }
+
         private static string LoadWebViewAsset(string fileName)
         {
             string path = Path.Combine(

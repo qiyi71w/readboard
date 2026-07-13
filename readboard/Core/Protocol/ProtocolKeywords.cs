@@ -9,6 +9,7 @@ namespace readboard
         internal const string Quit = "quit";
         internal const string Ready = "ready";
         internal const string Clear = "clear";
+        internal const string ClearBoard = "clearBoard";
         internal const string BoardEnd = "end";
         internal const string PlayPonderOn = "playponder on";
         internal const string PlayPonderOff = "playponder off";
@@ -48,6 +49,9 @@ namespace readboard
         internal const string PlayoutsChangedPrefix = "playoutschanged ";
         internal const string FirstPolicyChangedPrefix = "firstchanged ";
         internal const string NoPonder = "noponder";
+        internal const string ResumePonder = "resumeponder";
+        internal const string AnalysisStateRunning = "analysisState running";
+        internal const string AnalysisStatePaused = "analysisState paused";
         internal const string StopAutoPlay = "stopAutoPlay";
         internal const string Pass = "pass";
         internal const string DefaultNumericValue = "0";

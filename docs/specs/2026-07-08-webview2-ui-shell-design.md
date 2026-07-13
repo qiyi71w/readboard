@@ -250,7 +250,7 @@ UI 日志是内存环形缓冲，默认保留最近 100 行。来源只包括面
 
 ## 兼容性
 
-- 旧 wire 协议逐字保持；协议测试继续锁定 `ProtocolKeywords`。
+- 既有 wire 文本逐字保持；新增控制能力必须作为增量 token 记录在协议规格中，并由两端契约测试锁定。
 - 配置仍由 `DualFormatAppConfigStore` 读写 JSON 和 legacy 镜像。
 - 启动失败、无宿主参数、pipe/TCP 选择逻辑保持不变。
 - 语言资源第一版复用现有 `Program.langItems` 注入前端，避免维护第二套本地化源。

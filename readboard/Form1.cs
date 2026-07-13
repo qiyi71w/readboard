@@ -12,7 +12,7 @@ using System.Text.RegularExpressions;
 
 namespace readboard
 {
-    public partial class MainForm : Form, IProtocolCommandHost, ISyncCoordinatorHost, IWebViewSyncCoordinatorHost
+    public partial class MainForm : Form, IProtocolCommandHost, IAnalysisStateProtocolHost, ISyncCoordinatorHost, IWebViewSyncCoordinatorHost
     {
         // Boolean showDebugImage = true;
         Boolean clicked = false;
@@ -2244,6 +2244,14 @@ namespace readboard
             });
         }
 
+        void IWebViewSyncCoordinatorHost.OnBoardSnapshotSent(BoardSnapshot snapshot)
+        {
+            InvokeUiHostAction(delegate
+            {
+                UpdateWebViewSnapshotSentState(snapshot);
+            });
+        }
+
         void ISyncCoordinatorHost.OnBoardSnapshotRecognized(BoardSnapshot snapshot)
         {
             InvokeUiHostAction(delegate
@@ -2284,8 +2292,11 @@ namespace readboard
             return TrySendPlaceProtocolError(message);
         }
 
+        private bool keepSyncLifecycleOwnedByQuickSync;
+
         private void ApplyKeepSyncStartedUi()
         {
+            keepSyncLifecycleOwnedByQuickSync = sessionCoordinator.IsContinuousSyncing;
             btnKeepSync.Text = getLangStr("stopSync");
             btnFastSync.Text = getLangStr("stopSync");
             SetSyncConfigurationControlsEnabled(false);
@@ -2294,7 +2305,8 @@ namespace readboard
             if (lastMainWindowTitleTurn == MainWindowTitleTurn.None)
                 lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
             RefreshMainWindowTitleFromCurrentWindow();
-            AddWebViewLog("SYNC", "开始持续同步");
+            if (!keepSyncLifecycleOwnedByQuickSync)
+                AddWebViewLog("SYNC", "开始持续同步");
             PostWebViewState();
         }
 
@@ -2320,10 +2332,15 @@ namespace readboard
             return MainWindowTitleTurn.Unknown;
         }
 
+        private bool suppressKeepSyncLifecycleLog;
+
         private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)
         {
+            bool logKeepSyncLifecycle = !keepSyncLifecycleOwnedByQuickSync;
+            keepSyncLifecycleOwnedByQuickSync = false;
             btnKeepSync.Text = getLangStr("keepSync") + "(" + Program.timename + "ms)";
-            AddWebViewLog("SYNC", "持续同步已停止");
+            if (!suppressKeepSyncLifecycleLog && logKeepSyncLifecycle)
+                AddWebViewLog("SYNC", "持续同步已停止");
             PostWebViewState();
             if (!SyncToolbarTextResolver.ShouldRestoreIdleUiAfterKeepSyncStop(continuousSyncActive))
             {
@@ -2365,7 +2382,15 @@ namespace readboard
                 ApplyMainWindowTitle();
                 return;
             }
-            ApplyKeepSyncStoppedUi(false);
+            suppressKeepSyncLifecycleLog = true;
+            try
+            {
+                ApplyKeepSyncStoppedUi(false);
+            }
+            finally
+            {
+                suppressKeepSyncLifecycleLog = false;
+            }
         }
 
         internal bool IsShutdownRequested

@@ -820,6 +820,8 @@ namespace readboard
             if (sample.Snapshot != null && sample.Snapshot.IsValid)
             {
                 dispatch.BoardSnapshotBatch = TryBuildOutboundBoardSnapshotBatch(sample.Snapshot);
+                if (dispatch.BoardSnapshotBatch != null)
+                    dispatch.SentSnapshot = sample.Snapshot;
                 dispatch.PlayMessage = ReservePlayMessageIfChanged(snapshot);
             }
             return dispatch;
@@ -832,6 +834,7 @@ namespace readboard
             if (dispatch == null)
                 return;
 
+            bool boardSnapshotSent = false;
             outboundProtocolDispatcher.ExecuteBatch(delegate
             {
                 if (isOperationCurrent != null && !IsOperationCurrent(isOperationCurrent))
@@ -843,10 +846,19 @@ namespace readboard
                 if (dispatch.StartMessage != null)
                     outboundProtocolDispatcher.SendMessageWhileSynchronized(dispatch.StartMessage);
                 if (dispatch.BoardSnapshotBatch != null)
+                {
                     outboundBoardSnapshotEmitter.EmitWhileSynchronized(dispatch.BoardSnapshotBatch);
+                    boardSnapshotSent = true;
+                }
                 if (dispatch.PlayMessage != null)
                     outboundProtocolDispatcher.SendMessageWhileSynchronized(dispatch.PlayMessage);
             });
+            if (boardSnapshotSent)
+            {
+                IWebViewSyncCoordinatorHost webViewHost = GetRuntimeDependencies().Host as IWebViewSyncCoordinatorHost;
+                if (webViewHost != null)
+                    webViewHost.OnBoardSnapshotSent(dispatch.SentSnapshot);
+            }
         }
 
         private string BuildOverlayProtocolLineIfNeeded(SyncCoordinatorHostSnapshot snapshot, BoardFrame frame)
@@ -1385,6 +1397,7 @@ namespace readboard
             public string OverlayProtocolLine { get; set; }
             public ProtocolMessage StartMessage { get; set; }
             public OutboundBoardSnapshotBatch BoardSnapshotBatch { get; set; }
+            public BoardSnapshot SentSnapshot { get; set; }
             public ProtocolMessage PlayMessage { get; set; }
         }
     }

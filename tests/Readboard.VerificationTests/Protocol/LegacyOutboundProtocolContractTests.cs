@@ -172,6 +172,8 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("playoutschanged ", ProtocolKeywords.PlayoutsChangedPrefix);
             Assert.Equal("firstchanged ", ProtocolKeywords.FirstPolicyChangedPrefix);
             Assert.Equal("noponder", ProtocolKeywords.NoPonder);
+            Assert.Equal("clearBoard", ProtocolKeywords.ClearBoard);
+            Assert.Equal("resumeponder", ProtocolKeywords.ResumePonder);
             Assert.Equal("stopAutoPlay", ProtocolKeywords.StopAutoPlay);
             Assert.Equal("pass", ProtocolKeywords.Pass);
             Assert.Equal("0", ProtocolKeywords.DefaultNumericValue);

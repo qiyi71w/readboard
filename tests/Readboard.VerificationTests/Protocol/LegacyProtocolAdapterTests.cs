@@ -42,6 +42,29 @@ namespace Readboard.VerificationTests
             Assert.Equal("foxMoveNumber 57", line);
         }
 
+        [Fact]
+        public void ClearBoardAndResumePonder_SerializeNewOutboundCommandsWithoutChangingClear()
+        {
+            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
+
+            Assert.Equal("clear", adapter.Serialize(adapter.CreateClearMessage()));
+            Assert.Equal("clearBoard", adapter.Serialize(adapter.CreateClearBoardMessage()));
+            Assert.Equal("resumeponder", adapter.Serialize(adapter.CreateResumePonderMessage()));
+        }
+
+        [Theory]
+        [InlineData("analysisState running", true)]
+        [InlineData("analysisState paused", false)]
+        public void ParseInbound_MapsHostAnalysisState(string line, bool running)
+        {
+            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
+
+            ProtocolMessage message = adapter.ParseInbound(line);
+
+            Assert.Equal(ProtocolMessageKind.AnalysisState, message.Kind);
+            Assert.Equal(running, message.AnalysisRunning);
+        }
+
         [Theory]
         [InlineData(0, "lastMoveSource none")]
         [InlineData(1, "lastMoveSource redBlueMarker")]

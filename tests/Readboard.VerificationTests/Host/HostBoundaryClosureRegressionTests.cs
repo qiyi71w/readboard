@@ -135,6 +135,40 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void WebViewClearBoard_StopsSyncBeforeDedicatedOutboundCommand()
+        {
+            string source = LoadSource("readboard", "MainForm.WebView.cs");
+            int commandIndex = source.IndexOf("case \"sync.clearBoard\":", StringComparison.Ordinal);
+            int stopIndex = source.IndexOf("stopSync();", commandIndex, StringComparison.Ordinal);
+            int clearIndex = source.IndexOf("sessionCoordinator.SendClearBoard();", commandIndex, StringComparison.Ordinal);
+
+            Assert.True(commandIndex >= 0);
+            Assert.True(stopIndex > commandIndex);
+            Assert.True(clearIndex > stopIndex);
+        }
+
+        [Fact]
+        public void WebViewLogsBoardSentOnlyFromPostDedupCallback()
+        {
+            string formSource = LoadSource("readboard", "MainForm.WebView.cs");
+            string orchestrationSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
+
+            Assert.Contains("webViewHost.OnBoardSnapshotSent(dispatch.SentSnapshot);", orchestrationSource);
+            Assert.Contains("private void UpdateWebViewSnapshotSentState(BoardSnapshot snapshot)", formSource);
+            Assert.Equal(1, formSource.Split("已识别并发送棋盘状态").Length - 1);
+        }
+
+        [Fact]
+        public void NestedKeepSync_DoesNotOwnContinuousSyncLifecycleLog()
+        {
+            string source = LoadSource("readboard", "Form1.cs");
+
+            Assert.Contains("keepSyncLifecycleOwnedByQuickSync = sessionCoordinator.IsContinuousSyncing;", source);
+            Assert.Contains("if (!keepSyncLifecycleOwnedByQuickSync)", source);
+            Assert.Contains("bool logKeepSyncLifecycle = !keepSyncLifecycleOwnedByQuickSync;", source);
+        }
+
+        [Fact]
         public void MainForm_SelectBoard_ShowsSelectionOverlayWithMainFormOwner()
         {
             string source = LoadSource("readboard", "Form1.cs");
