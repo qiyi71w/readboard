@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "channels": [
+    {
+      "id": "legacy-windows",
+      "status": "active",
+      "maximumWindowsVersionExclusive": "10.0.17763",
+      "latestTag": "v3.0.9",
+      "assetName": "readboard-github-release-v3.0.9.zip",
+      "sha256": "08d40fcef3849646b8f4b403317b3b8a0b3377af67b46ae9e1e06d0f40734b69"
+    },
+    {
+      "id": "main",
+      "status": "active",
+      "minimumWindowsVersion": "10.0.17763",
+      "latestTag": "v3.0.9",
+      "assetName": "readboard-github-release-v3.0.9.zip",
+      "sha256": "08d40fcef3849646b8f4b403317b3b8a0b3377af67b46ae9e1e06d0f40734b69"
+    }
+  ]
+}
