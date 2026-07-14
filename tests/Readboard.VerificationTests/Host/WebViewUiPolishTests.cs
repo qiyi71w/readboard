@@ -14,7 +14,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains(".placement-row > b { font-size: 14px; }", styles);
             Assert.Contains(".placement-row { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 8px;", styles);
             Assert.Contains(".placement-row .segments { flex: 1; max-width: 424px; }", styles);
-            Assert.Contains(".placement-row .segments label { display: flex; flex: 1; min-width: 0; min-height: 32px; align-items: center; justify-content: center; padding: 6px 10px; font-size: 14px; }", styles);
+            Assert.Contains(".placement-row .segments label { display: flex; flex: 1; min-width: 0; min-height: var(--control-center-control-height); align-items: center; justify-content: center; padding: 6px 10px; font-size: 14px; }", styles);
         }
 
         [Fact]
@@ -28,10 +28,31 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("<div class=\"color-row\"><b>执子颜色</b>", html);
             Assert.Contains("<div class=\"segments color-segments\" role=\"radiogroup\" aria-label=\"执子颜色\">", html);
             Assert.Contains(".sync-toggle-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }", styles);
-            Assert.Contains(".sync-options { display: grid; min-width: 0; grid-template-rows: auto repeat(3, 37px); gap: 4px;", styles);
+            Assert.Contains(".sync-options { display: grid; min-width: 0; grid-template-rows: auto repeat(3, var(--control-center-control-height)); gap: var(--control-center-inner-gap);", styles);
             Assert.Contains(".color-row { display: grid; grid-template-columns: 62px minmax(0, 1fr) 90px; gap: 8px;", styles);
-            Assert.Contains(".color-row button { width: 90px; height: 34px; min-height: 34px; }", styles);
-            Assert.Contains(".color-row .segments label { display: flex; flex: 1; min-width: 0; min-height: 32px; align-items: center; justify-content: center; padding: 6px 10px; font-size: 14px; }", styles);
+            Assert.Contains(".color-row button { width: 90px; height: var(--control-center-control-height); min-height: var(--control-center-control-height); }", styles);
+            Assert.Contains(".color-row .segments label { display: flex; flex: 1; min-width: 0; min-height: var(--control-center-control-height); align-items: center; justify-content: center; padding: 6px 10px; font-size: 14px; }", styles);
+        }
+
+        [Fact]
+        public void ControlCenter_UsesCappedHeightResponsiveVerticalRhythm()
+        {
+            string styles = LoadWebViewAsset("styles.css");
+
+            Assert.Contains("--control-center-control-height: clamp(37px, calc(5.5vh - .4px), 48px);", styles);
+            Assert.Contains("--control-center-section-gap: clamp(6px, calc(.9vh - .12px), 12px);", styles);
+            Assert.Contains("--control-center-inner-gap: clamp(4px, calc(.65vh - .42px), 8px);", styles);
+            Assert.Contains("gap: var(--control-center-section-gap);", styles);
+            Assert.Contains(".engine-options { display: grid; min-width: 0; grid-template-rows: auto repeat(3, var(--control-center-control-height)); gap: var(--control-center-inner-gap); }", styles);
+        }
+
+        [Fact]
+        public void ControlCenter_GroupFramesUseResponsiveBottomClearance()
+        {
+            string styles = LoadWebViewAsset("styles.css");
+
+            Assert.Contains("--control-center-group-padding: clamp(3px, calc(2.75vh - 15.7px), 8px);", styles);
+            Assert.Contains(".page[data-page-panel=\"controlCenter\"] > fieldset:not(.log-card) { padding-bottom: var(--control-center-group-padding); }", styles);
         }
 
         [Fact]
@@ -96,12 +117,57 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("!control.analysisRunning && !control.analysisStateAvailable", script);
         }
 
+        [Fact]
+        public void Theme_UsesHostPreferenceAndSemanticDarkPalette()
+        {
+            string styles = LoadWebViewAsset("styles.css");
+            string script = LoadWebViewAsset("app.js");
+            string bridge = LoadReadboardSource("MainForm.WebView.cs");
+
+            Assert.Contains(":root[data-theme=\"dark\"] {", styles);
+            Assert.Contains("--window-background: #1e1e1e;", styles);
+            Assert.Contains("--surface-background: #282828;", styles);
+            Assert.Contains("--input-background: #323232;", styles);
+            Assert.Contains("--primary-text: #d2d2d2;", styles);
+            Assert.Contains("--secondary-text: #909090;", styles);
+            Assert.Contains("const systemThemeQuery = window.matchMedia(\"(prefers-color-scheme: dark)\");", script);
+            Assert.Contains("applyTheme(state.shell.theme || \"system\");", script);
+            Assert.Contains("systemThemeQuery.addEventListener(\"change\"", script);
+            Assert.Contains("Theme = ResolveWebViewTheme(Program.CurrentConfig.ColorMode),", bridge);
+        }
+
+        [Fact]
+        public void Theme_SaveAppliesWithoutRestartDialogOrDuplicateHeaderShortcut()
+        {
+            string html = LoadWebViewAsset("index.html");
+            string script = LoadWebViewAsset("app.js");
+            string bridge = LoadReadboardSource("MainForm.WebView.cs");
+            string settingsBridge = LoadReadboardSource("MainForm.WebView.Settings.cs");
+
+            Assert.Contains("data-page=\"settings\"", html);
+            Assert.Contains("data-command=\"rules.openManual\"", html);
+            Assert.DoesNotContain("shell.toggleTheme", html);
+            Assert.DoesNotContain("shell.toggleTheme", bridge);
+            Assert.DoesNotContain("themeRestart", script);
+            Assert.DoesNotContain("themeRestart", settingsBridge);
+            Assert.Contains("webViewSettingsDialog = null;", settingsBridge);
+        }
+
         private static string LoadWebViewAsset(string fileName)
         {
             string path = Path.Combine(
                 VerificationFixtureLocator.RepositoryRoot(),
                 "readboard",
                 "WebView",
+                fileName);
+            return File.ReadAllText(path);
+        }
+
+        private static string LoadReadboardSource(string fileName)
+        {
+            string path = Path.Combine(
+                VerificationFixtureLocator.RepositoryRoot(),
+                "readboard",
                 fileName);
             return File.ReadAllText(path);
         }

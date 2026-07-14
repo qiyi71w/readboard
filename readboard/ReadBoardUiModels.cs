@@ -18,6 +18,7 @@ namespace readboard
     internal sealed class ReadBoardShellState
     {
         public string Version { get; set; }
+        public string Theme { get; set; } = "system";
         public bool Connected { get; set; }
         public string SyncStatus { get; set; }
         public string LastSync { get; set; }

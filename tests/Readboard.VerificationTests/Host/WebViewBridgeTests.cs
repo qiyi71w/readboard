@@ -108,6 +108,7 @@ namespace Readboard.VerificationTests.Host
         [InlineData("{\"type\":\"control.update\",\"payload\":{\"key\":\"two-way\",\"value\":\"true\"}}")]
         [InlineData("{\"type\":\"control.update\",\"payload\":{\"key\":\"board-width\",\"value\":\"26\"}}")]
         [InlineData("{\"type\":\"control.update\",\"payload\":{\"key\":\"platform\",\"value\":\"unknown\"}}")]
+        [InlineData("{\"type\":\"shell.toggleTheme\",\"payload\":{}}")]
         public void TryParseWebViewCommand_RejectsUnknownOrMalformedShape(string json)
         {
             Assert.False(MainForm.TryParseWebViewCommand(json, out _));
@@ -126,6 +127,19 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Equal("state", json.RootElement.GetProperty("type").GetString());
             Assert.Equal(expectedKind, json.RootElement.GetProperty("payload").GetProperty("shell").GetProperty("targetWindowValid").ValueKind);
+        }
+
+        [Fact]
+        public void SerializeWebViewState_PreservesShellTheme()
+        {
+            ReadBoardUiState state = new ReadBoardUiState();
+            state.Shell.Theme = "dark";
+
+            using JsonDocument json = JsonDocument.Parse(MainForm.SerializeWebViewState(state));
+
+            Assert.Equal(
+                "dark",
+                json.RootElement.GetProperty("payload").GetProperty("shell").GetProperty("theme").GetString());
         }
 
         [Fact]

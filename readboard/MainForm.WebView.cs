@@ -262,10 +262,6 @@ namespace readboard
                 case "board.select":
                     HandleBoardSelect(command.Payload);
                     break;
-                case "shell.toggleTheme":
-                    webViewState.Page = "settings";
-                    GetWebViewSettingsState();
-                    break;
                 case "rules.openManual":
                     OpenWebViewManual();
                     break;
@@ -325,7 +321,6 @@ namespace readboard
                 case "sync.swapOrder":
                 case "sync.rebuild":
                 case "sync.clearBoard":
-                case "shell.toggleTheme":
                 case "rules.openManual":
                 case "about.openRepository":
                 case "about.checkUpdate":
@@ -699,6 +694,7 @@ namespace readboard
                 Shell = new ReadBoardShellState
                 {
                     Version = "v" + AppReleaseVersion.GetCurrentVersion(),
+                    Theme = ResolveWebViewTheme(Program.CurrentConfig.ColorMode),
                     Connected = hostCommunicationEstablished,
                     SyncStatus = ResolveWebViewSyncStatus(
                         hostCommunicationEstablished,

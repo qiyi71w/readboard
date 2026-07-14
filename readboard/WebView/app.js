@@ -5,6 +5,7 @@
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const webview = window.chrome?.webview;
   const preview = !webview;
+  const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
   const baseViewport = Object.freeze({ width: 1100, height: 680 });
   const minimumViewport = Object.freeze({ width: 960, height: 600 });
   const minimumScale = minimumViewport.width / baseViewport.width;
@@ -12,6 +13,7 @@
     page: "controlCenter",
     shell: {
       version: "v3.0.8",
+      theme: "system",
       connected: false,
       syncStatus: "宿主模式已启动",
       lastSync: "--:--:--",
@@ -83,6 +85,7 @@
   let activeModal = null;
   let modalOpener = null;
   let resizeFrame = 0;
+  let themePreference = "system";
 
   function updateViewportLayout() {
     resizeFrame = 0;
@@ -120,6 +123,23 @@
     }
     return result;
   }
+
+  function normalizeTheme(value) {
+    return value === "dark" || value === "light" ? value : "system";
+  }
+
+  function applyTheme(value) {
+    themePreference = normalizeTheme(value);
+    const resolvedTheme = themePreference === "system"
+      ? (systemThemeQuery.matches ? "dark" : "light")
+      : themePreference;
+    document.documentElement.dataset.theme = resolvedTheme;
+    document.documentElement.style.colorScheme = resolvedTheme;
+  }
+
+  systemThemeQuery.addEventListener("change", () => {
+    if (themePreference === "system") applyTheme(themePreference);
+  });
 
   function send(type, payload = {}) {
     const message = { type, payload };
@@ -373,11 +393,9 @@
     const content = {
       resetDefaults: ["恢复默认设置", "将当前设置草稿恢复为默认值。此操作不会立即写入配置，仍需点击保存设置。", "恢复默认"],
       diagnostics: ["开启调试诊断", "调试诊断可能产生较大的文件。确认后仅修改当前设置草稿，保存设置后生效。", "继续开启"],
-      themeRestart: ["需要重新启动", "颜色模式已保存。重新启动 ReadBoard 后可完整应用新的界面外观。", "知道了"],
       showInBoardHint: ["原棋盘上显示选点", "[前台]方式同步时不支持此功能。选点显示在原棋盘上后，原棋盘将无法落子。", "确定"]
     }[dialog.kind] || [dialog.title || "提示", dialog.message || "", "确定"];
     let actions = button("dialog.cancel", dialog.cancelLabel || "取消");
-    if (dialog.kind === "themeRestart") actions = "";
     if (dialog.kind === "showInBoardHint") {
       actions = button("dialog.dontShowAgain", "不再提示") + button("dialog.confirm", dialog.confirmLabel || content[2], "primary");
       openModal("dialog show-in-board-hint", "提示", `<div class="dialog-copy"><p>${escapeHtml(dialog.message || content[1])}</p><p>可通过勾选“双向同步”选项恢复落子功能。</p></div>`, actions, "min(520px, calc(100vw - 48px))");
@@ -417,6 +435,7 @@
   function escapeAttr(value) { return escapeHtml(value); }
 
   function render() {
+    applyTheme(state.shell.theme || "system");
     showPage(state.page);
     renderShell();
     renderControlCenter();

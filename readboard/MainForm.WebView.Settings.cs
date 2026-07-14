@@ -226,15 +226,12 @@ namespace readboard
             if (!TryBuildWebViewSettingsConfig(Program.CurrentConfig, settings, out updated))
                 return;
 
-            bool colorModeChanged = updated.ColorMode != Program.CurrentConfig.ColorMode;
             Program.CurrentContext.Config = updated;
             PersistConfiguration();
             resetBtnKeepSyncName();
             sendPonderStatus();
             webViewSettingsDraft = CreateWebViewSettingsState(Program.CurrentConfig);
-            webViewSettingsDialog = colorModeChanged
-                ? new ReadBoardDialogUiState { Open = true, Kind = "themeRestart" }
-                : null;
+            webViewSettingsDialog = null;
         }
 
         private void ShowWebViewSettingsDialog(string kind)

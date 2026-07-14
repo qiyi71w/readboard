@@ -75,12 +75,9 @@ public static bool IsDarkMode { get; }
 
 ## 运行时变更策略
 
-修改 ColorMode 必须重启才生效，因为 `Application.SetColorMode` 仅在启动时调用。
+`Application.SetColorMode` 仍只在启动时调用，用于原生 WinForms 颜色模式。WebView2 主界面由保存后的 C# 状态快照发送 `ColorMode`，前端收到后立即应用系统/深色/浅色主题，因此主界面不要求重启，也不显示重启提示。
 
-`Form4.button1_Click` 检测 `ColorMode` 变更后弹 `MessageBox` 提示用户重启。
-不自动 `Application.Restart()`，避免打断用户当前同步任务。
-
-**视觉过渡边界**: 用户改 ColorMode 但未重启时，若 DPI 变化或主题切换触发 `ApplyMainFormUi` 重绘，控件配色会立即按新 ColorMode 重新计算（因为 `IsDarkMode` 读 `Program.CurrentConfig.ColorMode`），但系统 chrome（标题栏等）由 `Application.SetColorMode` 控制，仅启动时生效 → 短暂视觉不一致。重启后修复。该状态由用户主动选择"不立即重启"承担。
+原生捕获辅助层会在下次正常启动时取得新的 `Application.SetColorMode`；不为此调用 `Application.Restart()`，避免打断用户当前同步任务。
 
 ## 不在范围内（已评审，决策为不修复）
 
