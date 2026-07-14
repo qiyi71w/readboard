@@ -71,6 +71,7 @@ namespace readboard
         bool TryStartKeepSync();
         bool TryStartContinuousSync();
         void StopSyncSession();
+        void StopSyncSessionAndClearBoard();
         PlaceRequestExecutionResult HandlePlaceRequest(MoveRequest request);
     }
 }

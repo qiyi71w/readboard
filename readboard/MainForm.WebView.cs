@@ -256,8 +256,7 @@ namespace readboard
                     btnForceRebuild_Click(this, EventArgs.Empty);
                     break;
                 case "sync.clearBoard":
-                    stopSync();
-                    sessionCoordinator.SendClearBoard();
+                    sessionCoordinator.StopSyncSessionAndClearBoard();
                     break;
                 case "board.select":
                     HandleBoardSelect(command.Payload);

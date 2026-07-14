@@ -19,6 +19,8 @@ namespace readboard
         private int activeContinuousSyncSessionId;
         private int nextKeepSyncSessionId;
         private int activeKeepSyncSessionId;
+        private int pendingKeepSyncStopCount;
+        private int suppressDeferredStopSyncThroughSessionId;
 
         public void AttachRuntime(SyncSessionRuntimeDependencies runtimeDependencies)
         {
@@ -122,13 +124,50 @@ namespace readboard
             StopSyncSessionCore(false);
         }
 
+        public void StopSyncSessionAndClearBoard()
+        {
+            lock (stateLock)
+            {
+                runtimeState.LastCapturedYikeGeometry = null;
+            }
+
+            bool sendStopSync = StopSyncSessionCore(false, true);
+            bool stopYikeSync = sendStopSync && IsYikeSyncPlatform();
+            ResetSyncCaches();
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                if (stopYikeSync)
+                    outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateYikeSyncStopMessage());
+                if (sendStopSync)
+                    outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateStopSyncMessage());
+                outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateClearBoardMessage());
+            });
+        }
+
         private void StopSyncSessionCore(bool waitForWorkers)
+        {
+            StopSyncSessionCore(waitForWorkers, false);
+        }
+
+        private bool StopSyncSessionCore(bool waitForWorkers, bool suppressDeferredStopSync)
         {
             Thread keepWorker;
             Thread continuousWorker;
+            bool sendStopSync = false;
 
             lock (workerLock)
             {
+                int keepSyncSessionId = Volatile.Read(ref activeKeepSyncSessionId);
+                if (suppressDeferredStopSync)
+                {
+                    sendStopSync = keepSyncSessionId != 0 || pendingKeepSyncStopCount > 0;
+                    if (sendStopSync)
+                    {
+                        suppressDeferredStopSyncThroughSessionId = Math.Max(
+                            suppressDeferredStopSyncThroughSessionId,
+                            nextKeepSyncSessionId);
+                    }
+                }
                 Interlocked.Increment(ref syncLifecycleGeneration);
                 EndContinuousSync();
                 EndKeepSync();
@@ -142,10 +181,11 @@ namespace readboard
             if (waitForWorkers)
             {
                 CompleteStopCleanup();
-                return;
+                return sendStopSync;
             }
 
             CompleteStopCleanupIfIdle();
+            return sendStopSync;
         }
 
         public PlaceRequestExecutionResult HandlePlaceRequest(MoveRequest request)
@@ -275,12 +315,17 @@ namespace readboard
             bool requireContinuousSync)
         {
             runtimeState.ResetProbeState();
-            SendForegroundFoxState(snapshot);
+            Func<bool> isOperationCurrent = delegate
+            {
+                return IsSyncLifecycleCurrent(lifecycleGeneration);
+            };
+            if (!TrySendForegroundFoxState(snapshot, isOperationCurrent))
+                return false;
             if (!TryPrimeSyncFrame(
                 runtime,
                 snapshot,
                 showMessages,
-                delegate { return IsSyncLifecycleCurrent(lifecycleGeneration); }))
+                isOperationCurrent))
             {
                 if (IsKeepSyncStartCurrent(lifecycleGeneration, requireContinuousSync))
                     HandleKeepSyncStartFailure(runtime, showMessages);
@@ -353,7 +398,7 @@ namespace readboard
                     shouldSendSync = true;
                 }
                 if (shouldSendSync)
-                    SendSync();
+                    SendSyncIfCurrent(isOperationCurrent);
 
                 while (IsOperationCurrent(isOperationCurrent))
                 {
@@ -387,11 +432,11 @@ namespace readboard
             }
             finally
             {
-                FinishKeepSyncLoop(runtime);
+                FinishKeepSyncLoop(runtime, keepSyncSessionId);
             }
         }
 
-        private void FinishKeepSyncLoop(SyncSessionRuntimeDependencies runtime)
+        private void FinishKeepSyncLoop(SyncSessionRuntimeDependencies runtime, int keepSyncSessionId)
         {
             bool notifyStop = false;
             bool shouldSendStopSync = false;
@@ -407,6 +452,7 @@ namespace readboard
                 keepSyncStopRequestedEvent.Set();
                 ResetRuntimeSyncCaches(runtime);
                 shouldSendStopSync = true;
+                pendingKeepSyncStopCount++;
                 ClearRuntimeFrame(runtime);
                 keepSyncThread = null;
                 continuousSyncActive = IsContinuousSyncing;
@@ -414,9 +460,59 @@ namespace readboard
             }
 
             if (shouldSendStopSync)
-                SendStopSync();
+                SendDeferredStopSync(keepSyncSessionId);
             if (notifyStop)
                 runtime.Host.OnKeepSyncStopped(continuousSyncActive);
+        }
+
+        private void SendDeferredStopSync(int keepSyncSessionId)
+        {
+            bool stopYikeSync = IsYikeSyncPlatform();
+            bool pendingConsumed = false;
+            try
+            {
+                outboundProtocolDispatcher.ExecuteBatch(delegate
+                {
+                    bool suppressed;
+                    lock (workerLock)
+                    {
+                        if (pendingKeepSyncStopCount > 0)
+                            pendingKeepSyncStopCount--;
+                        pendingConsumed = true;
+                        suppressed = keepSyncSessionId <= suppressDeferredStopSyncThroughSessionId;
+                    }
+
+                    if (suppressed)
+                        return;
+                    if (stopYikeSync)
+                        outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateYikeSyncStopMessage());
+                    outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateStopSyncMessage());
+                });
+            }
+            finally
+            {
+                if (!pendingConsumed)
+                {
+                    lock (workerLock)
+                    {
+                        if (pendingKeepSyncStopCount > 0)
+                            pendingKeepSyncStopCount--;
+                    }
+                }
+            }
+        }
+
+        private void SendSyncIfCurrent(Func<bool> isOperationCurrent)
+        {
+            bool startYikeSync = IsYikeSyncPlatform();
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                if (!IsOperationCurrent(isOperationCurrent))
+                    return;
+                outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateSyncMessage());
+                if (startYikeSync)
+                    outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateYikeSyncStartMessage());
+            });
         }
 
         private bool TryProcessKeepSyncSample(
@@ -1172,22 +1268,42 @@ namespace readboard
             return keepSyncStopRequestedEvent.Wait(sampleIntervalMs);
         }
 
-        private void SendForegroundFoxState(SyncCoordinatorHostSnapshot snapshot)
+        private bool TrySendForegroundFoxState(
+            SyncCoordinatorHostSnapshot snapshot,
+            Func<bool> isOperationCurrent)
         {
-            SendForegroundFoxInBoard(snapshot.ShowInBoard && snapshot.SupportsForegroundFoxInBoardProtocol);
-            SendPlayIfSelected(snapshot);
-        }
+            bool sendPlay = SyncBoth && !string.IsNullOrWhiteSpace(snapshot.PlayColor);
+            string time = sendPlay ? NormalizeNumericValue(snapshot.AiTimeValue) : null;
+            string playouts = sendPlay ? NormalizeNumericValue(snapshot.PlayoutsValue) : null;
+            string firstPolicy = sendPlay ? NormalizeNumericValue(snapshot.FirstPolicyValue) : null;
+            bool sent = false;
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                if (!IsOperationCurrent(isOperationCurrent))
+                    return;
 
-        private void SendPlayIfSelected(SyncCoordinatorHostSnapshot snapshot)
-        {
-            if (!SyncBoth || string.IsNullOrWhiteSpace(snapshot.PlayColor))
-                return;
-            SendPlay(
-                snapshot.PlayColor,
-                NormalizeNumericValue(snapshot.AiTimeValue),
-                NormalizeNumericValue(snapshot.PlayoutsValue),
-                NormalizeNumericValue(snapshot.FirstPolicyValue),
-                snapshot.AutoPlayMoveMode);
+                outboundProtocolDispatcher.SendMessageWhileSynchronized(
+                    protocolAdapter.CreateForegroundFoxInBoardMessage(
+                        snapshot.ShowInBoard && snapshot.SupportsForegroundFoxInBoardProtocol));
+                if (sendPlay)
+                {
+                    RememberSentPlayState(
+                        snapshot.PlayColor,
+                        time,
+                        playouts,
+                        firstPolicy,
+                        snapshot.AutoPlayMoveMode);
+                    outboundProtocolDispatcher.SendMessageWhileSynchronized(
+                        protocolAdapter.CreatePlayMessage(
+                            snapshot.PlayColor,
+                            time,
+                            playouts,
+                            firstPolicy,
+                            snapshot.AutoPlayMoveMode));
+                }
+                sent = true;
+            });
+            return sent;
         }
 
         private ProtocolMessage ReservePlayMessageIfChanged(SyncCoordinatorHostSnapshot snapshot)

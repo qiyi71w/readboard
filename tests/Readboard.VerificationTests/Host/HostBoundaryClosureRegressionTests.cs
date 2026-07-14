@@ -135,16 +135,14 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void WebViewClearBoard_StopsSyncBeforeDedicatedOutboundCommand()
+        public void WebViewClearBoard_UsesAtomicStopAndClearOperation()
         {
             string source = LoadSource("readboard", "MainForm.WebView.cs");
             int commandIndex = source.IndexOf("case \"sync.clearBoard\":", StringComparison.Ordinal);
-            int stopIndex = source.IndexOf("stopSync();", commandIndex, StringComparison.Ordinal);
-            int clearIndex = source.IndexOf("sessionCoordinator.SendClearBoard();", commandIndex, StringComparison.Ordinal);
+            int operationIndex = source.IndexOf("sessionCoordinator.StopSyncSessionAndClearBoard();", commandIndex, StringComparison.Ordinal);
 
             Assert.True(commandIndex >= 0);
-            Assert.True(stopIndex > commandIndex);
-            Assert.True(clearIndex > stopIndex);
+            Assert.True(operationIndex > commandIndex);
         }
 
         [Fact]
