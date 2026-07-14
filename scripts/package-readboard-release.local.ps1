@@ -19,7 +19,6 @@ $assemblyInfoPath = Join-Path $projectRoot 'Properties\AssemblyInfo.cs'
 
 $publishRuntimeIdentifier = 'win-x64'
 $publishTargetFramework = 'net10.0-windows10.0.17763.0'
-$webView2LoaderRelativePath = 'runtimes\win-x64\native\WebView2Loader.dll'
 
 if (-not $ReleaseRoot) {
     $ReleaseRoot = Join-Path $repoRoot 'release'
@@ -34,7 +33,7 @@ $requiredBuildFiles = @(
     'readboard.dll',
     'Microsoft.Web.WebView2.Core.dll',
     'Microsoft.Web.WebView2.WinForms.dll',
-    $webView2LoaderRelativePath,
+    'runtimes\win-x64\native\WebView2Loader.dll',
     'WebView\index.html',
     'WebView\styles.css',
     'WebView\app.js',
@@ -160,10 +159,6 @@ if (Test-Path -LiteralPath $releaseDirectory) {
 New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $releaseAppDirectory -Force | Out-Null
 Copy-DirectoryContents -SourceDir $BuildOutputDir -DestinationDir $releaseAppDirectory
-Copy-Item `
-    -LiteralPath (Join-Path $BuildOutputDir $webView2LoaderRelativePath) `
-    -Destination (Join-Path $releaseAppDirectory 'WebView2Loader.dll') `
-    -Force
 $packageTimestampUtc = [DateTime]::UtcNow
 Update-ReleaseArtifactTimestamps -ReleaseDirectory $releaseDirectory -TimestampUtc $packageTimestampUtc
 if ($SkipZip) {
