@@ -27,7 +27,7 @@ WebView2 控制中心新增三组可选能力，所有既有 wire 文本保持�
 - `resumeponder`：ReadBoard 请求宿主恢复主引擎分析。暂停继续使用既有 `noponder`。
 - `analysisState running` / `analysisState paused`：宿主在 native ReadBoard ready 后及执行暂停/恢复后回传实际分析状态，同时作为恢复能力声明。
 
-新 ReadBoard 连接旧宿主时，`noponder` 继续可用；没有收到 `analysisState` 时不会发送 `resumeponder`。旧宿主可能按历史 `startsWith("clear")` 逻辑把 `clearBoard` 降级为缓存清理，因此真正清空 Lizzie 主棋盘要求宿主与 ReadBoard 同时升级。Java 简易版 fallback 不接收这些新增能力行。
+新 ReadBoard 连接旧宿主时，`noponder` 继续可用；没有收到 `analysisState` 时不会发送 `resumeponder`。旧宿主可能按历史 `startsWith("clear")` 逻辑把 `clearBoard` 降级为缓存清理，因此真正清空 Lizzie 主棋盘要求宿主与 ReadBoard 同时升级。Java 简易版 fallback 不接收这些新增能力行。当前 `lizzieyzy-next` 解析端已接入 `clearBoard -> Lizzie.board.clear(false)`。
 
 ## 2026-04-23 实现结果
 

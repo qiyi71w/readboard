@@ -22,6 +22,10 @@ namespace readboard
         public bool Success { get; set; }
         public PlacementPathKind PlacementPath { get; set; }
         public BoardCoordinate Coordinate { get; set; }
+        public System.IntPtr TargetHandle { get; set; }
+        public int? ClientX { get; set; }
+        public int? ClientY { get; set; }
+        public int? MouseLParam { get; set; }
         public MovePlacementFailureKind FailureKind { get; set; }
         public string FailureReason { get; set; }
     }

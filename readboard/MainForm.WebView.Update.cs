@@ -75,9 +75,10 @@ namespace readboard
                 if (operationId != webViewUpdateOperationId)
                     return;
                 Trace.TraceError(exception.ToString());
-                ActivateWebViewManualDownloadFallback(
+                webViewUpdateState = CreateWebViewUpdateCheckFailedState(
                     getLangStr("Update_checkFailed"),
                     NormalizeWebViewUpdateText(exception.Message, getLangStr("Update_unknownError")));
+                PostWebViewState();
             }
         }
 
@@ -100,6 +101,7 @@ namespace readboard
                 launchOptions.TransportKind,
                 sessionCoordinator.IsProtocolSessionActive,
                 hostedUpdateSupported,
+                hostedUpdatePackageV2Supported,
                 result))
             {
                 OpenWebViewUpdateDownload();
@@ -115,7 +117,8 @@ namespace readboard
                 string zipPath = await downloader.DownloadAsync(
                     result.Tag,
                     result.AssetName,
-                    result.AssetDownloadUrl);
+                    result.AssetDownloadUrl,
+                    result.AssetSha256);
                 if (operationId != webViewUpdateOperationId)
                     return;
 
@@ -206,15 +209,21 @@ namespace readboard
             TransportKind transportKind,
             bool protocolSessionActive,
             bool hostSupportsUpdate,
+            bool hostSupportsPackageV2,
             UpdateCheckResult result)
         {
             return transportKind == TransportKind.Pipe &&
                 protocolSessionActive &&
                 hostSupportsUpdate &&
                 result != null &&
+                HostedUpdatePackageVerifier.IsSupportedFileName(
+                    result.Tag,
+                    result.AssetName,
+                    hostSupportsPackageV2) &&
                 !string.IsNullOrWhiteSpace(result.Tag) &&
                 !string.IsNullOrWhiteSpace(result.AssetName) &&
-                !string.IsNullOrWhiteSpace(result.AssetDownloadUrl);
+                !string.IsNullOrWhiteSpace(result.AssetDownloadUrl) &&
+                !string.IsNullOrWhiteSpace(result.AssetSha256);
         }
 
         internal static Uri GetWebViewManualDownloadUri()
@@ -254,7 +263,9 @@ namespace readboard
                         launchOptions.TransportKind,
                         sessionCoordinator.IsProtocolSessionActive,
                         hostedUpdateSupported,
+                        hostedUpdatePackageV2Supported,
                         result);
+                    string channelNotice = BuildWebViewChannelNotice(result);
                     webViewUpdateState = new ReadBoardUpdateUiState
                     {
                         Open = true,
@@ -266,32 +277,119 @@ namespace readboard
                             : getLangStr("Update_notProvided"),
                         ReleaseNotes = NormalizeWebViewUpdateText(
                             result.ReleaseNotes,
-                            getLangStr("Update_releaseNotesUnavailable"))
+                            getLangStr("Update_releaseNotesUnavailable")) + channelNotice,
+                        Detail = channelNotice.Trim()
                     };
                     break;
                 case UpdateCheckStatus.UpToDate:
+                    string upToDateMessage = string.Equals(
+                        result.ChannelStatus,
+                        "retired",
+                        StringComparison.Ordinal)
+                        ? getLangStr("Update_upToDateRetired")
+                        : getLangStr("Update_upToDate");
                     webViewUpdateState = new ReadBoardUpdateUiState
                     {
                         Open = true,
                         Status = "latest",
                         CurrentVersion = result.CurrentVersion,
                         LatestVersion = result.LatestVersion,
-                        Detail = getLangStr("Update_upToDate"),
+                        Title = upToDateMessage,
+                        Detail = AppendWebViewIncompatibleVersionNotice(result, upToDateMessage),
                         Message = DateTime.Now.ToString("HH:mm", CultureInfo.CurrentCulture)
                     };
                     break;
+                case UpdateCheckStatus.OutsideChannel:
+                    webViewUpdateState = CreateWebViewUpdateNoticeState(
+                        result,
+                        getLangStr("Update_outsideChannel"),
+                        BuildWebViewChannelNotice(result).Trim());
+                    break;
+                case UpdateCheckStatus.NoMatchingChannel:
+                    webViewUpdateState = CreateWebViewUpdateNoticeState(
+                        result,
+                        getLangStr("Update_noMatchingChannel"),
+                        AppendWebViewIncompatibleVersionNotice(result, string.Empty));
+                    break;
                 case UpdateCheckStatus.Failed:
-                    ActivateWebViewManualDownloadFallback(
+                    webViewUpdateState = CreateWebViewUpdateCheckFailedState(
                         getLangStr("Update_checkFailed"),
                         NormalizeWebViewUpdateText(
                             result.ErrorMessage,
                             getLangStr("Update_unknownError")));
-                    return;
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(result.Status));
             }
 
             PostWebViewState();
+        }
+
+        private ReadBoardUpdateUiState CreateWebViewUpdateNoticeState(
+            UpdateCheckResult result,
+            string title,
+            string detail)
+        {
+            return new ReadBoardUpdateUiState
+            {
+                Open = true,
+                Status = "notice",
+                CurrentVersion = result.CurrentVersion,
+                LatestVersion = result.LatestVersion,
+                Title = title,
+                Detail = string.IsNullOrWhiteSpace(detail) ? title : detail
+            };
+        }
+
+        private ReadBoardUpdateUiState CreateWebViewUpdateCheckFailedState(
+            string title,
+            string detail)
+        {
+            return new ReadBoardUpdateUiState
+            {
+                Open = true,
+                Status = "check-failed",
+                CurrentVersion = AppReleaseVersion.GetCurrentVersion(),
+                Title = title,
+                Detail = detail
+            };
+        }
+
+        private string BuildWebViewChannelNotice(UpdateCheckResult result)
+        {
+            string notice = string.Empty;
+            if (string.Equals(result.ChannelStatus, "retired", StringComparison.Ordinal))
+            {
+                notice = string.Format(
+                    CultureInfo.CurrentCulture,
+                    getLangStr("Update_retiredFinalVersion"),
+                    result.LatestVersion);
+            }
+
+            notice = AppendWebViewIncompatibleVersionNotice(result, notice);
+            return string.IsNullOrWhiteSpace(notice)
+                ? string.Empty
+                : Environment.NewLine + Environment.NewLine + notice;
+        }
+
+        private string AppendWebViewIncompatibleVersionNotice(
+            UpdateCheckResult result,
+            string message)
+        {
+            if (string.IsNullOrWhiteSpace(result.IncompatibleNewerVersion) ||
+                string.IsNullOrWhiteSpace(result.IncompatibleMinimumWindowsVersion))
+            {
+                return message;
+            }
+
+            string incompatibleMessage = string.Format(
+                CultureInfo.CurrentCulture,
+                getLangStr("Update_newerVersionRequiresWindows"),
+                result.IncompatibleNewerVersion,
+                result.IncompatibleMinimumWindowsVersion);
+            return string.IsNullOrWhiteSpace(message)
+                ? incompatibleMessage
+                : message + Environment.NewLine + incompatibleMessage;
         }
 
         private void SetWebViewUpdateProcessing(string detail, int activeStep)

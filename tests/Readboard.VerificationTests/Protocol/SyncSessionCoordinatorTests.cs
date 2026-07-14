@@ -50,12 +50,14 @@ namespace Readboard.VerificationTests
 
             coordinator.Start();
             transport.Emit("readboardUpdateSupported");
+            transport.Emit("readboardUpdatePackageV2Supported");
             transport.Emit("readboardUpdateInstalling");
             transport.Emit("readboardUpdateCancelled");
             transport.Emit("readboardUpdateFailed\tbad zip");
 
-            Assert.Equal(4, host.DispatchCount);
+            Assert.Equal(5, host.DispatchCount);
             Assert.Equal(1, host.ReadboardUpdateSupportedCount);
+            Assert.Equal(1, host.ReadboardUpdatePackageV2SupportedCount);
             Assert.Equal(1, host.ReadboardUpdateInstallingCount);
             Assert.Equal(1, host.ReadboardUpdateCancelledCount);
             Assert.Equal("bad zip", host.LastReadboardUpdateFailedMessage);
@@ -96,6 +98,17 @@ namespace Readboard.VerificationTests
             coordinator.SendError("boom");
 
             Assert.Equal(new[] { "boom" }, transport.ErrorMessages);
+        }
+
+        [Fact]
+        public void SendClearBoard_UsesDedicatedOutboundCommand()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SendClearBoard();
+
+            Assert.Equal(new[] { "clearBoard" }, transport.SentLines);
         }
 
         [Fact]
@@ -571,6 +584,7 @@ namespace Readboard.VerificationTests
             public int DispatchCount { get; private set; }
             public MoveRequest LastMoveRequest { get; private set; }
             public int ReadboardUpdateSupportedCount { get; private set; }
+            public int ReadboardUpdatePackageV2SupportedCount { get; private set; }
             public int ReadboardUpdateInstallingCount { get; private set; }
             public int ReadboardUpdateCancelledCount { get; private set; }
             public string LastReadboardUpdateFailedMessage { get; private set; }
@@ -612,6 +626,11 @@ namespace Readboard.VerificationTests
             public void HandleReadboardUpdateSupported()
             {
                 ReadboardUpdateSupportedCount++;
+            }
+
+            public void HandleReadboardUpdatePackageV2Supported()
+            {
+                ReadboardUpdatePackageV2SupportedCount++;
             }
 
             public void HandleReadboardUpdateInstalling()

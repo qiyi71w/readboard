@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Windows.Forms;
@@ -14,6 +15,8 @@ namespace readboard
     {
         private const string WebViewHostName = "app.readboard";
         private const string ReadBoardRepositoryUrl = "https://github.com/qiyi71w/readboard";
+        private const string WebViewRuntimeInstallerUrl =
+            "https://developer.microsoft.com/en-us/microsoft-edge/webview2/";
         private static readonly JsonSerializerOptions WebViewJsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -56,21 +59,81 @@ namespace readboard
 
         internal bool EnsureWebViewRuntimeAvailable()
         {
-            try
+            while (true)
             {
-                CoreWebView2Environment.GetAvailableBrowserVersionString();
-                return true;
+                try
+                {
+                    CoreWebView2Environment.GetAvailableBrowserVersionString();
+                    return true;
+                }
+                catch (WebView2RuntimeNotFoundException)
+                {
+                    var openDownloadPage = new TaskDialogButton(
+                        getLangStr("WebViewRuntime_openDownload"));
+                    var retry = new TaskDialogButton(getLangStr("WebViewRuntime_retry"));
+                    var exit = new TaskDialogButton(getLangStr("WebViewRuntime_exit"));
+                    var page = new TaskDialogPage
+                    {
+                        Caption = getLangStr("WebViewRuntime_caption"),
+                        Heading = getLangStr("WebViewRuntime_heading"),
+                        Text = string.Format(
+                            CultureInfo.CurrentCulture,
+                            getLangStr("WebViewRuntime_message"),
+                            AppReleaseVersion.GetCurrentVersion()),
+                        Icon = TaskDialogIcon.Error,
+                        AllowCancel = false,
+                        DefaultButton = retry
+                    };
+                    page.Buttons.Add(openDownloadPage);
+                    page.Buttons.Add(retry);
+                    page.Buttons.Add(exit);
+
+                    TaskDialogButton selected = TaskDialog.ShowDialog(this, page);
+                    if (ReferenceEquals(selected, retry))
+                        continue;
+                    if (ReferenceEquals(selected, openDownloadPage))
+                    {
+                        try
+                        {
+                            using (Process process = Process.Start(
+                                CreateWebViewRuntimeDownloadStartInfo(
+                                    GetWebViewRuntimeInstallerUri())))
+                            {
+                            }
+                        }
+                        catch (Exception exception)
+                        {
+                            Trace.TraceError(exception.ToString());
+                            MessageBox.Show(
+                                this,
+                                getLangStr("WebViewRuntime_openDownloadFailed"),
+                                getLangStr("WebViewRuntime_caption"),
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Error);
+                        }
+                        continue;
+                    }
+
+                    Dispose();
+                    return false;
+                }
             }
-            catch (WebView2RuntimeNotFoundException)
+        }
+
+        internal static Uri GetWebViewRuntimeInstallerUri()
+        {
+            return new Uri(WebViewRuntimeInstallerUrl, UriKind.Absolute);
+        }
+
+        internal static ProcessStartInfo CreateWebViewRuntimeDownloadStartInfo(Uri uri)
+        {
+            if (uri == null)
+                throw new ArgumentNullException(nameof(uri));
+
+            return new ProcessStartInfo(uri.AbsoluteUri)
             {
-                MessageBox.Show(
-                    "ReadBoard 需要 Microsoft Edge WebView2 Runtime。请安装 Evergreen Runtime 后重新启动。",
-                    "ReadBoard 无法启动",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-                Dispose();
-                return false;
-            }
+                UseShellExecute = true
+            };
         }
 
         private void InitializeWebViewShell()

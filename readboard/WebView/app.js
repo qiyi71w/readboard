@@ -12,7 +12,7 @@
   const initialState = {
     page: "controlCenter",
     shell: {
-      version: "v3.0.8",
+      version: "v3.1.0",
       theme: "system",
       connected: false,
       syncStatus: "宿主模式已启动",
@@ -189,7 +189,7 @@
 
   function renderShell() {
     const shell = state.shell || {};
-    const version = shell.version || "v3.0.8";
+    const version = shell.version || "v3.1.0";
     ["title-version", "version", "about-version", "project-version"].forEach(id => text(id, version));
     text("sync-status", shell.syncStatus || (shell.connected ? "就绪" : "宿主模式已启动"));
     text("last-sync", shell.lastSync || "--:--:--");
@@ -353,11 +353,17 @@
     if (mode === "checking") {
       body = message("&#xE895;", "正在检查可用更新", "正在连接 GitHub Release，请稍候。", '<div class="progress indeterminate"><i></i></div>');
     } else if (mode === "latest") {
-      body = message("&#xE73E;", "当前已是最新版本", `ReadBoard ${escapeHtml(update.currentVersion || state.shell.version || "")}`, `<p>${escapeHtml(update.completedAt || update.message || "刚刚完成检查")}</p>`);
+      body = message("&#xE73E;", update.title || "当前已是最新版本", escapeHtml(update.detail || `ReadBoard ${update.currentVersion || state.shell.version || ""}`), `<p>${escapeHtml(update.completedAt || update.message || "刚刚完成检查")}</p>`);
       actions = button("update.close", "完成", "primary");
     } else if (mode === "available" || mode === "manual") {
-      body = `<div class="update-details"><span>当前版本</span><b>${escapeHtml(update.currentVersion || "--")}</b><span>最新版本</span><b>${escapeHtml(update.latestVersion || "--")}</b><span>发布日期</span><b>${escapeHtml(update.releaseDate || "--")}</b>${mode === "manual" ? `<div class="update-warning"><b>当前宿主不支持托管安装</b><p>可打开 Release 页面手动下载更新。</p></div>` : `<span>更新说明</span><div class="release-notes">${escapeHtml(update.releaseNotes || "暂无更新说明")}</div>`}</div>`;
+      body = `<div class="update-details"><span>当前版本</span><b>${escapeHtml(update.currentVersion || "--")}</b><span>最新版本</span><b>${escapeHtml(update.latestVersion || "--")}</b><span>发布日期</span><b>${escapeHtml(update.releaseDate || "--")}</b>${mode === "manual" ? `<div class="update-warning"><b>当前宿主不支持托管安装</b><p>${escapeHtml(update.detail || "可打开 Release 页面手动下载更新。")}</p></div>` : ""}<span>更新说明</span><div class="release-notes">${escapeHtml(update.releaseNotes || "暂无更新说明")}</div></div>`;
       actions += button(mode === "manual" ? "update.openDownload" : "update.install", mode === "manual" ? "去下载" : "下载并安装", "primary");
+    } else if (mode === "notice") {
+      body = message("&#xE946;", update.title || "更新通道提示", escapeHtml(update.detail || "当前没有可安装的更新。"));
+      actions = button("update.close", "完成", "primary");
+    } else if (mode === "check-failed") {
+      body = message("&#xE783;", update.title || "检查更新失败", escapeHtml(update.detail || "请稍后重试。"));
+      actions = button("update.close", "关闭", "primary");
     } else if (mode === "processing") {
       body = `<h3>${escapeHtml(update.title || "正在准备更新包")}</h3><p>${escapeHtml(update.detail || "请稍候…")}</p>${progress(update.progress)}<div class="steps">${steps(update.steps)}</div>`;
       actions = '<button type="button" disabled>处理中…</button>';

@@ -31,6 +31,19 @@ if (-not $BuildOutputDir) {
 $requiredBuildFiles = @(
     'readboard.exe',
     'readboard.dll',
+    'readboard.runtimeconfig.json',
+    'readboard.deps.json',
+    'language_cn.txt',
+    'language_en.txt',
+    'language_jp.txt',
+    'language_kr.txt',
+    'readme.rtf',
+    'readme_en.rtf',
+    'readme_jp.rtf',
+    'OpenCvSharp.dll',
+    'OpenCvSharp.Extensions.dll',
+    'OpenCvSharpExtern.dll',
+    'opencv_videoio_ffmpeg4100_64.dll',
     'Microsoft.Web.WebView2.Core.dll',
     'Microsoft.Web.WebView2.WinForms.dll',
     'runtimes\win-x64\native\WebView2Loader.dll',
@@ -99,6 +112,23 @@ function Assert-RequiredFiles {
     }
 }
 
+function Assert-NoFixedWebView2Runtime {
+    param([string]$SourceDir)
+
+    $searchParameters = @{
+        LiteralPath = $SourceDir
+        Recurse = $true
+        File = $true
+        Filter = 'msedgewebview2.exe'
+        ErrorAction = 'Stop'
+    }
+    $fixedRuntimeExecutable = Get-ChildItem @searchParameters |
+        Select-Object -First 1
+    if ($fixedRuntimeExecutable) {
+        throw "发布输出不能携带 WebView2 Fixed Version Runtime: $($fixedRuntimeExecutable.FullName)"
+    }
+}
+
 function Copy-DirectoryContents {
     param(
         [string]$SourceDir,
@@ -135,10 +165,19 @@ function New-ReleaseArchive {
 }
 
 $versionInfo = Get-ReleaseVersion -Path $assemblyInfoPath
-$releaseDirectoryName = "readboard-github-release-$($versionInfo.TagVersion)"
+$numericVersion = [Version]::Parse($versionInfo.NumericVersion)
+$releaseAssetPrefix = if ($numericVersion -lt [Version]'3.1.0') {
+    'readboard-github-release-'
+} else {
+    'readboard-webview2-'
+}
+$releaseDirectoryName = "$releaseAssetPrefix$($versionInfo.TagVersion)"
 $releaseDirectory = Join-Path $ReleaseRoot $releaseDirectoryName
 $releaseZipPath = Join-Path $ReleaseRoot ($releaseDirectoryName + '.zip')
 $resolvedReleaseZipPath = $releaseZipPath
+$resolvedChecksumPath = $resolvedReleaseZipPath + '.sha256'
+$releaseChecksumPath = $resolvedChecksumPath
+$releaseSha256 = [string]::Empty
 $releaseAppDirectory = Join-Path $releaseDirectory 'readboard'
 
 if (-not $SkipBuild) {
@@ -151,6 +190,7 @@ if (-not $SkipBuild) {
 
 Assert-PathExists -Path $BuildOutputDir -Label '发布输出目录（dotnet publish 未产出或 BuildOutputDir 路径配置错误）'
 Assert-RequiredFiles -SourceDir $BuildOutputDir -RequiredFiles $requiredBuildFiles
+Assert-NoFixedWebView2Runtime -SourceDir $BuildOutputDir
 
 if (Test-Path -LiteralPath $releaseDirectory) {
     Remove-Item -LiteralPath $releaseDirectory -Recurse -Force
@@ -159,18 +199,32 @@ if (Test-Path -LiteralPath $releaseDirectory) {
 New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $releaseAppDirectory -Force | Out-Null
 Copy-DirectoryContents -SourceDir $BuildOutputDir -DestinationDir $releaseAppDirectory
+if ($numericVersion -ge [Version]'3.1.0') {
+    $webView2LoaderSource = Join-Path $BuildOutputDir 'runtimes\win-x64\native\WebView2Loader.dll'
+    $webView2LoaderDestination = Join-Path $releaseAppDirectory 'WebView2Loader.dll'
+    Copy-Item -LiteralPath $webView2LoaderSource -Destination $webView2LoaderDestination -Force
+}
 $packageTimestampUtc = [DateTime]::UtcNow
 Update-ReleaseArtifactTimestamps -ReleaseDirectory $releaseDirectory -TimestampUtc $packageTimestampUtc
 if ($SkipZip) {
     if (Test-Path -LiteralPath $resolvedReleaseZipPath) {
         Remove-Item -LiteralPath $resolvedReleaseZipPath -Force
     }
+    if (Test-Path -LiteralPath $resolvedChecksumPath) {
+        Remove-Item -LiteralPath $resolvedChecksumPath -Force
+    }
     $releaseZipPath = [string]::Empty
+    $releaseChecksumPath = [string]::Empty
 }
 if (-not $SkipZip) {
     New-ReleaseArchive -SourceDirectory $releaseDirectory -DestinationZipPath $resolvedReleaseZipPath
+    $releaseSha256 = (Get-FileHash -LiteralPath $resolvedReleaseZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $checksumLine = "$releaseSha256  $([System.IO.Path]::GetFileName($resolvedReleaseZipPath))"
+    Set-Content -LiteralPath $resolvedChecksumPath -Value $checksumLine -Encoding utf8NoBOM
 }
 
-Write-Host "PackageDir=$releaseDirectory"
-Write-Host "PackageZip=$releaseZipPath"
-Write-Host "PackageVersion=$($versionInfo.TagVersion)"
+Write-Output "PackageDir=$releaseDirectory"
+Write-Output "PackageZip=$releaseZipPath"
+Write-Output "PackageVersion=$($versionInfo.TagVersion)"
+Write-Output "PackageSha256=$releaseSha256"
+Write-Output "PackageChecksumFile=$releaseChecksumPath"

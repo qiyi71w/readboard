@@ -307,6 +307,13 @@ namespace readboard
         private static void AddDefaultLangItems()
         {
             langItems["connectLizzieFailed"] = "棋盘同步工具与Lizzie连接失败";
+            langItems["WebViewRuntime_caption"] = "ReadBoard 无法启动";
+            langItems["WebViewRuntime_heading"] = "缺少 Microsoft Edge WebView2 Runtime";
+            langItems["WebViewRuntime_message"] = "ReadBoard {0} 使用系统共享的 Evergreen Runtime。请先安装 Runtime，然后重试。";
+            langItems["WebViewRuntime_openDownload"] = "打开官方下载页面";
+            langItems["WebViewRuntime_retry"] = "重试";
+            langItems["WebViewRuntime_exit"] = "退出";
+            langItems["WebViewRuntime_openDownloadFailed"] = "无法打开 WebView2 Runtime 官方下载页面。";
             langItems["keepSync"] = "持续同步";
             langItems["recgnizeFaild"] = "不能识别棋盘,请调整被同步棋盘大小后重新选择或尝试[框选1路线]";
             langItems["noSelectedBoard"] = "未选择棋盘";
@@ -378,6 +385,11 @@ namespace readboard
             langItems["MainForm_themeOptimized"] = "新版主题";
             langItems["MainForm_themeClassic"] = "默认主题";
             langItems["Update_upToDate"] = "已是最新版本";
+            langItems["Update_retiredFinalVersion"] = "此通道已停止维护；v{0} 是最终维护版本。";
+            langItems["Update_upToDateRetired"] = "已是此系统通道的最终维护版本。";
+            langItems["Update_outsideChannel"] = "当前版本高于此系统通道的已晋升版本；不会自动降级。";
+            langItems["Update_noMatchingChannel"] = "当前 Windows 版本没有可用的维护通道。";
+            langItems["Update_newerVersionRequiresWindows"] = "主线 v{0} 需要 Windows {1} 或更高版本，当前系统不能安装。";
             langItems["Update_checkFailed"] = "检查更新失败";
             langItems["Update_unknownError"] = "未知错误";
             langItems["Update_dialogTitle"] = "发现新版本";
@@ -447,7 +459,7 @@ namespace readboard
             langItems["SettingsForm_outOfRange"] = "输入的值超过范围";
             langItems["SettingsForm_resetDefaultTip"] = "已恢复默认设置,请重新打开";
             langItems["TipsForm_title"] = "提示";
-            langItems["TipsForm_lblTips"] = "注意: 快捷键Ctrl+D,[前台]方式同步时不支持此功能,选点显示在原棋盘上后,原棋盘将无法落子";
+            langItems["TipsForm_lblTips"] = "注意: 快捷键Ctrl+X,[前台]方式同步时不支持此功能,选点显示在原棋盘上后,原棋盘将无法落子";
             langItems["TipsForm_lblTips1"] = "可通过勾选双向同步选项恢复落子功能";
             langItems["TipsForm_btnConfirm"] = "确定";
             langItems["TipsForm_btnNotAskAgain"] = "不再提示";

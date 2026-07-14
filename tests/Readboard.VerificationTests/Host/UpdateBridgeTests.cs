@@ -15,20 +15,24 @@ namespace Readboard.VerificationTests.Host
                 TransportKind.Pipe,
                 true,
                 true,
+                false,
                 result));
             Assert.False(MainForm.CanOfferWebViewHostedInstall(
                 TransportKind.Tcp,
                 true,
                 true,
+                false,
                 result));
             Assert.False(MainForm.CanOfferWebViewHostedInstall(
                 TransportKind.Pipe,
                 false,
                 true,
+                false,
                 result));
             Assert.False(MainForm.CanOfferWebViewHostedInstall(
                 TransportKind.Pipe,
                 true,
+                false,
                 false,
                 result));
 
@@ -37,6 +41,7 @@ namespace Readboard.VerificationTests.Host
                 TransportKind.Pipe,
                 true,
                 true,
+                false,
                 result));
         }
 
@@ -78,6 +83,7 @@ namespace Readboard.VerificationTests.Host
                 Tag = "v3.0.2",
                 AssetName = "readboard-github-release-v3.0.2.zip",
                 AssetDownloadUrl = "https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip",
+                AssetSha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
                 ReleaseUrl = "https://github.com/qiyi71w/readboard/releases/tag/v3.0.2"
             };
         }

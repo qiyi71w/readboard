@@ -27,6 +27,7 @@ jobs:
         run: dotnet restore readboard.sln --configfile NuGet.Config
 
       - name: Validate tag matches assembly version
+        id: release_metadata
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         run: |
@@ -45,6 +46,42 @@ jobs:
               throw "Tag $env:GITHUB_REF_NAME does not match assembly version $version"
           }
 
+          if ($version -notmatch '^v(\d+)\.(\d+)\.(\d+)$') {
+              throw "Release version must use vX.Y.Z format: $version"
+          }
+
+          $numericVersion = [Version]::new(
+              [int]$Matches[1],
+              [int]$Matches[2],
+              [int]$Matches[3])
+          $assetPrefix = if ($numericVersion -lt [Version]'3.1.0') {
+              'readboard-github-release-'
+          } else {
+              'readboard-webview2-'
+          }
+          $expectedAssetName = "$assetPrefix$version.zip"
+
+          $changelogPath = "docs/releases/$env:GITHUB_REF_NAME.md"
+          if (-not (Test-Path -LiteralPath $changelogPath)) {
+              throw "Missing release changelog: $changelogPath"
+          }
+          $changelog = Get-Content -LiteralPath $changelogPath -Raw
+          if ([string]::IsNullOrWhiteSpace($changelog)) {
+              throw "Release changelog is empty: $changelogPath"
+          }
+          $expectedChangelogHeading = "# $version"
+          $actualChangelogHeading = $changelog -split '\r?\n' |
+              Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+              Select-Object -First 1
+          if (-not [string]::Equals(
+              $actualChangelogHeading,
+              $expectedChangelogHeading,
+              [System.StringComparison]::Ordinal)) {
+              throw "Release changelog must start with '$expectedChangelogHeading': $changelogPath"
+          }
+
+          "expected_asset_name=$expectedAssetName" >> $env:GITHUB_OUTPUT
+
       - name: Run verification tests
         shell: pwsh
         run: dotnet test 'tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj' --no-restore
@@ -54,20 +91,69 @@ jobs:
         run: dotnet run --project 'benchmarks/Readboard.ProtocolConfigBenchmarks/Readboard.ProtocolConfigBenchmarks.csproj'
 
       - name: Package release zip
+        id: package
         shell: pwsh
         run: |
-          ./scripts/package-readboard-release.local.ps1
+          $packageOutput = [System.Collections.Generic.List[string]]::new()
+          ./scripts/package-readboard-release.local.ps1 | ForEach-Object {
+              $line = $_.ToString()
+              [void]$packageOutput.Add($line)
+              Write-Host $line
+          }
+
+          function Get-PackageOutputValue {
+              param([string]$Name)
+
+              $prefix = "$Name="
+              $matches = @($packageOutput | Where-Object {
+                  $_.StartsWith($prefix, [System.StringComparison]::Ordinal)
+              })
+              if ($matches.Count -ne 1) {
+                  throw "Expected exactly one $Name output from packaging script"
+              }
+              return $matches[0].Substring($prefix.Length)
+          }
+
+          $packageZip = Get-PackageOutputValue -Name 'PackageZip'
+          $packageChecksumFile = Get-PackageOutputValue -Name 'PackageChecksumFile'
+          $packageSha256 = Get-PackageOutputValue -Name 'PackageSha256'
+          foreach ($path in @($packageZip, $packageChecksumFile)) {
+              if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path -LiteralPath $path)) {
+                  throw "Packaging script did not produce the expected release asset: $path"
+              }
+          }
+          if ($packageSha256 -notmatch '^[0-9a-f]{64}$') {
+              throw "Packaging script returned an invalid SHA-256: $packageSha256"
+          }
+
+          if ("${{ steps.release_metadata.outputs.expected_asset_name }}") {
+              $actualAssetName = [System.IO.Path]::GetFileName($packageZip)
+              if ($actualAssetName -ne "${{ steps.release_metadata.outputs.expected_asset_name }}") {
+                  throw "Package asset $actualAssetName does not match expected asset ${{ steps.release_metadata.outputs.expected_asset_name }}"
+              }
+          }
+
+          "package_zip=$packageZip" >> $env:GITHUB_OUTPUT
+          "package_checksum_file=$packageChecksumFile" >> $env:GITHUB_OUTPUT
+          "package_sha256=$packageSha256" >> $env:GITHUB_OUTPUT
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
           name: readboard-package
-          path: release/readboard-github-release-v*.zip
+          path: |
+            ${{ steps.package.outputs.package_zip }}
+            ${{ steps.package.outputs.package_checksum_file }}
           if-no-files-found: error
 
       - name: Publish GitHub release asset
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: release/readboard-github-release-v*.zip
+          files: |
+            ${{ steps.package.outputs.package_zip }}
+            ${{ steps.package.outputs.package_checksum_file }}
+          body_path: docs/releases/${{ github.ref_name }}.md
           generate_release_notes: true
+          draft: false
+          prerelease: false

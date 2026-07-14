@@ -133,6 +133,7 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("quit", ProtocolKeywords.Quit);
             Assert.Equal("ready", ProtocolKeywords.Ready);
             Assert.Equal("clear", ProtocolKeywords.Clear);
+            Assert.Equal("clearBoard", ProtocolKeywords.ClearBoard);
             Assert.Equal("end", ProtocolKeywords.BoardEnd);
             Assert.Equal("playponder on", ProtocolKeywords.PlayPonderOn);
             Assert.Equal("playponder off", ProtocolKeywords.PlayPonderOff);
@@ -178,6 +179,9 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("pass", ProtocolKeywords.Pass);
             Assert.Equal("0", ProtocolKeywords.DefaultNumericValue);
             Assert.Equal("readboardUpdateSupported", ProtocolKeywords.ReadboardUpdateSupported);
+            Assert.Equal(
+                "readboardUpdatePackageV2Supported",
+                ProtocolKeywords.ReadboardUpdatePackageV2Supported);
             Assert.Equal("readboardUpdateReady\t", ProtocolKeywords.ReadboardUpdateReadyPrefix);
             Assert.Equal("readboardUpdateInstalling", ProtocolKeywords.ReadboardUpdateInstalling);
             Assert.Equal("readboardUpdateCancelled", ProtocolKeywords.ReadboardUpdateCancelled);

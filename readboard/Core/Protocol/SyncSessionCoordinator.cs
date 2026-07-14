@@ -8,6 +8,7 @@ namespace readboard
     internal sealed partial class SyncSessionCoordinator : ISyncSessionCoordinator
     {
         private const int PendingMoveWaitTimeoutMs = 250;
+        internal const string YikeGeometryUnavailableFailureReason = "Yike geometry unavailable.";
         private const int DisposeStateDisposed = 1;
 
         private readonly IReadBoardTransport transport;
@@ -135,7 +136,13 @@ namespace readboard
             lock (stateLock)
             {
                 runtimeState.LastCapturedYikeGeometry = YikeBoardGeometry.CopyOf(geometry);
-                if (runtimeState.LastCapturedYikeGeometry != null && runtimeState.LastCapturedYikeGeometry.IsUsable)
+                if (runtimeState.LastCapturedYikeGeometry == null)
+                {
+                    runtimeState.CurrentBoardPixelWidth = 0;
+                    runtimeState.CurrentBoardPixelHeight = 0;
+                    return;
+                }
+                if (runtimeState.LastCapturedYikeGeometry.IsUsable)
                 {
                     runtimeState.CurrentBoardPixelWidth = runtimeState.LastCapturedYikeGeometry.Bounds.Width;
                     runtimeState.CurrentBoardPixelHeight = runtimeState.LastCapturedYikeGeometry.Bounds.Height;
@@ -660,6 +667,8 @@ namespace readboard
                     return currentHost.HandleQuitRequest;
                 case ProtocolMessageKind.ReadboardUpdateSupported:
                     return currentHost.HandleReadboardUpdateSupported;
+                case ProtocolMessageKind.ReadboardUpdatePackageV2Supported:
+                    return currentHost.HandleReadboardUpdatePackageV2Supported;
                 case ProtocolMessageKind.ReadboardUpdateInstalling:
                     return currentHost.HandleReadboardUpdateInstalling;
                 case ProtocolMessageKind.ReadboardUpdateCancelled:

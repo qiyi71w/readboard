@@ -190,11 +190,16 @@ UI 是 WinForms，主窗口逻辑主要在 `Form1.cs`。项目启用了 `HighDpi
 [assembly: AssemblyInformationalVersion("v3.0.0")]
 ```
 
-打包脚本用这个版本生成目录名：
+打包脚本用这个版本按产品线生成目录和 ZIP 名：
 
 ```text
-release/readboard-github-release-v3.0.0
+v3.0.x: release/readboard-github-release-v3.0.9.zip
+v3.1.0+: release/readboard-webview2-v3.1.0.zip
 ```
+
+生成 ZIP 时还会写出同名 `.zip.sha256` 文件，并打印 `PackageSha256` 和
+`PackageChecksumFile`，供后续通道晋升核对。使用 `-SkipZip` 时不会保留 ZIP
+或 checksum 文件。
 
 默认发布脚本构建 Release 并复制：
 
@@ -209,7 +214,12 @@ release/readboard-github-release-v3.0.0
 
 发布包不包含旧的 `lw.dll`、`Interop.lw.dll`、`MouseKeyboardActivityMonitor.dll` 或 `readboard.exe.config`。
 
-GitHub Actions 在 tag `v*` 上会校验 tag 与 `AssemblyInformationalVersion` 一致，然后跑测试、benchmark acceptance、打包并发布 zip。
+每个正式版本必须在 `docs/releases/<tag>.md` 保留独立、非空的手写 Release
+描述，首个非空行固定为 `# <tag>`。GitHub Actions 在 tag `v*` 上会校验 tag、
+`AssemblyInformationalVersion`、changelog 文件名和预期资产名一致，然后跑测试、
+benchmark acceptance、打包并发布 ZIP 与 SHA-256 sidecar。tag Release 直接使用
+对应 changelog 作为正文，并可追加自动生成的提交列表。手动 dispatch 只上传
+Actions artifact，不创建正式 Release。
 
 ## 改动前后的检查
 

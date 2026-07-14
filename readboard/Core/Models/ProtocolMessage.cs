@@ -16,7 +16,8 @@ namespace readboard
         YikeContext = 11,
         YikeGeometry = 12,
         YikeBrowserSyncStop = 13,
-        AnalysisState = 14
+        AnalysisState = 14,
+        ReadboardUpdatePackageV2Supported = 15
     }
 
     internal sealed class ProtocolMessage

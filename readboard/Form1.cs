@@ -85,6 +85,7 @@ namespace readboard
         private bool closeRequestedBeforeHandle = false;
         private bool isInitializingProtocolState = true;
         private bool hostedUpdateSupported = false;
+        private bool hostedUpdatePackageV2Supported = false;
         private bool suppressAutoPlayColorModeEvents = false;
         private bool suppressAutoPlayMoveModeEvents = false;
         private AutoPlayColorMode lastManualAutoPlayColorMode = AutoPlayColorMode.ManualBlack;
@@ -1447,7 +1448,7 @@ namespace readboard
 
         private void SendClearCommand()
         {
-            sessionCoordinator.SendClear();
+            sessionCoordinator.StopSyncSessionAndClearBoard();
         }
 
         private void SendNoInBoardCommand()
@@ -2001,6 +2002,7 @@ namespace readboard
             lastYikeWindowContext = YikeWindowContext.Unknown();
             lastYikeContextWindowHandle = IntPtr.Zero;
             sessionCoordinator.SetYikeContext(lastYikeWindowContext);
+            sessionCoordinator.SetYikeGeometry(null);
         }
 
         private FoxWindowContext ResolveFoxWindowContext()

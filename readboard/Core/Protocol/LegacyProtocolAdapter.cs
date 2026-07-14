@@ -13,6 +13,8 @@ namespace readboard
             string trimmed = rawLine.Trim();
             if (string.Equals(trimmed, ProtocolKeywords.ReadboardUpdateSupported, StringComparison.Ordinal))
                 return new ProtocolMessage { Kind = ProtocolMessageKind.ReadboardUpdateSupported, RawText = trimmed };
+            if (string.Equals(trimmed, ProtocolKeywords.ReadboardUpdatePackageV2Supported, StringComparison.Ordinal))
+                return new ProtocolMessage { Kind = ProtocolMessageKind.ReadboardUpdatePackageV2Supported, RawText = trimmed };
             if (string.Equals(trimmed, ProtocolKeywords.ReadboardUpdateInstalling, StringComparison.Ordinal))
                 return new ProtocolMessage { Kind = ProtocolMessageKind.ReadboardUpdateInstalling, RawText = trimmed };
             if (string.Equals(trimmed, ProtocolKeywords.ReadboardUpdateCancelled, StringComparison.Ordinal))
@@ -365,13 +367,13 @@ namespace readboard
                 string part = parts[index];
                 if (part.StartsWith("left=", StringComparison.Ordinal))
                 {
-                    left = ParsePositiveInt(part.Substring("left=".Length));
+                    left = ParseNonNegativeInt(part.Substring("left=".Length));
                     continue;
                 }
 
                 if (part.StartsWith("top=", StringComparison.Ordinal))
                 {
-                    top = ParsePositiveInt(part.Substring("top=".Length));
+                    top = ParseNonNegativeInt(part.Substring("top=".Length));
                     continue;
                 }
 
@@ -395,13 +397,13 @@ namespace readboard
 
                 if (part.StartsWith("firstX=", StringComparison.Ordinal))
                 {
-                    firstX = ParsePositiveDouble(part.Substring("firstX=".Length));
+                    firstX = ParseNonNegativeDouble(part.Substring("firstX=".Length));
                     continue;
                 }
 
                 if (part.StartsWith("firstY=", StringComparison.Ordinal))
                 {
-                    firstY = ParsePositiveDouble(part.Substring("firstY=".Length));
+                    firstY = ParseNonNegativeDouble(part.Substring("firstY=".Length));
                     continue;
                 }
 
@@ -446,6 +448,11 @@ namespace readboard
             return int.TryParse(value, out int parsed) && parsed > 0 ? parsed : (int?)null;
         }
 
+        private static int? ParseNonNegativeInt(string value)
+        {
+            return int.TryParse(value, out int parsed) && parsed >= 0 ? parsed : (int?)null;
+        }
+
         private static double? ParsePositiveDouble(string value)
         {
             return double.TryParse(
@@ -454,6 +461,20 @@ namespace readboard
                     CultureInfo.InvariantCulture,
                     out double parsed)
                 && parsed > 0d
+                && !double.IsNaN(parsed)
+                && !double.IsInfinity(parsed)
+                ? parsed
+                : (double?)null;
+        }
+
+        private static double? ParseNonNegativeDouble(string value)
+        {
+            return double.TryParse(
+                    value,
+                    NumberStyles.Float | NumberStyles.AllowThousands,
+                    CultureInfo.InvariantCulture,
+                    out double parsed)
+                && parsed >= 0d
                 && !double.IsNaN(parsed)
                 && !double.IsInfinity(parsed)
                 ? parsed

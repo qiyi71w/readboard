@@ -1,4 +1,6 @@
+using System;
 using System.Drawing;
+using System.IO;
 using System.Text.Json;
 using readboard;
 using Xunit;
@@ -7,6 +9,61 @@ namespace Readboard.VerificationTests.Host
 {
     public sealed class WebViewBridgeTests
     {
+        [Fact]
+        public void MissingRuntime_OffersOfficialEvergreenDownloadRetryAndExit()
+        {
+            Uri installerUri = MainForm.GetWebViewRuntimeInstallerUri();
+            var startInfo = MainForm.CreateWebViewRuntimeDownloadStartInfo(installerUri);
+            string source = File.ReadAllText(Path.Combine(
+                VerificationFixtureLocator.RepositoryRoot(),
+                "readboard",
+                "MainForm.WebView.cs"));
+
+            Assert.Equal(
+                "https://developer.microsoft.com/en-us/microsoft-edge/webview2/",
+                installerUri.AbsoluteUri);
+            Assert.Equal(installerUri.AbsoluteUri, startInfo.FileName);
+            Assert.True(startInfo.UseShellExecute);
+            Assert.Contains("getLangStr(\"WebViewRuntime_openDownload\")", source);
+            Assert.Contains("getLangStr(\"WebViewRuntime_retry\")", source);
+            Assert.Contains("getLangStr(\"WebViewRuntime_exit\")", source);
+            Assert.Contains("AppReleaseVersion.GetCurrentVersion()", source);
+            Assert.DoesNotContain("ReadBoard v3.1.0", source);
+            Assert.Contains("CoreWebView2Environment.GetAvailableBrowserVersionString();", source);
+            Assert.DoesNotContain("InitializeComponent();", GetRuntimeCheckSlice(source));
+        }
+
+        [Fact]
+        public void MissingRuntimePrompt_HasDefaultsAndAllLanguageOverrides()
+        {
+            string root = VerificationFixtureLocator.RepositoryRoot();
+            string defaults = File.ReadAllText(Path.Combine(root, "readboard", "Program.cs"));
+            string[] languages = { "cn", "en", "jp", "kr" };
+            string[] keys =
+            {
+                "WebViewRuntime_caption",
+                "WebViewRuntime_heading",
+                "WebViewRuntime_message",
+                "WebViewRuntime_openDownload",
+                "WebViewRuntime_retry",
+                "WebViewRuntime_exit",
+                "WebViewRuntime_openDownloadFailed"
+            };
+
+            foreach (string key in keys)
+            {
+                Assert.Contains("langItems[\"" + key + "\"]", defaults);
+                foreach (string language in languages)
+                {
+                    string content = File.ReadAllText(Path.Combine(
+                        root,
+                        "readboard",
+                        "language_" + language + ".txt"));
+                    Assert.Contains(key + "=", content);
+                }
+            }
+        }
+
         [Theory]
         [InlineData(1100, 680, 1d)]
         [InlineData(1400, 900, 1d)]
@@ -255,6 +312,20 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(
                 expected,
                 MainForm.ResolveWebViewSyncStatus(communicationEstablished, activeSync));
+        }
+
+        private static string GetRuntimeCheckSlice(string source)
+        {
+            int start = source.IndexOf(
+                "internal bool EnsureWebViewRuntimeAvailable()",
+                StringComparison.Ordinal);
+            Assert.True(start >= 0);
+            int end = source.IndexOf(
+                "private void InitializeWebViewShell()",
+                start,
+                StringComparison.Ordinal);
+            Assert.True(end > start);
+            return source.Substring(start, end - start);
         }
     }
 }

@@ -197,9 +197,41 @@ namespace readboard
             if (!TryCaptureSnapshot(GetRuntimeDependencies(), out snapshot))
                 return PlaceRequestExecutionResult.NoResponse;
             int boardWidth = snapshot.BoardWidth;
-            if (!TryQueuePendingMove(request, runtimeState.CurrentBoardPixelWidth, boardWidth))
+            int boardPixelWidth = runtimeState.CurrentBoardPixelWidth;
+            if (snapshot.SyncMode == SyncMode.Yike && !TryResolveYikePlacementBoardPixelWidth(out boardPixelWidth))
+            {
+                RecordPlacementSkipped(GetRuntimeDependencies(), snapshot, request, YikeGeometryUnavailableFailureReason);
+                TrySendPlaceProtocolError(GetRuntimeDependencies(), YikeGeometryUnavailableFailureReason);
+                return PlaceRequestExecutionResult.CreateResponse(false);
+            }
+            if (!TryQueuePendingMove(request, boardPixelWidth, boardWidth))
                 return PlaceRequestExecutionResult.NoResponse;
             return PlaceRequestExecutionResult.CreateResponse(WaitForPendingMoveResult());
+        }
+
+        private static void TrySendPlaceProtocolError(SyncSessionRuntimeDependencies runtime, string message)
+        {
+            if (runtime == null || runtime.Host == null || string.IsNullOrWhiteSpace(message))
+                return;
+
+            try
+            {
+                runtime.Host.TrySendPlaceProtocolError(message);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceError(ex.ToString());
+            }
+        }
+
+        private bool TryResolveYikePlacementBoardPixelWidth(out int boardPixelWidth)
+        {
+            boardPixelWidth = 0;
+            YikeBoardGeometry geometry = runtimeState.LastCapturedYikeGeometry;
+            if (geometry == null || !geometry.IsUsable)
+                return false;
+            boardPixelWidth = geometry.Bounds.Width;
+            return true;
         }
 
         private bool TryActivateContinuousSyncSession(
@@ -1040,7 +1072,14 @@ namespace readboard
 
             BoardFrame placementFrame = ResolvePlacementFrame(snapshot);
             if (placementFrame == null)
+            {
+                if (snapshot != null && snapshot.SyncMode == SyncMode.Yike && IsOperationCurrent(isOperationCurrent))
+                {
+                    RecordPlacementSkipped(runtime, snapshot, request, YikeGeometryUnavailableFailureReason);
+                    TrySendPlaceProtocolError(runtime, YikeGeometryUnavailableFailureReason);
+                }
                 return false;
+            }
 
             MovePlacementResult result = runtime.PlacementService.Place(new MovePlacementRequest
             {
@@ -1049,6 +1088,7 @@ namespace readboard
                 BringTargetToFront = snapshot.SyncMode == SyncMode.Foreground,
                 ShouldCancel = delegate { return !IsOperationCurrent(isOperationCurrent); }
             });
+            RecordPlacementResult(runtime, snapshot, placementFrame, result);
             if (result != null && result.Success)
             {
                 return true;
@@ -1059,6 +1099,57 @@ namespace readboard
             return false;
         }
 
+        private static void RecordPlacementSkipped(
+            SyncSessionRuntimeDependencies runtime,
+            SyncCoordinatorHostSnapshot snapshot,
+            MoveRequest request,
+            string failureReason)
+        {
+            if (runtime == null || runtime.DebugDiagnostics == null)
+                return;
+
+            BoardDebugDiagnosticRecord record = CreateDebugDiagnosticRecord(
+                snapshot,
+                null,
+                null,
+                CapturePathKind.Unknown,
+                failureReason);
+            if (request != null)
+                record.PlacementCoordinate = new BoardCoordinate(request.X, request.Y);
+            runtime.DebugDiagnostics.RecordPlacementSkipped(record);
+        }
+
+        private static void RecordPlacementResult(
+            SyncSessionRuntimeDependencies runtime,
+            SyncCoordinatorHostSnapshot snapshot,
+            BoardFrame frame,
+            MovePlacementResult result)
+        {
+            if (runtime == null || runtime.DebugDiagnostics == null)
+                return;
+
+            BoardDebugDiagnosticRecord record = CreateDebugDiagnosticRecord(
+                snapshot,
+                frame,
+                null,
+                ResolveCapturePath(frame),
+                result == null ? "Move placement returned no result." : result.FailureReason);
+            if (result != null)
+            {
+                record.PlacementCoordinate = result.Coordinate;
+                record.PlacementPath = result.PlacementPath;
+                record.PlacementTargetHandle = result.TargetHandle;
+                record.PlacementClientX = result.ClientX;
+                record.PlacementClientY = result.ClientY;
+                record.PlacementMouseLParam = result.MouseLParam;
+            }
+
+            if (result != null && result.Success)
+                runtime.DebugDiagnostics.RecordPlacementSuccess(record);
+            else
+                runtime.DebugDiagnostics.RecordPlacementFailure(record);
+        }
+
         private BoardFrame ResolvePlacementFrame(SyncCoordinatorHostSnapshot snapshot)
         {
             BoardFrame frame = runtimeState.CurrentBoardFrame;
@@ -1067,7 +1158,7 @@ namespace readboard
 
             YikeBoardGeometry geometry = runtimeState.LastCapturedYikeGeometry;
             if (geometry == null || !geometry.IsUsable)
-                return frame;
+                return null;
 
             return CreateYikePlacementFrame(frame, geometry, snapshot.SelectedWindowHandle);
         }
@@ -1075,11 +1166,13 @@ namespace readboard
         private BoardFrame CreateYikePlacementFrame(BoardFrame currentFrame, YikeBoardGeometry geometry, IntPtr snapshotSelectedWindowHandle)
         {
             if (geometry == null || !geometry.IsUsable)
-                return currentFrame;
+                return null;
 
             IntPtr selectedHandle = runtimeState.SelectedWindowHandle != IntPtr.Zero
                 ? runtimeState.SelectedWindowHandle
                 : snapshotSelectedWindowHandle;
+            if (selectedHandle == IntPtr.Zero)
+                return null;
 
             WindowDescriptor window = currentFrame == null ? null : currentFrame.Window;
             if (window == null)
@@ -1097,9 +1190,8 @@ namespace readboard
             else
             {
                 window = CloneWindowDescriptor(window);
-                window.Handle = window.Handle == IntPtr.Zero ? selectedHandle : window.Handle;
-                if (!IsUsableWindowBounds(window.Bounds))
-                    window.Bounds = CloneRect(geometry.Bounds);
+                window.Handle = selectedHandle;
+                window.Bounds = CloneRect(geometry.Bounds);
                 window.IsJavaWindow = true;
             }
 

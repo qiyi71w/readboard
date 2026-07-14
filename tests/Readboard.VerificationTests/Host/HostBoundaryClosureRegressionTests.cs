@@ -190,5 +190,29 @@ namespace Readboard.VerificationTests.Host
             string path = Path.Combine(VerificationFixtureLocator.RepositoryRoot(), Path.Combine(segments));
             return File.ReadAllText(path);
         }
+
+        private static string GetMethodSlice(string source, string methodSignature)
+        {
+            int start = source.IndexOf(methodSignature, StringComparison.Ordinal);
+            Assert.True(start >= 0, "Missing method: " + methodSignature);
+
+            int braceStart = source.IndexOf('{', start);
+            Assert.True(braceStart >= 0, "Missing opening brace for: " + methodSignature);
+
+            int depth = 0;
+            for (int i = braceStart; i < source.Length; i++)
+            {
+                if (source[i] == '{')
+                    depth++;
+                else if (source[i] == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                        return source.Substring(start, i - start + 1);
+                }
+            }
+
+            throw new Xunit.Sdk.XunitException("Unbalanced braces for: " + methodSignature);
+        }
     }
 }

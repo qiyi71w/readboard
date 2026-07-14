@@ -10,6 +10,14 @@ namespace readboard
 
         public string LatestVersion { get; internal set; }
 
+        public string ChannelId { get; internal set; }
+
+        public string ChannelStatus { get; internal set; }
+
+        public string IncompatibleNewerVersion { get; internal set; }
+
+        public string IncompatibleMinimumWindowsVersion { get; internal set; }
+
         public string Tag { get; internal set; }
 
         public DateTime? PublishedAt { get; internal set; }
@@ -23,6 +31,8 @@ namespace readboard
         public string AssetDownloadUrl { get; internal set; }
 
         public long? AssetSize { get; internal set; }
+
+        public string AssetSha256 { get; internal set; }
 
         public string ErrorMessage { get; internal set; }
     }

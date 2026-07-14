@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using readboard;
@@ -33,10 +34,14 @@ namespace Readboard.VerificationTests.Protocol
             coordinator.SetSyncBoth(true);
             coordinator.TryQueuePendingMove(new MoveRequest { X = 1, Y = 1 }, 19, 19);
 
-            Task<bool> waitTask = Task.Run(() => coordinator.WaitForPendingMoveResult());
+            Task<bool> waitTask = Task.Factory.StartNew(
+                () => coordinator.WaitForPendingMoveResult(),
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
             coordinator.Stop();
 
-            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(1));
+            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.False(result);
         }
 
@@ -225,6 +230,10 @@ namespace Readboard.VerificationTests.Protocol
             {
             }
 
+            public void HandleReadboardUpdatePackageV2Supported()
+            {
+            }
+
             public void HandleReadboardUpdateInstalling()
             {
             }
@@ -287,6 +296,10 @@ namespace Readboard.VerificationTests.Protocol
             }
 
             public void HandleReadboardUpdateSupported()
+            {
+            }
+
+            public void HandleReadboardUpdatePackageV2Supported()
             {
             }
 

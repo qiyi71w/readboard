@@ -56,6 +56,7 @@ namespace readboard
         internal const string Pass = "pass";
         internal const string DefaultNumericValue = "0";
         internal const string ReadboardUpdateSupported = "readboardUpdateSupported";
+        internal const string ReadboardUpdatePackageV2Supported = "readboardUpdatePackageV2Supported";
         internal const string ReadboardUpdateReadyPrefix = "readboardUpdateReady\t";
         internal const string ReadboardUpdateInstalling = "readboardUpdateInstalling";
         internal const string ReadboardUpdateCancelled = "readboardUpdateCancelled";

@@ -19,6 +19,7 @@ ReadBoard 仍是 LizzieYzy-Next 调用的 Windows 棋盘同步工具。它负责
 - `docs/specs/2026-04-22-dotnet10-upgrade-design.md`: 旧 non-goal 写过“不迁移到 WPF/MAUI/Blazor”，未禁止 WebView2；“不改变与 LizzieYzy-Next 的通信协议”仍保留。
 - `docs/specs/2026-05-04-board-debug-diagnostics-writer.md`: 调试诊断写盘是异步文件诊断，不应被 UI 日志面板改成同步热路径。
 - `docs/specs/2026-05-01-readboard-hosted-auto-update-design.md`: 更新流程和宿主托管安装协议保持不变。
+- `docs/specs/2026-07-13-update-channels-and-legacy-release-design.md`: v3.1.0 起使用 `main` 通道和 `readboard-webview2-<tag>.zip`；只有声明 v2 包能力的宿主可托管安装该资产，旧系统维护分支固定为 `legacy/winforms`。
 - `docs/specs/2026-05-20-fox-auto-play-color-detection-design.md`、`2026-06-24-gma-engine-decision-autoplay-design.md`、`2026-06-26-last-move-source-gma-turn-trust-design.md`: 自动落子和 GMA 是授权/参数/协议行为，不是 ReadBoard 内部引擎面板。
 
 ## 目标
@@ -200,7 +201,7 @@ ReadBoard 仍是 LizzieYzy-Next 调用的 Windows 棋盘同步工具。它负责
 
 无边框主窗口必须保留原生窗口体验：四边和四角可拖拽调整尺寸，双击标题栏最大化或还原，拖到屏幕边缘可触发 Aero Snap，`Win + 方向键`、任务栏还原和系统最大化命令正常工作。最大化按钮悬停时应支持 Windows 11 Snap Layouts；最大化后窗口不得覆盖任务栏，边缘不再返回缩放命中。
 
-WebView2 依赖固定为 `Microsoft.Web.WebView2 1.0.4078.44`，使用 Evergreen Runtime。启动时检查运行时；缺失时显示明确错误，不回退到旧 WinForms 主界面。
+WebView2 依赖固定为 `Microsoft.Web.WebView2 1.0.4078.44`，使用系统共享的 Evergreen Runtime。启动时检查运行时；缺失时使用原生提示提供微软官方下载入口、重试和退出，不静默安装，也不回退到旧 WinForms 主界面。
 
 WebView2 资源放在本地静态目录，随应用输出：
 
@@ -255,7 +256,7 @@ UI 日志是内存环形缓冲，默认保留最近 100 行。来源只包括面
 - 启动失败、无宿主参数、pipe/TCP 选择逻辑保持不变。
 - 语言资源第一版复用现有 `Program.langItems` 注入前端，避免维护第二套本地化源。
 - WebView2 运行时不可用时给出明确错误提示；不回退到旧 WinForms UI。
-- 当前主线只支持 Windows 10/11；Windows 7 由独立 `legacy/win7` 分支有限维护，不参与本次 WebView2 迁移。
+- 当前主线最低支持 Windows 10 version 1809（10.0.17763）；更旧系统由独立 `legacy/winforms` 维护线有限维护，不参与本次 WebView2 迁移。
 - 棋盘框选、放大镜和跨窗口捕获覆盖层继续使用原生 WinForms；它们是捕获辅助层，不是旧设置或业务对话框回退。
 
 ## 实施顺序
@@ -279,6 +280,8 @@ UI 日志是内存环形缓冲，默认保留最近 100 行。来源只包括面
 - 设置、规则、关于、更新和身份选择与控制中心使用同一视觉系统，不出现旧 WinForms 对话框。
 - 设置取消不会写盘，恢复默认必须保存后才生效；错误输入就地显示。
 - 更新弹层保持现有托管安装和手动下载回退行为，15 秒超时不变。
+- 更新弹层完整呈现可更新、已最新、retired、版本高于通道、无匹配和失败状态；`readboard-webview2-<tag>.zip` 只有在宿主声明 v2 包能力后才提供托管安装。
+- 缺少 Evergreen Runtime 时显示原生提示，提供微软官方下载入口、重试和退出；发布包不携带 Fixed Version Runtime。
 - 身份选择保留截图预览、本次使用、保存并使用和清除保存。
 - 100% / 125% / 150% DPI 下主界面不裁切、不重叠。
 - 客户区在 `1100 x 680` 到 `960 x 600` 之间缩放时，界面整体同步缩放，文字不折行且不出现横向或垂直滚动条。

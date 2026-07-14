@@ -103,6 +103,37 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public void parses_yike_geometry_with_zero_origin_and_zero_first_intersection()
+        {
+            ProtocolMessage msg = new LegacyProtocolAdapter().ParseInbound(
+                "yikeGeometry left=0 top=0 width=655 height=655 board=19 firstX=0 firstY=0 cellX=31.9444 cellY=31.9446");
+
+            Assert.Equal(ProtocolMessageKind.YikeGeometry, msg.Kind);
+            Assert.NotNull(msg.YikeGeometry);
+            Assert.Equal(0, msg.YikeGeometry.Bounds.X);
+            Assert.Equal(0, msg.YikeGeometry.Bounds.Y);
+            Assert.Equal(655, msg.YikeGeometry.Bounds.Width);
+            Assert.Equal(655, msg.YikeGeometry.Bounds.Height);
+            Assert.Equal(19, msg.YikeGeometry.BoardSize);
+            Assert.Equal(0d, msg.YikeGeometry.FirstIntersectionX.Value, 10);
+            Assert.Equal(0d, msg.YikeGeometry.FirstIntersectionY.Value, 10);
+            Assert.Equal(31.9444d, msg.YikeGeometry.CellWidth, 10);
+            Assert.Equal(31.9446d, msg.YikeGeometry.CellHeight, 10);
+        }
+
+        [Theory]
+        [InlineData("yikeGeometry left=0 top=0 width=0 height=655 board=19")]
+        [InlineData("yikeGeometry left=0 top=0 width=655 height=0 board=19")]
+        [InlineData("yikeGeometry left=0 top=0 width=655 height=655 board=0")]
+        public void rejects_yike_geometry_with_non_positive_size_fields(string rawLine)
+        {
+            ProtocolMessage msg = new LegacyProtocolAdapter().ParseInbound(rawLine);
+
+            Assert.Equal(ProtocolMessageKind.YikeGeometry, msg.Kind);
+            Assert.Null(msg.YikeGeometry);
+        }
+
+        [Fact]
         public void parses_bare_yike_geometry_as_clear_signal()
         {
             ProtocolMessage msg = new LegacyProtocolAdapter().ParseInbound("yikeGeometry");
