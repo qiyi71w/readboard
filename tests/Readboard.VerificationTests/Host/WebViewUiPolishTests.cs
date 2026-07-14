@@ -95,6 +95,35 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void ControlCenter_DisabledControlsHaveScopedLightAndDarkVisualStates()
+        {
+            string styles = LoadWebViewAsset("styles.css");
+            string script = LoadWebViewAsset("app.js");
+
+            Assert.Contains("--disabled-border: #c8d2dc;", styles);
+            Assert.Contains("--disabled-selected-background: #dfe7ee;", styles);
+            Assert.Contains("--disabled-selected-indicator: #8494a5;", styles);
+            Assert.Contains("--disabled-border: #484848;", styles);
+            Assert.Contains("--disabled-selected-background: #383838;", styles);
+            Assert.Contains("--disabled-selected-indicator: #606060;", styles);
+            Assert.Contains("button:disabled { color: var(--disabled-text); border-color: var(--disabled-border); background: var(--disabled-background); cursor: default; }", styles);
+            Assert.Contains(".page[data-page-panel=\"controlCenter\"] label:has(input:disabled) { color: var(--disabled-text); cursor: default; }", styles);
+            Assert.Contains(".page[data-page-panel=\"controlCenter\"] input[type=\"radio\"]:disabled, .page[data-page-panel=\"controlCenter\"] input[type=\"checkbox\"]:disabled { accent-color: var(--disabled-selected-indicator); cursor: default; }", styles);
+            Assert.Contains(".page[data-page-panel=\"controlCenter\"] input[type=\"number\"]:disabled { color: var(--disabled-text); border-color: var(--disabled-border); background: var(--disabled-background); cursor: default; }", styles);
+            Assert.Contains(".page[data-page-panel=\"controlCenter\"] .choice-grid label:has(input:disabled) { border-color: var(--disabled-border); background: var(--disabled-background); }", styles);
+            Assert.Contains(".page[data-page-panel=\"controlCenter\"] .choice-grid label:has(input:checked:disabled) { background: var(--disabled-selected-background); }", styles);
+            Assert.Contains(".page[data-page-panel=\"controlCenter\"] .segments:has(input:disabled) { border-color: var(--disabled-border); background: var(--disabled-background); }", styles);
+            Assert.Contains(".page[data-page-panel=\"controlCenter\"] .segments label:has(input:checked:disabled) { color: var(--disabled-text); background: var(--disabled-selected-background); }", styles);
+            Assert.Contains(".page[data-page-panel=\"controlCenter\"] .color-row:has(input:disabled) > b, .page[data-page-panel=\"controlCenter\"] .placement-row:has(input:disabled) > b, .page[data-page-panel=\"controlCenter\"] .board-size-row:has(input:disabled) > b { color: var(--disabled-text); }", styles);
+            Assert.DoesNotContain(".page[data-page-panel=\"controlCenter\"] label:has(input:disabled) { opacity:", styles);
+
+            Assert.Contains("setDisabled('input[name=\"platform\"], input[name=\"boardSize\"]', !control.configurationEnabled);", script);
+            Assert.Contains("setDisabled('input[name=\"color\"], input[name=\"placement\"], #ai-time, #playouts', !control.autoPlayControlsEnabled);", script);
+            Assert.Contains("setDisabled(\"#first-policy\", !control.firstPolicyEnabled);", script);
+            Assert.Contains("setDisabled(\"#show-on-board\", !control.showOnBoardEnabled);", script);
+        }
+
+        [Fact]
         public void HostStatus_DistinguishesCompatibleModeFromConfirmedCommunication()
         {
             string html = LoadWebViewAsset("index.html");
