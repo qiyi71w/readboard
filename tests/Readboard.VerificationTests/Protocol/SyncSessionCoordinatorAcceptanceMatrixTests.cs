@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using readboard;
@@ -53,11 +54,11 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal(move.X, dispatched.X);
             Assert.Equal(move.Y, dispatched.Y);
 
-            Task<bool> waitTask = Task.Run(() => coordinator.WaitForPendingMoveResult());
+            Task<bool> waitTask = StartPendingMoveWait(coordinator);
             coordinator.HandlePendingMovePlacementResult(true);
             coordinator.ResolvePendingMove(CreateSnapshot(boardWidth, boardHeight, move), boardWidth);
 
-            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(1));
+            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(5));
 
             Assert.True(result);
             Assert.Equal(
@@ -104,14 +105,14 @@ namespace Readboard.VerificationTests.Protocol
                 },
                 19,
                 19));
-            Task<bool> waitTask = Task.Run(() => coordinator.WaitForPendingMoveResult());
+            Task<bool> waitTask = StartPendingMoveWait(coordinator);
 
             Assert.True(coordinator.TryTakePendingMove(out MoveRequest attempt));
             Assert.Equal(1, attempt.X);
             Assert.Equal(1, attempt.Y);
             coordinator.HandlePendingMovePlacementResult(false);
 
-            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(1));
+            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(5));
 
             Assert.False(result);
             Assert.False(coordinator.TryTakePendingMove(out _));
@@ -179,7 +180,7 @@ namespace Readboard.VerificationTests.Protocol
                 },
                 19,
                 19));
-            Task<bool> waitTask = Task.Run(() => coordinator.WaitForPendingMoveResult());
+            Task<bool> waitTask = StartPendingMoveWait(coordinator);
 
             for (int attemptNumber = 0; attemptNumber < expectedPlacementAttempts; attemptNumber++)
             {
@@ -190,7 +191,7 @@ namespace Readboard.VerificationTests.Protocol
                 coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
             }
 
-            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(1));
+            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(5));
 
             Assert.False(result);
             Assert.False(coordinator.TryTakePendingMove(out _));
@@ -202,6 +203,15 @@ namespace Readboard.VerificationTests.Protocol
             coordinator.BeginKeepSync();
             coordinator.SetSyncBoth(true);
             return coordinator;
+        }
+
+        private static Task<bool> StartPendingMoveWait(SyncSessionCoordinator coordinator)
+        {
+            return Task.Factory.StartNew(
+                () => coordinator.WaitForPendingMoveResult(),
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
         }
 
         private static BoardSnapshot CreateSnapshot(int boardWidth, int boardHeight, MoveRequest move)
