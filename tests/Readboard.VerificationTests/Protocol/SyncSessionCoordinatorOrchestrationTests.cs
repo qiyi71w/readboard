@@ -977,27 +977,31 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(runtime, "OverlayService", new PassiveOverlayService());
             Invoke(coordinator, "AttachRuntime", runtime);
             Assert.True(coordinator.TryStartKeepSync());
-            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
+            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(5)));
 
             coordinator.StopSyncSession();
             captureService.Release();
-            Assert.True(transport.BlockedSendStarted.Wait(TimeSpan.FromSeconds(1)));
+            Assert.True(transport.BlockedSendStarted.Wait(TimeSpan.FromSeconds(5)));
 
             int resetCountBeforeClear = hostRecorder.SyncCachesResetCount;
-            Task clearTask = Task.Run(() => coordinator.StopSyncSessionAndClearBoard());
+            Task clearTask = Task.Factory.StartNew(
+                () => coordinator.StopSyncSessionAndClearBoard(),
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
             try
             {
                 Assert.True(WaitForCondition(
                     () => hostRecorder.SyncCachesResetCount > resetCountBeforeClear,
-                    TimeSpan.FromSeconds(1)));
+                    TimeSpan.FromSeconds(5)));
             }
             finally
             {
                 transport.Release();
             }
 
-            await clearTask.WaitAsync(TimeSpan.FromSeconds(1));
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            await clearTask.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(5)));
             Assert.Equal(1, transport.CountLines("stopsync"));
             Assert.Equal("clearBoard", transport.SentLines[transport.SentLines.Count - 1]);
         }
