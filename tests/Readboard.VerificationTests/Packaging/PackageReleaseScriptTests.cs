@@ -21,7 +21,7 @@ namespace Readboard.VerificationTests
                 PackagingResult result = workspace.RunPackagingScript();
 
                 Assert.NotEqual(0, result.ExitCode);
-                Assert.Contains("发布输出目录", result.Output);
+                Assert.Contains("BuildOutputDir", result.Output);
             }
         }
 
