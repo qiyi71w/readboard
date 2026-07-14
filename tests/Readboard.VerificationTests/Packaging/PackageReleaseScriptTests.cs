@@ -83,6 +83,22 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
+        public void SkipBuild_PlacesWebView2LoaderBesideExecutable()
+        {
+            using (PackagingWorkspace workspace = PackagingWorkspace.Create())
+            {
+                workspace.CreateBuildOutputs();
+
+                PackagingResult result = workspace.RunPackagingScript(skipZip: true);
+
+                Assert.True(result.ExitCode == 0, result.Output);
+                string releaseDirectory = Assert.Single(Directory.GetDirectories(workspace.ReleaseRoot));
+                string releaseAppDirectory = Path.Combine(releaseDirectory, "readboard");
+                Assert.True(File.Exists(Path.Combine(releaseAppDirectory, "WebView2Loader.dll")));
+            }
+        }
+
+        [Fact]
         public void SkipBuild_SkipZip_RefreshesReleaseExeTimestampWithinPackagingWindow()
         {
             using (PackagingWorkspace workspace = PackagingWorkspace.Create())
