@@ -196,6 +196,93 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("webViewSettingsDialog = null;", settingsBridge);
         }
 
+        [Fact]
+        public void LocalizedPlatformChoices_ReserveEachLabelSingleLineWidth()
+        {
+            string styles = LoadWebViewAsset("styles.css");
+
+            Assert.Contains(
+                ".choice-grid.platforms { grid-template-columns: repeat(7, minmax(max-content, 1fr)); }",
+                styles);
+        }
+
+        [Fact]
+        public void LocalizedSettingSwitches_ReserveAStableControlColumn()
+        {
+            string styles = LoadWebViewAsset("styles.css");
+
+            Assert.Contains(
+                ".toggle-grid > label, .diagnostics { display: grid; min-width: 0; min-height: 42px; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; gap: 10px; }",
+                styles);
+        }
+
+        [Fact]
+        public void LocalizedSettingDescriptions_UseCompactSingleLineCopy()
+        {
+            AssertLanguageValue("en", "WebView_autoMinimizeDescription", "Minimize after one-time sync");
+            AssertLanguageValue("en", "WebView_backgroundAnalysisDescription", "Analyze during the opponent's turn");
+            AssertLanguageValue("en", "WebView_magnifierDescription", "Magnify while selecting the board");
+            AssertLanguageValue("en", "WebView_enhancedCaptureDescription", "Capture off-screen window content");
+            AssertLanguageValue("en", "WebView_placementValidationDescription", "Verify the move after placement");
+
+            AssertLanguageValue("jp", "WebView_autoMinimizeDescription", "単発同期後に最小化");
+            AssertLanguageValue("jp", "WebView_backgroundAnalysisDescription", "双方向同期中も相手番を分析");
+            AssertLanguageValue("jp", "WebView_magnifierDescription", "盤面選択中に拡大表示");
+            AssertLanguageValue("jp", "WebView_enhancedCaptureDescription", "画面外のウィンドウも取得");
+            AssertLanguageValue("jp", "WebView_placementValidationDescription", "着手後に配置結果を確認");
+
+            AssertLanguageValue("kr", "WebView_autoMinimizeDescription", "일회 동기화 후 창 최소화");
+            AssertLanguageValue("kr", "WebView_backgroundAnalysisDescription", "양방향 동기화 중 상대 차례 분석");
+            AssertLanguageValue("kr", "WebView_magnifierDescription", "바둑판 선택 중 확대 표시");
+            AssertLanguageValue("kr", "WebView_enhancedCaptureDescription", "화면 밖 창 내용도 캡처");
+            AssertLanguageValue("kr", "WebView_placementValidationDescription", "착수 후 배치 결과 확인");
+        }
+
+        [Fact]
+        public void CompactControls_UseNaturalEnglishCopy()
+        {
+            AssertLanguageValue("en", "MainForm_chkBothSync", "Two-way sync");
+            AssertLanguageValue("en", "MainForm_chkAutoPlay", "Auto-play");
+            AssertLanguageValue("en", "MainForm_radioBlack", "Black");
+            AssertLanguageValue("en", "MainForm_radioWhite", "White");
+            AssertLanguageValue("en", "MainForm_lblTime", "Time per move");
+            AssertLanguageValue("en", "MainForm_lblTotalVisits", "Total visits (opt.)");
+            AssertLanguageValue("en", "MainForm_lblBestMoveVisits", "Preferred visits (opt.)");
+            AssertLanguageValue("en", "MainForm_btnClickBoard", "Select board (click inside)");
+            AssertLanguageValue("en", "MainForm_btnCircleBoard", "Drag-select board");
+            AssertLanguageValue("en", "MainForm_btnCircleRow1", "Select first row");
+            AssertLanguageValue("en", "MainForm_chkShowInBoard", "Show on source board");
+            AssertLanguageValue("en", "MainForm_btnOneTimeSync", "Sync once");
+            AssertLanguageValue("en", "MainForm_btnClearBoard", "Clear board");
+            AssertLanguageValue("en", "SettingsForm_btnReset", "Reset all");
+            AssertLanguageValue("en", "SettingsForm_chkEnhanceScreen", "Enhanced capture");
+        }
+
+        [Fact]
+        public void AboutPage_LabelsItsWindowsValueAsSupportedOs()
+        {
+            AssertLanguageValue("cn", "WebView_platformRuntime", "支持系统");
+            AssertLanguageValue("en", "WebView_platformRuntime", "Supported OS");
+            AssertLanguageValue("jp", "WebView_platformRuntime", "対応OS");
+            AssertLanguageValue("kr", "WebView_platformRuntime", "지원 OS");
+        }
+
+        [Fact]
+        public void JapanesePlatformModes_UseCompactSemanticLabels()
+        {
+            AssertLanguageValue("jp", "MainForm_rdoFoxBack", "野狐（背景着手）");
+            AssertLanguageValue("jp", "MainForm_rdoBack", "その他（背景）");
+            AssertLanguageValue("jp", "MainForm_rdoFore", "その他（前面）");
+        }
+
+        [Fact]
+        public void LocalizedDiagnostics_UseCompactCopy()
+        {
+            AssertLanguageValue("en", "WebView_debugDiagnosticsDescription", "Save diagnostic capture details");
+            AssertLanguageValue("jp", "WebView_debugDiagnosticsDescription", "調査用のキャプチャ情報を保存");
+            AssertLanguageValue("kr", "WebView_debugDiagnosticsDescription", "문제 해결용 캡처 정보 저장");
+        }
+
         private static string LoadWebViewAsset(string fileName)
         {
             string path = Path.Combine(
@@ -213,6 +300,18 @@ namespace Readboard.VerificationTests.Host
                 "readboard",
                 fileName);
             return File.ReadAllText(path);
+        }
+
+        private static void AssertLanguageValue(string language, string key, string expected)
+        {
+            string line = Array.Find(
+                File.ReadAllLines(Path.Combine(
+                    VerificationFixtureLocator.RepositoryRoot(),
+                    "readboard",
+                    "language_" + language + ".txt")),
+                candidate => candidate.StartsWith(key + "=", StringComparison.Ordinal));
+
+            Assert.Equal(key + "=" + expected, line);
         }
     }
 }
