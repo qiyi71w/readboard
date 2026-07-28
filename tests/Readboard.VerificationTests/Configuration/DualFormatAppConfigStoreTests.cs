@@ -71,7 +71,7 @@ namespace Readboard.VerificationTests
                         doc.RootElement.GetProperty("MoveVerifyMaxAttempts").GetInt32());
                 }
                 Assert.Equal("96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5", legacyMain);
-                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc_1_1100_680_0", legacyOther);
+                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc_1_1100_680_0_host", legacyOther);
             }
         }
 
@@ -119,7 +119,55 @@ namespace Readboard.VerificationTests
                 Assert.Equal(1234, loaded.WindowClientWidth);
                 Assert.Equal(777, loaded.WindowClientHeight);
                 Assert.True(loaded.WindowMaximized);
-                Assert.EndsWith("_1234_777_1", File.ReadAllText(workspace.PathFor("config_readboard_others.txt")));
+                Assert.EndsWith("_1234_777_1_host", File.ReadAllText(workspace.PathFor("config_readboard_others.txt")));
+            }
+        }
+
+        [Fact]
+        public void Save_RoundTripsLanguagePreferenceAcrossJsonAndLegacyMirror()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, SaveMachineKey, ProtocolVersion);
+                AppConfig config = AppConfig.CreateDefault(ProtocolVersion, SaveMachineKey);
+                config.LanguagePreference = "jp";
+
+                store.Save(config);
+                AppConfig loaded = store.Load().Config;
+
+                using (JsonDocument doc = JsonDocument.Parse(
+                    File.ReadAllText(workspace.PathFor("config.readboard.json"))))
+                {
+                    Assert.Equal("jp", doc.RootElement.GetProperty("LanguagePreference").GetString());
+                }
+                Assert.Equal("jp", loaded.LanguagePreference);
+                Assert.EndsWith("_jp", File.ReadAllText(workspace.PathFor("config_readboard_others.txt")));
+            }
+        }
+
+        [Theory]
+        [InlineData("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc_1_1100_680_0", "host")]
+        [InlineData("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc_1_1100_680_0_jp", "jp")]
+        public void Load_ImportsLanguagePreferenceFromLegacyOtherWithoutJson(
+            string legacyOther,
+            string expectedLanguage)
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard.txt"),
+                    "96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5");
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard_others.txt"),
+                    legacyOther);
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(
+                    workspace.RootPath,
+                    SaveMachineKey,
+                    ProtocolVersion);
+
+                AppConfig loaded = store.Load().Config;
+
+                Assert.Equal(expectedLanguage, loaded.LanguagePreference);
             }
         }
 
@@ -513,7 +561,7 @@ namespace Readboard.VerificationTests
                     Assert.True(doc.RootElement.GetProperty("DebugDiagnosticsEnabled").GetBoolean());
                 }
                 Assert.True(loaded.DebugDiagnosticsEnabled);
-                Assert.Equal(22, legacyOther.Split('_').Length);
+                Assert.Equal(23, legacyOther.Split('_').Length);
             }
         }
     }

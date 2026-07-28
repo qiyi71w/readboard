@@ -104,6 +104,7 @@ namespace readboard
                 WhiteOffset = config.WhiteOffset.ToString(),
                 WhitePercent = config.WhitePercent.ToString(),
                 Theme = ResolveWebViewTheme(config.ColorMode),
+                Language = AppConfig.NormalizeLanguagePreference(config.LanguagePreference),
                 Diagnostics = config.DebugDiagnosticsEnabled,
                 Dirty = false
             };
@@ -156,6 +157,7 @@ namespace readboard
             updated.VerifyMove = settings.PlacementValidation;
             updated.DebugDiagnosticsEnabled = settings.Diagnostics;
             updated.ColorMode = ResolveColorMode(settings.Theme);
+            updated.LanguagePreference = AppConfig.NormalizeLanguagePreference(settings.Language);
             return true;
         }
 
@@ -185,7 +187,11 @@ namespace readboard
                 || key == "whiteOffset"
                 || key == "whitePercent")
                 return value.ValueKind == JsonValueKind.String;
-            return key == "theme" && IsAllowedString(value, "system", "dark", "light");
+            if (key == "theme")
+                return IsAllowedString(value, "system", "dark", "light");
+            return key == "language"
+                && value.ValueKind == JsonValueKind.String
+                && AppConfig.IsSupportedLanguagePreference(value.GetString());
         }
 
         private void UpdateWebViewSetting(JsonElement payload)
@@ -214,6 +220,7 @@ namespace readboard
                 case "whiteOffset": settings.WhiteOffset = value.GetString(); break;
                 case "whitePercent": settings.WhitePercent = value.GetString(); break;
                 case "theme": settings.Theme = value.GetString(); break;
+                case "language": settings.Language = value.GetString(); break;
             }
             settings.Errors.Remove(key);
             settings.Dirty = true;
@@ -228,6 +235,12 @@ namespace readboard
 
             Program.CurrentContext.Config = updated;
             PersistConfiguration();
+            bool languageChanged = Program.ApplyLanguagePreference(updated.LanguagePreference);
+            if (languageChanged)
+            {
+                webViewTextSent = false;
+                ApplyMainWindowTitle();
+            }
             resetBtnKeepSyncName();
             sendPonderStatus();
             webViewSettingsDraft = CreateWebViewSettingsState(Program.CurrentConfig);

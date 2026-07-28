@@ -144,11 +144,11 @@
 html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 html.emergency, html.emergency body { overflow: auto; }
 body { background: var(--window-background); }
-button, input { font: inherit; color: inherit; }
+button, input, select { font: inherit; color: inherit; }
 button { min-height: 37px; padding: 0 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--control-background); cursor: pointer; white-space: nowrap; }
 button:hover:not(:disabled) { border-color: var(--accent); background: var(--control-hover-background); }
 button:active:not(:disabled) { background: var(--control-active-background); }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .segments label:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 button:disabled { color: var(--disabled-text); border-color: var(--disabled-border); background: var(--disabled-background); cursor: default; }
 .primary { color: var(--primary-text-on-background); border-color: var(--primary-border); background: var(--primary-background); }
@@ -282,8 +282,13 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .page-heading p, .card p, small { color: var(--secondary-text); }
 .page-heading p { margin: 0; }
 .settings-card { margin: 0; padding: 12px 14px 10px; }
+.page[data-page-panel="settings"].active { gap: 5px; }
+.page[data-page-panel="settings"] .page-heading { padding-block: 0; }
+.page[data-page-panel="settings"] .settings-card { padding: 8px 12px 7px; }
 .toggle-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 24px; }
 .toggle-grid > label, .diagnostics { display: grid; min-width: 0; min-height: 42px; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; gap: 10px; }
+.page[data-page-panel="settings"] .toggle-grid { gap-block: 4px; }
+.page[data-page-panel="settings"] .toggle-grid > label { min-height: 36px; }
 .toggle-grid span, .diagnostics span { display: grid; min-width: 0; gap: 2px; }
 .toggle-grid b, .toggle-grid small, .diagnostics b, .diagnostics small { white-space: nowrap; }
 .toggle-grid input, .diagnostics input { appearance: none; flex: 0 0 auto; width: 44px; height: 24px; margin: 0; border-radius: 20px; background: var(--switch-track); }
@@ -297,11 +302,17 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .input-grid span input { width: 100%; padding-right: 50px; }
 .input-grid i { position: absolute; top: 9px; right: 10px; color: var(--secondary-text); font-style: normal; font-weight: 400; }
 .field-error { min-height: 12px; font-size: 11px; color: var(--danger); }
+.page[data-page-panel="settings"] .field-error:empty { display: none; }
 .appearance-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(200px, 1fr) 160px; align-items: center; gap: 24px; }
 .appearance-theme { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
 .appearance-theme .segments { flex: 1; }
 .appearance-theme .segments label { flex: 1; padding-inline: 8px; }
+.appearance-language { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(200px, 1fr) 160px; align-items: center; gap: 24px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+.appearance-language > span { display: grid; min-width: 0; gap: 2px; }
+.appearance-language b, .appearance-language small { white-space: nowrap; }
+.appearance-language select { grid-column: 2 / -1; width: 100%; min-height: 37px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--input-background); }
 .settings-actions, .manual-card, .update-card { display: flex; min-height: 48px; align-items: center; justify-content: space-between; margin: 0; padding: 6px 10px; }
+.page[data-page-panel="settings"] .settings-actions { min-height: 44px; padding-block: 3px; }
 .settings-actions > span { flex: 1; padding-left: 14px; color: var(--secondary-text); }
 .settings-actions > div, .update-card > div:last-child { display: flex; gap: 8px; }
 

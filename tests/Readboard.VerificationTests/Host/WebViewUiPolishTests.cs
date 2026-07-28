@@ -98,6 +98,45 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void SettingsLanguageSelector_UsesTheExistingAppearanceControlStyle()
+        {
+            string html = LoadWebViewAsset("index.html");
+            string styles = LoadWebViewAsset("styles.css");
+            string script = LoadWebViewAsset("app.js");
+
+            Assert.Contains("<div class=\"appearance-language\">", html);
+            Assert.Contains("<select id=\"settings-language\" data-setting=\"language\">", html);
+            Assert.Contains("<option value=\"host\" data-i18n=\"WebView_followHostLanguage\">跟随 LizzieYzy-Next</option>", html);
+            Assert.Contains("<option value=\"cn\">简体中文</option><option value=\"en\">English</option><option value=\"jp\">日本語</option><option value=\"kr\">한국어</option>", html);
+            Assert.Contains("button, input, select { font: inherit; color: inherit; }", styles);
+            Assert.Contains(".appearance-language { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(200px, 1fr) 160px; align-items: center; gap: 24px;", styles);
+            Assert.Contains(".appearance-language select { grid-column: 2 / -1;", styles);
+            Assert.Contains(".page[data-page-panel=\"settings\"] .field-error:empty { display: none; }", styles);
+            Assert.Contains(".page[data-page-panel=\"settings\"] .settings-card { padding: 8px 12px 7px; }", styles);
+            Assert.Contains("input instanceof HTMLSelectElement", script);
+
+            AssertLanguageValue("cn", "WebView_language", "界面语言");
+            AssertLanguageValue("en", "WebView_language", "Interface language");
+            AssertLanguageValue("jp", "WebView_language", "表示言語");
+            AssertLanguageValue("kr", "WebView_language", "인터페이스 언어");
+        }
+
+        [Fact]
+        public void SavingLanguagePreference_ImmediatelyRefreshesWebViewText()
+        {
+            string settingsBridge = LoadReadboardSource("MainForm.WebView.Settings.cs");
+            string program = LoadReadboardSource("Program.cs");
+
+            Assert.Contains("bool languageChanged = Program.ApplyLanguagePreference(updated.LanguagePreference);", settingsBridge);
+            Assert.Contains("if (languageChanged)", settingsBridge);
+            Assert.Contains("webViewTextSent = false;", settingsBridge);
+            Assert.Contains("ApplyMainWindowTitle();", settingsBridge);
+            Assert.DoesNotContain("ResetMainWindowTitle();", settingsBridge);
+            Assert.Contains("langItems.Clear();", program);
+            Assert.Contains("LoadLanguageItems(AppDomain.CurrentDomain.BaseDirectory, effectiveLanguage);", program);
+        }
+
+        [Fact]
         public void EnginePlacement_DisablesFirstPolicyAfterRestoringItsValue()
         {
             string script = LoadWebViewAsset("app.js");

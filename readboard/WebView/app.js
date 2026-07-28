@@ -73,6 +73,7 @@
       whiteOffset: 0,
       whitePercent: 85,
       theme: "system",
+      language: "host",
       diagnostics: false,
       dirty: false,
       errors: {}
@@ -533,7 +534,7 @@
 
   document.addEventListener("change", event => {
     const input = event.target;
-    if (!(input instanceof HTMLInputElement)) return;
+    if (!(input instanceof HTMLInputElement) && !(input instanceof HTMLSelectElement)) return;
     if (input.dataset.setting) {
       send("settings.update", {
         key: input.dataset.setting,

@@ -25,6 +25,17 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void LanguagePreference_DefaultsToHostAndResolvesSupportedLanguage()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+
+            Assert.Equal("host", config.LanguagePreference);
+            Assert.Equal("jp", Program.ResolveEffectiveLanguage("host", "jp"));
+            Assert.Equal("cn", Program.ResolveEffectiveLanguage("host", "unsupported"));
+            Assert.Equal("en", Program.ResolveEffectiveLanguage("en", "kr"));
+        }
+
+        [Fact]
         public void TryBuildConfig_ReportsFieldErrorsWithoutChangingCurrentConfig()
         {
             AppConfig current = AppConfig.CreateDefault("220430", "TEST");
@@ -64,13 +75,30 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal("TEST", updated.MachineKey);
         }
 
+        [Fact]
+        public void LanguagePreference_IsDraftedAndMappedWithoutChangingCurrentConfig()
+        {
+            AppConfig current = AppConfig.CreateDefault("220430", "TEST");
+            ReadBoardSettingsUiState state = MainForm.CreateWebViewSettingsState(current);
+
+            Assert.Equal("host", state.Language);
+
+            state.Language = "kr";
+
+            Assert.True(MainForm.TryBuildWebViewSettingsConfig(current, state, out AppConfig updated));
+            Assert.Equal("host", current.LanguagePreference);
+            Assert.Equal("kr", updated.LanguagePreference);
+        }
+
         [Theory]
         [InlineData("{\"type\":\"settings.update\",\"payload\":{\"key\":\"diagnostics\",\"value\":true}}", true)]
         [InlineData("{\"type\":\"settings.update\",\"payload\":{\"key\":\"syncInterval\",\"value\":\"250\"}}", true)]
         [InlineData("{\"type\":\"settings.update\",\"payload\":{\"key\":\"theme\",\"value\":\"dark\"}}", true)]
+        [InlineData("{\"type\":\"settings.update\",\"payload\":{\"key\":\"language\",\"value\":\"jp\"}}", true)]
         [InlineData("{\"type\":\"settings.save\",\"payload\":{}}", true)]
         [InlineData("{\"type\":\"settings.update\",\"payload\":{\"key\":\"diagnostics\",\"value\":\"true\"}}", false)]
         [InlineData("{\"type\":\"settings.update\",\"payload\":{\"key\":\"unknown\",\"value\":true}}", false)]
+        [InlineData("{\"type\":\"settings.update\",\"payload\":{\"key\":\"language\",\"value\":\"unsupported\"}}", false)]
         [InlineData("{\"type\":\"settings.save\",\"payload\":{\"extra\":true}}", false)]
         public void CommandValidation_IsStrict(string json, bool expected)
         {

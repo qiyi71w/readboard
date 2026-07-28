@@ -268,9 +268,34 @@ namespace readboard
             AppConfigLoadResult loadResult = configStore.Load();
             runtimeContext = new RuntimeContext(options, loadResult.Config, new SessionState());
             runtimeContext.HasConfigFile = loadResult.HasExistingConfig;
-            runtimeContext.Language = options.Language;
+            runtimeContext.Language = ResolveEffectiveLanguage(
+                loadResult.Config.LanguagePreference,
+                options.Language);
             AddDefaultLangItems();
-            LoadLanguageItems(baseDirectory, options.Language);
+            LoadLanguageItems(baseDirectory, runtimeContext.Language);
+        }
+
+        internal static string ResolveEffectiveLanguage(string preference, string hostLanguage)
+        {
+            string normalizedPreference = AppConfig.NormalizeLanguagePreference(preference);
+            if (normalizedPreference != AppConfig.FollowHostLanguage)
+                return normalizedPreference;
+            return AppConfig.IsSupportedLanguage(hostLanguage) ? hostLanguage : "cn";
+        }
+
+        internal static bool ApplyLanguagePreference(string preference)
+        {
+            string effectiveLanguage = ResolveEffectiveLanguage(
+                preference,
+                runtimeContext.LaunchOptions.Language);
+            if (string.Equals(runtimeContext.Language, effectiveLanguage, StringComparison.Ordinal))
+                return false;
+
+            runtimeContext.Language = effectiveLanguage;
+            langItems.Clear();
+            AddDefaultLangItems();
+            LoadLanguageItems(AppDomain.CurrentDomain.BaseDirectory, effectiveLanguage);
+            return true;
         }
 
         private static bool TryStartSession(IWin32Window owner)
@@ -327,6 +352,9 @@ namespace readboard
             langItems["WebView_candidateRowNumber"] = "玩家行 {0}";
             langItems["WebView_integerAtLeast"] = "请输入不小于 {0} 的整数";
             langItems["WebView_integerRange"] = "请输入 {0}–{1} 之间的整数";
+            langItems["WebView_language"] = "界面语言";
+            langItems["WebView_languageDescription"] = "保存后立即应用";
+            langItems["WebView_followHostLanguage"] = "跟随 LizzieYzy-Next";
             langItems["WebView_showInBoardHintForeground"] = "[前台]方式同步时不支持此功能。选点显示在原棋盘上后，原棋盘将无法落子。";
             langItems["WebView_showInBoardHintRestore"] = "可通过勾选“双向同步”选项恢复落子功能。";
             langItems["WebView_moveMode"] = "落子方式";

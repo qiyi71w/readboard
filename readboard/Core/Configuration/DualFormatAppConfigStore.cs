@@ -143,6 +143,7 @@ namespace readboard
             config.PlayPonder = ReadBoolValue(values, "PlayPonder", config.PlayPonder);
             config.DisableShowInBoardShortcut = ReadBoolValue(values, "DisableShowInBoardShortcut", config.DisableShowInBoardShortcut);
             config.DebugDiagnosticsEnabled = ReadBoolValue(values, "DebugDiagnosticsEnabled", config.DebugDiagnosticsEnabled);
+            config.LanguagePreference = ReadStringValue(values, "LanguagePreference", config.LanguagePreference);
             config.UiThemeMode = ReadIntValue(values, "UiThemeMode", config.UiThemeMode);
             config.ColorMode = ReadIntValue(values, "ColorMode", config.ColorMode);
             config.SyncMode = (SyncMode)ReadIntValue(values, "SyncMode", (int)config.SyncMode);
@@ -194,6 +195,7 @@ namespace readboard
         //   18: + AutoPlayColorMode @ 15, FoxAutoPlayNickname @ 16, FoxAutoPlayNicknameSignature @ 17
         //   19: + AutoPlayMoveMode @ 18
         //   22: + WindowClientWidth @ 19, WindowClientHeight @ 20, WindowMaximized @ 21
+        //   23: + LanguagePreference @ 22
         private bool ApplyLegacyOtherConfig(AppConfig config)
         {
             string[] parts = ReadLegacyParts(LegacyOtherFileName);
@@ -240,6 +242,8 @@ namespace readboard
                 config.WindowClientHeight = ReadInt(parts[20], config.WindowClientHeight);
                 config.WindowMaximized = ReadBool(parts[21], config.WindowMaximized);
             }
+            if (parts.Length >= 23)
+                config.LanguagePreference = ReadString(parts[22], config.LanguagePreference);
             return true;
         }
 
@@ -317,6 +321,7 @@ namespace readboard
             builder.Append('_').Append(config.WindowClientWidth);
             builder.Append('_').Append(config.WindowClientHeight);
             builder.Append('_').Append(ToLegacyBool(config.WindowMaximized));
+            builder.Append('_').Append(config.LanguagePreference);
             File.WriteAllText(GetPath(LegacyOtherFileName), builder.ToString(), Encoding.UTF8);
         }
 
@@ -330,6 +335,8 @@ namespace readboard
                 AppConfig.NormalizeAutoPlayColorMode(config.AutoPlayColorMode);
             config.AutoPlayMoveMode =
                 AppConfig.NormalizeAutoPlayMoveMode(config.AutoPlayMoveMode);
+            config.LanguagePreference =
+                AppConfig.NormalizeLanguagePreference(config.LanguagePreference);
             config.WindowClientWidth = Math.Max(
                 AppConfig.MinimumWindowClientWidth,
                 config.WindowClientWidth);
