@@ -161,6 +161,80 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal(expectedBoardFrameCount, transport.CountLines("re=fox"));
         }
 
+        [Theory]
+        [InlineData(0, "play>black>0 0 0")]
+        [InlineData(1, "play>black>0 0 0 gma")]
+        public void KeepSync_RearmsUnchangedPlayAfterStopAutoPlay(
+            int moveModeValue,
+            string playLine)
+        {
+            AutoPlayMoveMode moveMode = (AutoPlayMoveMode)moveModeValue;
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncBoth(true);
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+
+            AutoPlayToggleHostRecorder hostRecorder = new AutoPlayToggleHostRecorder(
+                snapshotType,
+                moveMode);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            ScriptedBlockingRecognitionService recognitionService = new ScriptedBlockingRecognitionService(
+                CreateResult("re=foreground"),
+                3);
+            SetProperty(runtime, "RecognitionService", recognitionService);
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+            try
+            {
+                Assert.True(recognitionService.BlockedRecognizeStarted.Wait(TimeSpan.FromSeconds(5)));
+                Assert.Equal(1, transport.CountLines(playLine));
+
+                hostRecorder.SetAutoPlayEnabled(false);
+                coordinator.SendStopAutoPlay();
+                recognitionService.Release();
+                Assert.True(hostRecorder.DisabledSnapshotCaptured.Wait(TimeSpan.FromSeconds(5)));
+                Assert.Equal(1, transport.CountLines(playLine));
+
+                hostRecorder.SetAutoPlayEnabled(true);
+                Assert.True(hostRecorder.PostReenableSamplesSettled.Wait(TimeSpan.FromSeconds(5)));
+                Assert.Equal(2, transport.CountLines(playLine));
+
+                int secondPlayIndex;
+                lock (transport.SentLines)
+                {
+                    int firstPlayIndex = transport.SentLines.IndexOf(playLine);
+                    int stopIndex = transport.SentLines.IndexOf("stopAutoPlay", firstPlayIndex + 1);
+                    secondPlayIndex = transport.SentLines.IndexOf(playLine, stopIndex + 1);
+                    Assert.True(stopIndex > firstPlayIndex);
+                    Assert.True(secondPlayIndex > stopIndex);
+                }
+                lock (transport.SentLines)
+                {
+                    int postPlayBoardIndex = transport.SentLines.IndexOf("re=foreground", secondPlayIndex + 1);
+                    Assert.Equal(
+                        moveMode == AutoPlayMoveMode.GenmoveAnalyze,
+                        postPlayBoardIndex > secondPlayIndex);
+                }
+            }
+            finally
+            {
+                recognitionService.Release();
+                Invoke(coordinator, "StopSyncSession");
+            }
+
+            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(5)));
+        }
+
         [Fact]
         public void KeepSync_ResendsPlayAfterFoxRecordViewContextChanges()
         {
@@ -1917,6 +1991,68 @@ namespace Readboard.VerificationTests.Protocol
                             Interlocked.Increment(ref snapshotRequests) - 1,
                             contexts.Length - 1);
                         coordinator.SetFoxWindowContext(contexts[contextIndex]);
+                        return snapshot;
+                    case "OnKeepSyncStarted":
+                        KeepStarted.Set();
+                        return null;
+                    case "OnKeepSyncStopped":
+                        KeepStopped.Set();
+                        return null;
+                    case "UpdateSelectedWindowHandle":
+                    case "OnSyncCachesReset":
+                    case "ShowMissingSyncSourceMessage":
+                    case "ShowRecognitionFailureMessage":
+                    case "MinimizeWindow":
+                        return null;
+                    default:
+                        return GetDefault(method.ReturnType);
+                }
+            }
+        }
+
+        private sealed class AutoPlayToggleHostRecorder
+        {
+            private readonly Type snapshotType;
+            private readonly AutoPlayMoveMode moveMode;
+            private int autoPlayEnabled = 1;
+            private int disabledSnapshotCaptured;
+            private int postReenableSnapshotCount;
+
+            public AutoPlayToggleHostRecorder(Type snapshotType, AutoPlayMoveMode moveMode)
+            {
+                this.snapshotType = snapshotType;
+                this.moveMode = moveMode;
+            }
+
+            public ManualResetEventSlim KeepStarted { get; } = new ManualResetEventSlim(false);
+            public ManualResetEventSlim KeepStopped { get; } = new ManualResetEventSlim(false);
+            public ManualResetEventSlim DisabledSnapshotCaptured { get; } = new ManualResetEventSlim(false);
+            public ManualResetEventSlim PostReenableSamplesSettled { get; } = new ManualResetEventSlim(false);
+
+            public void SetAutoPlayEnabled(bool enabled)
+            {
+                Interlocked.Exchange(ref autoPlayEnabled, enabled ? 1 : 0);
+            }
+
+            public object HandleCall(MethodInfo method, object[] args)
+            {
+                switch (method.Name)
+                {
+                    case "CaptureSnapshot":
+                        bool enabled = Volatile.Read(ref autoPlayEnabled) != 0;
+                        object snapshot = CreateSnapshot(snapshotType, SyncMode.Foreground, IntPtr.Zero);
+                        SetProperty(snapshot, "PlayColor", enabled ? "black" : null);
+                        SetProperty(snapshot, "AutoPlayMoveMode", moveMode);
+                        if (!enabled)
+                        {
+                            Interlocked.Exchange(ref disabledSnapshotCaptured, 1);
+                            DisabledSnapshotCaptured.Set();
+                        }
+                        else if (Volatile.Read(ref disabledSnapshotCaptured) != 0
+                            && Interlocked.Increment(ref postReenableSnapshotCount) == 3)
+                        {
+                            PostReenableSamplesSettled.Set();
+                        }
                         return snapshot;
                     case "OnKeepSyncStarted":
                         KeepStarted.Set();

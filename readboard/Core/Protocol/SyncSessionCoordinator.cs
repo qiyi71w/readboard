@@ -31,6 +31,7 @@ namespace readboard
         private LastMoveSource lastSentBoardLastMoveSource;
         private string lastSentWindowContextSignature;
         private string lastSentPlayStateSignature;
+        private int autoPlayAuthorizationGeneration;
         private SessionState sessionState;
         private IProtocolCommandHost host;
 
@@ -598,7 +599,16 @@ namespace readboard
 
         public void SendStopAutoPlay()
         {
-            SendProtocolMessage(protocolAdapter.CreateStopAutoPlayMessage());
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                outboundProtocolDispatcher.SendMessageWhileSynchronized(
+                    protocolAdapter.CreateStopAutoPlayMessage());
+                lock (stateLock)
+                {
+                    autoPlayAuthorizationGeneration++;
+                    lastSentPlayStateSignature = null;
+                }
+            });
         }
 
         public void SendPass()
