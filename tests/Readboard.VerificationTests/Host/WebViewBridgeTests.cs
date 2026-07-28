@@ -1,7 +1,9 @@
 using System;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using readboard;
 using Xunit;
 
@@ -197,6 +199,156 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(
                 "dark",
                 json.RootElement.GetProperty("payload").GetProperty("shell").GetProperty("theme").GetString());
+        }
+
+        [Fact]
+        public void SerializeWebViewState_CarriesHostLanguageAndLocalizedText()
+        {
+            ReadBoardUiState state = new ReadBoardUiState();
+            state.Language = "en";
+            state.Text["WebView_navControlCenter"] = "Control Center";
+
+            using JsonDocument json = JsonDocument.Parse(MainForm.SerializeWebViewState(state));
+            JsonElement payload = json.RootElement.GetProperty("payload");
+
+            Assert.Equal("en", payload.GetProperty("language").GetString());
+            Assert.Equal(
+                "Control Center",
+                payload.GetProperty("text").GetProperty("WebView_navControlCenter").GetString());
+        }
+
+        [Fact]
+        public void WebViewShell_UsesHostLanguageForStaticNavigation()
+        {
+            string root = VerificationFixtureLocator.RepositoryRoot();
+            string defaults = File.ReadAllText(Path.Combine(root, "readboard", "Program.cs"));
+            string html = File.ReadAllText(Path.Combine(root, "readboard", "WebView", "index.html"));
+            string script = File.ReadAllText(Path.Combine(root, "readboard", "WebView", "app.js"));
+
+            Assert.Contains("<html lang=\"und\">", html);
+            Assert.Contains("data-i18n=\"WebView_navControlCenter\"", html);
+            Assert.Contains("function localizeStaticPage()", script);
+            Assert.Contains("document.documentElement.lang = htmlLanguage(state.language);", script);
+            Assert.Contains("state.text?.[key]", script);
+            Assert.Contains("typeof value === \"string\" && value ? value : previewValue", script);
+            Assert.Contains("if (!message.payload.text) state.text = currentText;", script);
+            Assert.Contains("$$('[data-i18n-aria-label]')", script);
+
+            foreach (string language in new[] { "cn", "en", "jp", "kr" })
+            {
+                string languageFile = File.ReadAllText(Path.Combine(
+                    root,
+                    "readboard",
+                    "language_" + language + ".txt"));
+                Assert.Contains("WebView_navControlCenter=", languageFile);
+            }
+        }
+
+        [Fact]
+        public void WebViewVisibleText_UsesCompleteHostLanguageResources()
+        {
+            string root = VerificationFixtureLocator.RepositoryRoot();
+            string html = File.ReadAllText(Path.Combine(root, "readboard", "WebView", "index.html"));
+            string script = File.ReadAllText(Path.Combine(root, "readboard", "WebView", "app.js"));
+            var hanText = new Regex("[\\u4e00-\\u9fff]");
+
+            Assert.All(
+                File.ReadAllLines(Path.Combine(root, "readboard", "WebView", "index.html"))
+                    .Where(line => hanText.IsMatch(line)),
+                line => Assert.Contains("data-i18n", line));
+            Assert.All(
+                File.ReadAllLines(Path.Combine(root, "readboard", "WebView", "app.js"))
+                    .Where(line => hanText.IsMatch(line)),
+                line => Assert.Contains("t(", line));
+
+            string[] keys = Regex.Matches(
+                    html + "\n" + script,
+                    "(?:data-i18n(?:-aria-label)?=\\\"|(?<![A-Za-z0-9_$])t\\(\\\")([^\\\"]+)")
+                .Select(match => match.Groups[1].Value)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            Assert.NotEmpty(keys);
+
+            foreach (string language in new[] { "cn", "en", "jp", "kr" })
+            {
+                string[] languageLines = File.ReadAllLines(Path.Combine(
+                    root,
+                    "readboard",
+                    "language_" + language + ".txt"));
+                languageLines = languageLines.Where(line => line.Length != 0).ToArray();
+                Assert.All(languageLines, line => Assert.Equal(1, line.Count(character => character == '=')));
+                string[] languageKeys = languageLines
+                    .Select(line => line.Substring(0, line.IndexOf('=')))
+                    .ToArray();
+                Assert.Equal(
+                    languageKeys.Length,
+                    languageKeys.Distinct(StringComparer.Ordinal).Count());
+                Assert.All(keys, key => Assert.Contains(key, languageKeys));
+            }
+        }
+
+        [Fact]
+        public void WebViewHostVisibleText_UsesLanguageResources()
+        {
+            string root = VerificationFixtureLocator.RepositoryRoot();
+            string defaults = File.ReadAllText(Path.Combine(root, "readboard", "Program.cs"));
+            string bridge = File.ReadAllText(Path.Combine(root, "readboard", "MainForm.WebView.cs"));
+            string update = File.ReadAllText(Path.Combine(root, "readboard", "MainForm.WebView.Update.cs"));
+            string identity = File.ReadAllText(Path.Combine(root, "readboard", "MainForm.WebView.Identity.cs"));
+            string form = File.ReadAllText(Path.Combine(root, "readboard", "Form1.cs"));
+            string script = File.ReadAllText(Path.Combine(root, "readboard", "WebView", "app.js"));
+            string[] keys =
+            {
+                "WebView_initializationFailed",
+                "WebView_mainPageMissing",
+                "WebView_manualOpenFailedTitle",
+                "WebView_syncFailedTitle",
+                "WebView_recognitionFailedTitle",
+                "WebView_updateFetching",
+                "WebView_updateStepDownload",
+                "WebView_updateStepVerify",
+                "WebView_updateStepNotifyHost",
+                "WebView_updateStepHostInstall",
+                "WebView_candidateRowNumber",
+                "WebView_integerAtLeast",
+                "WebView_integerRange"
+            };
+
+            Assert.Contains("getLangStr(\"WebView_initializationFailed\")", bridge);
+            Assert.Contains("getLangStr(\"WebView_manualOpenFailedTitle\")", bridge);
+            Assert.Contains("getLangStr(\"WebView_updateFetching\")", update);
+            Assert.Contains("getLangStr(\"WebView_updateStepDownload\")", update);
+            Assert.Contains("getLangStr(\"WebView_candidateRowNumber\")", identity);
+            Assert.Contains("getLangStr(\"WebView_syncFailedTitle\")", form);
+            Assert.Contains("getLangStr(\"WebView_recognitionFailedTitle\")", form);
+            Assert.Contains("function localizedSettingsError(value)", script);
+            Assert.Contains("t(\"WebView_integerAtLeast\"", script);
+            Assert.Contains("t(\"WebView_integerRange\"", script);
+
+            Assert.DoesNotContain("Title = \"无法打开说明\"", bridge);
+            Assert.DoesNotContain("Detail = \"正在获取最新版本信息…\"", update);
+            Assert.DoesNotContain("CreateWebViewUpdateStep(\"", update);
+            Assert.DoesNotContain("Label = \"玩家行 \"", identity);
+            Assert.DoesNotContain("ShowWebViewMessage(\"无法同步\"", form);
+            Assert.DoesNotContain("ShowWebViewMessage(\"识别失败\"", form);
+
+            foreach (string language in new[] { "cn", "en", "jp", "kr" })
+            {
+                string[] languageLines = File.ReadAllLines(Path.Combine(
+                    root,
+                    "readboard",
+                    "language_" + language + ".txt"));
+                languageLines = languageLines.Where(line => line.Length != 0).ToArray();
+                Assert.All(languageLines, line => Assert.Equal(1, line.Count(character => character == '=')));
+                string[] languageKeys = languageLines
+                    .Select(line => line.Substring(0, line.IndexOf('=')))
+                    .ToArray();
+                Assert.Equal(
+                    languageKeys.Length,
+                    languageKeys.Distinct(StringComparer.Ordinal).Count());
+                Assert.All(keys, key => Assert.Contains(key, languageKeys));
+            }
+            Assert.All(keys, key => Assert.Contains("langItems[\"" + key + "\"]", defaults));
         }
 
         [Fact]

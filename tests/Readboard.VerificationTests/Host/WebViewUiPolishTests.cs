@@ -23,10 +23,10 @@ namespace Readboard.VerificationTests.Host
             string html = LoadWebViewAsset("index.html");
             string styles = LoadWebViewAsset("styles.css");
 
-            Assert.Contains("<h3>同步设置</h3>", html);
+            Assert.Contains("<h3 data-i18n=\"WebView_syncSettings\">同步设置</h3>", html);
             Assert.Contains("<div class=\"sync-toggle-row\">", html);
-            Assert.Contains("<div class=\"color-row\"><b>执子颜色</b>", html);
-            Assert.Contains("<div class=\"segments color-segments\" role=\"radiogroup\" aria-label=\"执子颜色\">", html);
+            Assert.Contains("<div class=\"color-row\"><b data-i18n=\"WebView_stoneColor\">执子颜色</b>", html);
+            Assert.Contains("<div class=\"segments color-segments\" role=\"radiogroup\" aria-label=\"执子颜色\" data-i18n-aria-label=\"WebView_stoneColor\">", html);
             Assert.Contains(".sync-toggle-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }", styles);
             Assert.Contains(".sync-options { display: grid; min-width: 0; grid-template-rows: auto repeat(3, var(--control-center-control-height)); gap: var(--control-center-inner-gap);", styles);
             Assert.Contains(".color-row { display: grid; grid-template-columns: 62px minmax(0, 1fr) 90px; gap: 8px;", styles);
@@ -64,11 +64,25 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains(".modal.show-in-board-hint { grid-template-rows: 44px auto 52px; }", styles);
             Assert.Contains(".modal.show-in-board-hint .modal-body { min-height: 0; padding: 12px 16px; overflow: hidden; }", styles);
             Assert.Contains("min(520px, calc(100vw - 48px))", script);
-            Assert.Contains("openModal(\"dialog show-in-board-hint\", \"提示\"", script);
-            Assert.Contains("[前台]方式同步时不支持此功能。选点显示在原棋盘上后，原棋盘将无法落子。", script);
-            Assert.Contains("可通过勾选“双向同步”选项恢复落子功能。", script);
+            Assert.Contains("openModal(\"dialog show-in-board-hint\", t(\"TipsForm_title\", \"提示\")", script);
+            Assert.Contains("t(\"WebView_showInBoardHintForeground\", \"[前台]方式同步时不支持此功能。选点显示在原棋盘上后，原棋盘将无法落子。\")", script);
+            Assert.Contains("t(\"WebView_showInBoardHintRestore\", \"可通过勾选“双向同步”选项恢复落子功能。\")", script);
             Assert.DoesNotContain("Ctrl+X", script);
-            Assert.Contains("button(\"dialog.dontShowAgain\", \"不再提示\") + button(\"dialog.confirm\",", script);
+            Assert.Contains("button(\"dialog.dontShowAgain\", t(\"TipsForm_btnNotAskAgain\", \"不再提示\")) + button(\"dialog.confirm\",", script);
+
+            foreach (string language in new[] { "cn", "en", "jp", "kr" })
+            {
+                string[] languageLines = File.ReadAllLines(Path.Combine(
+                    VerificationFixtureLocator.RepositoryRoot(),
+                    "readboard",
+                    "language_" + language + ".txt"));
+                string firstLine = Array.Find(languageLines, line => line.StartsWith("WebView_showInBoardHintForeground=", StringComparison.Ordinal));
+                string secondLine = Array.Find(languageLines, line => line.StartsWith("WebView_showInBoardHintRestore=", StringComparison.Ordinal));
+                Assert.NotNull(firstLine);
+                Assert.NotNull(secondLine);
+                Assert.DoesNotContain("Ctrl+X", firstLine);
+                Assert.DoesNotContain("Ctrl+X", secondLine);
+            }
         }
 
         [Fact]
@@ -131,7 +145,7 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Contains("宿主模式已启动", html);
             Assert.Contains("LizzieYzy-Next 棋盘同步工具", html);
-            Assert.Contains("shell.connected ? \"宿主通信正常\" : \"宿主模式已启动\"", script);
+            Assert.Contains("shell.connected ? t(\"WebView_hostConnected\", \"宿主通信正常\") : t(\"WebView_hostModeStarted\", \"宿主模式已启动\")", script);
             Assert.DoesNotContain("当前通过 LizzieYzy-Next 启动", html);
         }
 
@@ -140,9 +154,9 @@ namespace Readboard.VerificationTests.Host
         {
             string script = LoadWebViewAsset("app.js");
 
-            Assert.Contains("control.quickSyncActive ? \"停止快速同步\" : \"快速同步\"", script);
-            Assert.Contains("control.continuousSyncActive ? \"停止持续同步\" : \"持续同步\"", script);
-            Assert.Contains("control.analysisRunning ? \"暂停分析\" : \"继续分析\"", script);
+            Assert.Contains("control.quickSyncActive ? t(\"WebView_stopQuickSync\", \"停止快速同步\") : t(\"WebView_quickSync\", \"快速同步\")", script);
+            Assert.Contains("control.continuousSyncActive ? t(\"WebView_stopContinuousSync\", \"停止持续同步\") : t(\"WebView_continuousSync\", \"持续同步\")", script);
+            Assert.Contains("control.analysisRunning ? t(\"WebView_pauseAnalysis\", \"暂停分析\") : t(\"WebView_resumeAnalysis\", \"继续分析\")", script);
             Assert.Contains("!control.analysisRunning && !control.analysisStateAvailable", script);
         }
 

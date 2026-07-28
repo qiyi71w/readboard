@@ -2268,7 +2268,7 @@ namespace readboard
         {
             InvokeUiHostAction(delegate
             {
-                ShowWebViewMessage("无法同步", getLangStr("noSelectedBoardAndFailed"));
+                ShowWebViewMessage(getLangStr("WebView_syncFailedTitle"), getLangStr("noSelectedBoardAndFailed"));
             });
         }
 
@@ -2276,7 +2276,7 @@ namespace readboard
         {
             InvokeUiHostAction(delegate
             {
-                ShowWebViewMessage("识别失败", getLangStr("recgnizeFaild"));
+                ShowWebViewMessage(getLangStr("WebView_recognitionFailedTitle"), getLangStr("recgnizeFaild"));
             });
         }
 
@@ -2582,7 +2582,7 @@ namespace readboard
                 Math.Max(y1, y2));
             if (!TryFinalizeSelectionBounds())
             {
-                ShowWebViewMessage("识别失败", getLangStr("recgnizeFaild"));
+                ShowWebViewMessage(getLangStr("WebView_recognitionFailedTitle"), getLangStr("recgnizeFaild"));
                 RestoreMainWindowAfterSelection();
             }
             else if (CurrentSyncType == TYPE_BACKGROUND)

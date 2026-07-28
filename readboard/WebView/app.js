@@ -11,11 +11,13 @@
   const minimumScale = minimumViewport.width / baseViewport.width;
   const initialState = {
     page: "controlCenter",
+    language: "cn",
+    text: {},
     shell: {
       version: "v3.1.0",
       theme: "system",
       connected: false,
-      syncStatus: "宿主模式已启动",
+      syncStatus: "",
       lastSync: "--:--:--",
       stoneCount: 0,
       duration: "--",
@@ -75,17 +77,20 @@
       dirty: false,
       errors: {}
     },
-    logs: preview ? [{ time: "--:--:--", level: "INFO", message: "本地预览模式，等待宿主状态" }] : [],
+    logs: [],
     update: null,
     identity: null,
     dialog: null
   };
 
   let state = structuredClone(initialState);
+  if (preview) state.logs = [{ time: "--:--:--", level: "INFO", message: t("WebView_previewWaiting", "本地预览模式，等待宿主状态") }];
   let activeModal = null;
   let modalOpener = null;
   let resizeFrame = 0;
   let themePreference = "system";
+  let localizedText = null;
+  let localizedLanguage = "";
 
   function updateViewportLayout() {
     resizeFrame = 0;
@@ -152,6 +157,30 @@
     if (element) element.textContent = value ?? "";
   }
 
+  function t(key, previewValue = key) {
+    const value = state.text?.[key];
+    return typeof value === "string" && value ? value : previewValue;
+  }
+
+  function htmlLanguage(value) {
+    return ({ cn: "zh-CN", en: "en", jp: "ja", kr: "ko" })[value] || "und";
+  }
+
+  function localizeStaticPage() {
+    if (!preview && !Object.keys(state.text || {}).length) return;
+    if (localizedText === state.text && localizedLanguage === state.language) return;
+    document.documentElement.lang = htmlLanguage(state.language);
+    $$('[data-i18n]').forEach(element => {
+      element.textContent = t(element.dataset.i18n, element.textContent);
+    });
+    $$('[data-i18n-aria-label]').forEach(element => {
+      element.setAttribute("aria-label", t(element.dataset.i18nAriaLabel, element.getAttribute("aria-label")));
+    });
+    document.title = `ReadBoard / ${t("MainForm_title", "棋盘同步工具")}`;
+    localizedText = state.text;
+    localizedLanguage = state.language;
+  }
+
   function dynamicText(id, value) {
     const element = document.getElementById(id);
     if (!element) return;
@@ -191,14 +220,17 @@
     const shell = state.shell || {};
     const version = shell.version || "v3.1.0";
     ["title-version", "version", "about-version", "project-version"].forEach(id => text(id, version));
-    text("sync-status", shell.syncStatus || (shell.connected ? "就绪" : "宿主模式已启动"));
+    const syncStatus = shell.syncStatus === "同步中" ? t("WebView_syncing", "同步中")
+      : shell.syncStatus === "就绪" ? t("WebView_ready", "就绪")
+        : shell.syncStatus === "宿主模式已启动" ? t("WebView_hostModeStarted", "宿主模式已启动") : shell.syncStatus;
+    text("sync-status", syncStatus || (shell.connected ? t("WebView_ready", "就绪") : t("WebView_hostModeStarted", "宿主模式已启动")));
     text("last-sync", shell.lastSync || "--:--:--");
     text("stone-count", shell.stoneCount ?? 0);
     text("duration", shell.duration || "--");
-    text("host-state", shell.connected ? "宿主通信正常" : "宿主模式已启动");
+    text("host-state", shell.connected ? t("WebView_hostConnected", "宿主通信正常") : t("WebView_hostModeStarted", "宿主模式已启动"));
     const maximizeButton = $('[data-command="window.maximize"]');
     if (maximizeButton) {
-      maximizeButton.setAttribute("aria-label", shell.maximized ? "还原" : "最大化");
+      maximizeButton.setAttribute("aria-label", shell.maximized ? t("WebView_restore", "还原") : t("WebView_maximize", "最大化"));
       const icon = $(".icon", maximizeButton);
       if (icon) icon.innerHTML = shell.maximized ? "&#xE923;" : "&#xE922;";
     }
@@ -206,10 +238,10 @@
     $("#sync-dot").className = `dot${shell.connected ? " good" : ""}`;
     $("#host-dot").className = `dot${shell.connected ? " good" : ""}`;
     setStatus("target", shell.targetWindowValid === true
-      ? "目标窗口有效"
-      : shell.targetWindowValid === false ? "目标窗口已失效，请重新选择" : "等待选择目标窗口", shell.targetWindowValid);
-    setStatus("board", shell.boardRegionRecognized ? "棋盘区域已识别" : "等待首次棋盘识别", shell.boardRegionRecognized);
-    setStatus("placement", shell.placementRegionResolved ? "落子区域已解析" : "落子区域暂不可用", shell.placementRegionResolved);
+      ? t("WebView_targetValid", "目标窗口有效")
+      : shell.targetWindowValid === false ? t("WebView_targetInvalid", "目标窗口已失效，请重新选择") : t("WebView_waitTarget", "等待选择目标窗口"), shell.targetWindowValid);
+    setStatus("board", shell.boardRegionRecognized ? t("WebView_boardRecognized", "棋盘区域已识别") : t("WebView_waitBoardRecognition", "等待首次棋盘识别"), shell.boardRegionRecognized);
+    setStatus("placement", shell.placementRegionResolved ? t("WebView_placementResolved", "落子区域已解析") : t("WebView_placementUnavailable", "落子区域暂不可用"), shell.placementRegionResolved);
   }
 
   function setStatus(prefix, label, value) {
@@ -223,8 +255,8 @@
     text("context-platform", control.platformLabel || platformLabel(control.platform));
     dynamicText("context-room", control.room || "--");
     text("context-moves", control.moves ?? "--");
-    text("context-turn", control.nextTurn || "--");
-    text("context-binding", control.titleBound ? "已绑定" : "未绑定");
+    text("context-turn", control.nextTurn === "黑" ? t("WebView_black", "黑") : control.nextTurn === "白" ? t("WebView_white", "白") : control.nextTurn || "--");
+    text("context-binding", control.titleBound ? t("WebView_bound", "已绑定") : t("WebView_notBound", "未绑定"));
     const bindingDot = $("#binding-dot");
     if (bindingDot) bindingDot.className = `dot${control.titleBound ? " good" : ""}`;
     setChecked(`input[name="platform"][value="${cssValue(control.platform || "fox")}"]`, true);
@@ -247,9 +279,9 @@
     setDisabled("#first-policy", !control.firstPolicyEnabled);
     setDisabled('[data-command="identity.open"]', !control.identityEnabled);
     setDisabled("#show-on-board", !control.showOnBoardEnabled);
-    text("quick-label", control.quickSyncActive ? "停止快速同步" : "快速同步");
-    text("continuous-label", `${control.continuousSyncActive ? "停止持续同步" : "持续同步"} (${control.syncInterval ?? 200}ms)`);
-    text("analysis-label", control.analysisRunning ? "暂停分析" : "继续分析");
+    text("quick-label", control.quickSyncActive ? t("WebView_stopQuickSync", "停止快速同步") : t("WebView_quickSync", "快速同步"));
+    text("continuous-label", `${control.continuousSyncActive ? t("WebView_stopContinuousSync", "停止持续同步") : t("WebView_continuousSync", "持续同步")} (${control.syncInterval ?? 200}ms)`);
+    text("analysis-label", control.analysisRunning ? t("WebView_pauseAnalysis", "暂停分析") : t("WebView_resumeAnalysis", "继续分析"));
     setDisabled('[data-command="sync.quick"]', !control.quickSyncEnabled);
     setDisabled('[data-command="sync.continuous"]', !control.continuousSyncEnabled);
     setDisabled('[data-command="sync.toggleAnalysis"]', !control.analysisToggleEnabled || (!control.analysisRunning && !control.analysisStateAvailable));
@@ -267,7 +299,7 @@
   }
 
   function platformLabel(value) {
-    return ({ fox: "野狐", foxBackground: "野狐(后台落子)", yike: "弈客", yicheng: "弈城", sina: "新浪", otherBackground: "其他(后台)", otherForeground: "其他(前台)" })[value] || "未选择";
+    return ({ fox: t("MainForm_rdoFox", "野狐"), foxBackground: t("MainForm_rdoFoxBack", "野狐(后台落子)"), yike: t("MainForm_rdoYike", "弈客"), yicheng: t("MainForm_rdoTygem", "弈城"), sina: t("MainForm_rdoSina", "新浪"), otherBackground: t("MainForm_rdoBack", "其他(后台)"), otherForeground: t("MainForm_rdoFore", "其他(前台)") })[value] || t("WebView_notSelected", "未选择");
   }
 
   function cssValue(value) {
@@ -283,7 +315,7 @@
       const error = input.closest("label")?.querySelector(".field-error");
       if (error) {
         const message = settings.errors?.[input.dataset.setting] || "";
-        error.textContent = message;
+        error.textContent = localizedSettingsError(message);
         if (!error.id) error.id = `${input.dataset.setting}-error`;
         input.toggleAttribute("aria-invalid", Boolean(message));
         if (message) input.setAttribute("aria-describedby", error.id);
@@ -291,7 +323,16 @@
       }
     });
     setChecked(`input[name="theme"][value="${cssValue(settings.theme || "system")}"]`, true);
-    text("settings-dirty", settings.dirty ? "有尚未保存的更改" : "当前没有未保存的更改");
+    text("settings-dirty", settings.dirty ? t("WebView_unsavedChanges", "有尚未保存的更改") : t("WebView_noUnsavedChanges", "当前没有未保存的更改"));
+  }
+
+  function localizedSettingsError(value) {
+    if (value === "请输入整数") return t("SettingsForm_mustBeInteger", "请输入整数");
+    const minimum = /^\u8bf7\u8f93\u5165\u4e0d\u5c0f\u4e8e (\d+) \u7684\u6574\u6570$/.exec(value);
+    if (minimum) return t("WebView_integerAtLeast", "请输入不小于 {0} 的整数").replace("{0}", minimum[1]);
+    const range = /^\u8bf7\u8f93\u5165 (\d+)–(\d+) \u4e4b\u95f4\u7684\u6574\u6570$/.exec(value);
+    if (range) return t("WebView_integerRange", "请输入 {0}–{1} 之间的整数").replace("{0}", range[1]).replace("{1}", range[2]);
+    return value || "";
   }
 
   function renderLogs() {
@@ -307,11 +348,23 @@
       tag.className = `log-tag ${level.toLowerCase()}`;
       tag.textContent = level;
       const message = document.createElement("span");
-      message.textContent = log.message || "";
+      message.textContent = localizedLogMessage(log.message);
       row.append(time, tag, message);
       return row;
     }));
     list.scrollTop = list.scrollHeight;
+  }
+
+  function localizedLogMessage(value) {
+    return ({
+      "宿主通信正常": t("WebView_hostConnected", "宿主通信正常"),
+      "宿主模式已启动，ReadBoard 就绪": t("WebView_hostReadyLog", "宿主模式已启动，ReadBoard 就绪"),
+      "开始持续同步": t("WebView_continuousSyncStarted", "开始持续同步"),
+      "持续同步已停止": t("WebView_continuousSyncStopped", "持续同步已停止"),
+      "开始快速同步": t("WebView_quickSyncStarted", "开始快速同步"),
+      "快速同步已停止": t("WebView_quickSyncStopped", "快速同步已停止"),
+      "已识别并发送棋盘状态": t("WebView_boardSent", "已识别并发送棋盘状态")
+    })[value] || value || "";
   }
 
   function renderModal() {
@@ -349,45 +402,45 @@
   function renderUpdate(update) {
     const mode = update.status || "checking";
     let body;
-    let actions = button("update.close", "关闭");
+    let actions = button("update.close", t("Update_close", "关闭"));
     if (mode === "checking") {
-      body = message("&#xE895;", "正在检查可用更新", "正在连接 GitHub Release，请稍候。", '<div class="progress indeterminate"><i></i></div>');
+      body = message("&#xE895;", t("WebView_updateChecking", "正在检查可用更新"), t("WebView_updateConnecting", "正在连接 GitHub Release，请稍候。"), '<div class="progress indeterminate"><i></i></div>');
     } else if (mode === "latest") {
-      body = message("&#xE73E;", update.title || "当前已是最新版本", escapeHtml(update.detail || `ReadBoard ${update.currentVersion || state.shell.version || ""}`), `<p>${escapeHtml(update.completedAt || update.message || "刚刚完成检查")}</p>`);
-      actions = button("update.close", "完成", "primary");
+      body = message("&#xE73E;", update.title || t("WebView_updateLatest", "当前已是最新版本"), escapeHtml(update.detail || `ReadBoard ${update.currentVersion || state.shell.version || ""}`), `<p>${escapeHtml(update.completedAt || update.message || t("WebView_updateJustChecked", "刚刚完成检查"))}</p>`);
+      actions = button("update.close", t("WebView_done", "完成"), "primary");
     } else if (mode === "available" || mode === "manual") {
-      body = `<div class="update-details"><span>当前版本</span><b>${escapeHtml(update.currentVersion || "--")}</b><span>最新版本</span><b>${escapeHtml(update.latestVersion || "--")}</b><span>发布日期</span><b>${escapeHtml(update.releaseDate || "--")}</b>${mode === "manual" ? `<div class="update-warning"><b>当前宿主不支持托管安装</b><p>${escapeHtml(update.detail || "可打开 Release 页面手动下载更新。")}</p></div>` : ""}<span>更新说明</span><div class="release-notes">${escapeHtml(update.releaseNotes || "暂无更新说明")}</div></div>`;
-      actions += button(mode === "manual" ? "update.openDownload" : "update.install", mode === "manual" ? "去下载" : "下载并安装", "primary");
+      body = `<div class="update-details"><span>${escapeHtml(t("Update_currentVersion", "当前版本"))}</span><b>${escapeHtml(update.currentVersion || "--")}</b><span>${escapeHtml(t("Update_latestVersion", "最新版本"))}</span><b>${escapeHtml(update.latestVersion || "--")}</b><span>${escapeHtml(t("Update_releaseDate", "发布日期"))}</span><b>${escapeHtml(update.releaseDate || "--")}</b>${mode === "manual" ? `<div class="update-warning"><b>${escapeHtml(t("WebView_hostedInstallUnsupported", "当前宿主不支持托管安装"))}</b><p>${escapeHtml(update.detail || t("WebView_manualDownload", "可打开 Release 页面手动下载更新。"))}</p></div>` : ""}<span>${escapeHtml(t("Update_releaseNotes", "更新说明"))}</span><div class="release-notes">${escapeHtml(update.releaseNotes || t("Update_releaseNotesUnavailable", "暂无更新说明"))}</div></div>`;
+      actions += button(mode === "manual" ? "update.openDownload" : "update.install", mode === "manual" ? t("Update_download", "去下载") : t("Update_downloadAndInstall", "下载并安装"), "primary");
     } else if (mode === "notice") {
-      body = message("&#xE946;", update.title || "更新通道提示", escapeHtml(update.detail || "当前没有可安装的更新。"));
-      actions = button("update.close", "完成", "primary");
+      body = message("&#xE946;", update.title || t("WebView_updateChannelNotice", "更新通道提示"), escapeHtml(update.detail || t("WebView_noUpdateAvailable", "当前没有可安装的更新。")));
+      actions = button("update.close", t("WebView_done", "完成"), "primary");
     } else if (mode === "check-failed") {
-      body = message("&#xE783;", update.title || "检查更新失败", escapeHtml(update.detail || "请稍后重试。"));
-      actions = button("update.close", "关闭", "primary");
+      body = message("&#xE783;", update.title || t("Update_checkFailed", "检查更新失败"), escapeHtml(update.detail || t("WebView_tryAgainLater", "请稍后重试。")));
+      actions = button("update.close", t("Update_close", "关闭"), "primary");
     } else if (mode === "processing") {
-      body = `<h3>${escapeHtml(update.title || "正在准备更新包")}</h3><p>${escapeHtml(update.detail || "请稍候…")}</p>${progress(update.progress)}<div class="steps">${steps(update.steps)}</div>`;
-      actions = '<button type="button" disabled>处理中…</button>';
+      body = `<h3>${escapeHtml(update.title || t("WebView_preparingUpdate", "正在准备更新包"))}</h3><p>${escapeHtml(update.detail || t("WebView_pleaseWait", "请稍候…"))}</p>${progress(update.progress)}<div class="steps">${steps(update.steps)}</div>`;
+      actions = `<button type="button" disabled>${escapeHtml(t("WebView_processing", "处理中…"))}</button>`;
     } else {
-      body = `<div class="dialog-copy"><h3>${escapeHtml(update.title || "安装未完成")}</h3><p>${escapeHtml(update.message || "更新未完成，已切换为手动下载。")}</p><div class="update-warning"><b>${escapeHtml(update.errorTitle || "操作失败")}</b><p>${escapeHtml(update.error || "可稍后重试或手动下载。")}</p></div></div>`;
-      actions += button("update.openDownload", "去下载", "primary");
+      body = `<div class="dialog-copy"><h3>${escapeHtml(update.title || t("WebView_installIncomplete", "安装未完成"))}</h3><p>${escapeHtml(update.message || t("WebView_updateIncomplete", "更新未完成，已切换为手动下载。"))}</p><div class="update-warning"><b>${escapeHtml(update.errorTitle || t("WebView_operationFailed", "操作失败"))}</b><p>${escapeHtml(update.error || t("WebView_retryOrDownload", "可稍后重试或手动下载。"))}</p></div></div>`;
+      actions += button("update.openDownload", t("Update_download", "去下载"), "primary");
     }
-    openModal("update", "检查更新", body, actions, "min(660px, calc(100vw - 48px))");
+    openModal("update", t("MainForm_btnCheckUpdate", "检查更新"), body, actions, "min(660px, calc(100vw - 48px))");
   }
 
   function renderIdentity(identity) {
     const candidates = Array.isArray(identity.candidates) ? identity.candidates : [];
     const selected = identity.selectedId;
     const body = candidates.length
-      ? `<p class="identity-intro">请选择你在野狐当前房间里的玩家行。</p><b>可选玩家行</b><div class="candidate-list">${candidates.map(candidate => candidateHtml(candidate, selected, identity.savedId)).join("")}</div>${selected ? `<p class="identity-intro">已选择“${escapeHtml(candidates.find(item => item.id === selected)?.label || "") }”</p>` : ""}`
-      : `<p class="identity-intro">请选择你在野狐当前房间里的玩家行。</p><b>可选玩家行</b><div class="empty-state"><div><i class="icon">&#xE738;</i><h3>暂未识别到可选玩家行</h3><p>请确认野狐棋局窗口可见，然后重新打开身份选择。</p></div></div>`;
-    const actions = identity.hasSavedIdentity ? button("identity.clearSaved", "清除保存", "danger-outline left") : "";
-    openModal("identity", "选择野狐身份", body, actions + button("identity.close", "取消") + button("identity.useOnce", "本次使用", "", !selected) + button("identity.saveAndUse", "保存并使用", "primary", !selected), "min(780px, calc(100vw - 48px))");
+      ? `<p class="identity-intro">${escapeHtml(t("FoxAutoPlayIdentityDialog_lblPrompt", "请选择你在野狐当前房间里的玩家行。"))}</p><b>${escapeHtml(t("FoxAutoPlayIdentityDialog_lblDetectedNicknames", "可选玩家行"))}</b><div class="candidate-list">${candidates.map(candidate => candidateHtml(candidate, selected, identity.savedId)).join("")}</div>${selected ? `<p class="identity-intro">${escapeHtml(t("WebView_selectedIdentity", "已选择"))} ${escapeHtml(candidates.find(item => item.id === selected)?.label || "")}</p>` : ""}`
+      : `<p class="identity-intro">${escapeHtml(t("FoxAutoPlayIdentityDialog_lblPrompt", "请选择你在野狐当前房间里的玩家行。"))}</p><b>${escapeHtml(t("FoxAutoPlayIdentityDialog_lblDetectedNicknames", "可选玩家行"))}</b><div class="empty-state"><div><i class="icon">&#xE738;</i><h3>${escapeHtml(t("FoxAutoPlayIdentityDialog_noDetectedNicknames", "暂未识别到可选玩家行"))}</h3><p>${escapeHtml(t("WebView_identityWindowHint", "请确认野狐棋局窗口可见，然后重新打开身份选择。"))}</p></div></div>`;
+    const actions = identity.hasSavedIdentity ? button("identity.clearSaved", t("FoxAutoPlayIdentityDialog_btnClearSavedIdentity", "清除保存"), "danger-outline left") : "";
+    openModal("identity", t("WebView_selectIdentity", "选择野狐身份"), body, actions + button("identity.close", t("FoxAutoPlayIdentityDialog_btnCancel", "取消")) + button("identity.useOnce", t("FoxAutoPlayIdentityDialog_btnUseOnce", "本次使用"), "", !selected) + button("identity.saveAndUse", t("FoxAutoPlayIdentityDialog_btnSaveAndUse", "保存并使用"), "primary", !selected), "min(780px, calc(100vw - 48px))");
   }
 
   function candidateHtml(candidate, selectedId, savedId) {
     const selected = candidate.id === selectedId;
     const previewUrl = safeImageUrl(candidate.previewUrl);
-    return `<label class="candidate${selected ? " selected" : ""}"><input type="radio" name="candidate" value="${escapeAttr(candidate.id)}"${selected ? " checked" : ""}><b>${escapeHtml(candidate.label || "未命名候选")}</b>${candidate.id === savedId ? '<span class="saved-pill">已保存</span>' : ""}${previewUrl ? `<img src="${escapeAttr(previewUrl)}" alt="${escapeAttr(candidate.label || "候选玩家行")}截图">` : ""}</label>`;
+    return `<label class="candidate${selected ? " selected" : ""}"><input type="radio" name="candidate" value="${escapeAttr(candidate.id)}"${selected ? " checked" : ""}><b>${escapeHtml(candidate.label || t("WebView_unnamedCandidate", "未命名候选"))}</b>${candidate.id === savedId ? `<span class="saved-pill">${escapeHtml(t("WebView_saved", "已保存"))}</span>` : ""}${previewUrl ? `<img src="${escapeAttr(previewUrl)}" alt="${escapeAttr((candidate.label || t("WebView_candidateRow", "候选玩家行")) + t("WebView_screenshot", "截图"))}">` : ""}</label>`;
   }
 
   function safeImageUrl(value) {
@@ -397,14 +450,14 @@
 
   function renderDialog(dialog) {
     const content = {
-      resetDefaults: ["恢复默认设置", "将当前设置草稿恢复为默认值。此操作不会立即写入配置，仍需点击保存设置。", "恢复默认"],
-      diagnostics: ["开启调试诊断", "调试诊断可能产生较大的文件。确认后仅修改当前设置草稿，保存设置后生效。", "继续开启"],
-      showInBoardHint: ["原棋盘上显示选点", "[前台]方式同步时不支持此功能。选点显示在原棋盘上后，原棋盘将无法落子。", "确定"]
-    }[dialog.kind] || [dialog.title || "提示", dialog.message || "", "确定"];
-    let actions = button("dialog.cancel", dialog.cancelLabel || "取消");
+      resetDefaults: [t("SettingsForm_btnReset", "恢复默认设置"), t("WebView_resetDefaultsDescription", "将当前设置草稿恢复为默认值。此操作不会立即写入配置，仍需点击保存设置。"), t("WebView_resetDefaults", "恢复默认")],
+      diagnostics: [t("WebView_enableDiagnostics", "开启调试诊断"), t("WebView_diagnosticsDescription", "调试诊断可能产生较大的文件。确认后仅修改当前设置草稿，保存设置后生效。"), t("WebView_continueEnable", "继续开启")],
+      showInBoardHint: [t("MainForm_chkShowInBoard", "原棋盘上显示选点"), t("WebView_showInBoardHintForeground", "[前台]方式同步时不支持此功能。选点显示在原棋盘上后，原棋盘将无法落子。"), t("TipsForm_btnConfirm", "确定")]
+    }[dialog.kind] || [dialog.title || t("TipsForm_title", "提示"), dialog.message || "", t("TipsForm_btnConfirm", "确定")];
+    let actions = button("dialog.cancel", dialog.cancelLabel || t("SettingsForm_btnCancel", "取消"));
     if (dialog.kind === "showInBoardHint") {
-      actions = button("dialog.dontShowAgain", "不再提示") + button("dialog.confirm", dialog.confirmLabel || content[2], "primary");
-      openModal("dialog show-in-board-hint", "提示", `<div class="dialog-copy"><p>${escapeHtml(dialog.message || content[1])}</p><p>可通过勾选“双向同步”选项恢复落子功能。</p></div>`, actions, "min(520px, calc(100vw - 48px))");
+      actions = button("dialog.dontShowAgain", t("TipsForm_btnNotAskAgain", "不再提示")) + button("dialog.confirm", dialog.confirmLabel || content[2], "primary");
+      openModal("dialog show-in-board-hint", t("TipsForm_title", "提示"), `<div class="dialog-copy"><p>${escapeHtml(dialog.message || content[1])}</p><p>${escapeHtml(t("WebView_showInBoardHintRestore", "可通过勾选“双向同步”选项恢复落子功能。"))}</p></div>`, actions, "min(520px, calc(100vw - 48px))");
       return;
     }
     actions += button("dialog.confirm", dialog.confirmLabel || content[2], "primary");
@@ -441,6 +494,7 @@
   function escapeAttr(value) { return escapeHtml(value); }
 
   function render() {
+    localizeStaticPage();
     applyTheme(state.shell.theme || "system");
     showPage(state.page);
     renderShell();
@@ -521,7 +575,9 @@
 
   function acceptMessage(message) {
     if (!message || message.type !== "state" || !message.payload || typeof message.payload !== "object") return;
+    const currentText = state.text;
     state = merge(initialState, message.payload);
+    if (!message.payload.text) state.text = currentText;
     render();
   }
 

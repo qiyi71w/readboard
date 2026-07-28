@@ -112,7 +112,7 @@ namespace readboard
                         state.Candidates.Add(new ReadBoardIdentityCandidateUiState
                         {
                             Id = id,
-                            Label = "玩家行 " + (i + 1),
+                            Label = string.Format(getLangStr("WebView_candidateRowNumber"), i + 1),
                             PreviewUrl = previewUrl
                         });
                         if (string.Equals(signature, currentSignature, StringComparison.Ordinal))

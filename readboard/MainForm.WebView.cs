@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -24,6 +25,7 @@ namespace readboard
 
         private readonly ReadBoardUiState webViewState = new ReadBoardUiState();
         private readonly Queue<ReadBoardUiLogEntry> webViewLogs = new Queue<ReadBoardUiLogEntry>();
+        private bool webViewTextSent;
         private WebView2 webView;
         private bool hostCommunicationEstablished;
 
@@ -208,8 +210,11 @@ namespace readboard
             {
                 MessageBox.Show(
                     this,
-                    "WebView2 初始化失败：" + ex.Message,
-                    "ReadBoard 无法启动",
+                    string.Format(
+                        CultureInfo.CurrentCulture,
+                        getLangStr("WebView_initializationFailed"),
+                        ex.Message),
+                    getLangStr("WebViewRuntime_caption"),
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
                 Close();
@@ -218,10 +223,11 @@ namespace readboard
 
         private void ConfigureWebView()
         {
+            webViewTextSent = false;
             string webRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebView");
             string entryPoint = Path.Combine(webRoot, "index.html");
             if (!File.Exists(entryPoint))
-                throw new FileNotFoundException("找不到 WebView 主页面。", entryPoint);
+                throw new FileNotFoundException(getLangStr("WebView_mainPageMissing"), entryPoint);
 
             CoreWebView2 core = webView.CoreWebView2;
             core.Settings.AreDefaultContextMenusEnabled = false;
@@ -496,7 +502,7 @@ namespace readboard
                 webViewSettingsDialog = new ReadBoardDialogUiState
                 {
                     Open = true,
-                    Title = "无法打开说明",
+                    Title = getLangStr("WebView_manualOpenFailedTitle"),
                     Message = getLangStr("noHelpFile")
                 };
             }
@@ -745,6 +751,7 @@ namespace readboard
                 return;
 
             webView.CoreWebView2.PostWebMessageAsJson(SerializeWebViewState(BuildWebViewState()));
+            webViewTextSent = true;
         }
 
         private ReadBoardUiState BuildWebViewState()
@@ -753,6 +760,8 @@ namespace readboard
             return new ReadBoardUiState
             {
                 Page = webViewState.Page,
+                Language = Program.language,
+                Text = webViewTextSent ? null : BuildWebViewText(),
                 Shell = new ReadBoardShellState
                 {
                     Version = "v" + AppReleaseVersion.GetCurrentVersion(),
@@ -776,6 +785,17 @@ namespace readboard
                 Dialog = GetWebViewSettingsDialogState(),
                 Logs = new List<ReadBoardUiLogEntry>(webViewLogs)
             };
+        }
+
+        private static IDictionary<string, string> BuildWebViewText()
+        {
+            var text = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (DictionaryEntry entry in Program.langItems)
+            {
+                if (entry.Key is string key && entry.Value is string value)
+                    text[key] = value;
+            }
+            return text;
         }
 
         private ReadBoardControlCenterState BuildControlCenterState(bool targetWindowValid)

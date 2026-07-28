@@ -54,7 +54,7 @@ namespace readboard
                 Status = "checking",
                 CurrentVersion = AppReleaseVersion.GetCurrentVersion(),
                 Title = getLangStr("MainForm_btnCheckUpdate_Checking"),
-                Detail = "正在获取最新版本信息…"
+                Detail = getLangStr("WebView_updateFetching")
             };
             PostWebViewState();
 
@@ -404,10 +404,10 @@ namespace readboard
                 Detail = detail,
                 Steps = new[]
                 {
-                    CreateWebViewUpdateStep("下载更新包", activeStep, 0),
-                    CreateWebViewUpdateStep("校验更新包", activeStep, 1),
-                    CreateWebViewUpdateStep("通知宿主", activeStep, 2),
-                    CreateWebViewUpdateStep("宿主安装", activeStep, 3)
+                    CreateWebViewUpdateStep(getLangStr("WebView_updateStepDownload"), activeStep, 0),
+                    CreateWebViewUpdateStep(getLangStr("WebView_updateStepVerify"), activeStep, 1),
+                    CreateWebViewUpdateStep(getLangStr("WebView_updateStepNotifyHost"), activeStep, 2),
+                    CreateWebViewUpdateStep(getLangStr("WebView_updateStepHostInstall"), activeStep, 3)
                 }
             };
             PostWebViewState();
