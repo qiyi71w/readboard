@@ -539,7 +539,26 @@ namespace readboard
             AutoPlayMoveMode moveMode = AutoPlayMoveMode.FirstCandidate)
         {
             RememberSentPlayState(color, time, playouts, firstPolicy, moveMode);
-            SendProtocolMessage(protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode));
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
+                    protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode),
+                    moveMode);
+            });
+        }
+
+        private void SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
+            ProtocolMessage message,
+            AutoPlayMoveMode moveMode)
+        {
+            outboundProtocolDispatcher.SendMessageWhileSynchronized(message);
+            if (AppConfig.NormalizeAutoPlayMoveMode(moveMode) != AutoPlayMoveMode.GenmoveAnalyze)
+                return;
+
+            lock (stateLock)
+            {
+                sessionState.LastBoardPayload = null;
+            }
         }
 
         public void SendNoInBoard()

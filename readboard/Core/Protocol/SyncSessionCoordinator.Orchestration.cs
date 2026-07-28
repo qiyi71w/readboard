@@ -942,6 +942,7 @@ namespace readboard
             {
                 dispatch.BoardSnapshotBatch = TryBuildOutboundBoardSnapshotBatch(sample.Snapshot);
                 dispatch.PlayMessage = ReservePlayMessageIfChanged(snapshot);
+                dispatch.PlayMoveMode = snapshot.AutoPlayMoveMode;
             }
             return dispatch;
         }
@@ -966,7 +967,9 @@ namespace readboard
                 if (dispatch.BoardSnapshotBatch != null)
                     outboundBoardSnapshotEmitter.EmitWhileSynchronized(dispatch.BoardSnapshotBatch);
                 if (dispatch.PlayMessage != null)
-                    outboundProtocolDispatcher.SendMessageWhileSynchronized(dispatch.PlayMessage);
+                    SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
+                        dispatch.PlayMessage,
+                        dispatch.PlayMoveMode);
             });
         }
 
@@ -1582,6 +1585,7 @@ namespace readboard
             public ProtocolMessage StartMessage { get; set; }
             public OutboundBoardSnapshotBatch BoardSnapshotBatch { get; set; }
             public ProtocolMessage PlayMessage { get; set; }
+            public AutoPlayMoveMode PlayMoveMode { get; set; }
         }
     }
 }

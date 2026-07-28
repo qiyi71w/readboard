@@ -121,6 +121,26 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
+        public void SendPlay_GmaForcesNextRecognizedBoardFrameAfterPlayWhenPayloadIsUnchanged()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", 57));
+            coordinator.SendPlay("black", "5", "1000", "0", AutoPlayMoveMode.GenmoveAnalyze);
+            coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", 57));
+
+            Assert.Equal(
+                new[]
+                {
+                    "syncPlatform generic", "foxMoveNumber 57", "lastMoveSource none", "re=000", "re=111", "end",
+                    "play>black>5 1000 0 gma",
+                    "syncPlatform generic", "foxMoveNumber 57", "lastMoveSource none", "re=000", "re=111", "end"
+                },
+                transport.SentLines);
+        }
+
+        [Fact]
         public void SendBoardSnapshot_EmitsFoxLiveContextMetadataBeforeBoardPayload()
         {
             FakeTransport transport = new FakeTransport();

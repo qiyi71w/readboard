@@ -88,9 +88,15 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Same(recognition.Snapshot, hostRecorder.LastRecognizedSnapshot);
         }
 
-        [Fact]
-        public void KeepSync_ResendsPlayAfterFoxLiveRoomContextChanges()
+        [Theory]
+        [InlineData(0, "play>black>0 0 0", 1)]
+        [InlineData(1, "play>black>0 0 0 gma", 2)]
+        public void KeepSync_ResendsPlayAfterFoxLiveRoomContextChanges(
+            int moveModeValue,
+            string playLine,
+            int expectedBoardFrameCount)
         {
+            AutoPlayMoveMode moveMode = (AutoPlayMoveMode)moveModeValue;
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
             coordinator.SetSyncPlatform("fox");
@@ -103,6 +109,7 @@ namespace Readboard.VerificationTests.Protocol
 
             object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, new IntPtr(5151));
             SetProperty(snapshot, "PlayColor", "black");
+            SetProperty(snapshot, "AutoPlayMoveMode", moveMode);
             FoxLiveContextSequenceHostRecorder hostRecorder = new FoxLiveContextSequenceHostRecorder(
                 snapshot,
                 coordinator,
@@ -128,7 +135,13 @@ namespace Readboard.VerificationTests.Protocol
             {
                 lock (transport.SentLines)
                 {
-                    return transport.SentLines.IndexOf("roomToken 222号") >= 0;
+                    if (moveMode != AutoPlayMoveMode.GenmoveAnalyze)
+                        return transport.SentLines.IndexOf("roomToken 222号") >= 0;
+
+                    int firstPlay = transport.SentLines.IndexOf(playLine);
+                    int secondPlay = transport.SentLines.IndexOf(playLine, firstPlay + 1);
+                    return secondPlay >= 0
+                        && transport.SentLines.IndexOf("re=fox", secondPlay + 1) > secondPlay;
                 }
             }, TimeSpan.FromSeconds(1)));
 
@@ -136,11 +149,16 @@ namespace Readboard.VerificationTests.Protocol
 
             Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
             int secondRoomIndex = transport.SentLines.IndexOf("roomToken 222号");
-            int firstPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0");
-            int secondPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0", firstPlayIndex + 1);
+            int firstPlayIndex = transport.SentLines.IndexOf(playLine);
+            int firstBoardIndex = transport.SentLines.IndexOf("re=fox");
+            int secondPlayIndex = transport.SentLines.IndexOf(playLine, firstPlayIndex + 1);
+            int postPlayBoardIndex = transport.SentLines.IndexOf("re=fox", secondPlayIndex + 1);
             Assert.True(firstPlayIndex >= 0, "Initial keep sync should send the selected play color.");
+            Assert.True(firstBoardIndex > firstPlayIndex, "Initial keep sync should send an authoritative board after play state replay.");
             Assert.True(secondRoomIndex >= 0, "The second Fox room context should be sent.");
             Assert.True(secondPlayIndex > secondRoomIndex, "Changing Fox live room should resend play after the new room context.");
+            Assert.Equal(moveMode == AutoPlayMoveMode.GenmoveAnalyze, postPlayBoardIndex > secondPlayIndex);
+            Assert.Equal(expectedBoardFrameCount, transport.CountLines("re=fox"));
         }
 
         [Fact]
