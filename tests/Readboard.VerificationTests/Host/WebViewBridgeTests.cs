@@ -319,11 +319,14 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("getLangStr(\"WebView_updateFetching\")", update);
             Assert.Contains("getLangStr(\"WebView_updateStepDownload\")", update);
             Assert.Contains("getLangStr(\"WebView_candidateRowNumber\")", identity);
-            Assert.Contains("getLangStr(\"WebView_syncFailedTitle\")", form);
-            Assert.Contains("getLangStr(\"WebView_recognitionFailedTitle\")", form);
+            Assert.Contains("ShowWebViewMessage(\"WebView_syncFailedTitle\", \"noSelectedBoardAndFailed\")", form);
+            Assert.Contains("ShowWebViewMessage(\"WebView_recognitionFailedTitle\", \"recgnizeFaild\")", form);
+            Assert.Contains("Logs = BuildWebViewLogs()", bridge);
+            Assert.Contains("message = getLangStr(entry.MessageKey);", bridge);
             Assert.Contains("function localizedSettingsError(value)", script);
             Assert.Contains("t(\"WebView_integerAtLeast\"", script);
             Assert.Contains("t(\"WebView_integerRange\"", script);
+            Assert.DoesNotContain("t(log.messageKey", script);
 
             Assert.DoesNotContain("Title = \"无法打开说明\"", bridge);
             Assert.DoesNotContain("Detail = \"正在获取最新版本信息…\"", update);

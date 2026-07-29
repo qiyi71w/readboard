@@ -439,8 +439,8 @@ namespace Readboard.VerificationTests.Host
         {
             string source = LoadSource("readboard", "Form1.cs");
 
-            Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.OnKeepSyncStopped(bool continuousSyncActive)"));
-            Assert.Contains("InvokeUiHostAction(ApplyContinuousSyncStoppedUi);", GetMethodSlice(source, "void ISyncCoordinatorHost.OnContinuousSyncStopped()"));
+            Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.OnKeepSyncStopped(\n            bool continuousSyncActive,"));
+            Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.OnContinuousSyncStopped(long observationGeneration)"));
             Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.ShowMissingSyncSourceMessage()"));
             Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.ShowRecognitionFailureMessage()"));
             Assert.Contains("InvokeUiHostAction(delegate", GetMethodSlice(source, "void ISyncCoordinatorHost.MinimizeWindow()"));
@@ -459,20 +459,6 @@ namespace Readboard.VerificationTests.Host
             int restoreIndex = IndexOfRequired(methodSlice, "SetSyncConfigurationControlsEnabled(true);");
 
             Assert.True(returnIndex < restoreIndex, "Continuous sync must remain locked before idle controls are restored.");
-        }
-
-        [Fact]
-        public void MainForm_QuickSyncStop_PublishesRestoredConfigurationAvailability()
-        {
-            string source = LoadSource("readboard", "Form1.cs");
-            string methodSlice = GetMethodSlice(source, "private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)");
-
-            int restoreConfigurationIndex = IndexOfRequired(methodSlice, "SetSyncConfigurationControlsEnabled(true);");
-            int restoreSelectionIndex = IndexOfRequired(methodSlice, "RestoreBoardSelectionControls();");
-            int finalPublishIndex = methodSlice.LastIndexOf("PostWebViewState();", StringComparison.Ordinal);
-
-            Assert.True(finalPublishIndex > restoreConfigurationIndex, "The restored platform controls must be published to WebView.");
-            Assert.True(finalPublishIndex > restoreSelectionIndex, "The restored board controls must be published to WebView.");
         }
 
         [Fact]

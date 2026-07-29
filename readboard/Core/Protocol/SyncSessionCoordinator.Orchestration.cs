@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 
 namespace readboard
@@ -19,6 +20,9 @@ namespace readboard
         private int activeContinuousSyncSessionId;
         private int nextKeepSyncSessionId;
         private int activeKeepSyncSessionId;
+        private long activeContinuousObservationGeneration;
+        private long activeKeepObservationGeneration;
+        private long latestStopObservationGeneration;
         private int pendingKeepSyncStopCount;
         private int suppressDeferredStopSyncThroughSessionId;
 
@@ -45,6 +49,8 @@ namespace readboard
         public bool TryRunOneTimeSync()
         {
             SyncSessionRuntimeDependencies runtime = GetRuntimeDependencies();
+            Volatile.Write(ref latestStopObservationGeneration, 0L);
+            long observationGeneration = runtime.Host.AllocateSessionObservationGeneration();
             bool yikeBrowserSyncStarted = false;
             if (IsYikeSyncPlatform() && IsProtocolSessionActive)
             {
@@ -54,7 +60,7 @@ namespace readboard
 
             try
             {
-                ResetRuntimeSyncCaches(runtime);
+                ResetRuntimeSyncCaches(runtime, observationGeneration);
                 int autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
                 SyncCoordinatorHostSnapshot snapshot;
                 if (!TryCaptureSnapshot(runtime, out snapshot))
@@ -65,16 +71,28 @@ namespace readboard
                     return false;
 
                 RecognizedSyncSample sample;
-                if (!TryRecognizeSample(runtime, snapshot, true, out sample))
+                if (!TryRecognizeSample(
+                    runtime,
+                    snapshot,
+                    true,
+                    out sample,
+                    null,
+                    observationGeneration))
                 {
                     runtime.Host.ShowRecognitionFailureMessage();
                     return false;
                 }
 
                 DispatchRecognizedSampleProtocol(
-                    BuildRecognizedSampleProtocolDispatch(snapshot, sample, true, autoPlayGeneration),
+                    BuildRecognizedSampleProtocolDispatch(
+                        snapshot,
+                        sample,
+                        true,
+                        autoPlayGeneration,
+                        observationGeneration),
                     autoPlayGeneration,
-                    null);
+                    null,
+                    observationGeneration);
                 return true;
             }
             finally
@@ -244,6 +262,7 @@ namespace readboard
             out int continuousSyncSessionId)
         {
             Thread worker;
+            long observationGeneration;
 
             lock (workerLock)
             {
@@ -253,10 +272,13 @@ namespace readboard
                     return false;
                 }
 
+                observationGeneration = runtime.Host.AllocateSessionObservationGeneration();
                 BeginContinuousSync();
                 continuousSyncSessionId = Interlocked.Increment(ref nextContinuousSyncSessionId);
                 Volatile.Write(ref activeContinuousSyncSessionId, continuousSyncSessionId);
-                runtime.Host.OnContinuousSyncStarted();
+                Volatile.Write(ref latestStopObservationGeneration, 0L);
+                Volatile.Write(ref activeContinuousObservationGeneration, observationGeneration);
+                runtime.Host.OnContinuousSyncStarted(observationGeneration);
                 worker = CreateContinuousSyncWorker(lifecycleGeneration, continuousSyncSessionId);
                 continuousSyncThread = worker;
                 worker.Start();
@@ -308,6 +330,7 @@ namespace readboard
             int continuousSyncSessionId)
         {
             bool notifyStop = false;
+            long observationGeneration = 0;
 
             lock (workerLock)
             {
@@ -316,12 +339,17 @@ namespace readboard
                     return;
 
                 Volatile.Write(ref activeContinuousSyncSessionId, 0);
+                observationGeneration = runtime.Host.AllocateSessionObservationGeneration();
+                Volatile.Write(ref latestStopObservationGeneration, observationGeneration);
+                Volatile.Write(ref activeContinuousObservationGeneration, observationGeneration);
+                if (StartedSync)
+                    Volatile.Write(ref activeKeepObservationGeneration, observationGeneration);
                 continuousSyncThread = null;
                 notifyStop = true;
             }
 
             if (notifyStop)
-                runtime.Host.OnContinuousSyncStopped();
+                runtime.Host.OnContinuousSyncStopped(observationGeneration);
         }
 
         private void TryStartDiscoveredKeepSync(
@@ -334,7 +362,9 @@ namespace readboard
                 return;
 
             runtimeState.SelectedWindowHandle = handle;
-            runtime.Host.UpdateSelectedWindowHandle(handle);
+            runtime.Host.UpdateSelectedWindowHandle(
+                handle,
+                Volatile.Read(ref activeContinuousObservationGeneration));
             SyncCoordinatorHostSnapshot refreshedSnapshot;
             if (!TryCaptureSnapshot(runtime, out refreshedSnapshot))
                 return;
@@ -350,6 +380,14 @@ namespace readboard
             int lifecycleGeneration,
             bool requireContinuousSync)
         {
+            long observationGeneration;
+            lock (workerLock)
+            {
+                if (!IsKeepSyncStartCurrent(lifecycleGeneration, requireContinuousSync))
+                    return false;
+                observationGeneration = runtime.Host.AllocateSessionObservationGeneration();
+                Volatile.Write(ref latestStopObservationGeneration, 0L);
+            }
             runtimeState.ResetProbeState();
             Func<bool> isOperationCurrent = delegate
             {
@@ -361,10 +399,11 @@ namespace readboard
                 runtime,
                 snapshot,
                 showMessages,
-                isOperationCurrent))
+                isOperationCurrent,
+                observationGeneration))
             {
                 if (IsKeepSyncStartCurrent(lifecycleGeneration, requireContinuousSync))
-                    HandleKeepSyncStartFailure(runtime, showMessages);
+                    HandleKeepSyncStartFailure(runtime, showMessages, observationGeneration);
                 return false;
             }
 
@@ -372,26 +411,29 @@ namespace readboard
                 runtime,
                 snapshot,
                 lifecycleGeneration,
-                requireContinuousSync);
+                requireContinuousSync,
+                observationGeneration);
         }
 
         private void HandleKeepSyncStartFailure(
             SyncSessionRuntimeDependencies runtime,
-            bool restoreUi)
+            bool restoreUi,
+            long observationGeneration)
         {
-            ResetRuntimeSyncCaches(runtime);
-            ClearRuntimeFrame(runtime);
+            ResetRuntimeSyncCaches(runtime, observationGeneration);
+            ClearRuntimeFrame(runtime, observationGeneration);
             runtimeState.ResetProbeState();
             CancelPendingMove();
             if (restoreUi)
-                runtime.Host.OnKeepSyncStopped(false);
+                runtime.Host.OnKeepSyncStopped(false, observationGeneration);
         }
 
         private bool TryActivateKeepSyncSession(
             SyncSessionRuntimeDependencies runtime,
             SyncCoordinatorHostSnapshot snapshot,
             int lifecycleGeneration,
-            bool requireContinuousSync)
+            bool requireContinuousSync,
+            long observationGeneration)
         {
             Thread worker;
 
@@ -402,9 +444,11 @@ namespace readboard
 
                 int keepSyncSessionId = Interlocked.Increment(ref nextKeepSyncSessionId);
                 Volatile.Write(ref activeKeepSyncSessionId, keepSyncSessionId);
+                Volatile.Write(ref latestStopObservationGeneration, 0L);
                 BeginKeepSync();
-                runtime.Host.OnKeepSyncStarted();
-                ResetRuntimeSyncCaches(runtime);
+                Volatile.Write(ref activeKeepObservationGeneration, observationGeneration);
+                runtime.Host.OnKeepSyncStarted(observationGeneration);
+                ResetRuntimeSyncCaches(runtime, observationGeneration);
                 keepSyncStopRequestedEvent.Reset();
                 worker = CreateKeepSyncWorker(lifecycleGeneration, keepSyncSessionId);
                 keepSyncThread = worker;
@@ -457,7 +501,8 @@ namespace readboard
                         snapshot,
                         firstSample,
                         autoPlayGeneration,
-                        isOperationCurrent))
+                        isOperationCurrent,
+                        Volatile.Read(ref activeKeepObservationGeneration)))
                     {
                         if (!IsOperationCurrent(isOperationCurrent))
                             return;
@@ -483,28 +528,34 @@ namespace readboard
             bool notifyStop = false;
             bool shouldSendStopSync = false;
             bool continuousSyncActive = false;
+            long observationGeneration = 0;
 
             lock (workerLock)
             {
                 if (keepSyncThread != Thread.CurrentThread)
                     return;
 
+                observationGeneration = runtime.Host.AllocateSessionObservationGeneration();
+                Volatile.Write(ref latestStopObservationGeneration, observationGeneration);
+                Volatile.Write(ref activeKeepObservationGeneration, observationGeneration);
                 Volatile.Write(ref activeKeepSyncSessionId, 0);
                 EndKeepSync();
                 keepSyncStopRequestedEvent.Set();
-                ResetRuntimeSyncCaches(runtime);
+                ResetRuntimeSyncCaches(runtime, observationGeneration);
                 shouldSendStopSync = true;
                 pendingKeepSyncStopCount++;
-                ClearRuntimeFrame(runtime);
+                ClearRuntimeFrame(runtime, observationGeneration);
                 keepSyncThread = null;
                 continuousSyncActive = IsContinuousSyncing;
+                if (continuousSyncActive)
+                    Volatile.Write(ref activeContinuousObservationGeneration, observationGeneration);
                 notifyStop = true;
             }
 
             if (shouldSendStopSync)
                 SendDeferredStopSync(keepSyncSessionId);
             if (notifyStop)
-                runtime.Host.OnKeepSyncStopped(continuousSyncActive);
+                runtime.Host.OnKeepSyncStopped(continuousSyncActive, observationGeneration);
         }
 
         private void SendDeferredStopSync(int keepSyncSessionId)
@@ -562,10 +613,17 @@ namespace readboard
             SyncCoordinatorHostSnapshot snapshot,
             bool firstSample,
             int autoPlayGeneration,
-            Func<bool> isOperationCurrent)
+            Func<bool> isOperationCurrent,
+            long observationGeneration)
         {
             RecognizedSyncSample sample;
-            if (!TryRecognizeSample(runtime, snapshot, false, out sample, isOperationCurrent))
+            if (!TryRecognizeSample(
+                runtime,
+                snapshot,
+                false,
+                out sample,
+                isOperationCurrent,
+                observationGeneration))
                 return false;
             RecognizedSampleProtocolDispatch dispatch;
             lock (workerLock)
@@ -577,11 +635,16 @@ namespace readboard
                     snapshot,
                     sample,
                     firstSample,
-                    autoPlayGeneration);
+                    autoPlayGeneration,
+                    observationGeneration);
             }
             if (!IsOperationCurrent(isOperationCurrent))
                 return false;
-            DispatchRecognizedSampleProtocol(dispatch, autoPlayGeneration, isOperationCurrent);
+            DispatchRecognizedSampleProtocol(
+                dispatch,
+                autoPlayGeneration,
+                isOperationCurrent,
+                observationGeneration);
             return true;
         }
 
@@ -589,7 +652,8 @@ namespace readboard
             SyncSessionRuntimeDependencies runtime,
             SyncCoordinatorHostSnapshot snapshot,
             bool showMessages,
-            Func<bool> isOperationCurrent)
+            Func<bool> isOperationCurrent,
+            long observationGeneration)
         {
             if (!IsOperationCurrent(isOperationCurrent))
                 return false;
@@ -600,7 +664,13 @@ namespace readboard
                 return true;
 
             RecognizedSyncSample sample;
-            if (!TryRecognizeSample(runtime, snapshot, true, out sample, isOperationCurrent))
+            if (!TryRecognizeSample(
+                runtime,
+                snapshot,
+                true,
+                out sample,
+                isOperationCurrent,
+                observationGeneration))
             {
                 if (showMessages && IsOperationCurrent(isOperationCurrent))
                     runtime.Host.ShowRecognitionFailureMessage();
@@ -657,9 +727,16 @@ namespace readboard
             SyncSessionRuntimeDependencies runtime,
             SyncCoordinatorHostSnapshot snapshot,
             bool allowBlackRetry,
-            out RecognizedSyncSample sample)
+            out RecognizedSyncSample sample,
+            long observationGeneration)
         {
-            return TryRecognizeSample(runtime, snapshot, allowBlackRetry, out sample, null);
+            return TryRecognizeSample(
+                runtime,
+                snapshot,
+                allowBlackRetry,
+                out sample,
+                null,
+                observationGeneration);
         }
 
         private bool TryRecognizeSample(
@@ -667,7 +744,8 @@ namespace readboard
             SyncCoordinatorHostSnapshot snapshot,
             bool allowBlackRetry,
             out RecognizedSyncSample sample,
-            Func<bool> isOperationCurrent)
+            Func<bool> isOperationCurrent,
+            long observationGeneration)
         {
             sample = null;
             for (int attempt = 0; attempt < 2; attempt++)
@@ -675,6 +753,7 @@ namespace readboard
                 if (!IsOperationCurrent(isOperationCurrent))
                     return false;
 
+                Stopwatch sampleStopwatch = Stopwatch.StartNew();
                 BoardFrame frame = CaptureFrame(runtime, snapshot, isOperationCurrent);
                 if (frame == null)
                     return false;
@@ -682,6 +761,7 @@ namespace readboard
                 BoardRecognitionResult recognition = RecognizeFrame(runtime, snapshot, frame, isOperationCurrent);
                 if (recognition == null)
                     return false;
+                sampleStopwatch.Stop();
 
                 lock (workerLock)
                 {
@@ -691,7 +771,13 @@ namespace readboard
                         return false;
                     }
 
-                    sample = CompleteRecognizedSample(runtime, snapshot, frame, recognition);
+                    sample = CompleteRecognizedSample(
+                        runtime,
+                        snapshot,
+                        frame,
+                        recognition,
+                        sampleStopwatch.Elapsed,
+                        observationGeneration);
                 }
                 if (!NeedsBlackRetry(sample, allowBlackRetry))
                     return true;
@@ -751,7 +837,9 @@ namespace readboard
             SyncSessionRuntimeDependencies runtime,
             SyncCoordinatorHostSnapshot snapshot,
             BoardFrame frame,
-            BoardRecognitionResult recognition)
+            BoardRecognitionResult recognition,
+            TimeSpan duration,
+            long observationGeneration)
         {
             int previousArea = runtimeState.CurrentBoardPixelWidth * runtimeState.CurrentBoardPixelHeight;
             ApplyRecognizedFrame(frame, recognition);
@@ -765,8 +853,12 @@ namespace readboard
                     frame,
                     runtimeState.CurrentBoardPixelWidth,
                     runtimeState.CurrentBoardPixelHeight,
-                    runtime.PlacementService.CanResolvePlacementRegion(frame));
-            runtime.Host.OnBoardSnapshotRecognized(recognition.Snapshot);
+                    runtime.PlacementService.CanResolvePlacementRegion(frame),
+                    observationGeneration);
+            runtime.Host.OnBoardSnapshotRecognized(
+                recognition.Snapshot,
+                duration,
+                observationGeneration);
             return new RecognizedSyncSample(previousArea, frame, recognition.Snapshot);
         }
 
@@ -943,12 +1035,14 @@ namespace readboard
             SyncCoordinatorHostSnapshot snapshot,
             RecognizedSyncSample sample,
             bool firstSample,
-            int autoPlayGeneration)
+            int autoPlayGeneration,
+            long observationGeneration)
         {
             RecognizedSampleProtocolDispatch dispatch = new RecognizedSampleProtocolDispatch();
             if (!firstSample && sample.PreviousArea > 0 && sample.PreviousArea != (runtimeState.CurrentBoardPixelWidth * runtimeState.CurrentBoardPixelHeight))
             {
-                ResetSyncCaches();
+                ResetSyncCaches(false);
+                NotifySyncCachesReset(observationGeneration);
                 dispatch.ShouldSendClear = true;
             }
             dispatch.OverlayProtocolLine = ReserveOverlayProtocolLine(BuildOverlayProtocolLineIfNeeded(snapshot, sample.Frame));
@@ -975,7 +1069,8 @@ namespace readboard
         private void DispatchRecognizedSampleProtocol(
             RecognizedSampleProtocolDispatch dispatch,
             int autoPlayGeneration,
-            Func<bool> isOperationCurrent)
+            Func<bool> isOperationCurrent,
+            long observationGeneration)
         {
             if (dispatch == null)
                 return;
@@ -1006,7 +1101,9 @@ namespace readboard
             {
                 IWebViewSyncCoordinatorHost webViewHost = GetRuntimeDependencies().Host as IWebViewSyncCoordinatorHost;
                 if (webViewHost != null)
-                    webViewHost.OnBoardSnapshotSent(dispatch.SentSnapshot);
+                    webViewHost.OnBoardSnapshotSent(
+                        dispatch.SentSnapshot,
+                        observationGeneration);
             }
         }
 
@@ -1303,10 +1400,19 @@ namespace readboard
         private void CompleteStopCleanup()
         {
             Volatile.Write(ref activeKeepSyncSessionId, 0);
-            ClearRuntimeFrame(runtimeDependencies);
+            SyncSessionRuntimeDependencies runtime = runtimeDependencies;
+            long observationGeneration = Volatile.Read(ref latestStopObservationGeneration);
+            if (runtime != null && observationGeneration == 0)
+            {
+                observationGeneration = runtime.Host.AllocateSessionObservationGeneration();
+                Volatile.Write(ref latestStopObservationGeneration, observationGeneration);
+            }
+            if (runtime != null)
+            {
+                ClearRuntimeFrame(runtime, observationGeneration);
+                ResetRuntimeSyncCaches(runtime, observationGeneration);
+            }
             runtimeState.ResetProbeState();
-            if (runtimeDependencies != null)
-                ResetRuntimeSyncCaches(runtimeDependencies);
         }
 
         private void CompleteStopCleanupIfIdle()
@@ -1552,11 +1658,13 @@ namespace readboard
             return string.IsNullOrWhiteSpace(value) ? "0" : value;
         }
 
-        private void ResetRuntimeSyncCaches(SyncSessionRuntimeDependencies runtime)
+        private void ResetRuntimeSyncCaches(
+            SyncSessionRuntimeDependencies runtime,
+            long observationGeneration)
         {
             ResetSyncCaches(false);
             runtime.OverlayService.Reset();
-            runtime.Host.OnSyncCachesReset();
+            runtime.Host.OnSyncCachesReset(observationGeneration);
         }
 
         private SyncCoordinatorHostSnapshot CaptureSnapshot(SyncSessionRuntimeDependencies runtime)
@@ -1602,7 +1710,9 @@ namespace readboard
             DisposeBoardFrame(previous);
         }
 
-        private void ClearRuntimeFrame(SyncSessionRuntimeDependencies runtime)
+        private void ClearRuntimeFrame(
+            SyncSessionRuntimeDependencies runtime,
+            long observationGeneration)
         {
             ReplaceRuntimeFrame(null);
             runtimeState.CurrentBoardPixelWidth = 0;
@@ -1611,7 +1721,7 @@ namespace readboard
                 ? null
                 : runtime.Host as IWebViewSyncCoordinatorHost;
             if (webViewHost != null)
-                webViewHost.OnRuntimeFrameCleared();
+                webViewHost.OnRuntimeFrameCleared(observationGeneration);
         }
 
         private static void DisposeBoardFrame(BoardFrame frame)

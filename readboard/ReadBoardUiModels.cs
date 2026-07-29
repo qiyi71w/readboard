@@ -85,6 +85,8 @@ namespace readboard
         public string Time { get; set; }
         public string Level { get; set; }
         public string Message { get; set; }
+        public string MessageKey { get; set; }
+        public string DiagnosticDetail { get; set; }
     }
 
     internal sealed class ReadBoardUiCommand

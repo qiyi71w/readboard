@@ -239,5 +239,54 @@ namespace readboard
                 suppressWebViewStatePublication = false;
             }
         }
+
+        private void RunWithSuppressedWebViewStatePublication(Action action)
+        {
+            if (action == null)
+                throw new ArgumentNullException("action");
+
+            bool previous = suppressWebViewStatePublication;
+            bool previousPending = suppressedWebViewStatePublicationPending;
+            int previousDepth = suppressedWebViewStatePublicationScopeDepth;
+            suppressWebViewStatePublication = true;
+            suppressedWebViewStatePublicationScopeDepth = previousDepth + 1;
+            suppressedWebViewStatePublicationPending = false;
+            try
+            {
+                action();
+            }
+            finally
+            {
+                bool pending = suppressedWebViewStatePublicationPending;
+                suppressedWebViewStatePublicationScopeDepth = previousDepth;
+                suppressWebViewStatePublication = previous;
+                suppressedWebViewStatePublicationPending = previousPending || pending;
+                if (previousDepth == 0 && !previous && pending)
+                    PostWebViewState();
+            }
+        }
+
+        private ControlCenterSessionObservationApplyResult ApplyControlCenterSessionObservation(
+            ControlCenterSessionObservation observation)
+        {
+            ControlCenterSessionObservationApplyResult result = controlCenterRuntime.ApplyObservation(observation);
+            if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                return result;
+
+            for (int i = 0; i < result.SemanticMessages.Count; i++)
+            {
+                ControlCenterSemanticMessage message = result.SemanticMessages[i];
+                AddWebViewSemanticLog(message.Level, message);
+            }
+            if (result.ShouldPublishSnapshot)
+            {
+                if (suppressWebViewStatePublication
+                    && suppressedWebViewStatePublicationScopeDepth > 0)
+                    suppressedWebViewStatePublicationPending = true;
+                else if (!suppressWebViewStatePublication)
+                    PostWebViewState();
+            }
+            return result;
+        }
     }
 }

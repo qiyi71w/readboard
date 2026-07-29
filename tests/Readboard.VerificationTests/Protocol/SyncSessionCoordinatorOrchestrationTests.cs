@@ -1692,6 +1692,37 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public void ActiveKeepSyncCacheReset_ReusesActiveObservationGeneration()
+        {
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(
+                new RecordingTransport(),
+                new LegacyProtocolAdapter());
+            ObservationGenerationHost host = new ObservationGenerationHost();
+            coordinator.AttachRuntime(new SyncSessionRuntimeDependencies
+            {
+                Host = host,
+                CaptureService = new SequencedCaptureService(CreateFrame()),
+                RecognitionService = new SequencedRecognitionService(CreateResult("re=foreground")),
+                PlacementService = new PassivePlacementService(),
+                OverlayService = new PassiveOverlayService()
+            });
+            coordinator.BeginKeepSync();
+            SetField(coordinator, "activeKeepObservationGeneration", 41L);
+
+            try
+            {
+                coordinator.ResetSyncCaches();
+            }
+            finally
+            {
+                coordinator.EndKeepSync();
+            }
+
+            Assert.Equal(41L, host.LastSyncCachesResetGeneration);
+            Assert.Equal(0, host.AllocationCount);
+        }
+
+        [Fact]
         public void AreaChangeCacheReset_DoesNotReportRuntimeFrameCleared()
         {
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(
@@ -1718,11 +1749,12 @@ namespace Readboard.VerificationTests.Protocol
                 new SyncCoordinatorHostSnapshot { BoardWidth = 19, BoardHeight = 19 },
                 sample,
                 false,
+                0,
                 0);
 
             Assert.Equal(0, host.RuntimeFrameClearedCount);
 
-            Invoke(coordinator, "ClearRuntimeFrame", runtime);
+            Invoke(coordinator, "ClearRuntimeFrame", runtime, 0L);
 
             Assert.Equal(1, host.RuntimeFrameClearedCount);
         }
@@ -2011,20 +2043,24 @@ namespace Readboard.VerificationTests.Protocol
             public int RuntimeFrameClearedCount { get; private set; }
 
             public SyncCoordinatorHostSnapshot CaptureSnapshot() { return new SyncCoordinatorHostSnapshot(); }
-            public void UpdateSelectedWindowHandle(IntPtr handle) { }
-            public void OnKeepSyncStarted() { }
-            public void OnKeepSyncStopped(bool continuousSyncActive) { }
-            public void OnContinuousSyncStarted() { }
-            public void OnContinuousSyncStopped() { }
-            public void OnSyncCachesReset() { }
-            public void OnBoardSnapshotRecognized(BoardSnapshot snapshot) { }
-            public void OnBoardSnapshotSent(BoardSnapshot snapshot) { }
+            public long AllocateSessionObservationGeneration() { return 0; }
+            public void UpdateSelectedWindowHandle(IntPtr handle, long observationGeneration) { }
+            public void OnKeepSyncStarted(long observationGeneration) { }
+            public void OnKeepSyncStopped(bool continuousSyncActive, long observationGeneration) { }
+            public void OnContinuousSyncStarted(long observationGeneration) { }
+            public void OnContinuousSyncStopped(long observationGeneration) { }
+            public void OnSyncCachesReset(long observationGeneration) { }
+            public void OnBoardSnapshotRecognized(
+                BoardSnapshot snapshot,
+                TimeSpan duration,
+                long observationGeneration) { }
+            public void OnBoardSnapshotSent(BoardSnapshot snapshot, long observationGeneration) { }
             public void ShowMissingSyncSourceMessage() { }
             public void ShowRecognitionFailureMessage() { }
             public void MinimizeWindow() { }
             public bool TrySendPlaceProtocolError(string message) { return false; }
 
-            public void OnRuntimeFrameCleared()
+            public void OnRuntimeFrameCleared(long observationGeneration)
             {
                 RuntimeFrameClearedCount++;
             }
@@ -2033,9 +2069,48 @@ namespace Readboard.VerificationTests.Protocol
                 BoardFrame frame,
                 int boardPixelWidth,
                 int boardPixelHeight,
-                bool placementRegionResolved)
+                bool placementRegionResolved,
+                long observationGeneration)
             {
             }
+        }
+
+        private sealed class ObservationGenerationHost : ISyncCoordinatorHost
+        {
+            public int AllocationCount { get; private set; }
+            public long LastSyncCachesResetGeneration { get; private set; }
+
+            public SyncCoordinatorHostSnapshot CaptureSnapshot()
+            {
+                return new SyncCoordinatorHostSnapshot();
+            }
+
+            public long AllocateSessionObservationGeneration()
+            {
+                AllocationCount++;
+                return 100L + AllocationCount;
+            }
+
+            public void UpdateSelectedWindowHandle(IntPtr handle, long observationGeneration) { }
+            public void OnKeepSyncStarted(long observationGeneration) { }
+            public void OnKeepSyncStopped(bool continuousSyncActive, long observationGeneration) { }
+            public void OnContinuousSyncStarted(long observationGeneration) { }
+            public void OnContinuousSyncStopped(long observationGeneration) { }
+
+            public void OnSyncCachesReset(long observationGeneration)
+            {
+                LastSyncCachesResetGeneration = observationGeneration;
+            }
+
+            public void OnBoardSnapshotRecognized(
+                BoardSnapshot snapshot,
+                TimeSpan duration,
+                long observationGeneration) { }
+
+            public void ShowMissingSyncSourceMessage() { }
+            public void ShowRecognitionFailureMessage() { }
+            public void MinimizeWindow() { }
+            public bool TrySendPlaceProtocolError(string message) { return false; }
         }
 
         private sealed class AutoPlayToggleHostRecorder

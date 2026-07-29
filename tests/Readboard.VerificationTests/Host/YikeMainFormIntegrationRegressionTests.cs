@@ -73,7 +73,7 @@ namespace Readboard.VerificationTests.Host
             string keepStartedMethod = GetMethodSlice(formSource, "private void ApplyKeepSyncStartedUi()");
             string keepStoppedMethod = GetMethodSlice(formSource, "private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)");
             string continuousStartedMethod = GetMethodSlice(formSource, "private void ApplyContinuousSyncStartedUi()");
-            string resetMethod = GetMethodSlice(formSource, "void ISyncCoordinatorHost.OnSyncCachesReset()");
+            string resetMethod = GetMethodSlice(formSource, "void ISyncCoordinatorHost.OnSyncCachesReset(long observationGeneration)");
 
             Assert.DoesNotContain("ClearYikeContext()", keepStartedMethod);
             Assert.DoesNotContain("ClearYikeContext()", keepStoppedMethod);

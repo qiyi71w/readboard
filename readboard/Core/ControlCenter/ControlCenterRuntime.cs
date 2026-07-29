@@ -155,7 +155,20 @@ namespace readboard
         public string FirstPolicyValue { get; set; }
         public string FoxAutoPlayNicknameSignature { get; set; }
         public FoxWindowContext FoxWindowContext { get; set; }
+        public YikeWindowContext YikeWindowContext { get; set; }
         public AutoPlayColorResolution DetectedAutoPlayColor { get; set; }
+        public bool? TargetWindowValid { get; set; }
+        public bool BoardRegionRecognized { get; set; }
+        public bool PlacementRegionResolved { get; set; }
+        public bool QuickSyncActive { get; set; }
+        public bool ContinuousSyncActive { get; set; }
+        public bool AnalysisRunning { get; set; }
+        public bool AnalysisStateAvailable { get; set; }
+        public string LastSync { get; set; }
+        public int StoneCount { get; set; }
+        public string Duration { get; set; }
+        public MainWindowTitleTurn TitleTurn { get; set; }
+        public bool HostConnected { get; set; }
 
         public ControlCenterSessionState()
         {
@@ -164,6 +177,9 @@ namespace readboard
             FirstPolicyValue = string.Empty;
             FoxAutoPlayNicknameSignature = string.Empty;
             FoxWindowContext = FoxWindowContext.Unknown();
+            YikeWindowContext = YikeWindowContext.Unknown();
+            LastSync = null;
+            Duration = null;
         }
 
         public ControlCenterSessionState Clone()
@@ -176,8 +192,30 @@ namespace readboard
                 FirstPolicyValue = FirstPolicyValue,
                 FoxAutoPlayNicknameSignature = FoxAutoPlayNicknameSignature,
                 FoxWindowContext = global::readboard.FoxWindowContext.CopyOf(this.FoxWindowContext),
-                DetectedAutoPlayColor = DetectedAutoPlayColor
+                YikeWindowContext = global::readboard.YikeWindowContext.CopyOf(this.YikeWindowContext),
+                DetectedAutoPlayColor = CopyOf(DetectedAutoPlayColor),
+                TargetWindowValid = TargetWindowValid,
+                BoardRegionRecognized = BoardRegionRecognized,
+                PlacementRegionResolved = PlacementRegionResolved,
+                QuickSyncActive = QuickSyncActive,
+                ContinuousSyncActive = ContinuousSyncActive,
+                AnalysisRunning = AnalysisRunning,
+                AnalysisStateAvailable = AnalysisStateAvailable,
+                LastSync = LastSync,
+                StoneCount = StoneCount,
+                Duration = Duration,
+                TitleTurn = TitleTurn,
+                HostConnected = HostConnected
             };
+        }
+
+        private static AutoPlayColorResolution CopyOf(AutoPlayColorResolution resolution)
+        {
+            if (resolution == null)
+                return null;
+            return resolution.IsKnown
+                ? AutoPlayColorResolution.Known(resolution.PlayColor, resolution.Status)
+                : AutoPlayColorResolution.Unknown(resolution.Status);
         }
 
         internal static ControlCenterSessionState FromLaunchOptions(LaunchOptions options)
@@ -424,12 +462,26 @@ namespace readboard
         public AutoPlayColorMode AutoPlayColorMode { get; set; }
         public AutoPlayMoveMode AutoPlayMoveMode { get; set; }
         public AutoPlayColorResolution AutoPlayColorResolution { get; set; }
-        public FoxWindowContext FoxWindowContext { get; set; }
         public string PlayColor { get; set; }
         public AutoPlayColorStatus AutoPlayColorStatus { get; set; }
         public string AiTimeValue { get; set; }
         public string PlayoutsValue { get; set; }
         public string FirstPolicyValue { get; set; }
+        public bool? TargetWindowValid { get; set; }
+        public FoxWindowContext FoxWindowContext { get; set; }
+        public YikeWindowContext YikeWindowContext { get; set; }
+        public bool BoardRegionRecognized { get; set; }
+        public bool PlacementRegionResolved { get; set; }
+        public bool QuickSyncActive { get; set; }
+        public bool ContinuousSyncActive { get; set; }
+        public bool AnalysisRunning { get; set; }
+        public bool AnalysisStateAvailable { get; set; }
+        public string LastSync { get; set; }
+        public int StoneCount { get; set; }
+        public string Duration { get; set; }
+        public MainWindowTitleTurn TitleTurn { get; set; }
+        public bool HostConnected { get; set; }
+        public long SessionObservationGeneration { get; set; }
         public bool ConfigurationEnabled { get; set; }
         public bool CustomBoardSizeEnabled { get; set; }
         public bool CustomBoardDimensionsEnabled { get; set; }
@@ -623,10 +675,13 @@ namespace readboard
     {
         private readonly IControlCenterSessionAdapter sessionAdapter;
         private readonly IControlCenterPreferencePersistence persistence;
+        private readonly object observationSyncRoot = new object();
         private ControlCenterPreferences preferences;
         private ControlCenterSessionState sessionState;
         private bool preferencesSaved;
         private string persistenceError;
+        private long sessionObservationGeneration;
+        private string lastAppliedObservationFingerprint;
 
         public ControlCenterRuntime(
             ControlCenterPreferences initialPreferences,
@@ -680,6 +735,187 @@ namespace readboard
         public ControlCenterRuntimeSnapshot Snapshot
         {
             get { return BuildSnapshot(); }
+        }
+
+        public long SessionObservationGeneration
+        {
+            get
+            {
+                lock (observationSyncRoot)
+                    return sessionObservationGeneration;
+            }
+        }
+
+        public long BeginSessionObservationGeneration()
+        {
+            lock (observationSyncRoot)
+                return ++sessionObservationGeneration;
+        }
+
+        public long CaptureSessionObservationGeneration()
+        {
+            lock (observationSyncRoot)
+                return sessionObservationGeneration;
+        }
+
+        public ControlCenterSessionObservationApplyResult ApplyObservation(
+            ControlCenterSessionObservation observation)
+        {
+            if (observation == null)
+                throw new ArgumentNullException("observation");
+
+            lock (observationSyncRoot)
+            {
+                if (observation.Generation < sessionObservationGeneration)
+                    return new ControlCenterSessionObservationApplyResult(
+                        ControlCenterSessionObservationApplyOutcome.Stale,
+                        BuildSnapshot(),
+                        new List<ControlCenterSemanticMessage>());
+
+                if (observation.Generation > sessionObservationGeneration)
+                    sessionObservationGeneration = observation.Generation;
+
+                if (string.Equals(
+                    lastAppliedObservationFingerprint,
+                    observation.Fingerprint,
+                    StringComparison.Ordinal)
+                    && ObservationMatchesCurrentState(observation))
+                {
+                    return new ControlCenterSessionObservationApplyResult(
+                        ControlCenterSessionObservationApplyOutcome.NoOp,
+                        BuildSnapshot(),
+                        new List<ControlCenterSemanticMessage>());
+                }
+
+                bool changed = false;
+                if (observation.HasTargetWindowValid)
+                    changed |= SetIfDifferent(
+                        sessionState.TargetWindowValid,
+                        observation.TargetWindowValid,
+                        delegate { sessionState.TargetWindowValid = observation.TargetWindowValid; });
+                if (observation.HasFoxWindowContext)
+                    changed |= SetIfDifferent(
+                        sessionState.FoxWindowContext,
+                        observation.FoxWindowContext,
+                        AreSameFoxWindowContext,
+                        delegate { sessionState.FoxWindowContext = observation.FoxWindowContext; });
+                if (observation.HasYikeWindowContext)
+                    changed |= SetIfDifferent(
+                        sessionState.YikeWindowContext,
+                        observation.YikeWindowContext,
+                        AreSameYikeWindowContext,
+                        delegate { sessionState.YikeWindowContext = observation.YikeWindowContext; });
+                if (observation.HasBoardRegion)
+                    changed |= SetIfDifferent(
+                        sessionState.BoardRegionRecognized,
+                        observation.BoardRegionRecognized,
+                        delegate { sessionState.BoardRegionRecognized = observation.BoardRegionRecognized; });
+                if (observation.HasPlacementRegion)
+                    changed |= SetIfDifferent(
+                        sessionState.PlacementRegionResolved,
+                        observation.PlacementRegionResolved,
+                        delegate { sessionState.PlacementRegionResolved = observation.PlacementRegionResolved; });
+                if (observation.HasSyncActivity)
+                {
+                    changed |= SetIfDifferent(
+                        sessionState.QuickSyncActive,
+                        observation.QuickSyncActive,
+                        delegate { sessionState.QuickSyncActive = observation.QuickSyncActive; });
+                    changed |= SetIfDifferent(
+                        sessionState.ContinuousSyncActive,
+                        observation.ContinuousSyncActive,
+                        delegate { sessionState.ContinuousSyncActive = observation.ContinuousSyncActive; });
+                }
+                if (observation.HasAnalysisState)
+                {
+                    changed |= SetIfDifferent(
+                        sessionState.AnalysisRunning,
+                        observation.AnalysisRunning,
+                        delegate { sessionState.AnalysisRunning = observation.AnalysisRunning; });
+                    changed |= SetIfDifferent(
+                        sessionState.AnalysisStateAvailable,
+                        observation.AnalysisStateAvailable,
+                        delegate { sessionState.AnalysisStateAvailable = observation.AnalysisStateAvailable; });
+                }
+                if (observation.HasRecentSync)
+                {
+                    changed |= SetIfDifferent(
+                        sessionState.LastSync,
+                        observation.LastSync,
+                        delegate { sessionState.LastSync = observation.LastSync; });
+                    changed |= SetIfDifferent(
+                        sessionState.StoneCount,
+                        observation.StoneCount,
+                        delegate { sessionState.StoneCount = observation.StoneCount; });
+                    changed |= SetIfDifferent(
+                        sessionState.Duration,
+                        observation.Duration,
+                        delegate { sessionState.Duration = observation.Duration; });
+                }
+                if (observation.HasTitleTurn)
+                    changed |= SetIfDifferent(
+                        sessionState.TitleTurn,
+                        observation.TitleTurn,
+                        delegate { sessionState.TitleTurn = observation.TitleTurn; });
+                if (observation.HasHostConnected)
+                    changed |= SetIfDifferent(
+                        sessionState.HostConnected,
+                        observation.HostConnected,
+                        delegate { sessionState.HostConnected = observation.HostConnected; });
+
+                if (!changed && observation.SemanticMessages.Count == 0)
+                    return new ControlCenterSessionObservationApplyResult(
+                        ControlCenterSessionObservationApplyOutcome.NoOp,
+                        BuildSnapshot(),
+                        new List<ControlCenterSemanticMessage>());
+
+                lastAppliedObservationFingerprint = observation.Fingerprint;
+                return new ControlCenterSessionObservationApplyResult(
+                    ControlCenterSessionObservationApplyOutcome.Applied,
+                    BuildSnapshot(),
+                    observation.SemanticMessages);
+            }
+        }
+
+        private bool ObservationMatchesCurrentState(ControlCenterSessionObservation observation)
+        {
+            if (observation.HasTargetWindowValid
+                && !EqualityComparer<bool?>.Default.Equals(
+                    sessionState.TargetWindowValid,
+                    observation.TargetWindowValid))
+                return false;
+            if (observation.HasFoxWindowContext
+                && !AreSameFoxWindowContext(
+                    sessionState.FoxWindowContext,
+                    observation.FoxWindowContext))
+                return false;
+            if (observation.HasYikeWindowContext
+                && !AreSameYikeWindowContext(
+                    sessionState.YikeWindowContext,
+                    observation.YikeWindowContext))
+                return false;
+            if (observation.HasBoardRegion
+                && (sessionState.BoardRegionRecognized != observation.BoardRegionRecognized
+                    || sessionState.PlacementRegionResolved != observation.PlacementRegionResolved))
+                return false;
+            if (observation.HasSyncActivity
+                && (sessionState.QuickSyncActive != observation.QuickSyncActive
+                    || sessionState.ContinuousSyncActive != observation.ContinuousSyncActive))
+                return false;
+            if (observation.HasAnalysisState
+                && (sessionState.AnalysisRunning != observation.AnalysisRunning
+                    || sessionState.AnalysisStateAvailable != observation.AnalysisStateAvailable))
+                return false;
+            if (observation.HasRecentSync
+                && (!string.Equals(sessionState.LastSync, observation.LastSync, StringComparison.Ordinal)
+                    || sessionState.StoneCount != observation.StoneCount
+                    || !string.Equals(sessionState.Duration, observation.Duration, StringComparison.Ordinal)))
+                return false;
+            if (observation.HasTitleTurn && sessionState.TitleTurn != observation.TitleTurn)
+                return false;
+            if (observation.HasHostConnected && sessionState.HostConnected != observation.HostConnected)
+                return false;
+            return true;
         }
 
         public void ProjectCurrentState()
@@ -977,11 +1213,25 @@ namespace readboard
                 AutoPlayMoveMode = preferences.AutoPlayMoveMode,
                 AutoPlayColorResolution = autoPlayColor,
                 FoxWindowContext = global::readboard.FoxWindowContext.CopyOf(sessionState.FoxWindowContext),
+                YikeWindowContext = global::readboard.YikeWindowContext.CopyOf(sessionState.YikeWindowContext),
                 PlayColor = autoPlayColor.PlayColor,
                 AutoPlayColorStatus = autoPlayColor.Status,
                 AiTimeValue = sessionState.AiTimeValue,
                 PlayoutsValue = sessionState.PlayoutsValue,
                 FirstPolicyValue = sessionState.FirstPolicyValue,
+                TargetWindowValid = sessionState.TargetWindowValid,
+                BoardRegionRecognized = sessionState.BoardRegionRecognized,
+                PlacementRegionResolved = sessionState.PlacementRegionResolved,
+                QuickSyncActive = sessionState.QuickSyncActive,
+                ContinuousSyncActive = sessionState.ContinuousSyncActive,
+                AnalysisRunning = sessionState.AnalysisRunning,
+                AnalysisStateAvailable = sessionState.AnalysisStateAvailable,
+                LastSync = sessionState.LastSync,
+                StoneCount = sessionState.StoneCount,
+                Duration = sessionState.Duration,
+                TitleTurn = sessionState.TitleTurn,
+                HostConnected = sessionState.HostConnected,
+                SessionObservationGeneration = sessionObservationGeneration,
                 ConfigurationEnabled = configurationEnabled,
                 CustomBoardSizeEnabled = configurationEnabled
                     && ControlCenterPreferences.UsesManualSelection(preferences.Platform),
@@ -1002,6 +1252,29 @@ namespace readboard
                 PreferencesSaved = preferencesSaved,
                 PersistenceError = persistenceError
             };
+        }
+
+        private static bool SetIfDifferent<T>(
+            T current,
+            T next,
+            Action setter)
+        {
+            if (EqualityComparer<T>.Default.Equals(current, next))
+                return false;
+            setter();
+            return true;
+        }
+
+        private static bool SetIfDifferent<T>(
+            T current,
+            T next,
+            Func<T, T, bool> areSame,
+            Action setter)
+        {
+            if (areSame(current, next))
+                return false;
+            setter();
+            return true;
         }
 
         private static bool IsDefinedPlatform(SyncMode platform)
@@ -1111,6 +1384,17 @@ namespace readboard
                 && left.RecordTotalMove == right.RecordTotalMove
                 && left.RecordAtEnd == right.RecordAtEnd
                 && string.Equals(left.TitleFingerprint, right.TitleFingerprint, StringComparison.Ordinal);
+        }
+
+        private static bool AreSameYikeWindowContext(
+            YikeWindowContext left,
+            YikeWindowContext right)
+        {
+            if (left == null || right == null)
+                return left == right;
+
+            return string.Equals(left.RoomToken, right.RoomToken, StringComparison.Ordinal)
+                && left.MoveNumber == right.MoveNumber;
         }
 
         private static bool AreSameAutoPlayColorResolution(

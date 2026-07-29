@@ -5,7 +5,6 @@ using System.Text;
 using System.Windows.Forms;
 using System.Diagnostics;
 using System.IO;
-using System.Threading;
 using System.Runtime.InteropServices;
 using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
@@ -89,6 +88,8 @@ namespace readboard
         private bool suppressAutoPlayMoveModeEvents = false;
         private bool suppressControlCenterProjectionEvents = false;
         private bool suppressWebViewStatePublication = false;
+        private int suppressedWebViewStatePublicationScopeDepth;
+        private bool suppressedWebViewStatePublicationPending;
         private AutoPlayColorMode lastManualAutoPlayColorMode = AutoPlayColorMode.ManualBlack;
         private static readonly System.Drawing.Size MainFormDefaultSize = new System.Drawing.Size(852, 374);
 
@@ -1930,18 +1931,6 @@ namespace readboard
                 controlCenterRuntime.ClearAutoPlayObservation();
         }
 
-        private void InvokeHostAction(Action action)
-        {
-            if (action == null)
-                throw new ArgumentNullException("action");
-            if (IsHandleCreated && InvokeRequired)
-            {
-                BeginInvoke(action);
-                return;
-            }
-            action();
-        }
-
         private bool TryDispatchProtocolCommand(Action command)
         {
             if (command == null)
@@ -2166,16 +2155,16 @@ namespace readboard
             if (!string.Equals(previousContextSignature, nextContextSignature, StringComparison.Ordinal))
             {
                 ClearFoxAutoPlayColorDetectionState();
-                if (controlCenterRuntime != null)
-                {
-                    controlCenterRuntime.UpdateAutoPlayObservation(
-                        ResolveCurrentFoxAutoPlayNicknameSignature(),
-                        foxWindowContext,
-                        null);
-                }
             }
             lastFoxWindowContext = FoxWindowContext.CopyOf(foxWindowContext);
             ApplyMainWindowTitle();
+            if (controlCenterRuntime != null)
+            {
+                ApplyControlCenterSessionObservation(
+                    new ControlCenterSessionObservation(
+                        controlCenterRuntime.CaptureSessionObservationGeneration())
+                        .WithFoxWindowContext(lastFoxWindowContext));
+            }
         }
 
         private void RefreshMainWindowTitleFromCurrentWindow()
@@ -2194,6 +2183,18 @@ namespace readboard
                 lastYikeContextWindowHandle = IntPtr.Zero;
             InvalidateFoxWindowBinding();
             ApplyMainWindowTitle();
+            if (controlCenterRuntime != null)
+            {
+                ApplyControlCenterSessionObservation(
+                    new ControlCenterSessionObservation(
+                        controlCenterRuntime.CaptureSessionObservationGeneration())
+                        .WithTargetWindowValid(
+                            hwnd == IntPtr.Zero ? (bool?)null : IsWindow(hwnd))
+                        .WithBoardRegion(false, false)
+                        .WithFoxWindowContext(lastFoxWindowContext)
+                        .WithYikeWindowContext(lastYikeWindowContext)
+                        .WithTitleTurn(lastMainWindowTitleTurn));
+            }
         }
 
         private MainWindowTitleDisplayMode ResolveMainWindowTitleDisplayMode()
@@ -2270,21 +2271,45 @@ namespace readboard
             return sessionCoordinator.StartedSync || sessionCoordinator.IsContinuousSyncing;
         }
 
-        void ISyncCoordinatorHost.UpdateSelectedWindowHandle(IntPtr handle)
+        long ISyncCoordinatorHost.AllocateSessionObservationGeneration()
         {
-            InvokeHostAction(delegate
+            return controlCenterRuntime.BeginSessionObservationGeneration();
+        }
+
+        void ISyncCoordinatorHost.UpdateSelectedWindowHandle(
+            IntPtr handle,
+            long observationGeneration)
+        {
+            bool? targetWindowValid = handle == IntPtr.Zero
+                ? (bool?)null
+                : IsWindow(handle);
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithTargetWindowValid(targetWindowValid)
+                .WithBoardRegion(false, false)
+                .WithFoxWindowContext(FoxWindowContext.Unknown())
+                .WithYikeWindowContext(YikeWindowContext.Unknown())
+                .WithTitleTurn(MainWindowTitleTurn.None);
+            InvokeUiHostAction(delegate
             {
-                SetSelectedWindowHandle(handle);
-                hasRetainedFoxTitleSnapshot = false;
-                lastMainWindowTitleTurn = MainWindowTitleTurn.None;
-                lastFoxWindowContext = FoxWindowContext.Unknown();
-                InvalidateFoxWindowBinding();
-                if (HasActiveSyncOperation())
+                RunWithSuppressedWebViewStatePublication(delegate
                 {
-                    RefreshMainWindowTitleFromCurrentWindow();
-                    return;
-                }
-                ApplyMainWindowTitle();
+                    ControlCenterSessionObservationApplyResult result =
+                        ApplyControlCenterSessionObservation(observation);
+                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                        return;
+                    SetSelectedWindowHandle(handle);
+                    hasRetainedFoxTitleSnapshot = false;
+                    lastMainWindowTitleTurn = MainWindowTitleTurn.None;
+                    lastFoxWindowContext = FoxWindowContext.Unknown();
+                    InvalidateFoxWindowBinding();
+                    if (HasActiveSyncOperation())
+                    {
+                        RefreshMainWindowTitleFromCurrentWindow();
+                        return;
+                    }
+                    ApplyMainWindowTitle();
+                });
             });
         }
 
@@ -2295,7 +2320,6 @@ namespace readboard
             if (hwnd != handle)
             {
                 ClearFoxAutoPlayColorDetectionState();
-                ResetWebViewSyncState();
             }
             hwnd = handle;
         }
@@ -2305,74 +2329,181 @@ namespace readboard
             return hwnd != IntPtr.Zero && IsWindow(hwnd);
         }
 
-        void ISyncCoordinatorHost.OnKeepSyncStarted()
+        void ISyncCoordinatorHost.OnKeepSyncStarted(long observationGeneration)
         {
-            InvokeUiHostAction(ApplyKeepSyncStartedUi);
-        }
-
-        void ISyncCoordinatorHost.OnKeepSyncStopped(bool continuousSyncActive)
-        {
+            bool quickSyncActive = sessionCoordinator.IsContinuousSyncing;
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithSyncActivity(quickSyncActive, !quickSyncActive);
+            if (!quickSyncActive)
+                observation = observation.WithSemanticLog("SYNC", "WebView_continuousSyncStarted");
             InvokeUiHostAction(delegate
             {
-                ApplyKeepSyncStoppedUi(continuousSyncActive);
+                RunWithSuppressedWebViewStatePublication(delegate
+                {
+                    ControlCenterSessionObservationApplyResult result =
+                        ApplyControlCenterSessionObservation(observation);
+                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                        return;
+                    ApplyKeepSyncStartedUi();
+                });
             });
         }
 
-        void ISyncCoordinatorHost.OnContinuousSyncStarted()
+        void ISyncCoordinatorHost.OnKeepSyncStopped(
+            bool continuousSyncActive,
+            long observationGeneration)
         {
-            InvokeUiHostAction(ApplyContinuousSyncStartedUi);
-        }
-
-        void ISyncCoordinatorHost.OnContinuousSyncStopped()
-        {
-            InvokeUiHostAction(ApplyContinuousSyncStoppedUi);
-        }
-
-        void ISyncCoordinatorHost.OnSyncCachesReset()
-        {
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithSyncActivity(continuousSyncActive, false);
+            if (!continuousSyncActive)
+                observation = observation.WithSemanticLog("SYNC", "WebView_continuousSyncStopped");
             InvokeUiHostAction(delegate
             {
-                lastMainWindowTitleTurn = MainWindowTitleTurn.None;
-                ApplyMainWindowTitle();
+                RunWithSuppressedWebViewStatePublication(
+                    delegate
+                    {
+                        ControlCenterSessionObservationApplyResult result =
+                            ApplyControlCenterSessionObservation(observation);
+                        if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                            return;
+                        ApplyKeepSyncStoppedUi(continuousSyncActive);
+                    });
             });
         }
 
-        void IWebViewSyncCoordinatorHost.OnRuntimeFrameCleared()
+        void ISyncCoordinatorHost.OnContinuousSyncStarted(long observationGeneration)
         {
-            InvokeUiHostAction(ResetWebViewSyncState);
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithSyncActivity(true, false)
+                .WithSemanticLog("SYNC", "WebView_quickSyncStarted");
+            InvokeUiHostAction(delegate
+            {
+                RunWithSuppressedWebViewStatePublication(delegate
+                {
+                    ControlCenterSessionObservationApplyResult result =
+                        ApplyControlCenterSessionObservation(observation);
+                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                        return;
+                    ApplyContinuousSyncStartedUi();
+                });
+            });
+        }
+
+        void ISyncCoordinatorHost.OnContinuousSyncStopped(long observationGeneration)
+        {
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithSyncActivity(false, sessionCoordinator.StartedSync)
+                .WithSemanticLog("SYNC", "WebView_quickSyncStopped");
+            InvokeUiHostAction(delegate
+            {
+                RunWithSuppressedWebViewStatePublication(delegate
+                {
+                    ControlCenterSessionObservationApplyResult result =
+                        ApplyControlCenterSessionObservation(observation);
+                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                        return;
+                    ApplyContinuousSyncStoppedUi();
+                });
+            });
+        }
+
+        void ISyncCoordinatorHost.OnSyncCachesReset(long observationGeneration)
+        {
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithTitleTurn(MainWindowTitleTurn.None);
+            InvokeUiHostAction(delegate
+            {
+                RunWithSuppressedWebViewStatePublication(delegate
+                {
+                    ControlCenterSessionObservationApplyResult result =
+                        ApplyControlCenterSessionObservation(observation);
+                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                        return;
+                    lastMainWindowTitleTurn = MainWindowTitleTurn.None;
+                    ApplyMainWindowTitle();
+                });
+            });
+        }
+
+        void IWebViewSyncCoordinatorHost.OnRuntimeFrameCleared(long observationGeneration)
+        {
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .ClearRuntimeFrame();
+            InvokeUiHostAction(delegate
+            {
+                ApplyControlCenterSessionObservation(observation);
+            });
         }
 
         void IWebViewSyncCoordinatorHost.OnBoardFrameRecognized(
             BoardFrame frame,
             int boardPixelWidth,
             int boardPixelHeight,
-            bool placementRegionResolved)
+            bool placementRegionResolved,
+            long observationGeneration)
         {
+            bool boardRegionRecognized = IsBoardRegionRecognized(
+                frame,
+                boardPixelWidth,
+                boardPixelHeight);
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithBoardRegion(
+                    boardRegionRecognized,
+                    boardRegionRecognized && placementRegionResolved);
             InvokeUiHostAction(delegate
             {
-                UpdateWebViewBoardFrameState(
-                    frame,
-                    boardPixelWidth,
-                    boardPixelHeight,
-                    placementRegionResolved);
+                ApplyControlCenterSessionObservation(observation);
             });
         }
 
-        void IWebViewSyncCoordinatorHost.OnBoardSnapshotSent(BoardSnapshot snapshot)
+        void IWebViewSyncCoordinatorHost.OnBoardSnapshotSent(
+            BoardSnapshot snapshot,
+            long observationGeneration)
         {
+            if (snapshot == null || !snapshot.IsValid)
+                return;
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithSemanticLog("SYNC", "WebView_boardSent");
             InvokeUiHostAction(delegate
             {
-                UpdateWebViewSnapshotSentState(snapshot);
+                ApplyControlCenterSessionObservation(observation);
             });
         }
 
-        void ISyncCoordinatorHost.OnBoardSnapshotRecognized(BoardSnapshot snapshot)
+        void ISyncCoordinatorHost.OnBoardSnapshotRecognized(
+            BoardSnapshot snapshot,
+            TimeSpan duration,
+            long observationGeneration)
         {
+            if (snapshot == null || !snapshot.IsValid)
+                return;
+            MainWindowTitleTurn titleTurn = ResolveMainWindowTitleTurn(snapshot);
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithTitleTurn(titleTurn)
+                    .WithRecentSync(
+                        DateTime.Now.ToString("HH:mm:ss"),
+                        snapshot.BlackStoneCount + snapshot.WhiteStoneCount,
+                        FormatWebViewDuration(duration));
             InvokeUiHostAction(delegate
             {
-                lastMainWindowTitleTurn = ResolveMainWindowTitleTurn(snapshot);
-                ApplyMainWindowTitle();
-                UpdateWebViewSnapshotState(snapshot);
+                RunWithSuppressedWebViewStatePublication(delegate
+                {
+                    ControlCenterSessionObservationApplyResult result =
+                        ApplyControlCenterSessionObservation(observation);
+                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                        return;
+                    lastMainWindowTitleTurn = titleTurn;
+                    ApplyMainWindowTitle();
+                });
             });
         }
 
@@ -2380,7 +2511,7 @@ namespace readboard
         {
             InvokeUiHostAction(delegate
             {
-                ShowWebViewMessage(getLangStr("WebView_syncFailedTitle"), getLangStr("noSelectedBoardAndFailed"));
+                ShowWebViewMessage("WebView_syncFailedTitle", "noSelectedBoardAndFailed");
             });
         }
 
@@ -2388,7 +2519,7 @@ namespace readboard
         {
             InvokeUiHostAction(delegate
             {
-                ShowWebViewMessage(getLangStr("WebView_recognitionFailedTitle"), getLangStr("recgnizeFaild"));
+                ShowWebViewMessage("WebView_recognitionFailedTitle", "recgnizeFaild");
             });
         }
 
@@ -2406,11 +2537,8 @@ namespace readboard
             return TrySendPlaceProtocolError(message);
         }
 
-        private bool keepSyncLifecycleOwnedByQuickSync;
-
         private void ApplyKeepSyncStartedUi()
         {
-            keepSyncLifecycleOwnedByQuickSync = sessionCoordinator.IsContinuousSyncing;
             btnKeepSync.Text = getLangStr("stopSync");
             btnFastSync.Text = getLangStr("stopSync");
             SetSyncConfigurationControlsEnabled(false);
@@ -2419,9 +2547,6 @@ namespace readboard
             if (lastMainWindowTitleTurn == MainWindowTitleTurn.None)
                 lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
             RefreshMainWindowTitleFromCurrentWindow();
-            if (!keepSyncLifecycleOwnedByQuickSync)
-                AddWebViewLog("SYNC", "开始持续同步");
-            PostWebViewState();
         }
 
         private static MainWindowTitleTurn ResolveMainWindowTitleTurn(BoardSnapshot snapshot)
@@ -2446,18 +2571,11 @@ namespace readboard
             return MainWindowTitleTurn.Unknown;
         }
 
-        private bool suppressKeepSyncLifecycleLog;
-
         private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)
         {
-            bool logKeepSyncLifecycle = !keepSyncLifecycleOwnedByQuickSync;
-            keepSyncLifecycleOwnedByQuickSync = false;
             btnKeepSync.Text = getLangStr("keepSync") + "(" + Program.timename + "ms)";
-            if (!suppressKeepSyncLifecycleLog && logKeepSyncLifecycle)
-                AddWebViewLog("SYNC", "持续同步已停止");
             if (!SyncToolbarTextResolver.ShouldRestoreIdleUiAfterKeepSyncStop(continuousSyncActive))
             {
-                PostWebViewState();
                 ApplyMainWindowTitle();
                 return;
             }
@@ -2466,7 +2584,6 @@ namespace readboard
             SetSyncConfigurationControlsEnabled(true);
             RestoreBoardSelectionControls();
             ResetMainWindowTitle();
-            PostWebViewState();
         }
 
         private void ApplyContinuousSyncStartedUi()
@@ -2478,15 +2595,11 @@ namespace readboard
             hasRetainedFoxTitleSnapshot = false;
             lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
             RefreshMainWindowTitleFromCurrentWindow();
-            AddWebViewLog("SYNC", "开始快速同步");
-            PostWebViewState();
         }
 
         private void ApplyContinuousSyncStoppedUi()
         {
             bool keepSyncActive = sessionCoordinator.StartedSync;
-            AddWebViewLog("SYNC", "快速同步已停止");
-            PostWebViewState();
             btnFastSync.Text = SyncToolbarTextResolver.ResolveFastSyncTextAfterContinuousStop(
                 keepSyncActive,
                 getLangStr("stopSync"),
@@ -2497,15 +2610,7 @@ namespace readboard
                 ApplyMainWindowTitle();
                 return;
             }
-            suppressKeepSyncLifecycleLog = true;
-            try
-            {
-                ApplyKeepSyncStoppedUi(false);
-            }
-            finally
-            {
-                suppressKeepSyncLifecycleLog = false;
-            }
+            ApplyKeepSyncStoppedUi(false);
         }
 
         internal bool IsShutdownRequested
@@ -2708,7 +2813,7 @@ namespace readboard
                 Math.Max(y1, y2));
             if (!TryFinalizeSelectionBounds())
             {
-                ShowWebViewMessage(getLangStr("WebView_recognitionFailedTitle"), getLangStr("recgnizeFaild"));
+                ShowWebViewMessage("WebView_recognitionFailedTitle", "recgnizeFaild");
                 RestoreMainWindowAfterSelection();
             }
             else if (CurrentSyncType == TYPE_BACKGROUND)

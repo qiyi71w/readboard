@@ -373,23 +373,15 @@
       tag.className = `log-tag ${level.toLowerCase()}`;
       tag.textContent = level;
       const message = document.createElement("span");
-      message.textContent = localizedLogMessage(log.message);
+      message.textContent = localizedLogMessage(log);
       row.append(time, tag, message);
       return row;
     }));
     list.scrollTop = list.scrollHeight;
   }
 
-  function localizedLogMessage(value) {
-    return ({
-      "宿主通信正常": t("WebView_hostConnected", "宿主通信正常"),
-      "宿主模式已启动，ReadBoard 就绪": t("WebView_hostReadyLog", "宿主模式已启动，ReadBoard 就绪"),
-      "开始持续同步": t("WebView_continuousSyncStarted", "开始持续同步"),
-      "持续同步已停止": t("WebView_continuousSyncStopped", "持续同步已停止"),
-      "开始快速同步": t("WebView_quickSyncStarted", "开始快速同步"),
-      "快速同步已停止": t("WebView_quickSyncStopped", "快速同步已停止"),
-      "已识别并发送棋盘状态": t("WebView_boardSent", "已识别并发送棋盘状态")
-    })[value] || value || "";
+  function localizedLogMessage(log) {
+    return log && log.message ? log.message : "";
   }
 
   function renderModal() {

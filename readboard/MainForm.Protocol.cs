@@ -4,8 +4,6 @@ namespace readboard
 {
     public partial class MainForm
     {
-        private bool? hostAnalysisRunning;
-
         void IProtocolCommandHost.DispatchProtocolCommand(Action command)
         {
             if (command == null)
@@ -25,15 +23,21 @@ namespace readboard
             if (hostCommunicationEstablished)
                 return;
             hostCommunicationEstablished = true;
-            AddWebViewLog("INFO", "宿主通信正常");
-            PostWebViewState();
+            ApplyControlCenterSessionObservation(
+                new ControlCenterSessionObservation(
+                    controlCenterRuntime.CaptureSessionObservationGeneration())
+                    .WithHostConnected(true)
+                    .WithSemanticLog("INFO", "WebView_hostConnected"));
         }
 
         public void NotifyProtocolReady()
         {
             sessionCoordinator.NotifyReady(Program.playPonder);
-            AddWebViewLog("INFO", "宿主模式已启动，ReadBoard 就绪");
-            PostWebViewState();
+            ApplyControlCenterSessionObservation(
+                new ControlCenterSessionObservation(
+                    controlCenterRuntime.CaptureSessionObservationGeneration())
+                    .WithHostConnected(true)
+                    .WithSemanticLog("INFO", "WebView_hostReadyLog"));
         }
 
         public void ReplayStartupProtocolState()
@@ -133,6 +137,10 @@ namespace readboard
             {
                 ClearYikeContext();
                 ApplyMainWindowTitle();
+                ApplyControlCenterSessionObservation(
+                    new ControlCenterSessionObservation(
+                        controlCenterRuntime.CaptureSessionObservationGeneration())
+                        .WithYikeWindowContext(YikeWindowContext.Unknown()));
                 return;
             }
 
@@ -141,6 +149,10 @@ namespace readboard
                 lastYikeContextWindowHandle = hwnd;
             sessionCoordinator.SetYikeContext(lastYikeWindowContext);
             ApplyMainWindowTitle();
+            ApplyControlCenterSessionObservation(
+                new ControlCenterSessionObservation(
+                    controlCenterRuntime.CaptureSessionObservationGeneration())
+                    .WithYikeWindowContext(lastYikeWindowContext));
         }
 
         void IProtocolCommandHost.HandleYikeGeometry(YikeBoardGeometry geometry)
@@ -191,8 +203,10 @@ namespace readboard
 
         void IAnalysisStateProtocolHost.HandleAnalysisState(bool running)
         {
-            hostAnalysisRunning = running;
-            PostWebViewState();
+            ApplyControlCenterSessionObservation(
+                new ControlCenterSessionObservation(
+                    controlCenterRuntime.CaptureSessionObservationGeneration())
+                    .WithAnalysisState(running, true));
         }
 
         void IProtocolCommandHost.HandleReadboardUpdateCancelled()

@@ -817,7 +817,31 @@ namespace readboard
             SyncSessionRuntimeDependencies runtime = runtimeDependencies;
             if (runtime == null || runtime.Host == null)
                 return;
-            runtime.Host.OnSyncCachesReset();
+            long observationGeneration;
+            lock (workerLock)
+            {
+                bool keepSyncActive = GetLockedSessionState(s => s.StartedSync);
+                bool continuousSyncActive = GetLockedSessionState(s => s.IsContinuousSyncing);
+                if (keepSyncActive && Volatile.Read(ref activeKeepObservationGeneration) != 0)
+                    observationGeneration = Volatile.Read(ref activeKeepObservationGeneration);
+                else if (continuousSyncActive && Volatile.Read(ref activeContinuousObservationGeneration) != 0)
+                    observationGeneration = Volatile.Read(ref activeContinuousObservationGeneration);
+                else
+                {
+                    observationGeneration = Volatile.Read(ref latestStopObservationGeneration);
+                    if (observationGeneration == 0)
+                        observationGeneration = runtime.Host.AllocateSessionObservationGeneration();
+                }
+            }
+            NotifySyncCachesReset(observationGeneration);
+        }
+
+        private void NotifySyncCachesReset(long observationGeneration)
+        {
+            SyncSessionRuntimeDependencies runtime = runtimeDependencies;
+            if (runtime == null || runtime.Host == null)
+                return;
+            runtime.Host.OnSyncCachesReset(observationGeneration);
         }
 
         private bool TryCompletePendingMove(bool success)

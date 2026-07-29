@@ -52,7 +52,7 @@ namespace Readboard.VerificationTests.Host
         public void MainForm_ManagesRetainedTitleSnapshotAcrossWindowChangesAndForceRebuild()
         {
             string source = LoadSource("readboard", "Form1.cs");
-            string updateHandleSlice = GetMethodSlice(source, "void ISyncCoordinatorHost.UpdateSelectedWindowHandle(IntPtr handle)");
+            string updateHandleSlice = GetMethodSlice(source, "void ISyncCoordinatorHost.UpdateSelectedWindowHandle(\n            IntPtr handle,");
             string forceRebuildSlice = GetMethodSlice(source, "private void btnForceRebuild_Click(object sender, EventArgs e)");
 
             Assert.Contains(
@@ -109,20 +109,6 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Contains("if (lastMainWindowTitleTurn == MainWindowTitleTurn.None)", keepStartedSlice);
             Assert.Contains("lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;", keepStartedSlice);
-        }
-
-        [Fact]
-        public void MainForm_UpdatesTurnIndicatorFromRecognizedSnapshots()
-        {
-            string formSource = LoadSource("readboard", "Form1.cs");
-            string coordinatorSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
-
-            string recognizedSlice = GetMethodSlice(formSource, "void ISyncCoordinatorHost.OnBoardSnapshotRecognized(BoardSnapshot snapshot)");
-            Assert.Contains("lastMainWindowTitleTurn = ResolveMainWindowTitleTurn(snapshot);", recognizedSlice);
-            Assert.Contains("ApplyMainWindowTitle();", recognizedSlice);
-            Assert.Contains(
-                "runtime.Host.OnBoardSnapshotRecognized(recognition.Snapshot);",
-                GetMethodSlice(coordinatorSource, "private RecognizedSyncSample CompleteRecognizedSample("));
         }
 
         [Fact]

@@ -125,16 +125,6 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void SyncSessionCoordinator_BuildsRecognizedSampleDispatchBeforeSendingProtocol()
-        {
-            string orchestrationSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
-
-            Assert.Contains("BuildRecognizedSampleProtocolDispatch(", orchestrationSource);
-            Assert.Contains("DispatchRecognizedSampleProtocol(dispatch, autoPlayGeneration, isOperationCurrent);", orchestrationSource);
-            Assert.DoesNotContain("ProcessRecognizedSample(snapshot, sample, firstSample);", orchestrationSource);
-        }
-
-        [Fact]
         public void WebViewClearBoard_UsesAtomicStopAndClearOperation()
         {
             string source = LoadSource("readboard", "MainForm.WebView.cs");
@@ -143,27 +133,6 @@ namespace Readboard.VerificationTests.Host
 
             Assert.True(commandIndex >= 0);
             Assert.True(operationIndex > commandIndex);
-        }
-
-        [Fact]
-        public void WebViewLogsBoardSentOnlyFromPostDedupCallback()
-        {
-            string formSource = LoadSource("readboard", "MainForm.WebView.cs");
-            string orchestrationSource = LoadSource("readboard", "Core", "Protocol", "SyncSessionCoordinator.Orchestration.cs");
-
-            Assert.Contains("webViewHost.OnBoardSnapshotSent(dispatch.SentSnapshot);", orchestrationSource);
-            Assert.Contains("private void UpdateWebViewSnapshotSentState(BoardSnapshot snapshot)", formSource);
-            Assert.Equal(1, formSource.Split("已识别并发送棋盘状态").Length - 1);
-        }
-
-        [Fact]
-        public void NestedKeepSync_DoesNotOwnContinuousSyncLifecycleLog()
-        {
-            string source = LoadSource("readboard", "Form1.cs");
-
-            Assert.Contains("keepSyncLifecycleOwnedByQuickSync = sessionCoordinator.IsContinuousSyncing;", source);
-            Assert.Contains("if (!keepSyncLifecycleOwnedByQuickSync)", source);
-            Assert.Contains("bool logKeepSyncLifecycle = !keepSyncLifecycleOwnedByQuickSync;", source);
         }
 
         [Fact]

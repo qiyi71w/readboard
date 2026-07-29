@@ -709,15 +709,17 @@ namespace readboard
             }
         }
 
-        private void ShowWebViewMessage(string title, string message)
+        private void ShowWebViewMessage(string titleKey, string messageKey)
         {
             webViewSettingsDialog = new ReadBoardDialogUiState
             {
                 Open = true,
-                Title = title,
-                Message = message
+                Title = getLangStr(titleKey),
+                Message = getLangStr(messageKey)
             };
-            AddWebViewLog("WARN", message);
+            AddWebViewSemanticLog(
+                "WARN",
+                new ControlCenterSemanticMessage(messageKey, null, "WARN"));
             PostWebViewState();
         }
 
@@ -855,7 +857,8 @@ namespace readboard
 
         private ReadBoardUiState BuildWebViewState()
         {
-            bool? targetWindowValid = hwnd == IntPtr.Zero ? (bool?)null : IsWindow(hwnd);
+            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
+            bool? targetWindowValid = controlCenter.TargetWindowValid;
             return new ReadBoardUiState
             {
                 Page = webViewState.Page,
@@ -865,16 +868,16 @@ namespace readboard
                 {
                     Version = "v" + AppReleaseVersion.GetCurrentVersion(),
                     Theme = ResolveWebViewTheme(Program.CurrentConfig.ColorMode),
-                    Connected = hostCommunicationEstablished,
+                    Connected = controlCenter.HostConnected,
                     SyncStatus = ResolveWebViewSyncStatus(
-                        hostCommunicationEstablished,
-                        HasActiveSyncOperation()),
-                    LastSync = webViewState.Shell.LastSync ?? "--:--:--",
-                    StoneCount = webViewState.Shell.StoneCount,
-                    Duration = "--",
+                        controlCenter.HostConnected,
+                        controlCenter.QuickSyncActive || controlCenter.ContinuousSyncActive),
+                    LastSync = controlCenter.LastSync ?? "--:--:--",
+                    StoneCount = controlCenter.StoneCount,
+                    Duration = controlCenter.Duration ?? "--",
                     TargetWindowValid = targetWindowValid,
-                    BoardRegionRecognized = webViewState.Shell.BoardRegionRecognized,
-                    PlacementRegionResolved = webViewState.Shell.PlacementRegionResolved,
+                    BoardRegionRecognized = controlCenter.BoardRegionRecognized,
+                    PlacementRegionResolved = controlCenter.PlacementRegionResolved,
                     Maximized = WindowState == FormWindowState.Maximized
                 },
                 ControlCenter = BuildControlCenterState(targetWindowValid == true),
@@ -882,8 +885,30 @@ namespace readboard
                 Update = GetWebViewUpdateState(),
                 Identity = GetWebViewIdentityState(),
                 Dialog = GetWebViewSettingsDialogState(),
-                Logs = new List<ReadBoardUiLogEntry>(webViewLogs)
+                Logs = BuildWebViewLogs()
             };
+        }
+
+        private List<ReadBoardUiLogEntry> BuildWebViewLogs()
+        {
+            List<ReadBoardUiLogEntry> logs = new List<ReadBoardUiLogEntry>();
+            foreach (ReadBoardUiLogEntry entry in webViewLogs)
+            {
+                string message = entry.Message;
+                if (!string.IsNullOrWhiteSpace(entry.MessageKey))
+                    message = getLangStr(entry.MessageKey);
+                if (!string.IsNullOrWhiteSpace(entry.DiagnosticDetail))
+                    message = string.IsNullOrWhiteSpace(message)
+                        ? entry.DiagnosticDetail
+                        : message + ": " + entry.DiagnosticDetail;
+                logs.Add(new ReadBoardUiLogEntry
+                {
+                    Time = entry.Time,
+                    Level = entry.Level,
+                    Message = message
+                });
+            }
+            return logs;
         }
 
         private static IDictionary<string, string> BuildWebViewText()
@@ -904,8 +929,8 @@ namespace readboard
             int? moves = null;
             if (controlCenter.Platform == SyncMode.Yike)
             {
-                room = string.IsNullOrWhiteSpace(lastYikeWindowContext.RoomToken) ? "--" : lastYikeWindowContext.RoomToken;
-                moves = lastYikeWindowContext.MoveNumber;
+                room = string.IsNullOrWhiteSpace(controlCenter.YikeWindowContext.RoomToken) ? "--" : controlCenter.YikeWindowContext.RoomToken;
+                moves = controlCenter.YikeWindowContext.MoveNumber;
             }
             else if (controlCenter.Platform == SyncMode.Fox
                 || controlCenter.Platform == SyncMode.FoxBackgroundPlace)
@@ -920,7 +945,7 @@ namespace readboard
                 Platform = ControlCenterPreferences.ToPlatformToken(controlCenter.Platform),
                 Room = room,
                 Moves = moves.HasValue ? moves.Value.ToString() : "--",
-                NextTurn = ResolveWebViewNextTurn(),
+                NextTurn = ResolveWebViewNextTurn(controlCenter.TitleTurn),
                 TitleBound = targetWindowValid,
                 BoardSize = ControlCenterPreferences.ToBoardSizeToken(controlCenter.BoardSizeKind),
                 BoardWidth = controlCenter.BoardWidth,
@@ -944,15 +969,15 @@ namespace readboard
                 PlayColorKnown = controlCenter.AutoPlayColorResolution != null
                     && controlCenter.AutoPlayColorResolution.IsKnown,
                 ShowOnBoard = controlCenter.ShowOnBoard,
-                QuickSyncActive = sessionCoordinator.IsContinuousSyncing,
-                ContinuousSyncActive = sessionCoordinator.StartedSync && !sessionCoordinator.IsContinuousSyncing,
+                QuickSyncActive = controlCenter.QuickSyncActive,
+                ContinuousSyncActive = controlCenter.ContinuousSyncActive,
                 QuickSyncEnabled = SupportsFastSyncType(CurrentSyncType)
-                    && (!sessionCoordinator.StartedSync || sessionCoordinator.IsContinuousSyncing),
-                ContinuousSyncEnabled = !sessionCoordinator.IsContinuousSyncing,
+                    && (!controlCenter.ContinuousSyncActive || controlCenter.QuickSyncActive),
+                ContinuousSyncEnabled = !controlCenter.QuickSyncActive,
                 SyncInterval = Program.timeinterval,
-                AnalysisRunning = hostAnalysisRunning != false,
-                AnalysisStateAvailable = hostAnalysisRunning.HasValue,
-                AnalysisToggleEnabled = hostAnalysisRunning != false || hostAnalysisRunning.HasValue,
+                AnalysisRunning = controlCenter.AnalysisStateAvailable && controlCenter.AnalysisRunning,
+                AnalysisStateAvailable = controlCenter.AnalysisStateAvailable,
+                AnalysisToggleEnabled = controlCenter.AnalysisStateAvailable,
                 ConfigurationEnabled = controlCenter.ConfigurationEnabled,
                 TwoWaySyncEnabled = controlCenter.TwoWaySyncEnabled,
                 AutoPlayToggleEnabled = controlCenter.AutoPlayToggleEnabled,
@@ -975,27 +1000,19 @@ namespace readboard
             return communicationEstablished ? "就绪" : "宿主模式已启动";
         }
 
-        private string ResolveWebViewNextTurn()
+        private static string ResolveWebViewNextTurn(MainWindowTitleTurn titleTurn)
         {
-            if (lastMainWindowTitleTurn == MainWindowTitleTurn.Black)
+            if (titleTurn == MainWindowTitleTurn.Black)
                 return "黑";
-            if (lastMainWindowTitleTurn == MainWindowTitleTurn.White)
+            if (titleTurn == MainWindowTitleTurn.White)
                 return "白";
             return "--";
         }
 
-        private void UpdateWebViewBoardFrameState(
-            BoardFrame frame,
-            int boardPixelWidth,
-            int boardPixelHeight,
-            bool placementRegionResolved)
+        private static string FormatWebViewDuration(TimeSpan duration)
         {
-            webViewState.Shell.BoardRegionRecognized = IsBoardRegionRecognized(
-                frame,
-                boardPixelWidth,
-                boardPixelHeight);
-            webViewState.Shell.PlacementRegionResolved = webViewState.Shell.BoardRegionRecognized && placementRegionResolved;
-            PostWebViewState();
+            long milliseconds = Math.Max(0L, (long)Math.Round(duration.TotalMilliseconds));
+            return milliseconds.ToString(CultureInfo.InvariantCulture) + " ms";
         }
 
         internal static bool IsBoardRegionRecognized(
@@ -1014,26 +1031,10 @@ namespace readboard
                 && boardPixelHeight > 0;
         }
 
-        private void UpdateWebViewSnapshotState(BoardSnapshot snapshot)
-        {
-            if (snapshot == null || !snapshot.IsValid)
-                return;
-            webViewState.Shell.LastSync = DateTime.Now.ToString("HH:mm:ss");
-            webViewState.Shell.StoneCount = snapshot.BlackStoneCount + snapshot.WhiteStoneCount;
-            PostWebViewState();
-        }
-
-        private void UpdateWebViewSnapshotSentState(BoardSnapshot snapshot)
-        {
-            if (snapshot == null || !snapshot.IsValid)
-                return;
-            AddWebViewLog("SYNC", "已识别并发送棋盘状态");
-            PostWebViewState();
-        }
-
         private void HandleWebViewToggleAnalysis()
         {
-            if (hostAnalysisRunning == false)
+            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
+            if (controlCenter.AnalysisStateAvailable && !controlCenter.AnalysisRunning)
             {
                 sessionCoordinator.SendResumePonder();
                 return;
@@ -1043,8 +1044,10 @@ namespace readboard
 
         private void ResetWebViewSyncState()
         {
-            ResetShellSyncState(webViewState.Shell);
-            PostWebViewState();
+            ApplyControlCenterSessionObservation(
+                new ControlCenterSessionObservation(
+                    controlCenterRuntime.BeginSessionObservationGeneration())
+                    .ClearRuntimeFrame());
         }
 
         internal static void ResetShellSyncState(ReadBoardShellState shell)
@@ -1055,15 +1058,21 @@ namespace readboard
             shell.StoneCount = 0;
         }
 
-        private void AddWebViewLog(string level, string message)
+        private void AddWebViewSemanticLog(
+            string level,
+            ControlCenterSemanticMessage message)
         {
+            if (message == null)
+                return;
+
             if (webViewLogs.Count == 100)
                 webViewLogs.Dequeue();
             webViewLogs.Enqueue(new ReadBoardUiLogEntry
             {
                 Time = DateTime.Now.ToString("HH:mm:ss"),
                 Level = level,
-                Message = message
+                MessageKey = message.Key,
+                DiagnosticDetail = message.DiagnosticDetail
             });
         }
     }

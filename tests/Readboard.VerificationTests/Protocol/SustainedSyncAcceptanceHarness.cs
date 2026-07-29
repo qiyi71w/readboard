@@ -248,38 +248,46 @@ namespace Readboard.VerificationTests.Protocol
                 return snapshot;
             }
 
-            public void UpdateSelectedWindowHandle(IntPtr handle)
+            public long AllocateSessionObservationGeneration()
+            {
+                return 0;
+            }
+
+            public void UpdateSelectedWindowHandle(IntPtr handle, long observationGeneration)
             {
                 snapshot.SelectedWindowHandle = handle;
             }
 
-            public void OnKeepSyncStarted()
+            public void OnKeepSyncStarted(long observationGeneration)
             {
                 KeepSyncStartedObserved = true;
             }
 
-            public void OnKeepSyncStopped(bool continuousSyncActive)
+            public void OnKeepSyncStopped(bool continuousSyncActive, long observationGeneration)
             {
                 KeepSyncStoppedObserved = true;
                 keepSyncStopped.Set();
             }
 
-            public void OnContinuousSyncStarted()
+            public void OnContinuousSyncStarted(long observationGeneration)
             {
                 ContinuousSyncStartedObserved = true;
             }
 
-            public void OnContinuousSyncStopped()
+            public void OnContinuousSyncStopped(long observationGeneration)
             {
                 ContinuousSyncStoppedObserved = true;
                 continuousSyncStopped.Set();
             }
 
-            public void OnSyncCachesReset()
+            public void OnSyncCachesReset(long observationGeneration)
             {
             }
 
-            public void OnBoardSnapshotRecognized(BoardSnapshot snapshot)
+            public void OnBoardSnapshotRecognized(
+                BoardSnapshot snapshot,
+                TimeSpan duration,
+                long observationGeneration)
             {
             }
 

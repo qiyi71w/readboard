@@ -359,6 +359,13 @@ namespace readboard
             langItems["WebView_showInBoardHintForeground"] = "[前台]方式同步时不支持此功能。选点显示在原棋盘上后，原棋盘将无法落子。";
             langItems["WebView_showInBoardHintRestore"] = "可通过勾选“双向同步”选项恢复落子功能。";
             langItems["WebView_moveMode"] = "落子方式";
+            langItems["WebView_hostConnected"] = "宿主通信正常";
+            langItems["WebView_hostReadyLog"] = "宿主模式已启动，ReadBoard 就绪";
+            langItems["WebView_continuousSyncStarted"] = "开始持续同步";
+            langItems["WebView_continuousSyncStopped"] = "持续同步已停止";
+            langItems["WebView_quickSyncStarted"] = "开始快速同步";
+            langItems["WebView_quickSyncStopped"] = "快速同步已停止";
+            langItems["WebView_boardSent"] = "已识别并发送棋盘状态";
             langItems["keepSync"] = "持续同步";
             langItems["recgnizeFaild"] = "不能识别棋盘,请调整被同步棋盘大小后重新选择或尝试[框选1路线]";
             langItems["noSelectedBoard"] = "未选择棋盘";
