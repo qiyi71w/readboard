@@ -5,9 +5,9 @@
       "id": "legacy-windows",
       "status": "active",
       "maximumWindowsVersionExclusive": "10.0.17763",
-      "latestTag": "v3.0.9",
-      "assetName": "readboard-github-release-v3.0.9.zip",
-      "sha256": "08d40fcef3849646b8f4b403317b3b8a0b3377af67b46ae9e1e06d0f40734b69"
+      "latestTag": "v3.0.10",
+      "assetName": "readboard-github-release-v3.0.10.zip",
+      "sha256": "38a6656828b1b3b1973d486cb370ecac0b715d73f311075544e024c3d585d527"
     },
     {
       "id": "main",
