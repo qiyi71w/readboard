@@ -55,6 +55,7 @@ namespace readboard
             try
             {
                 ResetRuntimeSyncCaches(runtime);
+                int autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
                 SyncCoordinatorHostSnapshot snapshot;
                 if (!TryCaptureSnapshot(runtime, out snapshot))
                     return false;
@@ -70,7 +71,10 @@ namespace readboard
                     return false;
                 }
 
-                DispatchRecognizedSampleProtocol(BuildRecognizedSampleProtocolDispatch(snapshot, sample, true), null);
+                DispatchRecognizedSampleProtocol(
+                    BuildRecognizedSampleProtocolDispatch(snapshot, sample, true, autoPlayGeneration),
+                    autoPlayGeneration,
+                    null);
                 return true;
             }
             finally
@@ -434,6 +438,7 @@ namespace readboard
 
                 while (IsOperationCurrent(isOperationCurrent))
                 {
+                    int autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
                     SyncCoordinatorHostSnapshot snapshot;
                     if (!TryCaptureSnapshot(runtime, out snapshot))
                         return;
@@ -447,7 +452,12 @@ namespace readboard
                     DispatchPendingMove(runtime, snapshot, isOperationCurrent);
                     if (!IsOperationCurrent(isOperationCurrent))
                         return;
-                    if (!TryProcessKeepSyncSample(runtime, snapshot, firstSample, isOperationCurrent))
+                    if (!TryProcessKeepSyncSample(
+                        runtime,
+                        snapshot,
+                        firstSample,
+                        autoPlayGeneration,
+                        isOperationCurrent))
                     {
                         if (!IsOperationCurrent(isOperationCurrent))
                             return;
@@ -551,6 +561,7 @@ namespace readboard
             SyncSessionRuntimeDependencies runtime,
             SyncCoordinatorHostSnapshot snapshot,
             bool firstSample,
+            int autoPlayGeneration,
             Func<bool> isOperationCurrent)
         {
             RecognizedSyncSample sample;
@@ -562,11 +573,15 @@ namespace readboard
                 if (!IsOperationCurrent(isOperationCurrent))
                     return false;
 
-                dispatch = BuildRecognizedSampleProtocolDispatch(snapshot, sample, firstSample);
+                dispatch = BuildRecognizedSampleProtocolDispatch(
+                    snapshot,
+                    sample,
+                    firstSample,
+                    autoPlayGeneration);
             }
             if (!IsOperationCurrent(isOperationCurrent))
                 return false;
-            DispatchRecognizedSampleProtocol(dispatch, isOperationCurrent);
+            DispatchRecognizedSampleProtocol(dispatch, autoPlayGeneration, isOperationCurrent);
             return true;
         }
 
@@ -920,7 +935,8 @@ namespace readboard
         private RecognizedSampleProtocolDispatch BuildRecognizedSampleProtocolDispatch(
             SyncCoordinatorHostSnapshot snapshot,
             RecognizedSyncSample sample,
-            bool firstSample)
+            bool firstSample,
+            int autoPlayGeneration)
         {
             RecognizedSampleProtocolDispatch dispatch = new RecognizedSampleProtocolDispatch();
             if (!firstSample && sample.PreviousArea > 0 && sample.PreviousArea != (runtimeState.CurrentBoardPixelWidth * runtimeState.CurrentBoardPixelHeight))
@@ -941,13 +957,15 @@ namespace readboard
             if (sample.Snapshot != null && sample.Snapshot.IsValid)
             {
                 dispatch.BoardSnapshotBatch = TryBuildOutboundBoardSnapshotBatch(sample.Snapshot);
-                dispatch.PlayMessage = ReservePlayMessageIfChanged(snapshot);
+                dispatch.PlayMessage = ReservePlayMessageIfChanged(snapshot, autoPlayGeneration);
+                dispatch.PlayMoveMode = snapshot.AutoPlayMoveMode;
             }
             return dispatch;
         }
 
         private void DispatchRecognizedSampleProtocol(
             RecognizedSampleProtocolDispatch dispatch,
+            int autoPlayGeneration,
             Func<bool> isOperationCurrent)
         {
             if (dispatch == null)
@@ -965,8 +983,11 @@ namespace readboard
                     outboundProtocolDispatcher.SendMessageWhileSynchronized(dispatch.StartMessage);
                 if (dispatch.BoardSnapshotBatch != null)
                     outboundBoardSnapshotEmitter.EmitWhileSynchronized(dispatch.BoardSnapshotBatch);
-                if (dispatch.PlayMessage != null)
-                    outboundProtocolDispatcher.SendMessageWhileSynchronized(dispatch.PlayMessage);
+                if (dispatch.PlayMessage != null
+                    && IsAutoPlayAuthorizationGenerationCurrent(autoPlayGeneration))
+                    SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
+                        dispatch.PlayMessage,
+                        dispatch.PlayMoveMode);
             });
         }
 
@@ -1379,7 +1400,9 @@ namespace readboard
             return sent;
         }
 
-        private ProtocolMessage ReservePlayMessageIfChanged(SyncCoordinatorHostSnapshot snapshot)
+        private ProtocolMessage ReservePlayMessageIfChanged(
+            SyncCoordinatorHostSnapshot snapshot,
+            int autoPlayGeneration)
         {
             if (!SyncBoth || snapshot == null || string.IsNullOrWhiteSpace(snapshot.PlayColor))
                 return null;
@@ -1392,6 +1415,8 @@ namespace readboard
             string signature;
             lock (stateLock)
             {
+                if (autoPlayGeneration != autoPlayAuthorizationGeneration)
+                    return null;
                 signature = BuildPlayStateSignatureForCurrentContext(color, time, playouts, firstPolicy, moveMode);
                 if (string.Equals(lastSentPlayStateSignature, signature, StringComparison.Ordinal))
                     return null;
@@ -1399,6 +1424,18 @@ namespace readboard
             }
 
             return protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode);
+        }
+
+        private int CaptureAutoPlayAuthorizationGeneration()
+        {
+            lock (stateLock)
+                return autoPlayAuthorizationGeneration;
+        }
+
+        private bool IsAutoPlayAuthorizationGenerationCurrent(int generation)
+        {
+            lock (stateLock)
+                return generation == autoPlayAuthorizationGeneration;
         }
 
         private void RememberSentPlayState(
@@ -1582,6 +1619,7 @@ namespace readboard
             public ProtocolMessage StartMessage { get; set; }
             public OutboundBoardSnapshotBatch BoardSnapshotBatch { get; set; }
             public ProtocolMessage PlayMessage { get; set; }
+            public AutoPlayMoveMode PlayMoveMode { get; set; }
         }
     }
 }

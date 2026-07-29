@@ -31,6 +31,7 @@ namespace readboard
         private LastMoveSource lastSentBoardLastMoveSource;
         private string lastSentWindowContextSignature;
         private string lastSentPlayStateSignature;
+        private int autoPlayAuthorizationGeneration;
         private SessionState sessionState;
         private IProtocolCommandHost host;
 
@@ -539,7 +540,26 @@ namespace readboard
             AutoPlayMoveMode moveMode = AutoPlayMoveMode.FirstCandidate)
         {
             RememberSentPlayState(color, time, playouts, firstPolicy, moveMode);
-            SendProtocolMessage(protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode));
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
+                    protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode),
+                    moveMode);
+            });
+        }
+
+        private void SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
+            ProtocolMessage message,
+            AutoPlayMoveMode moveMode)
+        {
+            outboundProtocolDispatcher.SendMessageWhileSynchronized(message);
+            if (AppConfig.NormalizeAutoPlayMoveMode(moveMode) != AutoPlayMoveMode.GenmoveAnalyze)
+                return;
+
+            lock (stateLock)
+            {
+                sessionState.LastBoardPayload = null;
+            }
         }
 
         public void SendNoInBoard()
@@ -579,7 +599,16 @@ namespace readboard
 
         public void SendStopAutoPlay()
         {
-            SendProtocolMessage(protocolAdapter.CreateStopAutoPlayMessage());
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                outboundProtocolDispatcher.SendMessageWhileSynchronized(
+                    protocolAdapter.CreateStopAutoPlayMessage());
+                lock (stateLock)
+                {
+                    autoPlayAuthorizationGeneration++;
+                    lastSentPlayStateSignature = null;
+                }
+            });
         }
 
         public void SendPass()
