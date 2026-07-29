@@ -26,6 +26,7 @@ namespace Readboard.VerificationTests.Host
                 downloader,
                 verifier,
                 host.SendReady,
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             Task run = journey.StartAsync(Request);
@@ -65,6 +66,7 @@ namespace Readboard.VerificationTests.Host
                 downloader,
                 verifier,
                 host.SendReady,
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             Task run = journey.StartAsync(Request);
@@ -100,6 +102,7 @@ namespace Readboard.VerificationTests.Host
                 downloader,
                 verifier,
                 host.SendReady,
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             Task run = journey.StartAsync(Request);
@@ -124,6 +127,7 @@ namespace Readboard.VerificationTests.Host
                 downloader,
                 verifier,
                 host.SendReady,
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             await journey.StartAsync(Request);
@@ -154,6 +158,7 @@ namespace Readboard.VerificationTests.Host
                 downloader,
                 verifier,
                 host.SendReady,
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             Assert.True(await journey.StartAsync(Request));
@@ -177,6 +182,7 @@ namespace Readboard.VerificationTests.Host
                 downloader,
                 verifier,
                 host.SendReady,
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             Task first = journey.StartAsync(Request);
@@ -202,6 +208,7 @@ namespace Readboard.VerificationTests.Host
                 downloader,
                 verifier,
                 host.SendReady,
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             Assert.False(await journey.StartAsync(Request));
@@ -217,11 +224,13 @@ namespace Readboard.VerificationTests.Host
             var downloader = new ControlledDownloader { ImmediateResult = "handed-off.zip" };
             var verifier = new RecordingVerifier();
             var host = new RecordingHost();
+            var scheduler = new ManualTimeoutScheduler();
             var observations = new List<HostedUpdateObservation>();
             var journey = new HostedUpdateJourney(
                 downloader,
                 verifier,
                 host.SendReady,
+                scheduler,
                 observations.Add);
 
             Assert.True(await journey.StartAsync(Request));
@@ -245,11 +254,13 @@ namespace Readboard.VerificationTests.Host
             var downloader = new ControlledDownloader { ImmediateResult = "handed-off.zip" };
             var verifier = new RecordingVerifier();
             var host = new RecordingHost();
+            var scheduler = new ManualTimeoutScheduler();
             var observations = new List<HostedUpdateObservation>();
             var journey = new HostedUpdateJourney(
                 downloader,
                 verifier,
                 host.SendReady,
+                scheduler,
                 observations.Add);
 
             Assert.True(await journey.StartAsync(Request));
@@ -279,7 +290,7 @@ namespace Readboard.VerificationTests.Host
                     Assert.True(journey.MarkHostCancelled());
                     return true;
                 },
-                new NoopHostedUpdateResponseTimeoutScheduler(),
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             Assert.True(await journey.StartAsync(Request));
@@ -292,6 +303,45 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public async Task PostHandoffObservationFailure_DoesNotCleanHandedOffPackage()
+        {
+            var downloader = new ControlledDownloader { ImmediateResult = "handed-off.zip" };
+            var verifier = new RecordingVerifier();
+            var scheduler = new ManualTimeoutScheduler();
+            var observations = new List<HostedUpdateObservation>();
+            bool throwOnce = true;
+            HostedUpdateJourney journey = null;
+            journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                (tag, packagePath) =>
+                {
+                    Assert.True(journey.MarkHostInstalling());
+                    return true;
+                },
+                scheduler,
+                observation =>
+                {
+                    observations.Add(observation);
+                    if (throwOnce && observation.Stage == HostedUpdateStage.HostInstalling)
+                    {
+                        throwOnce = false;
+                        throw new InvalidOperationException("observer failed");
+                    }
+                });
+
+            Assert.False(await journey.StartAsync(Request));
+
+            Assert.True(journey.HandoffSent);
+            Assert.Null(downloader.CleanedPackagePath);
+            Assert.Contains(
+                observations,
+                observation => observation.Stage == HostedUpdateStage.Failed);
+            journey.Dispose();
+            Assert.True(scheduler.WasDisposed);
+        }
+
+        [Fact]
         public async Task ClosedHostTransport_DoesNotConsumeHandoffBudget()
         {
             var downloader = new ControlledDownloader { ImmediateResult = "candidate.zip" };
@@ -301,7 +351,7 @@ namespace Readboard.VerificationTests.Host
                 downloader,
                 verifier,
                 (tag, packagePath) => false,
-                new NoopHostedUpdateResponseTimeoutScheduler(),
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             Assert.False(await journey.StartAsync(Request));
@@ -321,6 +371,7 @@ namespace Readboard.VerificationTests.Host
                 downloader,
                 verifier,
                 host.SendReady,
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             Assert.True(await journey.StartAsync(Request));
@@ -346,6 +397,7 @@ namespace Readboard.VerificationTests.Host
                 downloader,
                 verifier,
                 host.SendReady,
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             Assert.True(await journey.StartAsync(Request));
@@ -407,11 +459,13 @@ namespace Readboard.VerificationTests.Host
             var downloader = new ControlledDownloader { ImmediateResult = "handed-off.zip" };
             var verifier = new RecordingVerifier();
             var host = new RecordingHost();
+            var scheduler = new ManualTimeoutScheduler();
             var observations = new List<HostedUpdateObservation>();
             var journey = new HostedUpdateJourney(
                 downloader,
                 verifier,
                 host.SendReady,
+                scheduler,
                 observations.Add);
 
             Assert.True(await journey.StartAsync(Request));
@@ -421,6 +475,7 @@ namespace Readboard.VerificationTests.Host
             Assert.False(downloader.CancellationToken.IsCancellationRequested);
             Assert.Null(downloader.CleanedPackagePath);
             Assert.False(journey.MarkHostFailed("late failure"));
+            Assert.True(scheduler.WasDisposed);
         }
 
         [Fact]
@@ -432,6 +487,7 @@ namespace Readboard.VerificationTests.Host
                 firstDownloader,
                 new RecordingVerifier(),
                 firstHost.SendReady,
+                new ManualTimeoutScheduler(),
                 _ => { });
 
             Assert.True(await firstJourney.StartAsync(Request));
@@ -443,6 +499,7 @@ namespace Readboard.VerificationTests.Host
                 secondDownloader,
                 new RecordingVerifier(),
                 secondHost.SendReady,
+                new ManualTimeoutScheduler(),
                 _ => { });
 
             Assert.True(await secondJourney.StartAsync(Request));
@@ -460,6 +517,7 @@ namespace Readboard.VerificationTests.Host
                 downloader,
                 verifier,
                 host.SendReady,
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             await journey.StartAsync(Request);
@@ -485,6 +543,7 @@ namespace Readboard.VerificationTests.Host
                 {
                     throw new InvalidOperationException("pipe closed");
                 },
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             await journey.StartAsync(Request);
@@ -508,6 +567,7 @@ namespace Readboard.VerificationTests.Host
                 downloader,
                 verifier,
                 host.SendReady,
+                new ManualTimeoutScheduler(),
                 observations.Add);
 
             Task first = journey.StartAsync(Request);
@@ -624,9 +684,10 @@ namespace Readboard.VerificationTests.Host
         {
             public List<ReadyMessage> ReadyMessages { get; } = new List<ReadyMessage>();
 
-            public void SendReady(string versionTag, string packagePath)
+            public bool SendReady(string versionTag, string packagePath)
             {
                 ReadyMessages.Add(new ReadyMessage(versionTag, packagePath));
+                return true;
             }
         }
 
@@ -635,6 +696,8 @@ namespace Readboard.VerificationTests.Host
             private Action callback;
 
             public bool IsArmed { get { return callback != null; } }
+
+            public bool WasDisposed { get; private set; }
 
             public void Start(Action callback)
             {
@@ -657,6 +720,7 @@ namespace Readboard.VerificationTests.Host
             public void Dispose()
             {
                 callback = null;
+                WasDisposed = true;
             }
         }
 

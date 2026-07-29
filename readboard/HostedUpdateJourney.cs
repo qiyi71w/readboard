@@ -157,21 +157,6 @@ namespace readboard
         }
     }
 
-    internal sealed class NoopHostedUpdateResponseTimeoutScheduler : IHostedUpdateResponseTimeoutScheduler
-    {
-        public void Start(Action callback)
-        {
-        }
-
-        public void Stop()
-        {
-        }
-
-        public void Dispose()
-        {
-        }
-    }
-
     internal sealed class HostedUpdateJourney : IDisposable
     {
         private readonly IHostedUpdatePackageDownloader downloader;
@@ -194,24 +179,6 @@ namespace readboard
         private HostedUpdateSemanticMessage pendingHostOutcome;
         private bool responseTimeoutArmed;
         private bool disposed;
-
-        public HostedUpdateJourney(
-            IHostedUpdatePackageDownloader downloader,
-            IHostedUpdatePackageVerifier verifier,
-            Action<string, string> sendReady,
-            Action<HostedUpdateObservation> observe)
-            : this(
-                downloader,
-                verifier,
-                delegate(string tag, string packagePath)
-                {
-                    sendReady(tag, packagePath);
-                    return true;
-                },
-                new NoopHostedUpdateResponseTimeoutScheduler(),
-                observe)
-        {
-        }
 
         public HostedUpdateJourney(
             IHostedUpdatePackageDownloader downloader,
@@ -401,20 +368,24 @@ namespace readboard
             if (disposed)
                 return;
 
-            CancellationTokenSource cancellation;
+            CancellationTokenSource cancellation = null;
             lock (stateSyncRoot)
             {
                 disposed = true;
                 StopResponseTimeoutUnsafe();
-                if (operationCancellation == null || handoffSent || handoffInProgress)
-                    return;
-
-                cancellation = operationCancellation;
-                operationCancellation = null;
-                activeRequest = null;
-                activePackagePath = null;
-                generation++;
+                if (operationCancellation != null && !handoffSent && !handoffInProgress)
+                {
+                    cancellation = operationCancellation;
+                    operationCancellation = null;
+                    activeRequest = null;
+                    activePackagePath = null;
+                    generation++;
+                }
             }
+
+            responseTimeoutScheduler.Dispose();
+            if (cancellation == null)
+                return;
 
             cancellation.Cancel();
             cancellation.Dispose();
@@ -478,6 +449,7 @@ namespace readboard
                     return false;
                 }
                 handoffDelivered = true;
+                FlushPendingHostObservations();
 
                 if (ShouldWaitForHost(operationGeneration, cancellationSource))
                 {
@@ -615,7 +587,6 @@ namespace readboard
                     activePackagePath = null;
             }
 
-            FlushPendingHostObservations();
             return true;
         }
 
