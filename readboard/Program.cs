@@ -355,6 +355,8 @@ namespace readboard
             langItems["WebView_language"] = "界面语言";
             langItems["WebView_languageDescription"] = "保存后立即应用";
             langItems["WebView_followHostLanguage"] = "跟随 LizzieYzy-Next";
+            langItems["WebView_preferencesSaved"] = "偏好已保存";
+            langItems["WebView_preferencesNotSaved"] = "当前选择已生效，但尚未保存";
             langItems["WebView_showInBoardHintForeground"] = "[前台]方式同步时不支持此功能。选点显示在原棋盘上后，原棋盘将无法落子。";
             langItems["WebView_showInBoardHintRestore"] = "可通过勾选“双向同步”选项恢复落子功能。";
             langItems["WebView_moveMode"] = "落子方式";

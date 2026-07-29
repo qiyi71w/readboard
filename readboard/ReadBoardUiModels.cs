@@ -65,7 +65,10 @@ namespace readboard
         public bool TwoWaySyncEnabled { get; set; }
         public bool AutoPlayToggleEnabled { get; set; }
         public bool AutoPlayControlsEnabled { get; set; }
+        public bool CustomBoardSizeEnabled { get; set; }
         public bool CustomBoardDimensionsEnabled { get; set; }
+        public bool PreferencesSaved { get; set; }
+        public string PersistenceError { get; set; }
         public bool IdentityEnabled { get; set; }
         public bool ShowOnBoardEnabled { get; set; }
     }

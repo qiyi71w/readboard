@@ -292,14 +292,14 @@ namespace readboard
             }
             else
             {
-                DispatchNonUpdateWebViewCommand(command);
+                bool publish = DispatchNonUpdateWebViewCommand(command);
+                if (publish)
+                    PostWebViewState();
+                return;
             }
-
-            if (!updateCommand)
-                PostWebViewState();
         }
 
-        private void DispatchNonUpdateWebViewCommand(ReadBoardUiCommand command)
+        private bool DispatchNonUpdateWebViewCommand(ReadBoardUiCommand command)
         {
             switch (command.Type)
             {
@@ -318,8 +318,7 @@ namespace readboard
                     HandleNavigate(command.Payload);
                     break;
                 case "control.update":
-                    HandleControlUpdate(command.Payload);
-                    break;
+                    return HandleControlUpdate(command.Payload);
                 case "sync.quick":
                     if (SupportsFastSyncType(CurrentSyncType)
                         && (!sessionCoordinator.StartedSync || sessionCoordinator.IsContinuousSyncing))
@@ -359,6 +358,7 @@ namespace readboard
                         HandleWebViewSettingsCommand(command);
                     break;
             }
+            return true;
         }
 
         private void HandleWebViewUpdateIntent(ReadBoardUpdateIntent intent)
@@ -488,15 +488,9 @@ namespace readboard
                 || !payload.TryGetProperty("value", out value))
                 return false;
             string key = keyValue.GetString();
-            if (key == "platform")
-                return IsAllowedString(value, "fox", "foxBackground", "yike", "yicheng", "sina", "otherBackground", "otherForeground");
-            if (key == "boardSize")
-                return IsAllowedString(value, "19", "13", "9", "custom");
-            if (key == "board-width" || key == "board-height")
-            {
-                int dimension;
-                return TryReadInteger(value, false, 2, out dimension) && dimension <= 25;
-            }
+            ControlCenterIntent controlCenterIntent;
+            if (TryCreateControlCenterIntent(payload, out controlCenterIntent))
+                return true;
             if (key == "two-way" || key == "auto-play" || key == "show-on-board")
                 return value.ValueKind == JsonValueKind.True || value.ValueKind == JsonValueKind.False;
             if (key == "color")
@@ -508,6 +502,61 @@ namespace readboard
                 return TryReadInteger(value, false, 1, out numeric);
             if (key == "playouts" || key == "first-policy")
                 return TryReadInteger(value, true, 0, out numeric);
+            return false;
+        }
+
+        internal static bool TryCreateControlCenterIntent(
+            ReadBoardUiCommand command,
+            out ControlCenterIntent intent)
+        {
+            intent = null;
+            if (command == null || command.Type != "control.update")
+                return false;
+            return TryCreateControlCenterIntent(command.Payload, out intent);
+        }
+
+        private static bool TryCreateControlCenterIntent(
+            JsonElement payload,
+            out ControlCenterIntent intent)
+        {
+            intent = null;
+            if (payload.ValueKind != JsonValueKind.Object
+                || CountProperties(payload) != 2
+                || !payload.TryGetProperty("key", out JsonElement keyValue)
+                || !payload.TryGetProperty("value", out JsonElement value)
+                || keyValue.ValueKind != JsonValueKind.String)
+                return false;
+
+            string key = keyValue.GetString();
+            if (key == "platform" && value.ValueKind == JsonValueKind.String)
+            {
+                SyncMode platform;
+                if (!ControlCenterPreferences.TryParsePlatform(value.GetString(), out platform))
+                    return false;
+                intent = ControlCenterIntent.SetPlatform(platform);
+                return true;
+            }
+
+            if (key == "boardSize" && value.ValueKind == JsonValueKind.String)
+            {
+                ControlCenterBoardSizeKind boardSizeKind;
+                if (!ControlCenterPreferences.TryParseBoardSize(value.GetString(), out boardSizeKind))
+                    return false;
+                intent = ControlCenterIntent.SetBoardSize(boardSizeKind);
+                return true;
+            }
+
+            int dimension;
+            if ((key == "board-width" || key == "board-height")
+                && TryReadInteger(value, false, 2, out dimension)
+                && ControlCenterPreferences.IsValidDimension(dimension))
+            {
+                intent = key == "board-width"
+                    ? ControlCenterIntent.SetCustomBoardWidth(dimension)
+                    : ControlCenterIntent.SetCustomBoardHeight(dimension);
+                return true;
+            }
+
             return false;
         }
 
@@ -572,20 +621,17 @@ namespace readboard
             PostWebViewState();
         }
 
-        private void HandleControlUpdate(JsonElement payload)
+        private bool HandleControlUpdate(JsonElement payload)
         {
             JsonElement keyValue = payload.GetProperty("key");
             JsonElement value = payload.GetProperty("value");
             string key = keyValue.GetString();
-            if (key == "platform")
-                UpdatePlatform(value);
-            else if (key == "boardSize")
-                UpdateBoardSize(value);
-            else if (key == "board-width")
-                UpdateCustomBoardDimension(value, txtBoardWidth);
-            else if (key == "board-height")
-                UpdateCustomBoardDimension(value, txtBoardHeight);
-            else if (key == "two-way")
+
+            ControlCenterIntent controlCenterIntent;
+            if (TryCreateControlCenterIntent(payload, out controlCenterIntent))
+                return ApplyControlCenterIntent(controlCenterIntent).ShouldPublishSnapshot;
+
+            if (key == "two-way")
                 UpdateBooleanControl(value, chkBothSync);
             else if (key == "auto-play")
                 UpdateBooleanControl(value, chkAutoPlay);
@@ -601,50 +647,7 @@ namespace readboard
                 UpdateNumericControl(value, textBox3, true, 0);
             else if (key == "show-on-board" && SupportsShowInBoard())
                 UpdateBooleanControl(value, chkShowInBoard);
-        }
-
-        private void UpdatePlatform(JsonElement value)
-        {
-            if (HasActiveSyncOperation() || value.ValueKind != JsonValueKind.String)
-                return;
-            switch (value.GetString())
-            {
-                case "fox": rdoFox.Checked = true; break;
-                case "foxBackground": rdoFoxBack.Checked = true; break;
-                case "yike": rdoYike.Checked = true; break;
-                case "yicheng": rdoTygem.Checked = true; break;
-                case "sina": rdoSina.Checked = true; break;
-                case "otherBackground": rdoBack.Checked = true; break;
-                case "otherForeground": rdoFore.Checked = true; break;
-            }
-        }
-
-        private void UpdateBoardSize(JsonElement value)
-        {
-            if (HasActiveSyncOperation() || value.ValueKind != JsonValueKind.String)
-                return;
-            switch (value.GetString())
-            {
-                case "19": rdo19x19.Checked = true; break;
-                case "13": rdo13x13.Checked = true; break;
-                case "9": rdo9x9.Checked = true; break;
-                case "custom":
-                    if (UsesManualSelectionType(CurrentSyncType))
-                        rdoOtherBoard.Checked = true;
-                    break;
-            }
-        }
-
-        private void UpdateCustomBoardDimension(JsonElement value, TextBox control)
-        {
-            int parsed;
-            if (HasActiveSyncOperation()
-                || !rdoOtherBoard.Checked
-                || !TryReadInteger(value, false, 2, out parsed)
-                || parsed > 25)
-                return;
-            control.Text = parsed.ToString();
-            ResetWebViewSyncState();
+            return true;
         }
 
         private static void UpdateBooleanControl(JsonElement value, CheckBox control)
@@ -799,7 +802,9 @@ namespace readboard
 
         private void PostWebViewState()
         {
-            if (webView == null || webView.CoreWebView2 == null)
+            if (suppressWebViewStatePublication
+                || webView == null
+                || webView.CoreWebView2 == null)
                 return;
 
             webView.CoreWebView2.PostWebMessageAsJson(SerializeWebViewState(BuildWebViewState()));
@@ -852,14 +857,16 @@ namespace readboard
 
         private ReadBoardControlCenterState BuildControlCenterState(bool targetWindowValid)
         {
+            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
             string room = "--";
             int? moves = null;
-            if (CurrentSyncType == TYPE_YIKE)
+            if (controlCenter.Platform == SyncMode.Yike)
             {
                 room = string.IsNullOrWhiteSpace(lastYikeWindowContext.RoomToken) ? "--" : lastYikeWindowContext.RoomToken;
                 moves = lastYikeWindowContext.MoveNumber;
             }
-            else if (IsFoxSyncType(CurrentSyncType))
+            else if (controlCenter.Platform == SyncMode.Fox
+                || controlCenter.Platform == SyncMode.FoxBackgroundPlace)
             {
                 room = string.IsNullOrWhiteSpace(lastFoxWindowContext.RoomToken) ? "--" : lastFoxWindowContext.RoomToken;
                 moves = lastFoxWindowContext.ResolveDisplayedMoveNumber();
@@ -867,14 +874,14 @@ namespace readboard
 
             return new ReadBoardControlCenterState
             {
-                Platform = ResolveWebViewPlatform(),
+                Platform = ControlCenterPreferences.ToPlatformToken(controlCenter.Platform),
                 Room = room,
                 Moves = moves.HasValue ? moves.Value.ToString() : "--",
                 NextTurn = ResolveWebViewNextTurn(),
                 TitleBound = targetWindowValid,
-                BoardSize = rdoOtherBoard.Checked ? "custom" : boardW.ToString(),
-                BoardWidth = boardW,
-                BoardHeight = boardH,
+                BoardSize = ControlCenterPreferences.ToBoardSizeToken(controlCenter.BoardSizeKind),
+                BoardWidth = controlCenter.BoardWidth,
+                BoardHeight = controlCenter.BoardHeight,
                 TwoWaySync = sessionCoordinator.SyncBoth,
                 AutoPlay = chkAutoPlay.Checked,
                 Color = radioAutoPlayColor.Checked ? "auto" : radioWhite.Checked ? "white" : "black",
@@ -893,11 +900,14 @@ namespace readboard
                 AnalysisRunning = hostAnalysisRunning != false,
                 AnalysisStateAvailable = hostAnalysisRunning.HasValue,
                 AnalysisToggleEnabled = hostAnalysisRunning != false || hostAnalysisRunning.HasValue,
-                ConfigurationEnabled = rdoFox.Enabled,
+                ConfigurationEnabled = controlCenter.ConfigurationEnabled,
                 TwoWaySyncEnabled = chkBothSync.Enabled,
                 AutoPlayToggleEnabled = chkAutoPlay.Enabled,
                 AutoPlayControlsEnabled = radioBlack.Enabled,
-                CustomBoardDimensionsEnabled = txtBoardWidth.Enabled && rdoOtherBoard.Checked,
+                CustomBoardSizeEnabled = controlCenter.CustomBoardSizeEnabled,
+                CustomBoardDimensionsEnabled = controlCenter.CustomBoardDimensionsEnabled,
+                PreferencesSaved = controlCenter.PreferencesSaved,
+                PersistenceError = controlCenter.PersistenceError,
                 IdentityEnabled = btnFoxAutoPlayIdentity.Enabled,
                 ShowOnBoardEnabled = chkShowInBoard.Enabled
             };
@@ -910,21 +920,6 @@ namespace readboard
             if (activeSync)
                 return "同步中";
             return communicationEstablished ? "就绪" : "宿主模式已启动";
-        }
-
-        private string ResolveWebViewPlatform()
-        {
-            switch (CurrentSyncType)
-            {
-                case TYPE_FOX: return "fox";
-                case TYPE_FOX_BACKGROUND_PLACE: return "foxBackground";
-                case TYPE_YIKE: return "yike";
-                case TYPE_TYGEM: return "yicheng";
-                case TYPE_SINA: return "sina";
-                case TYPE_BACKGROUND: return "otherBackground";
-                case TYPE_FOREGROUND: return "otherForeground";
-                default: return "fox";
-            }
         }
 
         private string ResolveWebViewNextTurn()

@@ -44,19 +44,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("if (isInitializingProtocolState)", methodSlice);
         }
 
-        [Theory]
-        [InlineData("private void radioButton5_CheckedChanged(object sender, EventArgs e)")]
-        [InlineData("private void radioButton6_CheckedChanged(object sender, EventArgs e)")]
-        [InlineData("private void radioButton7_CheckedChanged(object sender, EventArgs e)")]
-        [InlineData("private void radioButton8_CheckedChanged(object sender, EventArgs e)")]
-        public void StartupBoardSelectionHandlers_GuardPersistenceDuringInitialization(string methodSignature)
-        {
-            string source = LoadSource("readboard", "Form1.cs");
-            string methodSlice = GetMethodSlice(source, methodSignature);
-
-            Assert.Contains("if (isInitializingProtocolState)", methodSlice);
-        }
-
         [Fact]
         public void ApplyLoadedConfiguration_ReappliesShowInBoardConstraintsAfterRestoringConfig()
         {
@@ -245,39 +232,6 @@ namespace Readboard.VerificationTests.Host
             Assert.DoesNotContain("e.KeyValue == 88", source);
             Assert.DoesNotContain("disableShowInBoardShortcut", source);
             Assert.DoesNotContain("GlobalKeyboardHook", source);
-        }
-
-        [Fact]
-        public void ResolveSyncPlatform_UsesFoxTokenForAllFoxSyncModes()
-        {
-            string source = LoadSource("readboard", "Form1.cs");
-            string methodSlice = GetMethodSlice(source, "private string ResolveSyncPlatform()");
-
-            Assert.Contains("if (IsFoxSyncType(CurrentSyncType))", methodSlice);
-            Assert.Contains("return \"fox\";", methodSlice);
-            Assert.Contains("if (CurrentSyncType == TYPE_YIKE)", methodSlice);
-            Assert.Contains("return ProtocolKeywords.Yike;", methodSlice);
-            Assert.Contains("return \"generic\";", methodSlice);
-        }
-
-        [Fact]
-        public void MainForm_RemovesLegacyPublicStaticSelectionAndTypeMirrors()
-        {
-            string source = LoadSource("readboard", "Form1.cs");
-            string setSyncTypeSlice = GetMethodSlice(source, "private void SetCurrentSyncType(int syncType)");
-            string updateSelectionSlice = GetMethodSlice(source, "private void UpdateSelectionBounds(int x1, int y1, int x2, int y2)");
-            string captureSlice = GetMethodSlice(source, "private SyncCoordinatorHostSnapshot CaptureSnapshotCore()");
-
-            Assert.DoesNotContain("public static int ox1", source);
-            Assert.DoesNotContain("public static int oy1", source);
-            Assert.DoesNotContain("public static int type", source);
-            Assert.Contains("currentSyncType = syncType;", setSyncTypeSlice);
-            Assert.DoesNotContain("type = syncType;", setSyncTypeSlice);
-            Assert.Contains("selectionX1 = x1;", updateSelectionSlice);
-            Assert.Contains("selectionY1 = y1;", updateSelectionSlice);
-            Assert.DoesNotContain("ox1 = x1;", updateSelectionSlice);
-            Assert.DoesNotContain("oy1 = y1;", updateSelectionSlice);
-            Assert.Contains("LegacyTypeToken = CurrentSyncType.ToString()", captureSlice);
         }
 
         [Fact]

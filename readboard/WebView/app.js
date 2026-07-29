@@ -56,7 +56,10 @@
       twoWaySyncEnabled: true,
       autoPlayToggleEnabled: true,
       autoPlayControlsEnabled: false,
+      customBoardSizeEnabled: false,
       customBoardDimensionsEnabled: false,
+      preferencesSaved: true,
+      persistenceError: null,
       identityEnabled: true,
       showOnBoardEnabled: true
     },
@@ -272,7 +275,17 @@
     setValue("#playouts", control.playouts ?? "");
     setValue("#first-policy", control.firstPolicy ?? "");
     setChecked("#show-on-board", control.showOnBoard);
+    const preferencesStatus = $("#preferences-status");
+    if (preferencesStatus) {
+      const saved = control.preferencesSaved !== false;
+      preferencesStatus.className = `preference-status${saved ? "" : " not-saved"}`;
+      preferencesStatus.textContent = saved
+        ? t("WebView_preferencesSaved", "偏好已保存")
+        : t("WebView_preferencesNotSaved", "当前选择已生效，但尚未保存");
+      preferencesStatus.title = saved ? "" : (control.persistenceError || preferencesStatus.textContent);
+    }
     setDisabled('input[name="platform"], input[name="boardSize"]', !control.configurationEnabled);
+    setDisabled('input[name="boardSize"][value="custom"]', !control.customBoardSizeEnabled);
     setDisabled("#board-width, #board-height", !control.customBoardDimensionsEnabled);
     setDisabled("#two-way", !control.twoWaySyncEnabled);
     setDisabled("#auto-play", !control.autoPlayToggleEnabled);

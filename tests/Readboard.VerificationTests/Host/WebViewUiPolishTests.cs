@@ -171,9 +171,35 @@ namespace Readboard.VerificationTests.Host
             Assert.DoesNotContain(".page[data-page-panel=\"controlCenter\"] label:has(input:disabled) { opacity:", styles);
 
             Assert.Contains("setDisabled('input[name=\"platform\"], input[name=\"boardSize\"]', !control.configurationEnabled);", script);
+            Assert.Contains("setDisabled('input[name=\"boardSize\"][value=\"custom\"]', !control.customBoardSizeEnabled);", script);
             Assert.Contains("setDisabled('input[name=\"color\"], input[name=\"placement\"], #ai-time, #playouts', !control.autoPlayControlsEnabled);", script);
             Assert.Contains("setDisabled(\"#first-policy\", !control.firstPolicyEnabled);", script);
             Assert.Contains("setDisabled(\"#show-on-board\", !control.showOnBoardEnabled);", script);
+        }
+
+        [Fact]
+        public void ControlCenter_PersistenceFailureHasVisibleLocalizedStatus()
+        {
+            string root = VerificationFixtureLocator.RepositoryRoot();
+            string html = LoadWebViewAsset("index.html");
+            string styles = LoadWebViewAsset("styles.css");
+            string script = LoadWebViewAsset("app.js");
+
+            Assert.Contains("id=\"preferences-status\"", html);
+            Assert.Contains("role=\"status\"", html);
+            Assert.Contains("control.preferencesSaved !== false", script);
+            Assert.Contains("control.persistenceError || preferencesStatus.textContent", script);
+            Assert.Contains(".top-status #preferences-status.not-saved", styles);
+
+            foreach (string language in new[] { "cn", "en", "jp", "kr" })
+            {
+                string languageFile = File.ReadAllText(Path.Combine(
+                    root,
+                    "readboard",
+                    "language_" + language + ".txt"));
+                Assert.Contains("WebView_preferencesSaved=", languageFile);
+                Assert.Contains("WebView_preferencesNotSaved=", languageFile);
+            }
         }
 
         [Fact]

@@ -27,6 +27,8 @@ namespace Readboard.VerificationTests.Architecture
                 Dialog = new ReadBoardDialogUiState()
             };
             state.Shell.TargetWindowValid = null;
+            state.ControlCenter.PreferencesSaved = false;
+            state.ControlCenter.PersistenceError = "disk full";
 
             using (JsonDocument document = JsonDocument.Parse(MainForm.SerializeWebViewState(state)))
             {
@@ -49,6 +51,10 @@ namespace Readboard.VerificationTests.Architecture
                 Assert.Equal(JsonValueKind.Object, payload.GetProperty("shell").ValueKind);
                 Assert.Equal(JsonValueKind.Object, payload.GetProperty("controlCenter").ValueKind);
                 Assert.Equal(JsonValueKind.Array, payload.GetProperty("logs").ValueKind);
+                Assert.False(payload.GetProperty("controlCenter").GetProperty("preferencesSaved").GetBoolean());
+                Assert.Equal(
+                    "disk full",
+                    payload.GetProperty("controlCenter").GetProperty("persistenceError").GetString());
 
                 AssertPropertyNames(
                     payload.GetProperty("shell"),
@@ -94,7 +100,10 @@ namespace Readboard.VerificationTests.Architecture
                     "twoWaySyncEnabled",
                     "autoPlayToggleEnabled",
                     "autoPlayControlsEnabled",
+                    "customBoardSizeEnabled",
                     "customBoardDimensionsEnabled",
+                    "preferencesSaved",
+                    "persistenceError",
                     "identityEnabled",
                     "showOnBoardEnabled");
                 AssertPropertyNames(

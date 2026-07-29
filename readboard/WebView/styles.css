@@ -202,6 +202,9 @@ main { grid-row: 2; grid-column: 2; display: grid; min-width: 0; min-height: 0; 
 .top-status > span b, .top-status > span strong { white-space: nowrap; }
 .top-status strong.good { color: var(--success); }
 .top-status b { font-weight: 500; }
+.preference-status { padding: 3px 10px !important; border: 1px solid var(--success-border) !important; border-radius: 14px; }
+.top-status #preferences-status { margin-left: auto; border-right: 0; color: var(--success-text); background: var(--success-background); }
+.top-status #preferences-status.not-saved { color: var(--warning-text); background: var(--warning-background); }
 .top-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; margin-left: auto; }
 .top-actions button { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 37px; padding: 0 7px; border: 0; }
 .top-actions .icon { font-size: 17px; }
