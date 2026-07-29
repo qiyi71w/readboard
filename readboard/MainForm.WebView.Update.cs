@@ -2,17 +2,14 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 
 namespace readboard
 {
     public partial class MainForm
     {
-        private const int WebViewHostedUpdateResponseTimeoutMilliseconds = 15000;
         private const string WebViewManualDownloadUrl =
             "https://github.com/qiyi71w/readboard/releases/latest";
 
-        private readonly Timer webViewHostedUpdateResponseTimer = new Timer();
         private ReadBoardUpdateUiState webViewUpdateState = CreateClosedWebViewUpdateState();
         private UpdateCheckResult webViewUpdateResult;
         private Uri webViewManualDownloadUri = GetWebViewManualDownloadUri();
@@ -27,9 +24,6 @@ namespace readboard
             if (webViewUpdateInitialized)
                 return;
 
-            webViewHostedUpdateResponseTimer.Interval =
-                WebViewHostedUpdateResponseTimeoutMilliseconds;
-            webViewHostedUpdateResponseTimer.Tick += WebViewHostedUpdateResponseTimer_Tick;
             webViewUpdateInitialized = true;
         }
 
@@ -46,7 +40,6 @@ namespace readboard
                 return;
             int operationId = ++webViewUpdateOperationId;
             InitializeWebViewUpdateBridge();
-            webViewHostedUpdateResponseTimer.Stop();
             webViewHostedInstallFallbackActive = false;
             webViewHostedUpdateHostInstalling = false;
             webViewUpdateResult = null;
@@ -89,7 +82,6 @@ namespace readboard
         {
             if (hostedUpdateJourney != null && hostedUpdateJourney.Cancel())
             {
-                webViewHostedUpdateResponseTimer.Stop();
                 webViewHostedUpdateHostInstalling = false;
                 return;
             }
@@ -102,7 +94,6 @@ namespace readboard
             if (journeyGeneration >= webViewHostedUpdateGeneration)
                 webViewHostedUpdateGeneration = journeyGeneration + 1;
             webViewUpdateOperationId++;
-            webViewHostedUpdateResponseTimer.Stop();
             webViewHostedUpdateHostInstalling = false;
             webViewUpdateState = CreateClosedWebViewUpdateState();
             PostWebViewState();
@@ -179,13 +170,10 @@ namespace readboard
                     if (webViewHostedInstallFallbackActive || webViewHostedUpdateHostInstalling)
                         return;
                     SetWebViewUpdateProcessing(observation.Message, 2);
-                    webViewHostedUpdateResponseTimer.Stop();
-                    webViewHostedUpdateResponseTimer.Start();
                     break;
                 case HostedUpdateStage.HostInstalling:
                     if (webViewHostedInstallFallbackActive)
                         return;
-                    webViewHostedUpdateResponseTimer.Stop();
                     webViewHostedUpdateHostInstalling = true;
                     SetWebViewUpdateProcessing(observation.Message, 3);
                     break;
@@ -195,7 +183,6 @@ namespace readboard
                     ActivateWebViewManualDownloadFallback(observation.Message);
                     break;
                 case HostedUpdateStage.Cancelled:
-                    webViewHostedUpdateResponseTimer.Stop();
                     webViewHostedInstallFallbackActive = false;
                     webViewHostedUpdateHostInstalling = false;
                     webViewUpdateState = CreateClosedWebViewUpdateState();
@@ -205,7 +192,13 @@ namespace readboard
                     ActivateWebViewManualDownloadFallback(observation.Message);
                     break;
                 case HostedUpdateStage.Rejected:
-                    PostWebViewState();
+                    if (string.Equals(
+                        observation.Message.Key,
+                        "Update_handoffAlreadySent",
+                        StringComparison.Ordinal))
+                        ActivateWebViewManualDownloadFallback(observation.Message);
+                    else
+                        PostWebViewState();
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(observation.Stage));
@@ -235,9 +228,7 @@ namespace readboard
             if (hostedUpdateJourney != null)
                 hostedUpdateJourney.Dispose();
             webViewUpdateOperationId++;
-            webViewHostedUpdateResponseTimer.Stop();
             webViewHostedUpdateHostInstalling = false;
-            webViewHostedUpdateResponseTimer.Dispose();
         }
 
         internal static bool CanOfferWebViewHostedInstall(
@@ -470,7 +461,6 @@ namespace readboard
 
         private void ActivateWebViewManualDownloadFallback(string headline, string detail)
         {
-            webViewHostedUpdateResponseTimer.Stop();
             webViewHostedInstallFallbackActive = true;
             webViewHostedUpdateHostInstalling = false;
             webViewUpdateState = new ReadBoardUpdateUiState
@@ -496,13 +486,6 @@ namespace readboard
             return string.IsNullOrWhiteSpace(message.DiagnosticDetail)
                 ? localized
                 : localized + ": " + message.DiagnosticDetail;
-        }
-
-        private void WebViewHostedUpdateResponseTimer_Tick(object sender, EventArgs e)
-        {
-            webViewHostedUpdateResponseTimer.Stop();
-            if (hostedUpdateJourney != null)
-                hostedUpdateJourney.MarkHostTimedOut();
         }
 
         private bool CanOfferWebViewHostedInstallForCurrentProcess(UpdateCheckResult result)

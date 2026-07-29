@@ -41,7 +41,7 @@ namespace readboard
         void NotifyReady(bool playPonderEnabled);
         void SendPonderStatus(bool playPonderEnabled);
         void SendVersion(string version);
-        void SendReadboardUpdateReady(string tag, string absoluteZipPath);
+        bool SendReadboardUpdateReady(string tag, string absoluteZipPath);
         void SendSync();
         void SendStopSync();
         void SendBothSync(bool enabled);

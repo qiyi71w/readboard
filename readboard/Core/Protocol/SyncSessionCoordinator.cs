@@ -479,9 +479,10 @@ namespace readboard
             SendProtocolMessage(protocolAdapter.CreateVersionMessage(version));
         }
 
-        public void SendReadboardUpdateReady(string tag, string absoluteZipPath)
+        public bool SendReadboardUpdateReady(string tag, string absoluteZipPath)
         {
-            SendProtocolMessage(protocolAdapter.CreateReadboardUpdateReadyMessage(tag, absoluteZipPath));
+            return outboundProtocolDispatcher.TrySend(
+                protocolAdapter.CreateReadboardUpdateReadyMessage(tag, absoluteZipPath));
         }
 
         public void SendSync()

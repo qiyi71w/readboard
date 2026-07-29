@@ -111,6 +111,7 @@ namespace Readboard.VerificationTests.Host
                 "Update_verifyingPackage",
                 "Update_notifyingHost",
                 "Update_hostInstalling",
+                "Update_handoffAlreadySent",
                 "Update_retiredFinalVersion",
                 "Update_upToDateRetired",
                 "Update_outsideChannel",
@@ -122,6 +123,24 @@ namespace Readboard.VerificationTests.Host
                 foreach (string languageSource in languageSources)
                     Assert.Contains(key + "=", languageSource);
             }
+        }
+
+        [Fact]
+        public void MainFormHostedCallbacksUseJourneyAndRejectedHandoffFallsBackToManual()
+        {
+            string updateSource = LoadReadboardSource("MainForm.WebView.Update.cs");
+            string protocolSource = LoadReadboardSource("MainForm.Protocol.cs");
+
+            Assert.Contains("responseTimeoutScheduler.Start", LoadReadboardSource("HostedUpdateJourney.cs"));
+            Assert.Contains("MarkHostTimedOut();", LoadReadboardSource("HostedUpdateJourney.cs"));
+            Assert.Contains("hostedUpdateJourney.MarkHostInstalling();", updateSource);
+            Assert.Contains("hostedUpdateJourney.MarkHostCancelled();", updateSource);
+            Assert.Contains("hostedUpdateJourney.MarkHostFailed(message);", updateSource);
+            Assert.Contains("observation.Message.Key", updateSource);
+            Assert.Contains("Update_handoffAlreadySent", updateSource);
+            Assert.Contains("MarkWebViewHostedUpdateInstalling();", protocolSource);
+            Assert.Contains("MarkWebViewHostedUpdateCancelled();", protocolSource);
+            Assert.Contains("MarkWebViewHostedUpdateFailed", protocolSource);
         }
 
         private static UpdateCheckResult CreateResult(

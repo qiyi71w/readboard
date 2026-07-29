@@ -2429,8 +2429,9 @@ namespace readboard
                 new HostedUpdatePackageVerifier(),
                 delegate(string tag, string zipPath)
                 {
-                    this.sessionCoordinator.SendReadboardUpdateReady(tag, zipPath);
+                    return this.sessionCoordinator.SendReadboardUpdateReady(tag, zipPath);
                 },
+                new HostedUpdateResponseTimeoutScheduler(),
                 OnHostedUpdateObservation);
             InitializeComponent();
             using (System.Drawing.Bitmap bitmap = new Bitmap(1, 1))

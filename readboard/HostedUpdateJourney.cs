@@ -107,11 +107,77 @@ namespace readboard
         void Verify(HostedUpdateRequest request, string packagePath, CancellationToken cancellationToken);
     }
 
+    internal interface IHostedUpdateResponseTimeoutScheduler : IDisposable
+    {
+        void Start(Action callback);
+
+        void Stop();
+    }
+
+    internal sealed class HostedUpdateResponseTimeoutScheduler : IHostedUpdateResponseTimeoutScheduler
+    {
+        private const int TimeoutMilliseconds = 15000;
+        private readonly object syncRoot = new object();
+        private Timer timer;
+
+        public void Start(Action callback)
+        {
+            if (callback == null)
+                throw new ArgumentNullException(nameof(callback));
+
+            lock (syncRoot)
+            {
+                StopUnsafe();
+                timer = new Timer(
+                    _ => callback(),
+                    null,
+                    TimeoutMilliseconds,
+                    Timeout.Infinite);
+            }
+        }
+
+        public void Stop()
+        {
+            lock (syncRoot)
+                StopUnsafe();
+        }
+
+        public void Dispose()
+        {
+            Stop();
+        }
+
+        private void StopUnsafe()
+        {
+            if (timer == null)
+                return;
+
+            timer.Dispose();
+            timer = null;
+        }
+    }
+
+    internal sealed class NoopHostedUpdateResponseTimeoutScheduler : IHostedUpdateResponseTimeoutScheduler
+    {
+        public void Start(Action callback)
+        {
+        }
+
+        public void Stop()
+        {
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
     internal sealed class HostedUpdateJourney : IDisposable
     {
         private readonly IHostedUpdatePackageDownloader downloader;
         private readonly IHostedUpdatePackageVerifier verifier;
-        private readonly Action<string, string> sendReady;
+        private readonly Func<string, string, bool> sendReady;
+        private readonly IHostedUpdateResponseTimeoutScheduler responseTimeoutScheduler;
         private readonly Action<HostedUpdateObservation> observe;
         private readonly object stateSyncRoot = new object();
         private CancellationTokenSource operationCancellation;
@@ -123,6 +189,10 @@ namespace readboard
         private bool handoffBudgetConsumed;
         private bool hostInstallStarted;
         private bool hostOutcomeSettled;
+        private bool pendingHostInstalling;
+        private HostedUpdateStage? pendingHostOutcomeStage;
+        private HostedUpdateSemanticMessage pendingHostOutcome;
+        private bool responseTimeoutArmed;
         private bool disposed;
 
         public HostedUpdateJourney(
@@ -130,10 +200,30 @@ namespace readboard
             IHostedUpdatePackageVerifier verifier,
             Action<string, string> sendReady,
             Action<HostedUpdateObservation> observe)
+            : this(
+                downloader,
+                verifier,
+                delegate(string tag, string packagePath)
+                {
+                    sendReady(tag, packagePath);
+                    return true;
+                },
+                new NoopHostedUpdateResponseTimeoutScheduler(),
+                observe)
+        {
+        }
+
+        public HostedUpdateJourney(
+            IHostedUpdatePackageDownloader downloader,
+            IHostedUpdatePackageVerifier verifier,
+            Func<string, string, bool> sendReady,
+            IHostedUpdateResponseTimeoutScheduler responseTimeoutScheduler,
+            Action<HostedUpdateObservation> observe)
         {
             this.downloader = downloader ?? throw new ArgumentNullException(nameof(downloader));
             this.verifier = verifier ?? throw new ArgumentNullException(nameof(verifier));
             this.sendReady = sendReady ?? throw new ArgumentNullException(nameof(sendReady));
+            this.responseTimeoutScheduler = responseTimeoutScheduler ?? throw new ArgumentNullException(nameof(responseTimeoutScheduler));
             this.observe = observe ?? throw new ArgumentNullException(nameof(observe));
         }
 
@@ -191,6 +281,7 @@ namespace readboard
                 }
                 else
                 {
+                    StopResponseTimeoutUnsafe();
                     generation++;
                     operationGeneration = generation;
                     activeRequest = request;
@@ -199,6 +290,9 @@ namespace readboard
                     handoffInProgress = false;
                     hostInstallStarted = false;
                     hostOutcomeSettled = false;
+                    pendingHostInstalling = false;
+                    pendingHostOutcomeStage = null;
+                    pendingHostOutcome = null;
                     cancellationSource = new CancellationTokenSource();
                     operationCancellation = cancellationSource;
                 }
@@ -238,6 +332,7 @@ namespace readboard
                 operationCancellation = null;
                 activeRequest = null;
                 activePackagePath = null;
+                StopResponseTimeoutUnsafe();
                 cancellationGeneration = ++generation;
             }
 
@@ -254,21 +349,26 @@ namespace readboard
 
         public bool MarkHostInstalling()
         {
-            int observationGeneration;
+            HostedUpdateObservation observation = null;
             lock (stateSyncRoot)
             {
                 if (!CanAcceptHostObservationUnsafe() || hostOutcomeSettled || hostInstallStarted)
                     return false;
 
                 hostInstallStarted = true;
-                observationGeneration = generation;
+                StopResponseTimeoutUnsafe();
+                if (handoffInProgress)
+                {
+                    pendingHostInstalling = true;
+                    return true;
+                }
+
+                observation = CreateHostObservation(
+                    HostedUpdateStage.HostInstalling,
+                    new HostedUpdateSemanticMessage("Update_hostInstalling"));
             }
 
-            Emit(
-                HostedUpdateStage.HostInstalling,
-                new HostedUpdateSemanticMessage("Update_hostInstalling"),
-                null,
-                observationGeneration);
+            Emit(observation);
             return true;
         }
 
@@ -292,7 +392,8 @@ namespace readboard
         {
             return SetHostOutcome(
                 HostedUpdateStage.HostTimedOut,
-                new HostedUpdateSemanticMessage("Update_hostTimedOut"));
+                new HostedUpdateSemanticMessage("Update_hostTimedOut"),
+                true);
         }
 
         public void Dispose()
@@ -304,7 +405,8 @@ namespace readboard
             lock (stateSyncRoot)
             {
                 disposed = true;
-                if (operationCancellation == null || handoffSent)
+                StopResponseTimeoutUnsafe();
+                if (operationCancellation == null || handoffSent || handoffInProgress)
                     return;
 
                 cancellation = operationCancellation;
@@ -358,7 +460,21 @@ namespace readboard
                 handoffAttempted = true;
                 if (!TrySendReady(request, packagePath, operationGeneration, cancellationSource))
                 {
-                    Cleanup(request, packagePath);
+                    if (IsCurrent(operationGeneration, cancellationSource))
+                    {
+                        FailCurrentOperation(
+                            request,
+                            packagePath,
+                            "Update_handoffFailed",
+                            null,
+                            operationGeneration,
+                            cancellationSource,
+                            false);
+                    }
+                    else
+                    {
+                        Cleanup(request, packagePath);
+                    }
                     return false;
                 }
                 handoffDelivered = true;
@@ -461,13 +577,28 @@ namespace readboard
 
             try
             {
-                sendReady(request.VersionTag, packagePath);
+                if (!sendReady(request.VersionTag, packagePath))
+                {
+                    lock (stateSyncRoot)
+                    {
+                        handoffInProgress = false;
+                        StopResponseTimeoutUnsafe();
+                        pendingHostInstalling = false;
+                        pendingHostOutcomeStage = null;
+                        pendingHostOutcome = null;
+                    }
+                    return false;
+                }
             }
             catch
             {
                 lock (stateSyncRoot)
                 {
                     handoffInProgress = false;
+                    StopResponseTimeoutUnsafe();
+                    pendingHostInstalling = false;
+                    pendingHostOutcomeStage = null;
+                    pendingHostOutcome = null;
                     if (ReferenceEquals(operationCancellation, cancellationSource))
                     {
                         handoffSent = false;
@@ -478,36 +609,104 @@ namespace readboard
 
             lock (stateSyncRoot)
             {
-                handoffInProgress = false;
                 handoffSent = true;
                 handoffBudgetConsumed = true;
                 if (ReferenceEquals(operationCancellation, cancellationSource))
                     activePackagePath = null;
             }
+
+            FlushPendingHostObservations();
             return true;
         }
 
         private bool SetHostOutcome(
             HostedUpdateStage stage,
-            HostedUpdateSemanticMessage message)
+            HostedUpdateSemanticMessage message,
+            bool rejectIfInstalling = false)
         {
-            int observationGeneration;
+            HostedUpdateObservation observation = null;
             lock (stateSyncRoot)
             {
-                if (!CanAcceptHostObservationUnsafe() || hostOutcomeSettled)
+                if (!CanAcceptHostObservationUnsafe() || hostOutcomeSettled ||
+                    (rejectIfInstalling && hostInstallStarted))
                     return false;
 
                 hostOutcomeSettled = true;
-                observationGeneration = generation;
+                StopResponseTimeoutUnsafe();
+                if (handoffInProgress)
+                {
+                    pendingHostOutcomeStage = stage;
+                    pendingHostOutcome = message;
+                    return true;
+                }
+
+                observation = CreateHostObservation(stage, message);
             }
 
-            Emit(stage, message, null, observationGeneration);
+            Emit(observation);
             return true;
         }
 
         private bool CanAcceptHostObservationUnsafe()
         {
-            return !disposed && handoffSent;
+            return !disposed && (handoffSent || handoffInProgress);
+        }
+
+        private void StopResponseTimeoutUnsafe()
+        {
+            if (!responseTimeoutArmed)
+                return;
+
+            responseTimeoutArmed = false;
+            responseTimeoutScheduler.Stop();
+        }
+
+        private HostedUpdateObservation CreateHostObservation(
+            HostedUpdateStage stage,
+            HostedUpdateSemanticMessage message)
+        {
+            return new HostedUpdateObservation(generation, stage, message);
+        }
+
+        private void FlushPendingHostObservations()
+        {
+            while (true)
+            {
+                bool emitInstalling;
+                HostedUpdateStage? outcomeStage;
+                HostedUpdateSemanticMessage outcome;
+                lock (stateSyncRoot)
+                {
+                    emitInstalling = pendingHostInstalling;
+                    pendingHostInstalling = false;
+                    outcomeStage = pendingHostOutcomeStage;
+                    pendingHostOutcomeStage = null;
+                    outcome = pendingHostOutcome;
+                    pendingHostOutcome = null;
+                    if (!emitInstalling && !outcomeStage.HasValue && outcome == null)
+                    {
+                        handoffInProgress = false;
+                        if (!disposed && !hostInstallStarted && !hostOutcomeSettled)
+                        {
+                            responseTimeoutArmed = true;
+                            responseTimeoutScheduler.Start(delegate
+                            {
+                                MarkHostTimedOut();
+                            });
+                        }
+                        return;
+                    }
+                }
+
+                if (emitInstalling)
+                    Emit(CreateHostObservation(
+                        HostedUpdateStage.HostInstalling,
+                        new HostedUpdateSemanticMessage("Update_hostInstalling")));
+                if (outcome != null && outcomeStage.HasValue)
+                    Emit(CreateHostObservation(
+                        outcomeStage.Value,
+                        outcome));
+            }
         }
 
         private bool ShouldWaitForHost(
@@ -588,6 +787,11 @@ namespace readboard
                 stage,
                 message,
                 packagePath));
+        }
+
+        private void Emit(HostedUpdateObservation observation)
+        {
+            observe(observation);
         }
 
         private static string SanitizeDiagnosticDetail(string detail)

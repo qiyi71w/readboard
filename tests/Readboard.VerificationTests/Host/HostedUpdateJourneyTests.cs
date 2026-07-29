@@ -264,6 +264,53 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public async Task FastHostReplyDuringSend_IsSettledAfterSuccessfulHandoff()
+        {
+            var downloader = new ControlledDownloader { ImmediateResult = "handed-off.zip" };
+            var verifier = new RecordingVerifier();
+            var observations = new List<HostedUpdateObservation>();
+            HostedUpdateJourney journey = null;
+            journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                delegate(string tag, string packagePath)
+                {
+                    Assert.True(journey.MarkHostInstalling());
+                    Assert.True(journey.MarkHostCancelled());
+                    return true;
+                },
+                new NoopHostedUpdateResponseTimeoutScheduler(),
+                observations.Add);
+
+            Assert.True(await journey.StartAsync(Request));
+
+            Assert.Contains(observations, observation => observation.Stage == HostedUpdateStage.HostInstalling);
+            Assert.Contains(observations, observation => observation.Stage == HostedUpdateStage.HostCancelled);
+            Assert.False(journey.MarkHostTimedOut());
+            Assert.False(await journey.StartAsync(Request));
+            Assert.Null(downloader.CleanedPackagePath);
+        }
+
+        [Fact]
+        public async Task ClosedHostTransport_DoesNotConsumeHandoffBudget()
+        {
+            var downloader = new ControlledDownloader { ImmediateResult = "candidate.zip" };
+            var verifier = new RecordingVerifier();
+            var observations = new List<HostedUpdateObservation>();
+            var journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                (tag, packagePath) => false,
+                new NoopHostedUpdateResponseTimeoutScheduler(),
+                observations.Add);
+
+            Assert.False(await journey.StartAsync(Request));
+            Assert.Equal("Update_handoffFailed", observations[3].Message.Key);
+            Assert.Equal("candidate.zip", downloader.CleanedPackagePath);
+            Assert.True(journey.CanStartHostedInstall);
+        }
+
+        [Fact]
         public async Task HostFailureAfterHandoff_SanitizesDetailWithoutCleaningHandedOffPackage()
         {
             var downloader = new ControlledDownloader { ImmediateResult = "handed-off.zip" };
@@ -311,6 +358,47 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal("Update_hostTimedOut", timeout.Message.Key);
             Assert.False(await journey.StartAsync(Request));
             Assert.Null(downloader.CleanedPackagePath);
+        }
+
+        [Fact]
+        public async Task ControlledTimeoutScheduler_ExpiresOnceAndInstallingDisarmsDeadline()
+        {
+            var downloader = new ControlledDownloader { ImmediateResult = "handed-off.zip" };
+            var verifier = new RecordingVerifier();
+            var scheduler = new ManualTimeoutScheduler();
+            var observations = new List<HostedUpdateObservation>();
+            var journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                (tag, packagePath) => true,
+                scheduler,
+                observations.Add);
+
+            Assert.True(await journey.StartAsync(Request));
+            Assert.True(scheduler.IsArmed);
+            scheduler.Fire();
+
+            Assert.Contains(observations, observation => observation.Stage == HostedUpdateStage.HostTimedOut);
+            Assert.False(scheduler.IsArmed);
+            Assert.False(journey.MarkHostInstalling());
+
+            var secondDownloader = new ControlledDownloader { ImmediateResult = "installing.zip" };
+            var secondObservations = new List<HostedUpdateObservation>();
+            var secondScheduler = new ManualTimeoutScheduler();
+            var secondJourney = new HostedUpdateJourney(
+                secondDownloader,
+                new RecordingVerifier(),
+                (tag, packagePath) => true,
+                secondScheduler,
+                secondObservations.Add);
+
+            Assert.True(await secondJourney.StartAsync(Request));
+            Assert.True(secondJourney.MarkHostInstalling());
+            Assert.False(secondScheduler.IsArmed);
+            secondScheduler.Fire();
+            Assert.DoesNotContain(
+                secondObservations,
+                observation => observation.Stage == HostedUpdateStage.HostTimedOut);
         }
 
         [Fact]
@@ -539,6 +627,36 @@ namespace Readboard.VerificationTests.Host
             public void SendReady(string versionTag, string packagePath)
             {
                 ReadyMessages.Add(new ReadyMessage(versionTag, packagePath));
+            }
+        }
+
+        private sealed class ManualTimeoutScheduler : IHostedUpdateResponseTimeoutScheduler
+        {
+            private Action callback;
+
+            public bool IsArmed { get { return callback != null; } }
+
+            public void Start(Action callback)
+            {
+                this.callback = callback;
+            }
+
+            public void Stop()
+            {
+                callback = null;
+            }
+
+            public void Fire()
+            {
+                Action current = callback;
+                callback = null;
+                if (current != null)
+                    current();
+            }
+
+            public void Dispose()
+            {
+                callback = null;
             }
         }
 

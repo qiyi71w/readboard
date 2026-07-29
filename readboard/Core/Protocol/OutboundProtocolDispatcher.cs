@@ -54,6 +54,21 @@ namespace readboard
             });
         }
 
+        public bool TrySend(ProtocolMessage message)
+        {
+            if (message == null)
+                throw new ArgumentNullException("message");
+
+            lock (syncRoot)
+            {
+                if (closed)
+                    return false;
+
+                SendMessageWhileSynchronized(message);
+                return true;
+            }
+        }
+
         public void SendError(string message)
         {
             ExecuteBatch(delegate
