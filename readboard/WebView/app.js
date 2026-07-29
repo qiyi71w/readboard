@@ -43,6 +43,13 @@
       playouts: "",
       firstPolicy: "",
       firstPolicyEnabled: false,
+      colorEnabled: false,
+      autoColorEnabled: false,
+      placementEnabled: false,
+      aiTimeEnabled: false,
+      playoutsEnabled: false,
+      autoPlayColorStatus: "",
+      playColorKnown: false,
       showOnBoard: false,
       quickSyncActive: false,
       continuousSyncActive: false,
@@ -289,7 +296,11 @@
     setDisabled("#board-width, #board-height", !control.customBoardDimensionsEnabled);
     setDisabled("#two-way", !control.twoWaySyncEnabled);
     setDisabled("#auto-play", !control.autoPlayToggleEnabled);
-    setDisabled('input[name="color"], input[name="placement"], #ai-time, #playouts', !control.autoPlayControlsEnabled);
+    setDisabled('input[name="color"][value="black"], input[name="color"][value="white"]', !control.colorEnabled);
+    setDisabled('input[name="color"][value="auto"]', !control.autoColorEnabled);
+    setDisabled('input[name="placement"]', !control.placementEnabled);
+    setDisabled('#ai-time', !control.aiTimeEnabled);
+    setDisabled('#playouts', !control.playoutsEnabled);
     setDisabled("#first-policy", !control.firstPolicyEnabled);
     setDisabled('[data-command="identity.open"]', !control.identityEnabled);
     setDisabled("#show-on-board", !control.showOnBoardEnabled);

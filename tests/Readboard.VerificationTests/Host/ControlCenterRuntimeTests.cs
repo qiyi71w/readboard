@@ -10,6 +10,23 @@ namespace Readboard.VerificationTests.Host
     public sealed class ControlCenterRuntimeTests
     {
         [Fact]
+        public void StartupEngineValues_AreSessionStateWithLaunchWhitespaceNormalized()
+        {
+            ControlCenterSessionState state = ControlCenterSessionState.FromLaunchOptions(
+                new LaunchOptions
+                {
+                    AiTime = " 5 ",
+                    Playouts = " ",
+                    FirstPolicy = "0"
+                });
+
+            Assert.Equal("5", state.AiTimeValue);
+            Assert.Equal(string.Empty, state.PlayoutsValue);
+            Assert.Equal("0", state.FirstPolicyValue);
+            Assert.False(state.AutoPlayEnabled);
+        }
+
+        [Fact]
         public void PlatformIntent_UpdatesSessionPersistsOnceAndPublishesSavedSnapshot()
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
@@ -465,6 +482,255 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void AutoPlayEnabled_IsSessionStateAndDoesNotPersist()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = true;
+            ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(config);
+            ControlCenterSessionState sessionState = new ControlCenterSessionState
+            {
+                AiTimeValue = "5",
+                PlayoutsValue = "1000",
+                FirstPolicyValue = "200"
+            };
+            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RecordingPersistence persistence = new RecordingPersistence();
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                initial,
+                sessionState,
+                session,
+                persistence);
+
+            ControlCenterApplyResult result = runtime.Apply(
+                ControlCenterIntent.SetAutoPlayEnabled(true));
+
+            Assert.Equal(ControlCenterApplyOutcome.Changed, result.Outcome);
+            Assert.True(result.Snapshot.AutoPlayEnabled);
+            Assert.True(result.Snapshot.AutoPlayToggleEnabled);
+            Assert.True(result.Snapshot.ManualColorEnabled);
+            Assert.True(result.Snapshot.FoxAutoColorEnabled);
+            Assert.True(result.Snapshot.MoveModeEnabled);
+            Assert.True(result.Snapshot.AiTimeEnabled);
+            Assert.True(result.Snapshot.PlayoutsEnabled);
+            Assert.True(result.Snapshot.FirstPolicyEnabled);
+            Assert.Equal("5", result.Snapshot.AiTimeValue);
+            Assert.Equal("1000", result.Snapshot.PlayoutsValue);
+            Assert.Equal("200", result.Snapshot.FirstPolicyValue);
+            Assert.True(session.AppliedSessions[0].AutoPlayEnabled);
+            Assert.Empty(persistence.Saved);
+        }
+
+        [Fact]
+        public void AutoPlayColorAndMoveMode_ArePersistentPreferences()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = true;
+            ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
+                config);
+            ControlCenterSessionState sessionState = new ControlCenterSessionState
+            {
+                AutoPlayEnabled = true
+            };
+            RecordingPersistence persistence = new RecordingPersistence();
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                initial,
+                sessionState,
+                new RecordingSessionAdapter(),
+                persistence);
+
+            ControlCenterApplyResult color = runtime.Apply(
+                ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.ManualWhite));
+            ControlCenterApplyResult moveMode = runtime.Apply(
+                ControlCenterIntent.SetAutoPlayMoveMode(AutoPlayMoveMode.GenmoveAnalyze));
+
+            Assert.Equal(ControlCenterApplyOutcome.Changed, color.Outcome);
+            Assert.Equal(AutoPlayColorMode.ManualWhite, color.Snapshot.AutoPlayColorMode);
+            Assert.Equal("white", color.Snapshot.PlayColor);
+            Assert.Equal(ControlCenterApplyOutcome.Changed, moveMode.Outcome);
+            Assert.Equal(AutoPlayMoveMode.GenmoveAnalyze, moveMode.Snapshot.AutoPlayMoveMode);
+            Assert.False(moveMode.Snapshot.FirstPolicyEnabled);
+            Assert.Equal(2, persistence.Saved.Count);
+            Assert.Equal(AutoPlayColorMode.ManualWhite, persistence.Saved[0].AutoPlayColorMode);
+            Assert.Equal(AutoPlayMoveMode.GenmoveAnalyze, persistence.Saved[1].AutoPlayMoveMode);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(1)]
+        [InlineData(2)]
+        public void SameValueUnavailableIntent_IsRejectedAndPublishesAuthoritativeState(int kind)
+        {
+            ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
+                AppConfig.CreateDefault("220430", "TEST"));
+            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RecordingPersistence persistence = new RecordingPersistence();
+            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence);
+
+            ControlCenterIntent intent = kind == 0
+                ? ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.ManualBlack)
+                : kind == 1
+                    ? ControlCenterIntent.SetAutoPlayMoveMode(AutoPlayMoveMode.FirstCandidate)
+                    : ControlCenterIntent.SetAiTime(string.Empty);
+
+            ControlCenterApplyResult result = runtime.Apply(intent);
+
+            Assert.Equal(ControlCenterApplyOutcome.Rejected, result.Outcome);
+            Assert.True(result.ShouldPublishSnapshot);
+            Assert.Empty(session.Applied);
+            Assert.Empty(persistence.Saved);
+        }
+
+        [Fact]
+        public void FoxAutoPlayObservation_IsKnownOnlyForFoxAndCurrentRecognition()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = true;
+            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
+            ControlCenterSessionState sessionState = new ControlCenterSessionState
+            {
+                AutoPlayEnabled = true,
+                FoxAutoPlayNicknameSignature = "sig",
+                FoxWindowContext = new FoxWindowContext
+                {
+                    Kind = FoxWindowKind.LiveRoom,
+                    LiveRoomState = FoxLiveRoomState.Playing
+                },
+                DetectedAutoPlayColor = AutoPlayColorResolution.Known(
+                    "black",
+                    AutoPlayColorStatus.RecognizedBlack)
+            };
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(config),
+                sessionState,
+                new RecordingSessionAdapter(),
+                new RecordingPersistence());
+
+            Assert.Equal("black", runtime.Snapshot.PlayColor);
+            Assert.Equal(AutoPlayColorStatus.RecognizedBlack, runtime.Snapshot.AutoPlayColorStatus);
+
+            runtime.UpdateAutoPlayObservation(
+                "sig",
+                sessionState.FoxWindowContext,
+                AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched));
+            Assert.Null(runtime.Snapshot.PlayColor);
+            Assert.Equal(AutoPlayColorStatus.NicknameNotMatched, runtime.Snapshot.AutoPlayColorStatus);
+
+            ControlCenterApplyResult platform = runtime.Apply(
+                ControlCenterIntent.SetPlatform(SyncMode.Yike));
+            Assert.Equal(ControlCenterApplyOutcome.Changed, platform.Outcome);
+            Assert.Null(platform.Snapshot.PlayColor);
+            Assert.Equal(AutoPlayColorStatus.UnsupportedPlatform, platform.Snapshot.AutoPlayColorStatus);
+        }
+
+        [Fact]
+        public void DisablingAutoPlay_ClearsRecognitionBeforeNextEnable()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = true;
+            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
+            ControlCenterSessionState sessionState = new ControlCenterSessionState
+            {
+                AutoPlayEnabled = true,
+                FoxAutoPlayNicknameSignature = "sig",
+                FoxWindowContext = new FoxWindowContext
+                {
+                    Kind = FoxWindowKind.LiveRoom,
+                    LiveRoomState = FoxLiveRoomState.Playing
+                },
+                DetectedAutoPlayColor = AutoPlayColorResolution.Known(
+                    "white",
+                    AutoPlayColorStatus.RecognizedWhite)
+            };
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(config),
+                sessionState,
+                new RecordingSessionAdapter(),
+                new RecordingPersistence());
+
+            ControlCenterApplyResult disabled = runtime.Apply(
+                ControlCenterIntent.SetAutoPlayEnabled(false));
+            ControlCenterApplyResult enabled = runtime.Apply(
+                ControlCenterIntent.SetAutoPlayEnabled(true));
+
+            Assert.False(disabled.Snapshot.AutoPlayEnabled);
+            Assert.False(disabled.Snapshot.ManualColorEnabled);
+            Assert.True(enabled.Snapshot.AutoPlayEnabled);
+            Assert.Null(enabled.Snapshot.PlayColor);
+            Assert.Equal(AutoPlayColorStatus.ColorUnknown, enabled.Snapshot.AutoPlayColorStatus);
+        }
+
+        [Fact]
+        public void EngineConditionIntents_AreSessionOnlyAndRespectMoveModeEnablement()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = true;
+            ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
+                config);
+            ControlCenterSessionState sessionState = new ControlCenterSessionState
+            {
+                AutoPlayEnabled = true,
+                AiTimeValue = "5",
+                PlayoutsValue = string.Empty,
+                FirstPolicyValue = "200"
+            };
+            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RecordingPersistence persistence = new RecordingPersistence();
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                initial,
+                sessionState,
+                session,
+                persistence);
+
+            ControlCenterApplyResult aiTime = runtime.Apply(ControlCenterIntent.SetAiTime("7"));
+            ControlCenterApplyResult playouts = runtime.Apply(ControlCenterIntent.SetPlayouts("1200"));
+            ControlCenterApplyResult moveMode = runtime.Apply(
+                ControlCenterIntent.SetAutoPlayMoveMode(AutoPlayMoveMode.GenmoveAnalyze));
+            ControlCenterApplyResult firstPolicy = runtime.Apply(ControlCenterIntent.SetFirstPolicy("300"));
+
+            Assert.Equal(ControlCenterApplyOutcome.Changed, aiTime.Outcome);
+            Assert.Equal(ControlCenterApplyOutcome.Changed, playouts.Outcome);
+            Assert.Equal(ControlCenterApplyOutcome.Changed, moveMode.Outcome);
+            Assert.Equal(ControlCenterApplyOutcome.Rejected, firstPolicy.Outcome);
+            Assert.Equal("7", runtime.Snapshot.AiTimeValue);
+            Assert.Equal("1200", runtime.Snapshot.PlayoutsValue);
+            Assert.Equal("200", runtime.Snapshot.FirstPolicyValue);
+            Assert.False(runtime.Snapshot.FirstPolicyEnabled);
+            Assert.Single(persistence.Saved);
+            Assert.Equal(3, session.Applied.Count);
+        }
+
+        [Fact]
+        public void AutoPlayPreferencePersistenceFailure_LeavesChoiceActiveAndMarksNotSaved()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = true;
+            ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
+                config);
+            ControlCenterSessionState sessionState = new ControlCenterSessionState
+            {
+                AutoPlayEnabled = true
+            };
+            RecordingPersistence persistence = new RecordingPersistence
+            {
+                Failure = new IOException("disk full")
+            };
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                initial,
+                sessionState,
+                new RecordingSessionAdapter(),
+                persistence);
+
+            ControlCenterApplyResult result = runtime.Apply(
+                ControlCenterIntent.SetAutoPlayMoveMode(AutoPlayMoveMode.GenmoveAnalyze));
+
+            Assert.Equal(ControlCenterApplyOutcome.Changed, result.Outcome);
+            Assert.Equal(AutoPlayMoveMode.GenmoveAnalyze, result.Snapshot.AutoPlayMoveMode);
+            Assert.False(result.Snapshot.PreferencesSaved);
+            Assert.Equal("disk full", result.Snapshot.PersistenceError);
+            Assert.Single(persistence.Saved);
+        }
+
+        [Fact]
         public void TwoWaySyncEffectPlan_PreservesProtocolOrderAndForegroundFoxCondition()
         {
             ControlCenterPreferences preferences = ControlCenterPreferences.FromConfig(
@@ -637,14 +903,41 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(expectedValue, intent.Enabled);
         }
 
+        [Theory]
+        [InlineData("auto-play", "true", (int)ControlCenterIntentKind.SetAutoPlayEnabled)]
+        [InlineData("color", "\"white\"", (int)ControlCenterIntentKind.SetAutoPlayColor)]
+        [InlineData("placement", "\"engine\"", (int)ControlCenterIntentKind.SetAutoPlayMoveMode)]
+        [InlineData("ai-time", "\"5\"", (int)ControlCenterIntentKind.SetAiTime)]
+        [InlineData("playouts", "\"1000\"", (int)ControlCenterIntentKind.SetPlayouts)]
+        [InlineData("first-policy", "\"200\"", (int)ControlCenterIntentKind.SetFirstPolicy)]
+        public void WebViewAutoplayShape_IsConvertedToTypedIntent(
+            string key,
+            string jsonValue,
+            int expectedKind)
+        {
+            string json = "{\"type\":\"control.update\",\"payload\":{\"key\":\""
+                + key
+                + "\",\"value\":"
+                + jsonValue
+                + "}}";
+
+            Assert.True(MainForm.TryParseWebViewCommand(json, out ReadBoardUiCommand command));
+            Assert.True(MainForm.TryCreateControlCenterIntent(command, out ControlCenterIntent intent));
+            Assert.Equal((ControlCenterIntentKind)expectedKind, intent.Kind);
+        }
+
         private sealed class RecordingSessionAdapter : IControlCenterSessionAdapter
         {
             public bool HasActiveSyncOperation { get; set; }
             public List<ControlCenterPreferences> Applied { get; } = new List<ControlCenterPreferences>();
+            public List<ControlCenterSessionState> AppliedSessions { get; } = new List<ControlCenterSessionState>();
 
-            public void Apply(ControlCenterPreferences preferences)
+            public void Apply(
+                ControlCenterPreferences preferences,
+                ControlCenterSessionState sessionState)
             {
                 Applied.Add(preferences.Clone());
+                AppliedSessions.Add(sessionState.Clone());
             }
         }
 

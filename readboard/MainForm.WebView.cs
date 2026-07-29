@@ -499,7 +499,7 @@ namespace readboard
                 return IsAllowedString(value, "direct", "engine");
             int numeric;
             if (key == "ai-time")
-                return TryReadInteger(value, false, 1, out numeric);
+                return TryReadInteger(value, true, 0, out numeric);
             if (key == "playouts" || key == "first-policy")
                 return TryReadInteger(value, true, 0, out numeric);
             return false;
@@ -555,6 +555,58 @@ namespace readboard
                 return true;
             }
 
+            if (key == "auto-play"
+                && (value.ValueKind == JsonValueKind.True || value.ValueKind == JsonValueKind.False))
+            {
+                intent = ControlCenterIntent.SetAutoPlayEnabled(value.GetBoolean());
+                return true;
+            }
+
+            if (key == "color" && value.ValueKind == JsonValueKind.String)
+            {
+                AutoPlayColorMode colorMode;
+                if (!TryParseAutoPlayColorMode(value.GetString(), out colorMode))
+                    return false;
+                intent = ControlCenterIntent.SetAutoPlayColor(colorMode);
+                return true;
+            }
+
+            if (key == "placement" && value.ValueKind == JsonValueKind.String)
+            {
+                AutoPlayMoveMode moveMode;
+                if (!TryParseAutoPlayMoveMode(value.GetString(), out moveMode))
+                    return false;
+                intent = ControlCenterIntent.SetAutoPlayMoveMode(moveMode);
+                return true;
+            }
+
+            if (key == "ai-time" && value.ValueKind == JsonValueKind.String)
+            {
+                int numeric;
+                if (!TryReadInteger(value, true, 0, out numeric))
+                    return false;
+                intent = ControlCenterIntent.SetAiTime(value.GetString());
+                return true;
+            }
+
+            if (key == "playouts" && value.ValueKind == JsonValueKind.String)
+            {
+                int numeric;
+                if (!TryReadInteger(value, true, 0, out numeric))
+                    return false;
+                intent = ControlCenterIntent.SetPlayouts(value.GetString());
+                return true;
+            }
+
+            if (key == "first-policy" && value.ValueKind == JsonValueKind.String)
+            {
+                int numeric;
+                if (!TryReadInteger(value, true, 0, out numeric))
+                    return false;
+                intent = ControlCenterIntent.SetFirstPolicy(value.GetString());
+                return true;
+            }
+
             int dimension;
             if ((key == "board-width" || key == "board-height")
                 && TryReadInteger(value, false, 2, out dimension)
@@ -567,6 +619,45 @@ namespace readboard
             }
 
             return false;
+        }
+
+        private static bool TryParseAutoPlayColorMode(
+            string value,
+            out AutoPlayColorMode mode)
+        {
+            switch (value)
+            {
+                case "black":
+                    mode = AutoPlayColorMode.ManualBlack;
+                    return true;
+                case "white":
+                    mode = AutoPlayColorMode.ManualWhite;
+                    return true;
+                case "auto":
+                    mode = AutoPlayColorMode.FoxAuto;
+                    return true;
+                default:
+                    mode = default(AutoPlayColorMode);
+                    return false;
+            }
+        }
+
+        private static bool TryParseAutoPlayMoveMode(
+            string value,
+            out AutoPlayMoveMode mode)
+        {
+            switch (value)
+            {
+                case "direct":
+                    mode = AutoPlayMoveMode.FirstCandidate;
+                    return true;
+                case "engine":
+                    mode = AutoPlayMoveMode.GenmoveAnalyze;
+                    return true;
+                default:
+                    mode = default(AutoPlayMoveMode);
+                    return false;
+            }
         }
 
         private static bool IsAllowedString(JsonElement value, params string[] allowed)
@@ -632,74 +723,20 @@ namespace readboard
 
         private bool HandleControlUpdate(JsonElement payload)
         {
-            JsonElement keyValue = payload.GetProperty("key");
-            JsonElement value = payload.GetProperty("value");
-            string key = keyValue.GetString();
-
             ControlCenterIntent controlCenterIntent;
             if (TryCreateControlCenterIntent(payload, out controlCenterIntent))
+            {
+                if (controlCenterIntent.Kind == ControlCenterIntentKind.SetAutoPlayColor
+                    && controlCenterIntent.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
+                    && string.IsNullOrWhiteSpace(ResolveCurrentFoxAutoPlayNicknameSignature()))
+                {
+                    OpenWebViewIdentity(true);
+                    return true;
+                }
                 return ApplyControlCenterIntent(controlCenterIntent).ShouldPublishSnapshot;
-
-            if (key == "auto-play")
-                UpdateBooleanControl(value, chkAutoPlay);
-            else if (key == "color")
-                UpdateAutoPlayColor(value);
-            else if (key == "placement")
-                UpdatePlacementMode(value);
-            else if (key == "ai-time")
-                UpdateNumericControl(value, textBox1, false, 1);
-            else if (key == "playouts")
-                UpdateNumericControl(value, textBox2, true, 0);
-            else if (key == "first-policy")
-                UpdateNumericControl(value, textBox3, true, 0);
-            return true;
-        }
-
-        private static void UpdateBooleanControl(JsonElement value, CheckBox control)
-        {
-            if (control.Enabled
-                && (value.ValueKind == JsonValueKind.True || value.ValueKind == JsonValueKind.False))
-                control.Checked = value.GetBoolean();
-        }
-
-        private void UpdateAutoPlayColor(JsonElement value)
-        {
-            if (!chkAutoPlay.Checked || value.ValueKind != JsonValueKind.String)
-                return;
-            switch (value.GetString())
-            {
-                case "black": radioBlack.Checked = true; break;
-                case "white": radioWhite.Checked = true; break;
-                case "auto":
-                    if (IsFoxSyncType(CurrentSyncType))
-                        radioAutoPlayColor.Checked = true;
-                    break;
             }
-        }
 
-        private void UpdatePlacementMode(JsonElement value)
-        {
-            if (!chkAutoPlay.Checked || value.ValueKind != JsonValueKind.String)
-                return;
-            if (value.GetString() == "direct")
-                radioAutoPlayMoveFirst.Checked = true;
-            else if (value.GetString() == "engine")
-                radioAutoPlayMoveGma.Checked = true;
-        }
-
-        private static void UpdateNumericControl(JsonElement value, TextBox control, bool allowEmpty, int minimum)
-        {
-            int parsed;
-            if (!control.Enabled || value.ValueKind != JsonValueKind.String)
-                return;
-            string text = value.GetString();
-            if (allowEmpty && string.IsNullOrEmpty(text))
-            {
-                control.Text = string.Empty;
-                return;
-            }
-            if (int.TryParse(text, out parsed) && parsed >= minimum)
-                control.Text = parsed.ToString();
+            return false;
         }
 
         private static bool TryReadInteger(JsonElement value, bool allowEmpty, int minimum, out int parsed)
@@ -873,8 +910,9 @@ namespace readboard
             else if (controlCenter.Platform == SyncMode.Fox
                 || controlCenter.Platform == SyncMode.FoxBackgroundPlace)
             {
-                room = string.IsNullOrWhiteSpace(lastFoxWindowContext.RoomToken) ? "--" : lastFoxWindowContext.RoomToken;
-                moves = lastFoxWindowContext.ResolveDisplayedMoveNumber();
+                FoxWindowContext foxWindowContext = controlCenter.FoxWindowContext;
+                room = string.IsNullOrWhiteSpace(foxWindowContext.RoomToken) ? "--" : foxWindowContext.RoomToken;
+                moves = foxWindowContext.ResolveDisplayedMoveNumber();
             }
 
             return new ReadBoardControlCenterState
@@ -888,13 +926,23 @@ namespace readboard
                 BoardWidth = controlCenter.BoardWidth,
                 BoardHeight = controlCenter.BoardHeight,
                 TwoWaySync = controlCenter.TwoWaySync,
-                AutoPlay = chkAutoPlay.Checked,
-                Color = radioAutoPlayColor.Checked ? "auto" : radioWhite.Checked ? "white" : "black",
-                Placement = radioAutoPlayMoveGma.Checked ? "engine" : "direct",
-                AiTime = textBox1.Text,
-                Playouts = textBox2.Text,
-                FirstPolicy = textBox3.Text,
-                FirstPolicyEnabled = textBox3.Enabled,
+                AutoPlay = controlCenter.AutoPlayEnabled,
+                Color = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
+                    ? "auto"
+                    : controlCenter.AutoPlayColorMode == AutoPlayColorMode.ManualWhite ? "white" : "black",
+                Placement = controlCenter.AutoPlayMoveMode == AutoPlayMoveMode.GenmoveAnalyze ? "engine" : "direct",
+                AiTime = controlCenter.AiTimeValue,
+                Playouts = controlCenter.PlayoutsValue,
+                FirstPolicy = controlCenter.FirstPolicyValue,
+                FirstPolicyEnabled = controlCenter.FirstPolicyEnabled,
+                ColorEnabled = controlCenter.ManualColorEnabled,
+                AutoColorEnabled = controlCenter.FoxAutoColorEnabled,
+                PlacementEnabled = controlCenter.MoveModeEnabled,
+                AiTimeEnabled = controlCenter.AiTimeEnabled,
+                PlayoutsEnabled = controlCenter.PlayoutsEnabled,
+                AutoPlayColorStatus = controlCenter.AutoPlayColorStatus.ToString(),
+                PlayColorKnown = controlCenter.AutoPlayColorResolution != null
+                    && controlCenter.AutoPlayColorResolution.IsKnown,
                 ShowOnBoard = controlCenter.ShowOnBoard,
                 QuickSyncActive = sessionCoordinator.IsContinuousSyncing,
                 ContinuousSyncActive = sessionCoordinator.StartedSync && !sessionCoordinator.IsContinuousSyncing,
@@ -907,8 +955,8 @@ namespace readboard
                 AnalysisToggleEnabled = hostAnalysisRunning != false || hostAnalysisRunning.HasValue,
                 ConfigurationEnabled = controlCenter.ConfigurationEnabled,
                 TwoWaySyncEnabled = controlCenter.TwoWaySyncEnabled,
-                AutoPlayToggleEnabled = chkAutoPlay.Enabled,
-                AutoPlayControlsEnabled = radioBlack.Enabled,
+                AutoPlayToggleEnabled = controlCenter.AutoPlayToggleEnabled,
+                AutoPlayControlsEnabled = controlCenter.AutoPlayControlsEnabled,
                 CustomBoardSizeEnabled = controlCenter.CustomBoardSizeEnabled,
                 CustomBoardDimensionsEnabled = controlCenter.CustomBoardDimensionsEnabled,
                 PreferencesSaved = controlCenter.PreferencesSaved,

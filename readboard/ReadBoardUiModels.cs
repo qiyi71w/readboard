@@ -52,6 +52,13 @@ namespace readboard
         public string Playouts { get; set; }
         public string FirstPolicy { get; set; }
         public bool FirstPolicyEnabled { get; set; }
+        public bool ColorEnabled { get; set; }
+        public bool AutoColorEnabled { get; set; }
+        public bool PlacementEnabled { get; set; }
+        public bool AiTimeEnabled { get; set; }
+        public bool PlayoutsEnabled { get; set; }
+        public string AutoPlayColorStatus { get; set; }
+        public bool PlayColorKnown { get; set; }
         public bool ShowOnBoard { get; set; }
         public bool QuickSyncActive { get; set; }
         public bool ContinuousSyncActive { get; set; }

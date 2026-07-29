@@ -31,19 +31,6 @@ namespace Readboard.VerificationTests.Host
             Assert.True(replayIndex > readyIndex, "Startup protocol replay should happen after the ready/playponder handshake.");
         }
 
-        [Theory]
-        [InlineData("private void textbox1_TextChanged(object sender, EventArgs e)")]
-        [InlineData("private void textBox2_TextChanged(object sender, EventArgs e)")]
-        [InlineData("private void textBox3_TextChanged(object sender, EventArgs e)")]
-        [InlineData("private void checkBox1_CheckedChanged_1(object sender, EventArgs e)")]
-        public void InitializationSensitiveHandlers_GuardProtocolSideEffects(string methodSignature)
-        {
-            string source = LoadSource("readboard", "Form1.cs");
-            string methodSlice = GetMethodSlice(source, methodSignature);
-
-            Assert.Contains("if (isInitializingProtocolState)", methodSlice);
-        }
-
         [Fact]
         public void ApplyLoadedConfiguration_DefersWindowClampUntilFinalUiLayout()
         {
@@ -223,151 +210,6 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void MainForm_AutoPlayColorMode_UsesThreeWaySelectorAndPersistsMode()
-        {
-            string source = LoadSource("readboard", "Form1.cs");
-            string designerSource = LoadSource("readboard", "Form1.Designer.cs");
-            string configSource = LoadSource("readboard", "MainForm.Configuration.cs");
-            string programSource = LoadSource("readboard", "Program.cs");
-            string cnSource = LoadSource("readboard", "language_cn.txt");
-            string enSource = LoadSource("readboard", "language_en.txt");
-            string jpSource = LoadSource("readboard", "language_jp.txt");
-            string krSource = LoadSource("readboard", "language_kr.txt");
-            string captureSlice = GetMethodSlice(source, "private SyncCoordinatorHostSnapshot CaptureSnapshotCore()");
-
-            Assert.Contains("private System.Windows.Forms.RadioButton radioAutoPlayColor;", designerSource);
-            Assert.Contains("private System.Windows.Forms.Label lblAutoPlayColorStatus;", designerSource);
-            Assert.Contains("private System.Windows.Forms.Button btnFoxAutoPlayIdentity;", designerSource);
-            Assert.Contains("private System.Windows.Forms.FlowLayoutPanel flowLayoutPanelAutoPlayMoveMode;", designerSource);
-            Assert.Contains("private System.Windows.Forms.Label lblAutoPlayMoveMode;", designerSource);
-            Assert.Contains("private System.Windows.Forms.RadioButton radioAutoPlayMoveFirst;", designerSource);
-            Assert.Contains("private System.Windows.Forms.RadioButton radioAutoPlayMoveGma;", designerSource);
-            int whiteIndex = IndexOfRequired(designerSource, "this.flowLayoutPanel2.Controls.Add(this.radioWhite);");
-            int autoIndex = IndexOfRequired(designerSource, "this.flowLayoutPanel2.Controls.Add(this.radioAutoPlayColor);", whiteIndex);
-            int statusIndex = IndexOfRequired(designerSource, "this.flowLayoutPanel2.Controls.Add(this.lblAutoPlayColorStatus);", autoIndex);
-            IndexOfRequired(designerSource, "this.flowLayoutPanel2.Controls.Add(this.btnFoxAutoPlayIdentity);", statusIndex);
-            Assert.Contains("this.flowLayoutPanelAutoPlayMoveMode.Controls.Add(this.lblAutoPlayMoveMode);", designerSource);
-            Assert.Contains("this.flowLayoutPanelAutoPlayMoveMode.Controls.Add(this.radioAutoPlayMoveFirst);", designerSource);
-            Assert.Contains("this.flowLayoutPanelAutoPlayMoveMode.Controls.Add(this.radioAutoPlayMoveGma);", designerSource);
-            Assert.Contains("this.radioAutoPlayColor.Text = getLangStr(\"MainForm_radioAutoPlayColor\");", source);
-            Assert.Contains("this.btnFoxAutoPlayIdentity.Text = getLangStr(\"MainForm_btnFoxAutoPlayIdentity\");", source);
-            Assert.Contains("this.lblAutoPlayMoveMode.Text = getLangStr(\"MainForm_lblAutoPlayMoveMode\");", source);
-            Assert.Contains("this.radioAutoPlayMoveFirst.Text = getLangStr(\"MainForm_radioAutoPlayMoveFirst\");", source);
-            Assert.Contains("this.radioAutoPlayMoveGma.Text = getLangStr(\"MainForm_radioAutoPlayMoveGma\");", source);
-            Assert.Contains("AutoPlayColorResolution autoPlayColor = ResolveCurrentAutoPlayColor(foxWindowContext);", captureSlice);
-            Assert.Contains("PlayColor = autoPlayColor.PlayColor,", captureSlice);
-            Assert.Contains("AutoPlayMoveMode = GetSelectedAutoPlayMoveMode()", captureSlice);
-            Assert.Contains("private AutoPlayColorMode GetSelectedAutoPlayColorMode()", source);
-            Assert.Contains("private void ApplyAutoPlayColorMode(AutoPlayColorMode mode)", source);
-            Assert.Contains("private AutoPlayMoveMode GetSelectedAutoPlayMoveMode()", source);
-            Assert.Contains("private void ApplyAutoPlayMoveMode(AutoPlayMoveMode mode)", source);
-            Assert.Contains("private void ApplyAutoPlayMoveModeControlState()", source);
-            Assert.Contains("private void ApplyAutoPlayColorAvailability()", source);
-            Assert.Contains("ApplyAutoPlayColorMode(config.AutoPlayColorMode);", configSource);
-            Assert.Contains("ApplyAutoPlayMoveMode(config.AutoPlayMoveMode);", configSource);
-            Assert.Contains("config.AutoPlayColorMode = GetSelectedAutoPlayColorMode();", configSource);
-            Assert.Contains("config.AutoPlayMoveMode = GetSelectedAutoPlayMoveMode();", configSource);
-            Assert.Contains("MainForm_radioAutoPlayColor", programSource);
-            Assert.Contains("MainForm_btnFoxAutoPlayIdentity", programSource);
-            Assert.Contains("MainForm_autoPlayColorStatusUnconfigured", programSource);
-            Assert.Contains("MainForm_lblAutoPlayMoveMode", programSource);
-            Assert.Contains("MainForm_radioAutoPlayMoveFirst", programSource);
-            Assert.Contains("MainForm_radioAutoPlayMoveGma", programSource);
-            Assert.Contains("MainForm_radioAutoPlayColor=", cnSource);
-            Assert.Contains("MainForm_radioAutoPlayColor=", enSource);
-            Assert.Contains("MainForm_radioAutoPlayColor=", jpSource);
-            Assert.Contains("MainForm_radioAutoPlayColor=", krSource);
-            Assert.Contains("MainForm_radioAutoPlayMoveGma=", cnSource);
-            Assert.Contains("MainForm_radioAutoPlayMoveGma=", enSource);
-            Assert.Contains("MainForm_radioAutoPlayMoveGma=", jpSource);
-            Assert.Contains("MainForm_radioAutoPlayMoveGma=", krSource);
-            Assert.Contains("MainForm_btnFoxAutoPlayIdentity=", cnSource);
-            Assert.Contains("MainForm_btnFoxAutoPlayIdentity=", enSource);
-            Assert.Contains("MainForm_btnFoxAutoPlayIdentity=", jpSource);
-            Assert.Contains("MainForm_btnFoxAutoPlayIdentity=", krSource);
-            Assert.Contains("MainForm_autoPlayColorStatusUnconfigured=", cnSource);
-            Assert.Contains("MainForm_autoPlayColorStatusUnconfigured=", enSource);
-            Assert.Contains("MainForm_autoPlayColorStatusUnconfigured=", jpSource);
-            Assert.Contains("MainForm_autoPlayColorStatusUnconfigured=", krSource);
-        }
-
-        [Fact]
-        public void MainForm_AutoPlayColorMode_IsEnabledOnlyForFoxSyncTypes()
-        {
-            string source = LoadSource("readboard", "Form1.cs");
-            string availabilitySlice = GetMethodSlice(source, "private void ApplyAutoPlayColorAvailability()");
-            string syncModeControlSlice = GetMethodSlice(source, "private void ApplySyncModeControlState()");
-            string autoPlayCheckSlice = GetMethodSlice(source, "private void chkAutoPlay_CheckedChanged(object sender, EventArgs e)");
-            string autoRadioSlice = GetMethodSlice(source, "private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)");
-
-            Assert.Contains("radioAutoPlayColor.Enabled = chkAutoPlay.Checked && IsFoxSyncType(CurrentSyncType);", availabilitySlice);
-            Assert.Contains("btnFoxAutoPlayIdentity.Enabled = IsFoxSyncType(CurrentSyncType);", availabilitySlice);
-            Assert.Contains("if (!IsFoxSyncType(CurrentSyncType) && radioAutoPlayColor.Checked)", availabilitySlice);
-            Assert.Contains("ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);", availabilitySlice);
-            Assert.Contains("ApplyAutoPlayColorAvailability();", syncModeControlSlice);
-            Assert.Contains("ApplyAutoPlayColorAvailability();", autoPlayCheckSlice);
-            Assert.Contains("if (!IsFoxSyncType(CurrentSyncType))", autoRadioSlice);
-        }
-
-        [Fact]
-        public void MainForm_FoxAutoPlayIdentity_UsesNonBlockingWebViewState()
-        {
-            string mainFormSource = LoadSource("readboard", "Form1.cs");
-            string identitySource = LoadSource("readboard", "MainForm.WebView.Identity.cs");
-            string identityModelSource = LoadSource("readboard", "ReadBoardIdentityUiModels.cs");
-            string autoRadioSlice = GetMethodSlice(mainFormSource, "private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)");
-            string clearSavedIdentitySlice = GetMethodSlice(mainFormSource, "private void ClearSavedFoxAutoPlayIdentity()");
-            string buttonSlice = GetMethodSlice(mainFormSource, "private void btnFoxAutoPlayIdentity_Click(object sender, EventArgs e)");
-
-            Assert.Contains("string.IsNullOrWhiteSpace(ResolveCurrentFoxAutoPlayNicknameSignature())", autoRadioSlice);
-            Assert.DoesNotContain("string.IsNullOrWhiteSpace(Program.CurrentConfig.FoxAutoPlayNickname)", autoRadioSlice);
-            Assert.Contains("OpenWebViewIdentity(true);", autoRadioSlice);
-            Assert.Contains("OpenWebViewIdentity(false);", buttonSlice);
-            Assert.DoesNotContain("FoxAutoPlayIdentityDialog", mainFormSource);
-            Assert.Contains("ResolveFoxAutoPlayIdentityBoardHandle()", identitySource);
-            Assert.Contains("using (Bitmap rowPreview = CropBitmap(bitmap, rows[i].RowBounds))", identitySource);
-            Assert.Contains("previewUrl = EncodeIdentityPreview(rowPreview);", identitySource);
-            Assert.Contains("webViewIdentitySignatures.Add(id, signature);", identitySource);
-            Assert.DoesNotContain("NicknameSignature", identityModelSource);
-            Assert.Contains("new LegacySyncWindowLocator().FindWindowHandle(GetCurrentSyncMode())", mainFormSource);
-            Assert.Contains("currentFoxAutoPlayNicknameSignature = signature;", identitySource);
-            Assert.Contains("updatedConfig.FoxAutoPlayNicknameSignature = signature;", identitySource);
-            Assert.Contains("updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;", clearSavedIdentitySlice);
-            Assert.Contains("ClearFoxAutoPlayColorDetectionState();", identitySource);
-            Assert.Contains("ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);", identitySource);
-        }
-
-        [Fact]
-        public void MainForm_FoxAutoPlayColorDetection_UsesCachedWindowBitmapDetector()
-        {
-            string source = LoadSource("readboard", "Form1.cs");
-            string resolveSlice = GetMethodSlice(source, "private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)");
-            string detectionSlice = GetMethodSlice(source, "private AutoPlayColorResolution ResolveDetectedFoxAutoPlayColor(FoxWindowContext foxWindowContext)");
-            string contextSignatureSlice = GetMethodSlice(source, "private static string BuildFoxAutoPlayColorDetectionContextSignature(FoxWindowContext context)");
-            string clearSlice = GetMethodSlice(source, "private void ClearFoxAutoPlayColorDetectionState()");
-            string handleSlice = GetMethodSlice(source, "private void SetSelectedWindowHandle(IntPtr handle)");
-            string updateTitleSlice = GetMethodSlice(source, "private void UpdateMainWindowTitle(FoxWindowContext foxWindowContext)");
-
-            Assert.Contains("lastFoxAutoPlayColorDetection", source);
-            Assert.Contains("lastFoxAutoPlayColorDetectionWindowHandle", source);
-            Assert.Contains("lastFoxAutoPlayColorDetectionContextSignature", source);
-            Assert.Contains("lastFoxAutoPlayColorDetectionTimestampUtc", source);
-            Assert.Contains("ResolveDetectedFoxAutoPlayColor(foxWindowContext)", resolveSlice);
-            Assert.Contains("BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext)", detectionSlice);
-            Assert.Contains("context.RoomToken", contextSignatureSlice);
-            Assert.DoesNotContain("context.LiveTitleMove", contextSignatureSlice);
-            Assert.DoesNotContain("foxWindowContext.TitleFingerprint ?? string.Empty", detectionSlice);
-            Assert.Contains("IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(hwnd);", detectionSlice);
-            Assert.Contains("FoxAutoPlayColorDetector.DetectPlayerListPanel(", detectionSlice);
-            Assert.Contains("foxAutoPlayCapturePlatform.CaptureWindow(captureHandle)", detectionSlice);
-            Assert.Contains("FindFoxPlayerListPanelHandle", source);
-            Assert.Contains("lastFoxAutoPlayColorDetection = null;", clearSlice);
-            Assert.Contains("ClearFoxAutoPlayColorDetectionState();", handleSlice);
-            Assert.Contains("BuildFoxAutoPlayColorDetectionContextSignature(", updateTitleSlice);
-            Assert.DoesNotContain("TitleFingerprint", updateTitleSlice);
-        }
-
-        [Fact]
         public void ShowInBoardTooltip_DoesNotAdvertiseRemovedShortcut()
         {
             string source = LoadSource("readboard", "Form1.cs");
@@ -395,17 +237,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("ShowWebViewSettingsDialog(\"diagnostics\");", updateSlice);
             Assert.Contains("PersistConfiguration();", saveSlice);
             Assert.Contains("sendPonderStatus();", saveSlice);
-        }
-
-        [Fact]
-        public void ReplayStartupProtocolState_SkipsBlankNumericOverrides()
-        {
-            string source = LoadSource("readboard", "MainForm.Protocol.cs");
-            string methodSlice = GetMethodSlice(source, "public void ReplayStartupProtocolState()");
-
-            Assert.Contains("if (!string.IsNullOrWhiteSpace(textBox1.Text))", methodSlice);
-            Assert.Contains("if (!string.IsNullOrWhiteSpace(textBox2.Text))", methodSlice);
-            Assert.Contains("if (!string.IsNullOrWhiteSpace(textBox3.Text))", methodSlice);
         }
 
         [Fact]

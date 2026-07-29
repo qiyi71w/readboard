@@ -9,11 +9,12 @@ namespace readboard
         private void ApplyLoadedConfiguration()
         {
             AppConfig config = Program.CurrentContext.Config;
+            ControlCenterPreferences preferences = controlCenterRuntime.CurrentPreferences;
             ProjectControlCenterState();
             posX = config.WindowPosX;
             posY = config.WindowPosY;
-            ApplyAutoPlayColorMode(config.AutoPlayColorMode);
-            ApplyAutoPlayMoveMode(config.AutoPlayMoveMode);
+            ApplyAutoPlayColorMode(preferences.AutoPlayColorMode);
+            ApplyAutoPlayMoveMode(preferences.AutoPlayMoveMode);
             ApplySyncModeControlState();
         }
 
@@ -44,6 +45,8 @@ namespace readboard
             config.SyncBoth = preferences.TwoWaySync;
             config.ShowInBoard = preferences.ShowOnBoard;
             config.SyncMode = preferences.Platform;
+            config.AutoPlayColorMode = preferences.AutoPlayColorMode;
+            config.AutoPlayMoveMode = preferences.AutoPlayMoveMode;
             config.WindowPosX = persistedWindowLocation.X;
             config.WindowPosY = persistedWindowLocation.Y;
             Size persistedWindowClientSize = ResolvePersistableWindowClientSize(persistedWindowBounds);
@@ -53,8 +56,6 @@ namespace readboard
             config.WindowClientWidth = Math.Max(AppConfig.MinimumWindowClientWidth, logicalWindowSize.Width);
             config.WindowClientHeight = Math.Max(AppConfig.MinimumWindowClientHeight, logicalWindowSize.Height);
             config.WindowMaximized = WindowState == FormWindowState.Maximized;
-            config.AutoPlayColorMode = GetSelectedAutoPlayColorMode();
-            config.AutoPlayMoveMode = GetSelectedAutoPlayMoveMode();
             return config;
         }
 

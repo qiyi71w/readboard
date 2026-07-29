@@ -151,7 +151,6 @@ namespace Readboard.VerificationTests.Host
         public void ControlCenter_DisabledControlsHaveScopedLightAndDarkVisualStates()
         {
             string styles = LoadWebViewAsset("styles.css");
-            string script = LoadWebViewAsset("app.js");
 
             Assert.Contains("--disabled-border: #c8d2dc;", styles);
             Assert.Contains("--disabled-selected-background: #dfe7ee;", styles);
@@ -170,11 +169,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains(".page[data-page-panel=\"controlCenter\"] .color-row:has(input:disabled) > b, .page[data-page-panel=\"controlCenter\"] .placement-row:has(input:disabled) > b, .page[data-page-panel=\"controlCenter\"] .board-size-row:has(input:disabled) > b { color: var(--disabled-text); }", styles);
             Assert.DoesNotContain(".page[data-page-panel=\"controlCenter\"] label:has(input:disabled) { opacity:", styles);
 
-            Assert.Contains("setDisabled('input[name=\"platform\"], input[name=\"boardSize\"]', !control.configurationEnabled);", script);
-            Assert.Contains("setDisabled('input[name=\"boardSize\"][value=\"custom\"]', !control.customBoardSizeEnabled);", script);
-            Assert.Contains("setDisabled('input[name=\"color\"], input[name=\"placement\"], #ai-time, #playouts', !control.autoPlayControlsEnabled);", script);
-            Assert.Contains("setDisabled(\"#first-policy\", !control.firstPolicyEnabled);", script);
-            Assert.Contains("setDisabled(\"#show-on-board\", !control.showOnBoardEnabled);", script);
         }
 
         [Fact]

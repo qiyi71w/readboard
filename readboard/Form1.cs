@@ -1325,11 +1325,18 @@ namespace readboard
 
         private void ApplyAutoPlayColorAvailability()
         {
-            radioAutoPlayColor.Enabled = chkAutoPlay.Checked && IsFoxSyncType(CurrentSyncType);
+            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime == null
+                ? null
+                : controlCenterRuntime.Snapshot;
+            bool autoPlayEnabled = controlCenter == null
+                ? false
+                : controlCenter.AutoPlayEnabled;
+            bool foxAutoEnabled = controlCenter != null && controlCenter.FoxAutoColorEnabled;
+            radioBlack.Enabled = controlCenter != null && controlCenter.ManualColorEnabled;
+            radioWhite.Enabled = controlCenter != null && controlCenter.ManualColorEnabled;
+            radioAutoPlayColor.Enabled = foxAutoEnabled;
             btnFoxAutoPlayIdentity.Enabled = IsFoxSyncType(CurrentSyncType);
-            if (!IsFoxSyncType(CurrentSyncType) && radioAutoPlayColor.Checked)
-                ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);
-            if (!radioAutoPlayColor.Enabled)
+            if (!autoPlayEnabled)
                 UpdateAutoPlayColorStatus(null);
         }
 
@@ -1392,6 +1399,18 @@ namespace readboard
             txtBoardHeight.Enabled = customBoardDimensionsEnabled;
             chkBothSync.Enabled = twoWaySyncEnabled;
             chkShowInBoard.Enabled = showOnBoardEnabled;
+            if (controlCenter != null)
+            {
+                chkAutoPlay.Enabled = controlCenter.AutoPlayToggleEnabled;
+                radioBlack.Enabled = controlCenter.ManualColorEnabled;
+                radioWhite.Enabled = controlCenter.ManualColorEnabled;
+                radioAutoPlayColor.Enabled = controlCenter.FoxAutoColorEnabled;
+                radioAutoPlayMoveFirst.Enabled = controlCenter.MoveModeEnabled;
+                radioAutoPlayMoveGma.Enabled = controlCenter.MoveModeEnabled;
+                textBox1.Enabled = controlCenter.AiTimeEnabled;
+                textBox2.Enabled = controlCenter.PlayoutsEnabled;
+                textBox3.Enabled = controlCenter.FirstPolicyEnabled;
+            }
         }
 
         private void DisableBoardSelectionControls()
@@ -1419,26 +1438,30 @@ namespace readboard
             sessionCoordinator.SendError(strMsg);
         }
 
-        private string GetProtocolNumericValue(TextBox textBox)
+        private static string GetProtocolNumericValue(string value)
         {
-            return string.IsNullOrWhiteSpace(textBox.Text) ? "0" : textBox.Text;
+            return string.IsNullOrWhiteSpace(value) ? "0" : value;
         }
 
         private void SendPlayCommandIfSelected()
         {
-            if (!controlCenterRuntime.CurrentPreferences.TwoWaySync || !chkAutoPlay.Checked)
+            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
+            if (!controlCenter.TwoWaySync || !controlCenter.AutoPlayEnabled)
                 return;
-            AutoPlayColorResolution autoPlayColor = ResolveCurrentAutoPlayColor(
-                GetSelectedAutoPlayColorMode() == AutoPlayColorMode.FoxAuto ? ResolveFoxWindowContext() : FoxWindowContext.Unknown());
-            if (!autoPlayColor.IsKnown)
+            FoxWindowContext foxWindowContext = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
+                ? ResolveFoxWindowContext()
+                : FoxWindowContext.Unknown();
+            ResolveCurrentAutoPlayColor(foxWindowContext);
+            controlCenter = controlCenterRuntime.Snapshot;
+            if (!controlCenter.AutoPlayColorResolution.IsKnown)
                 return;
 
             sessionCoordinator.SendPlay(
-                autoPlayColor.PlayColor,
-                GetProtocolNumericValue(textBox1),
-                GetProtocolNumericValue(textBox2),
-                GetProtocolNumericValue(textBox3),
-                GetSelectedAutoPlayMoveMode());
+                controlCenter.PlayColor,
+                GetProtocolNumericValue(controlCenter.AiTimeValue),
+                GetProtocolNumericValue(controlCenter.PlayoutsValue),
+                GetProtocolNumericValue(controlCenter.FirstPolicyValue),
+                controlCenter.AutoPlayMoveMode);
         }
 
         private void SendPonderStatusCommand()
@@ -1514,17 +1537,20 @@ namespace readboard
 
         private void SendTimeChangedCommand()
         {
-            sessionCoordinator.SendTimeChanged(GetProtocolNumericValue(textBox1));
+            sessionCoordinator.SendTimeChanged(
+                GetProtocolNumericValue(controlCenterRuntime.CurrentSessionState.AiTimeValue));
         }
 
         private void SendPlayoutsChangedCommand()
         {
-            sessionCoordinator.SendPlayoutsChanged(GetProtocolNumericValue(textBox2));
+            sessionCoordinator.SendPlayoutsChanged(
+                GetProtocolNumericValue(controlCenterRuntime.CurrentSessionState.PlayoutsValue));
         }
 
         private void SendFirstPolicyChangedCommand()
         {
-            sessionCoordinator.SendFirstPolicyChanged(GetProtocolNumericValue(textBox3));
+            sessionCoordinator.SendFirstPolicyChanged(
+                GetProtocolNumericValue(controlCenterRuntime.CurrentSessionState.FirstPolicyValue));
         }
 
         private void SendNoPonderCommand()
@@ -1608,18 +1634,12 @@ namespace readboard
 
         private AutoPlayColorMode GetSelectedAutoPlayColorMode()
         {
-            if (radioWhite.Checked)
-                return AutoPlayColorMode.ManualWhite;
-            if (radioAutoPlayColor.Checked)
-                return AutoPlayColorMode.FoxAuto;
-            return AutoPlayColorMode.ManualBlack;
+            return controlCenterRuntime.CurrentPreferences.AutoPlayColorMode;
         }
 
         private AutoPlayMoveMode GetSelectedAutoPlayMoveMode()
         {
-            return radioAutoPlayMoveGma.Checked
-                ? AutoPlayMoveMode.GenmoveAnalyze
-                : AutoPlayMoveMode.FirstCandidate;
+            return controlCenterRuntime.CurrentPreferences.AutoPlayMoveMode;
         }
 
         private void ApplyAutoPlayColorMode(AutoPlayColorMode mode)
@@ -1664,28 +1684,39 @@ namespace readboard
 
         private void ApplyAutoPlayMoveModeControlState()
         {
-            radioAutoPlayMoveFirst.Enabled = chkAutoPlay.Checked;
-            radioAutoPlayMoveGma.Enabled = chkAutoPlay.Checked;
-            textBox3.Enabled = chkAutoPlay.Checked && GetSelectedAutoPlayMoveMode() == AutoPlayMoveMode.FirstCandidate;
+            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime == null
+                ? null
+                : controlCenterRuntime.Snapshot;
+            if (controlCenter == null)
+            {
+                radioAutoPlayMoveFirst.Enabled = false;
+                radioAutoPlayMoveGma.Enabled = false;
+                textBox3.Enabled = false;
+                return;
+            }
+
+            radioAutoPlayMoveFirst.Enabled = controlCenter.MoveModeEnabled;
+            radioAutoPlayMoveGma.Enabled = controlCenter.MoveModeEnabled;
+            textBox3.Enabled = controlCenter.FirstPolicyEnabled;
         }
 
         private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)
         {
-            if (!chkAutoPlay.Checked)
+            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
+            if (!controlCenter.AutoPlayEnabled)
             {
                 UpdateAutoPlayColorStatus(null);
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
             }
 
-            AutoPlayColorResolution detected = GetSelectedAutoPlayColorMode() == AutoPlayColorMode.FoxAuto
+            AutoPlayColorResolution detected = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
                 ? ResolveDetectedFoxAutoPlayColor(foxWindowContext)
                 : null;
-            AutoPlayColorResolution resolution = FoxAutoPlayColorResolver.Resolve(
-                GetSelectedAutoPlayColorMode(),
-                GetCurrentSyncMode(),
+            controlCenterRuntime.UpdateAutoPlayObservation(
                 ResolveCurrentFoxAutoPlayNicknameSignature(),
                 foxWindowContext,
                 detected);
+            AutoPlayColorResolution resolution = controlCenterRuntime.Snapshot.AutoPlayColorResolution;
             UpdateAutoPlayColorStatus(resolution);
             return resolution;
         }
@@ -1754,14 +1785,24 @@ namespace readboard
 
         private string ResolveCurrentFoxAutoPlayNicknameSignature()
         {
-            return !string.IsNullOrWhiteSpace(currentFoxAutoPlayNicknameSignature)
-                ? currentFoxAutoPlayNicknameSignature
-                : Program.CurrentContext.Config.FoxAutoPlayNicknameSignature;
+            string runtimeSignature = controlCenterRuntime == null
+                ? string.Empty
+                : controlCenterRuntime.CurrentSessionState.FoxAutoPlayNicknameSignature;
+            if (!string.IsNullOrWhiteSpace(runtimeSignature))
+                return runtimeSignature;
+            if (!string.IsNullOrWhiteSpace(currentFoxAutoPlayNicknameSignature))
+                return currentFoxAutoPlayNicknameSignature;
+            return Program.CurrentContext.Config.FoxAutoPlayNicknameSignature;
         }
 
         private void UpdateAutoPlayColorStatus(AutoPlayColorResolution resolution)
         {
-            if (!radioAutoPlayColor.Checked || resolution == null)
+            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime == null
+                ? null
+                : controlCenterRuntime.Snapshot;
+            if (controlCenter == null
+                || controlCenter.AutoPlayColorMode != AutoPlayColorMode.FoxAuto
+                || resolution == null)
             {
                 SetAutoPlayColorStatusText(string.Empty);
                 return;
@@ -1804,6 +1845,13 @@ namespace readboard
             updatedConfig.FoxAutoPlayNickname = string.Empty;
             updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;
             Program.SaveAppConfig(updatedConfig);
+            if (string.IsNullOrWhiteSpace(currentFoxAutoPlayNicknameSignature))
+            {
+                controlCenterRuntime.UpdateAutoPlayObservation(
+                    string.Empty,
+                    ResolveFoxWindowContext(),
+                    null);
+            }
         }
 
         private IntPtr ResolveFoxAutoPlayIdentityBoardHandle()
@@ -1878,6 +1926,8 @@ namespace readboard
             lastFoxAutoPlayColorDetectionContextSignature = string.Empty;
             lastFoxAutoPlayColorDetectionNicknameSignature = string.Empty;
             lastFoxAutoPlayColorDetectionTimestampUtc = DateTime.MinValue;
+            if (controlCenterRuntime != null)
+                controlCenterRuntime.ClearAutoPlayObservation();
         }
 
         private void InvokeHostAction(Action action)
@@ -2004,6 +2054,7 @@ namespace readboard
             int? foxMoveNumber = foxWindowContext.ResolveDisplayedMoveNumber();
             UpdateMainWindowTitle(foxWindowContext);
             AutoPlayColorResolution autoPlayColor = ResolveCurrentAutoPlayColor(foxWindowContext);
+            ControlCenterRuntimeSnapshot runtimeSnapshot = controlCenterRuntime.Snapshot;
 
             SyncCoordinatorHostSnapshot snapshot = new SyncCoordinatorHostSnapshot
             {
@@ -2021,10 +2072,10 @@ namespace readboard
                 UseEnhancedCapture = Program.useEnhanceScreen,
                 FoxMoveNumber = foxMoveNumber,
                 PlayColor = autoPlayColor.PlayColor,
-                AiTimeValue = GetProtocolNumericValue(textBox1),
-                PlayoutsValue = GetProtocolNumericValue(textBox2),
-                FirstPolicyValue = GetProtocolNumericValue(textBox3),
-                AutoPlayMoveMode = GetSelectedAutoPlayMoveMode()
+                AiTimeValue = runtimeSnapshot.AiTimeValue,
+                PlayoutsValue = runtimeSnapshot.PlayoutsValue,
+                FirstPolicyValue = runtimeSnapshot.FirstPolicyValue,
+                AutoPlayMoveMode = runtimeSnapshot.AutoPlayMoveMode
             };
 
             sessionCoordinator.SetSyncPlatform(syncPlatform);
@@ -2113,7 +2164,16 @@ namespace readboard
             string previousContextSignature = BuildFoxAutoPlayColorDetectionContextSignature(lastFoxWindowContext);
             string nextContextSignature = BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext);
             if (!string.Equals(previousContextSignature, nextContextSignature, StringComparison.Ordinal))
+            {
                 ClearFoxAutoPlayColorDetectionState();
+                if (controlCenterRuntime != null)
+                {
+                    controlCenterRuntime.UpdateAutoPlayObservation(
+                        ResolveCurrentFoxAutoPlayNicknameSignature(),
+                        foxWindowContext,
+                        null);
+                }
+            }
             lastFoxWindowContext = FoxWindowContext.CopyOf(foxWindowContext);
             ApplyMainWindowTitle();
         }
@@ -2487,10 +2547,15 @@ namespace readboard
             InitializeComponent();
             this.controlCenterRuntime = new ControlCenterRuntime(
                 ControlCenterPreferences.FromConfig(Program.CurrentConfig),
+                ControlCenterSessionState.FromLaunchOptions(launchOptions),
                 new MainFormControlCenterSessionAdapter(this),
                 new AppConfigControlCenterPreferencePersistence(
                     delegate { return Program.CurrentConfig; },
                     Program.SaveAppConfig));
+            this.controlCenterRuntime.UpdateAutoPlayObservation(
+                Program.CurrentConfig.FoxAutoPlayNicknameSignature,
+                FoxWindowContext.Unknown(),
+                null);
             using (System.Drawing.Bitmap bitmap = new Bitmap(1, 1))
             using (System.Drawing.Graphics graphics2 = Graphics.FromImage(bitmap))
             {
@@ -2502,12 +2567,6 @@ namespace readboard
             }
             ApplyLoadedConfiguration();
             this.MaximizeBox = false;
-            if (!launchOptions.AiTime.Equals(" "))
-                textBox1.Text = launchOptions.AiTime;
-            if (!launchOptions.Playouts.Equals(" "))
-                textBox2.Text = launchOptions.Playouts;
-            if (!launchOptions.FirstPolicy.Equals(" "))
-                textBox3.Text = launchOptions.FirstPolicy;
             radioWhite.Enabled = false;
             radioBlack.Enabled = false;
             radioAutoPlayColor.Enabled = false;
@@ -3130,9 +3189,14 @@ namespace readboard
         private void textbox1_TextChanged(object sender, EventArgs e)
         {
             NormalizeNumericTextBox(textBox1);
-            if (isInitializingProtocolState)
+            if (isInitializingProtocolState || suppressControlCenterProjectionEvents)
                 return;
-            SendTimeChangedCommand();
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetAiTime(textBox1.Text));
+            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
+                ProjectControlCenterState();
+            else
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void button7_Click_1(object sender, EventArgs e)
@@ -3143,17 +3207,27 @@ namespace readboard
         private void textBox2_TextChanged(object sender, EventArgs e)
         {
             NormalizeNumericTextBox(textBox2);
-            if (isInitializingProtocolState)
+            if (isInitializingProtocolState || suppressControlCenterProjectionEvents)
                 return;
-            SendPlayoutsChangedCommand();
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetPlayouts(textBox2.Text));
+            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
+                ProjectControlCenterState();
+            else
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void textBox3_TextChanged(object sender, EventArgs e)
         {
             NormalizeNumericTextBox(textBox3);
-            if (isInitializingProtocolState)
+            if (isInitializingProtocolState || suppressControlCenterProjectionEvents)
                 return;
-            SendFirstPolicyChangedCommand();
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetFirstPolicy(textBox3.Text));
+            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
+                ProjectControlCenterState();
+            else
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void checkBox1_CheckedChanged_1(object sender, EventArgs e)
@@ -3164,7 +3238,6 @@ namespace readboard
                 return;
             ControlCenterApplyResult result = ApplyControlCenterIntent(
                 ControlCenterIntent.SetTwoWaySync(chkBothSync.Checked));
-            chkAutoPlay.Enabled = controlCenterRuntime.CurrentPreferences.TwoWaySync;
             ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
@@ -3192,29 +3265,15 @@ namespace readboard
 
         private void chkAutoPlay_CheckedChanged(object sender, EventArgs e)
         {
-            if (chkAutoPlay.Checked)
-            {
-                radioWhite.Enabled = true;
-                radioBlack.Enabled = true;
-                if (!radioBlack.Checked && !radioWhite.Checked && !radioAutoPlayColor.Checked)
-                    ApplyAutoPlayColorMode(Program.CurrentContext.Config.AutoPlayColorMode);
-                ApplyAutoPlayColorAvailability();
-                textBox1.Enabled = true;
-                textBox2.Enabled = true;
-                ApplyAutoPlayMoveModeControlState();
-                ResolveCurrentAutoPlayColor(radioAutoPlayColor.Checked ? ResolveFoxWindowContext() : FoxWindowContext.Unknown());
-            }
+            if (isInitializingProtocolState || suppressControlCenterProjectionEvents)
+                return;
+
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetAutoPlayEnabled(chkAutoPlay.Checked));
+            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
+                ProjectControlCenterState();
             else
-            {
-                radioWhite.Enabled = false;
-                radioBlack.Enabled = false;
-                ApplyAutoPlayColorAvailability();
-                textBox1.Enabled = false;
-                textBox2.Enabled = false;
-                ApplyAutoPlayMoveModeControlState();
-                UpdateAutoPlayColorStatus(null);
-                SendStopAutoPlayCommand();
-            }
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void btnSettings_Click(object sender, EventArgs e)
@@ -3290,82 +3349,80 @@ namespace readboard
 
         private void radioBlack_CheckedChanged(object sender, EventArgs e)
         {
-            if (suppressAutoPlayColorModeEvents)
+            if (suppressAutoPlayColorModeEvents || isInitializingProtocolState || !radioBlack.Checked)
                 return;
-            if (radioBlack.Checked)
-            {
-                radioWhite.Checked = false;
-                radioAutoPlayColor.Checked = false;
-                lastManualAutoPlayColorMode = AutoPlayColorMode.ManualBlack;
-                ClearFoxAutoPlayColorDetectionState();
-            }
-            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
-                SendPlayCommandIfSelected();
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.ManualBlack));
+            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
+                ProjectControlCenterState();
+            else
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void radioWhite_CheckedChanged(object sender, EventArgs e)
         {
-            if (suppressAutoPlayColorModeEvents)
+            if (suppressAutoPlayColorModeEvents || isInitializingProtocolState || !radioWhite.Checked)
                 return;
-            if (radioWhite.Checked)
-            {
-                radioBlack.Checked = false;
-                radioAutoPlayColor.Checked = false;
-                lastManualAutoPlayColorMode = AutoPlayColorMode.ManualWhite;
-                ClearFoxAutoPlayColorDetectionState();
-            }
-            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
-                SendPlayCommandIfSelected();
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.ManualWhite));
+            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
+                ProjectControlCenterState();
+            else
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)
         {
-            if (suppressAutoPlayColorModeEvents)
+            if (suppressAutoPlayColorModeEvents || isInitializingProtocolState || !radioAutoPlayColor.Checked)
                 return;
-            if (radioAutoPlayColor.Checked)
+            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
+            if (!controlCenter.AutoPlayEnabled
+                || (controlCenter.Platform != SyncMode.Fox
+                    && controlCenter.Platform != SyncMode.FoxBackgroundPlace))
             {
-                if (!IsFoxSyncType(CurrentSyncType))
-                {
-                    ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);
-                    return;
-                }
-                radioBlack.Checked = false;
-                radioWhite.Checked = false;
-                if (isInitializingProtocolState)
-                    return;
-                if (IsFoxSyncType(CurrentSyncType)
-                    && string.IsNullOrWhiteSpace(ResolveCurrentFoxAutoPlayNicknameSignature()))
-                {
-                    OpenWebViewIdentity(true);
-                    return;
-                }
-                ResolveCurrentAutoPlayColor(ResolveFoxWindowContext());
+                ProjectControlCenterState();
+                return;
             }
+            if (string.IsNullOrWhiteSpace(ResolveCurrentFoxAutoPlayNicknameSignature()))
+            {
+                OpenWebViewIdentity(true);
+                PostWebViewState();
+                return;
+            }
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.FoxAuto));
+            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
+                ProjectControlCenterState();
             else
-            {
-                ClearFoxAutoPlayColorDetectionState();
-                UpdateAutoPlayColorStatus(null);
-            }
-            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
-                SendPlayCommandIfSelected();
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void radioAutoPlayMoveFirst_CheckedChanged(object sender, EventArgs e)
         {
-            if (suppressAutoPlayMoveModeEvents || !radioAutoPlayMoveFirst.Checked)
+            if (suppressAutoPlayMoveModeEvents
+                || isInitializingProtocolState
+                || !radioAutoPlayMoveFirst.Checked)
                 return;
-            ApplyAutoPlayMoveModeControlState();
-            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
-                SendPlayCommandIfSelected();
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetAutoPlayMoveMode(AutoPlayMoveMode.FirstCandidate));
+            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
+                ProjectControlCenterState();
+            else
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void radioAutoPlayMoveGma_CheckedChanged(object sender, EventArgs e)
         {
-            if (suppressAutoPlayMoveModeEvents || !radioAutoPlayMoveGma.Checked)
+            if (suppressAutoPlayMoveModeEvents
+                || isInitializingProtocolState
+                || !radioAutoPlayMoveGma.Checked)
                 return;
-            ApplyAutoPlayMoveModeControlState();
-            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
-                SendPlayCommandIfSelected();
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetAutoPlayMoveMode(AutoPlayMoveMode.GenmoveAnalyze));
+            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
+                ProjectControlCenterState();
+            else
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void btnFoxAutoPlayIdentity_Click(object sender, EventArgs e)
@@ -3374,6 +3431,7 @@ namespace readboard
                 return;
 
             OpenWebViewIdentity(false);
+            PostWebViewState();
         }
 
 

@@ -12,6 +12,13 @@ namespace readboard
             private bool hasAppliedPreferences;
             private bool appliedTwoWaySync;
             private bool appliedShowOnBoard;
+            private bool hasAppliedSession;
+            private bool appliedAutoPlayEnabled;
+            private AutoPlayColorMode appliedAutoPlayColorMode;
+            private AutoPlayMoveMode appliedAutoPlayMoveMode;
+            private string appliedAiTimeValue;
+            private string appliedPlayoutsValue;
+            private string appliedFirstPolicyValue;
 
             public MainFormControlCenterSessionAdapter(MainForm form)
             {
@@ -23,16 +30,32 @@ namespace readboard
                 get { return form.HasActiveSyncOperation(); }
             }
 
-            public void Apply(ControlCenterPreferences preferences)
+            public void Apply(
+                ControlCenterPreferences preferences,
+                ControlCenterSessionState sessionState)
             {
                 if (preferences == null)
                     throw new ArgumentNullException("preferences");
+                if (sessionState == null)
+                    throw new ArgumentNullException("sessionState");
 
                 bool platformChanged = !hasAppliedPlatform || appliedPlatform != preferences.Platform;
                 bool twoWaySyncChanged = hasAppliedPreferences
                     && appliedTwoWaySync != preferences.TwoWaySync;
                 bool showOnBoardChanged = hasAppliedPreferences
                     && appliedShowOnBoard != preferences.ShowOnBoard;
+                bool autoPlayChanged = hasAppliedSession
+                    && appliedAutoPlayEnabled != sessionState.AutoPlayEnabled;
+                bool autoPlayColorChanged = hasAppliedPreferences
+                    && appliedAutoPlayColorMode != preferences.AutoPlayColorMode;
+                bool autoPlayMoveModeChanged = hasAppliedPreferences
+                    && appliedAutoPlayMoveMode != preferences.AutoPlayMoveMode;
+                bool aiTimeChanged = hasAppliedSession
+                    && !string.Equals(appliedAiTimeValue, sessionState.AiTimeValue, StringComparison.Ordinal);
+                bool playoutsChanged = hasAppliedSession
+                    && !string.Equals(appliedPlayoutsValue, sessionState.PlayoutsValue, StringComparison.Ordinal);
+                bool firstPolicyChanged = hasAppliedSession
+                    && !string.Equals(appliedFirstPolicyValue, sessionState.FirstPolicyValue, StringComparison.Ordinal);
 
                 form.suppressControlCenterProjectionEvents = true;
                 try
@@ -42,14 +65,21 @@ namespace readboard
                         form.ClearFoxAutoPlayColorDetectionState();
                         form.ResetWebViewSyncState();
                     }
+                    if (autoPlayChanged && !sessionState.AutoPlayEnabled)
+                        form.ClearFoxAutoPlayColorDetectionState();
                     form.ApplyControlCenterBoardSelection(preferences);
                     if (platformChanged)
                         form.ApplySyncModeSelection();
                     if (!hasAppliedPreferences || twoWaySyncChanged)
                         form.SetSyncBoth(preferences.TwoWaySync);
                     form.chkBothSync.Checked = preferences.TwoWaySync;
-                    form.chkAutoPlay.Enabled = preferences.TwoWaySync;
+                    form.chkAutoPlay.Checked = sessionState.AutoPlayEnabled;
                     form.chkShowInBoard.Checked = preferences.ShowOnBoard;
+                    form.ApplyAutoPlayColorMode(preferences.AutoPlayColorMode);
+                    form.ApplyAutoPlayMoveMode(preferences.AutoPlayMoveMode);
+                    form.textBox1.Text = sessionState.AiTimeValue ?? string.Empty;
+                    form.textBox2.Text = sessionState.PlayoutsValue ?? string.Empty;
+                    form.textBox3.Text = sessionState.FirstPolicyValue ?? string.Empty;
                     if (platformChanged)
                         form.ApplySyncModeControlState();
                     form.ApplyControlCenterNativeEnablement();
@@ -58,6 +88,13 @@ namespace readboard
                     hasAppliedPreferences = true;
                     appliedTwoWaySync = preferences.TwoWaySync;
                     appliedShowOnBoard = preferences.ShowOnBoard;
+                    hasAppliedSession = true;
+                    appliedAutoPlayEnabled = sessionState.AutoPlayEnabled;
+                    appliedAutoPlayColorMode = preferences.AutoPlayColorMode;
+                    appliedAutoPlayMoveMode = preferences.AutoPlayMoveMode;
+                    appliedAiTimeValue = sessionState.AiTimeValue;
+                    appliedPlayoutsValue = sessionState.PlayoutsValue;
+                    appliedFirstPolicyValue = sessionState.FirstPolicyValue;
                 }
                 finally
                 {
@@ -72,6 +109,25 @@ namespace readboard
                         form.ApplyControlCenterTwoWaySyncEffect();
                     if (showOnBoardChanged && !platformChanged)
                         form.ApplyControlCenterShowOnBoardEffect(preferences.ShowOnBoard);
+                    if (autoPlayChanged)
+                    {
+                        if (sessionState.AutoPlayEnabled)
+                            form.SendPlayCommandIfSelected();
+                        else
+                            form.SendStopAutoPlayCommand();
+                    }
+                    else if ((autoPlayColorChanged || autoPlayMoveModeChanged)
+                        && sessionState.AutoPlayEnabled
+                        && form.sessionCoordinator.KeepSync)
+                    {
+                        form.SendPlayCommandIfSelected();
+                    }
+                    if (aiTimeChanged)
+                        form.SendTimeChangedCommand();
+                    if (playoutsChanged)
+                        form.SendPlayoutsChangedCommand();
+                    if (firstPolicyChanged)
+                        form.SendFirstPolicyChangedCommand();
                 }
             }
         }

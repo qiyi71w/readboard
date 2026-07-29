@@ -39,11 +39,12 @@ namespace readboard
         public void ReplayStartupProtocolState()
         {
             SendBothSyncStateChange();
-            if (!string.IsNullOrWhiteSpace(textBox1.Text))
+            ControlCenterSessionState sessionState = controlCenterRuntime.CurrentSessionState;
+            if (!string.IsNullOrWhiteSpace(sessionState.AiTimeValue))
                 SendTimeChangedCommand();
-            if (!string.IsNullOrWhiteSpace(textBox2.Text))
+            if (!string.IsNullOrWhiteSpace(sessionState.PlayoutsValue))
                 SendPlayoutsChangedCommand();
-            if (!string.IsNullOrWhiteSpace(textBox3.Text))
+            if (!string.IsNullOrWhiteSpace(sessionState.FirstPolicyValue))
                 SendFirstPolicyChangedCommand();
             SendPlayCommandIfSelected();
         }

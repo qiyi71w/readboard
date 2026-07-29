@@ -10,7 +10,13 @@ namespace readboard
         SetCustomBoardWidth = 2,
         SetCustomBoardHeight = 3,
         SetTwoWaySync = 4,
-        SetShowOnBoard = 5
+        SetShowOnBoard = 5,
+        SetAutoPlayEnabled = 6,
+        SetAutoPlayColor = 7,
+        SetAutoPlayMoveMode = 8,
+        SetAiTime = 9,
+        SetPlayouts = 10,
+        SetFirstPolicy = 11
     }
 
     internal enum ControlCenterBoardSizeKind
@@ -40,6 +46,9 @@ namespace readboard
         public ControlCenterBoardSizeKind BoardSizeKind { get; private set; }
         public int Dimension { get; private set; }
         public bool Enabled { get; private set; }
+        public AutoPlayColorMode AutoPlayColorMode { get; private set; }
+        public AutoPlayMoveMode AutoPlayMoveMode { get; private set; }
+        public string Value { get; private set; }
 
         public static ControlCenterIntent SetPlatform(SyncMode platform)
         {
@@ -88,6 +97,108 @@ namespace readboard
                 Enabled = enabled
             };
         }
+
+        public static ControlCenterIntent SetAutoPlayEnabled(bool enabled)
+        {
+            return new ControlCenterIntent(ControlCenterIntentKind.SetAutoPlayEnabled)
+            {
+                Enabled = enabled
+            };
+        }
+
+        public static ControlCenterIntent SetAutoPlayColor(AutoPlayColorMode mode)
+        {
+            return new ControlCenterIntent(ControlCenterIntentKind.SetAutoPlayColor)
+            {
+                AutoPlayColorMode = mode
+            };
+        }
+
+        public static ControlCenterIntent SetAutoPlayMoveMode(AutoPlayMoveMode mode)
+        {
+            return new ControlCenterIntent(ControlCenterIntentKind.SetAutoPlayMoveMode)
+            {
+                AutoPlayMoveMode = mode
+            };
+        }
+
+        public static ControlCenterIntent SetAiTime(string value)
+        {
+            return new ControlCenterIntent(ControlCenterIntentKind.SetAiTime)
+            {
+                Value = value
+            };
+        }
+
+        public static ControlCenterIntent SetPlayouts(string value)
+        {
+            return new ControlCenterIntent(ControlCenterIntentKind.SetPlayouts)
+            {
+                Value = value
+            };
+        }
+
+        public static ControlCenterIntent SetFirstPolicy(string value)
+        {
+            return new ControlCenterIntent(ControlCenterIntentKind.SetFirstPolicy)
+            {
+                Value = value
+            };
+        }
+    }
+
+    internal sealed class ControlCenterSessionState
+    {
+        public bool AutoPlayEnabled { get; set; }
+        public string AiTimeValue { get; set; }
+        public string PlayoutsValue { get; set; }
+        public string FirstPolicyValue { get; set; }
+        public string FoxAutoPlayNicknameSignature { get; set; }
+        public FoxWindowContext FoxWindowContext { get; set; }
+        public AutoPlayColorResolution DetectedAutoPlayColor { get; set; }
+
+        public ControlCenterSessionState()
+        {
+            AiTimeValue = string.Empty;
+            PlayoutsValue = string.Empty;
+            FirstPolicyValue = string.Empty;
+            FoxAutoPlayNicknameSignature = string.Empty;
+            FoxWindowContext = FoxWindowContext.Unknown();
+        }
+
+        public ControlCenterSessionState Clone()
+        {
+            return new ControlCenterSessionState
+            {
+                AutoPlayEnabled = AutoPlayEnabled,
+                AiTimeValue = AiTimeValue,
+                PlayoutsValue = PlayoutsValue,
+                FirstPolicyValue = FirstPolicyValue,
+                FoxAutoPlayNicknameSignature = FoxAutoPlayNicknameSignature,
+                FoxWindowContext = global::readboard.FoxWindowContext.CopyOf(this.FoxWindowContext),
+                DetectedAutoPlayColor = DetectedAutoPlayColor
+            };
+        }
+
+        internal static ControlCenterSessionState FromLaunchOptions(LaunchOptions options)
+        {
+            if (options == null)
+                throw new ArgumentNullException("options");
+
+            return new ControlCenterSessionState
+            {
+                AiTimeValue = NormalizeLaunchValue(options.AiTime),
+                PlayoutsValue = NormalizeLaunchValue(options.Playouts),
+                FirstPolicyValue = NormalizeLaunchValue(options.FirstPolicy)
+            };
+        }
+
+        private static string NormalizeLaunchValue(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) || value == " "
+                ? string.Empty
+                : value.Trim();
+        }
     }
 
     internal sealed class ControlCenterPreferences
@@ -100,6 +211,8 @@ namespace readboard
         public int CustomBoardHeight { get; set; }
         public bool TwoWaySync { get; set; }
         public bool ShowOnBoard { get; set; }
+        public AutoPlayColorMode AutoPlayColorMode { get; set; }
+        public AutoPlayMoveMode AutoPlayMoveMode { get; set; }
 
         public static ControlCenterPreferences FromConfig(AppConfig config)
         {
@@ -119,7 +232,9 @@ namespace readboard
                 CustomBoardWidth = config.CustomBoardWidth,
                 CustomBoardHeight = config.CustomBoardHeight,
                 TwoWaySync = config.SyncBoth,
-                ShowOnBoard = config.ShowInBoard
+                ShowOnBoard = config.ShowInBoard,
+                AutoPlayColorMode = AppConfig.NormalizeAutoPlayColorMode(config.AutoPlayColorMode),
+                AutoPlayMoveMode = AppConfig.NormalizeAutoPlayMoveMode(config.AutoPlayMoveMode)
             };
             if (!UsesManualSelection(platform)
                 && preferences.BoardSizeKind == ControlCenterBoardSizeKind.Custom)
@@ -160,6 +275,8 @@ namespace readboard
             config.CustomBoardHeight = CustomBoardHeight;
             config.SyncBoth = TwoWaySync;
             config.ShowInBoard = ShowOnBoard;
+            config.AutoPlayColorMode = AutoPlayColorMode;
+            config.AutoPlayMoveMode = AutoPlayMoveMode;
         }
 
         internal static ControlCenterBoardSizeKind ResolveBoardSizeKind(int width, int height)
@@ -287,7 +404,9 @@ namespace readboard
                 && left.CustomBoardWidth == right.CustomBoardWidth
                 && left.CustomBoardHeight == right.CustomBoardHeight
                 && left.TwoWaySync == right.TwoWaySync
-                && left.ShowOnBoard == right.ShowOnBoard;
+                && left.ShowOnBoard == right.ShowOnBoard
+                && left.AutoPlayColorMode == right.AutoPlayColorMode
+                && left.AutoPlayMoveMode == right.AutoPlayMoveMode;
         }
     }
 
@@ -301,11 +420,29 @@ namespace readboard
         public int CustomBoardHeight { get; set; }
         public bool TwoWaySync { get; set; }
         public bool ShowOnBoard { get; set; }
+        public bool AutoPlayEnabled { get; set; }
+        public AutoPlayColorMode AutoPlayColorMode { get; set; }
+        public AutoPlayMoveMode AutoPlayMoveMode { get; set; }
+        public AutoPlayColorResolution AutoPlayColorResolution { get; set; }
+        public FoxWindowContext FoxWindowContext { get; set; }
+        public string PlayColor { get; set; }
+        public AutoPlayColorStatus AutoPlayColorStatus { get; set; }
+        public string AiTimeValue { get; set; }
+        public string PlayoutsValue { get; set; }
+        public string FirstPolicyValue { get; set; }
         public bool ConfigurationEnabled { get; set; }
         public bool CustomBoardSizeEnabled { get; set; }
         public bool CustomBoardDimensionsEnabled { get; set; }
         public bool TwoWaySyncEnabled { get; set; }
         public bool ShowOnBoardEnabled { get; set; }
+        public bool AutoPlayToggleEnabled { get; set; }
+        public bool AutoPlayControlsEnabled { get; set; }
+        public bool ManualColorEnabled { get; set; }
+        public bool FoxAutoColorEnabled { get; set; }
+        public bool MoveModeEnabled { get; set; }
+        public bool AiTimeEnabled { get; set; }
+        public bool PlayoutsEnabled { get; set; }
+        public bool FirstPolicyEnabled { get; set; }
         public bool PreferencesSaved { get; set; }
         public string PersistenceError { get; set; }
     }
@@ -448,7 +585,9 @@ namespace readboard
     internal interface IControlCenterSessionAdapter
     {
         bool HasActiveSyncOperation { get; }
-        void Apply(ControlCenterPreferences preferences);
+        void Apply(
+            ControlCenterPreferences preferences,
+            ControlCenterSessionState sessionState);
     }
 
     internal interface IControlCenterPreferencePersistence
@@ -485,6 +624,7 @@ namespace readboard
         private readonly IControlCenterSessionAdapter sessionAdapter;
         private readonly IControlCenterPreferencePersistence persistence;
         private ControlCenterPreferences preferences;
+        private ControlCenterSessionState sessionState;
         private bool preferencesSaved;
         private string persistenceError;
 
@@ -492,12 +632,36 @@ namespace readboard
             ControlCenterPreferences initialPreferences,
             IControlCenterSessionAdapter sessionAdapter,
             IControlCenterPreferencePersistence persistence)
+            : this(
+                initialPreferences,
+                new ControlCenterSessionState(),
+                sessionAdapter,
+                persistence)
+        {
+        }
+
+        public ControlCenterRuntime(
+            ControlCenterPreferences initialPreferences,
+            ControlCenterSessionState initialSessionState,
+            IControlCenterSessionAdapter sessionAdapter,
+            IControlCenterPreferencePersistence persistence)
         {
             preferences = initialPreferences == null
                 ? throw new ArgumentNullException("initialPreferences")
                 : initialPreferences.Clone();
+            sessionState = initialSessionState == null
+                ? throw new ArgumentNullException("initialSessionState")
+                : initialSessionState.Clone();
             if (!ControlCenterPreferences.SupportsShowOnBoard(preferences.Platform))
                 preferences.ShowOnBoard = false;
+            if (!preferences.TwoWaySync)
+            {
+                sessionState.AutoPlayEnabled = false;
+                sessionState.FoxWindowContext = FoxWindowContext.Unknown();
+                sessionState.DetectedAutoPlayColor = null;
+            }
+            preferences.AutoPlayColorMode = AppConfig.NormalizeAutoPlayColorMode(preferences.AutoPlayColorMode);
+            preferences.AutoPlayMoveMode = AppConfig.NormalizeAutoPlayMoveMode(preferences.AutoPlayMoveMode);
             this.sessionAdapter = sessionAdapter ?? throw new ArgumentNullException("sessionAdapter");
             this.persistence = persistence ?? throw new ArgumentNullException("persistence");
             preferencesSaved = true;
@@ -508,6 +672,11 @@ namespace readboard
             get { return preferences.Clone(); }
         }
 
+        public ControlCenterSessionState CurrentSessionState
+        {
+            get { return sessionState.Clone(); }
+        }
+
         public ControlCenterRuntimeSnapshot Snapshot
         {
             get { return BuildSnapshot(); }
@@ -515,7 +684,34 @@ namespace readboard
 
         public void ProjectCurrentState()
         {
-            sessionAdapter.Apply(preferences.Clone());
+            sessionAdapter.Apply(preferences.Clone(), sessionState.Clone());
+        }
+
+        public bool UpdateAutoPlayObservation(
+            string nicknameSignature,
+            FoxWindowContext foxWindowContext,
+            AutoPlayColorResolution detectedColor)
+        {
+            string normalizedSignature = nicknameSignature ?? string.Empty;
+            FoxWindowContext normalizedContext = FoxWindowContext.CopyOf(foxWindowContext);
+            if (string.Equals(sessionState.FoxAutoPlayNicknameSignature, normalizedSignature, StringComparison.Ordinal)
+                && AreSameFoxWindowContext(sessionState.FoxWindowContext, normalizedContext)
+                && AreSameAutoPlayColorResolution(sessionState.DetectedAutoPlayColor, detectedColor))
+                return false;
+
+            sessionState.FoxAutoPlayNicknameSignature = normalizedSignature;
+            sessionState.FoxWindowContext = normalizedContext;
+            sessionState.DetectedAutoPlayColor = detectedColor;
+            return true;
+        }
+
+        public bool ClearAutoPlayObservation()
+        {
+            if (sessionState.DetectedAutoPlayColor == null)
+                return false;
+
+            sessionState.DetectedAutoPlayColor = null;
+            return true;
         }
 
         public ControlCenterApplyResult Apply(ControlCenterIntent intent)
@@ -524,24 +720,29 @@ namespace readboard
                 throw new ArgumentNullException("intent");
 
             ControlCenterPreferences candidate;
-            if (!TryBuildCandidate(intent, out candidate))
+            ControlCenterSessionState sessionCandidate = sessionState.Clone();
+            if (!TryBuildCandidate(intent, out candidate, sessionCandidate))
                 return new ControlCenterApplyResult(
                     ControlCenterApplyOutcome.Rejected,
                     BuildSnapshot());
 
-            if (ControlCenterPreferences.Equals(preferences, candidate))
+            if (!CanApply(intent, candidate, sessionCandidate))
+                return new ControlCenterApplyResult(
+                    ControlCenterApplyOutcome.Rejected,
+                    BuildSnapshot());
+
+            if (ControlCenterPreferences.Equals(preferences, candidate)
+                && AreSameSessionState(sessionState, sessionCandidate))
                 return new ControlCenterApplyResult(
                     ControlCenterApplyOutcome.NoOp,
                     BuildSnapshot());
 
-            if (!CanApply(intent, candidate))
-                return new ControlCenterApplyResult(
-                    ControlCenterApplyOutcome.Rejected,
-                    BuildSnapshot());
-
+            bool preferenceChanged = !ControlCenterPreferences.Equals(preferences, candidate);
             preferences = candidate;
-            sessionAdapter.Apply(candidate.Clone());
-            TryPersist(candidate);
+            sessionState = sessionCandidate;
+            sessionAdapter.Apply(candidate.Clone(), sessionState.Clone());
+            if (preferenceChanged)
+                TryPersist(candidate);
             return new ControlCenterApplyResult(
                 ControlCenterApplyOutcome.Changed,
                 BuildSnapshot());
@@ -563,7 +764,8 @@ namespace readboard
 
         private bool TryBuildCandidate(
             ControlCenterIntent intent,
-            out ControlCenterPreferences candidate)
+            out ControlCenterPreferences candidate,
+            ControlCenterSessionState sessionCandidate)
         {
             candidate = preferences.Clone();
             switch (intent.Kind)
@@ -572,6 +774,11 @@ namespace readboard
                     if (!IsDefinedPlatform(intent.Platform))
                         return false;
                     candidate.Platform = intent.Platform;
+                    if (candidate.Platform != preferences.Platform)
+                    {
+                        sessionCandidate.FoxWindowContext = FoxWindowContext.Unknown();
+                        sessionCandidate.DetectedAutoPlayColor = null;
+                    }
                     if (!ControlCenterPreferences.UsesManualSelection(intent.Platform)
                         && candidate.BoardSizeKind == ControlCenterBoardSizeKind.Custom)
                     {
@@ -627,12 +834,65 @@ namespace readboard
                     return true;
                 case ControlCenterIntentKind.SetTwoWaySync:
                     candidate.TwoWaySync = intent.Enabled;
+                    if (!intent.Enabled)
+                    {
+                        sessionCandidate.AutoPlayEnabled = false;
+                        sessionCandidate.FoxWindowContext = FoxWindowContext.Unknown();
+                        sessionCandidate.DetectedAutoPlayColor = null;
+                    }
                     return true;
                 case ControlCenterIntentKind.SetShowOnBoard:
                     if (intent.Enabled && !ControlCenterPreferences.SupportsShowOnBoard(candidate.Platform))
                         return false;
                     candidate.ShowOnBoard = intent.Enabled;
                     return true;
+                case ControlCenterIntentKind.SetAutoPlayEnabled:
+                    if (intent.Enabled && !candidate.TwoWaySync)
+                        return false;
+                    sessionCandidate.AutoPlayEnabled = intent.Enabled;
+                    if (!intent.Enabled)
+                    {
+                        sessionCandidate.FoxWindowContext = FoxWindowContext.Unknown();
+                        sessionCandidate.DetectedAutoPlayColor = null;
+                    }
+                    return true;
+                case ControlCenterIntentKind.SetAutoPlayColor:
+                    if (!IsDefinedAutoPlayColorMode(intent.AutoPlayColorMode))
+                        return false;
+                    candidate.AutoPlayColorMode = intent.AutoPlayColorMode;
+                    return true;
+                case ControlCenterIntentKind.SetAutoPlayMoveMode:
+                    if (!IsDefinedAutoPlayMoveMode(intent.AutoPlayMoveMode))
+                        return false;
+                    candidate.AutoPlayMoveMode = intent.AutoPlayMoveMode;
+                    return true;
+                case ControlCenterIntentKind.SetAiTime:
+                    return TrySetEngineCondition(
+                        intent.Value,
+                        true,
+                        sessionCandidate,
+                        delegate(ControlCenterSessionState state, string value)
+                        {
+                            state.AiTimeValue = value;
+                        });
+                case ControlCenterIntentKind.SetPlayouts:
+                    return TrySetEngineCondition(
+                        intent.Value,
+                        true,
+                        sessionCandidate,
+                        delegate(ControlCenterSessionState state, string value)
+                        {
+                            state.PlayoutsValue = value;
+                        });
+                case ControlCenterIntentKind.SetFirstPolicy:
+                    return TrySetEngineCondition(
+                        intent.Value,
+                        true,
+                        sessionCandidate,
+                        delegate(ControlCenterSessionState state, string value)
+                        {
+                            state.FirstPolicyValue = value;
+                        });
                 default:
                     return false;
             }
@@ -640,13 +900,35 @@ namespace readboard
 
         private bool CanApply(
             ControlCenterIntent intent,
-            ControlCenterPreferences candidate)
+            ControlCenterPreferences candidate,
+            ControlCenterSessionState sessionCandidate)
         {
             if (sessionAdapter.HasActiveSyncOperation
                 && (intent.Kind == ControlCenterIntentKind.SetPlatform
                     || intent.Kind == ControlCenterIntentKind.SetBoardSize
                     || intent.Kind == ControlCenterIntentKind.SetCustomBoardWidth
                     || intent.Kind == ControlCenterIntentKind.SetCustomBoardHeight))
+                return false;
+
+            if (intent.Kind == ControlCenterIntentKind.SetAutoPlayColor)
+            {
+                if (!sessionCandidate.AutoPlayEnabled)
+                    return false;
+                if (intent.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
+                    && !IsFoxPlatform(candidate.Platform))
+                    return false;
+            }
+
+            if (intent.Kind == ControlCenterIntentKind.SetAutoPlayMoveMode
+                && !sessionCandidate.AutoPlayEnabled)
+                return false;
+
+            if ((intent.Kind == ControlCenterIntentKind.SetAiTime
+                    || intent.Kind == ControlCenterIntentKind.SetPlayouts
+                    || intent.Kind == ControlCenterIntentKind.SetFirstPolicy)
+                && (!sessionCandidate.AutoPlayEnabled
+                    || (intent.Kind == ControlCenterIntentKind.SetFirstPolicy
+                        && candidate.AutoPlayMoveMode != AutoPlayMoveMode.FirstCandidate)))
                 return false;
 
             if ((intent.Kind == ControlCenterIntentKind.SetBoardSize
@@ -674,6 +956,12 @@ namespace readboard
         private ControlCenterRuntimeSnapshot BuildSnapshot()
         {
             bool configurationEnabled = !sessionAdapter.HasActiveSyncOperation;
+            AutoPlayColorResolution autoPlayColor = ResolveAutoPlayColor();
+            bool autoPlayEnabled = sessionState.AutoPlayEnabled;
+            bool autoPlayToggleEnabled = preferences.TwoWaySync;
+            bool manualColorEnabled = autoPlayEnabled;
+            bool foxAutoColorEnabled = autoPlayEnabled && IsFoxPlatform(preferences.Platform);
+            bool moveModeEnabled = autoPlayEnabled;
             return new ControlCenterRuntimeSnapshot
             {
                 Platform = preferences.Platform,
@@ -684,6 +972,16 @@ namespace readboard
                 CustomBoardHeight = preferences.CustomBoardHeight,
                 TwoWaySync = preferences.TwoWaySync,
                 ShowOnBoard = preferences.ShowOnBoard,
+                AutoPlayEnabled = autoPlayEnabled,
+                AutoPlayColorMode = preferences.AutoPlayColorMode,
+                AutoPlayMoveMode = preferences.AutoPlayMoveMode,
+                AutoPlayColorResolution = autoPlayColor,
+                FoxWindowContext = global::readboard.FoxWindowContext.CopyOf(sessionState.FoxWindowContext),
+                PlayColor = autoPlayColor.PlayColor,
+                AutoPlayColorStatus = autoPlayColor.Status,
+                AiTimeValue = sessionState.AiTimeValue,
+                PlayoutsValue = sessionState.PlayoutsValue,
+                FirstPolicyValue = sessionState.FirstPolicyValue,
                 ConfigurationEnabled = configurationEnabled,
                 CustomBoardSizeEnabled = configurationEnabled
                     && ControlCenterPreferences.UsesManualSelection(preferences.Platform),
@@ -692,6 +990,15 @@ namespace readboard
                     && preferences.BoardSizeKind == ControlCenterBoardSizeKind.Custom,
                 TwoWaySyncEnabled = true,
                 ShowOnBoardEnabled = ControlCenterPreferences.SupportsShowOnBoard(preferences.Platform),
+                AutoPlayToggleEnabled = autoPlayToggleEnabled,
+                AutoPlayControlsEnabled = autoPlayEnabled,
+                ManualColorEnabled = manualColorEnabled,
+                FoxAutoColorEnabled = foxAutoColorEnabled,
+                MoveModeEnabled = moveModeEnabled,
+                AiTimeEnabled = autoPlayEnabled,
+                PlayoutsEnabled = autoPlayEnabled,
+                FirstPolicyEnabled = autoPlayEnabled
+                    && preferences.AutoPlayMoveMode == AutoPlayMoveMode.FirstCandidate,
                 PreferencesSaved = preferencesSaved,
                 PersistenceError = persistenceError
             };
@@ -707,6 +1014,115 @@ namespace readboard
         {
             string token;
             return ControlCenterPreferences.TryFormatBoardSize(boardSizeKind, out token);
+        }
+
+        private static bool IsDefinedAutoPlayColorMode(AutoPlayColorMode mode)
+        {
+            return mode == AutoPlayColorMode.ManualBlack
+                || mode == AutoPlayColorMode.ManualWhite
+                || mode == AutoPlayColorMode.FoxAuto;
+        }
+
+        private static bool IsDefinedAutoPlayMoveMode(AutoPlayMoveMode mode)
+        {
+            return mode == AutoPlayMoveMode.FirstCandidate
+                || mode == AutoPlayMoveMode.GenmoveAnalyze;
+        }
+
+        private static bool IsFoxPlatform(SyncMode platform)
+        {
+            return platform == SyncMode.Fox || platform == SyncMode.FoxBackgroundPlace;
+        }
+
+        private static bool TrySetEngineCondition(
+            string value,
+            bool allowEmpty,
+            ControlCenterSessionState sessionCandidate,
+            Action<ControlCenterSessionState, string> setter)
+        {
+            string normalized;
+            if (!TryNormalizeEngineValue(value, allowEmpty, out normalized))
+                return false;
+            setter(sessionCandidate, normalized);
+            return true;
+        }
+
+        private static bool TryNormalizeEngineValue(
+            string value,
+            bool allowEmpty,
+            out string normalized)
+        {
+            normalized = string.Empty;
+            if (value == null)
+                return false;
+
+            string trimmed = value.Trim();
+            if (trimmed.Length == 0)
+                return allowEmpty;
+
+            int parsed;
+            if (!int.TryParse(trimmed, out parsed) || parsed < (allowEmpty ? 0 : 1))
+                return false;
+            normalized = parsed.ToString();
+            return true;
+        }
+
+        private AutoPlayColorResolution ResolveAutoPlayColor()
+        {
+            if (!sessionState.AutoPlayEnabled)
+                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
+
+            return FoxAutoPlayColorResolver.Resolve(
+                preferences.AutoPlayColorMode,
+                preferences.Platform,
+                sessionState.FoxAutoPlayNicknameSignature,
+                sessionState.FoxWindowContext,
+                sessionState.DetectedAutoPlayColor);
+        }
+
+        private static bool AreSameSessionState(
+            ControlCenterSessionState left,
+            ControlCenterSessionState right)
+        {
+            return left.AutoPlayEnabled == right.AutoPlayEnabled
+                && string.Equals(left.AiTimeValue, right.AiTimeValue, StringComparison.Ordinal)
+                && string.Equals(left.PlayoutsValue, right.PlayoutsValue, StringComparison.Ordinal)
+                && string.Equals(left.FirstPolicyValue, right.FirstPolicyValue, StringComparison.Ordinal)
+                && string.Equals(
+                    left.FoxAutoPlayNicknameSignature,
+                    right.FoxAutoPlayNicknameSignature,
+                    StringComparison.Ordinal)
+                && AreSameFoxWindowContext(left.FoxWindowContext, right.FoxWindowContext)
+                && AreSameAutoPlayColorResolution(left.DetectedAutoPlayColor, right.DetectedAutoPlayColor);
+        }
+
+        private static bool AreSameFoxWindowContext(
+            FoxWindowContext left,
+            FoxWindowContext right)
+        {
+            if (left == null || right == null)
+                return left == right;
+
+            return left.Kind == right.Kind
+                && left.LiveRoomState == right.LiveRoomState
+                && string.Equals(left.RoomToken, right.RoomToken, StringComparison.Ordinal)
+                && left.LiveTitleMove == right.LiveTitleMove
+                && left.RecordCurrentMove == right.RecordCurrentMove
+                && left.RecordTotalMove == right.RecordTotalMove
+                && left.RecordAtEnd == right.RecordAtEnd
+                && string.Equals(left.TitleFingerprint, right.TitleFingerprint, StringComparison.Ordinal);
+        }
+
+        private static bool AreSameAutoPlayColorResolution(
+            AutoPlayColorResolution left,
+            AutoPlayColorResolution right)
+        {
+            if (left == null || right == null)
+                return left == right;
+
+            return left.IsKnown == right.IsKnown
+                && left.Status == right.Status
+                && string.Equals(left.PlayColor, right.PlayColor, StringComparison.Ordinal);
         }
 
     }

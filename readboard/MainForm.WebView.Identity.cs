@@ -125,7 +125,6 @@ namespace readboard
 
             resumeAutoPlayAfterIdentitySelection = resumeAutoPlay;
             webViewIdentityState = state;
-            PostWebViewState();
         }
 
         internal static string EncodeIdentityPreview(Bitmap bitmap)
@@ -160,11 +159,26 @@ namespace readboard
                 Program.SaveAppConfig(updatedConfig);
             }
             ClearFoxAutoPlayColorDetectionState();
+            controlCenterRuntime.UpdateAutoPlayObservation(
+                signature,
+                ResolveFoxWindowContext(),
+                null);
+            bool resumeAutomaticColor = resumeAutoPlayAfterIdentitySelection;
+            ControlCenterApplyResult modeResult = null;
+            if (resumeAutomaticColor)
+            {
+                modeResult = ApplyControlCenterIntent(
+                    ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.FoxAuto));
+            }
             CloseWebViewIdentity(false);
-            if (radioAutoPlayColor.Checked)
+            if (controlCenterRuntime.Snapshot.AutoPlayColorMode == AutoPlayColorMode.FoxAuto)
             {
                 ResolveCurrentAutoPlayColor(ResolveFoxWindowContext());
-                if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
+                bool modeChangeMayHaveSentPlay = modeResult != null
+                    && modeResult.Outcome == ControlCenterApplyOutcome.Changed;
+                if (!modeChangeMayHaveSentPlay
+                    && sessionCoordinator.KeepSync
+                    && !isInitializingProtocolState)
                     SendPlayCommandIfSelected();
             }
         }
@@ -177,7 +191,6 @@ namespace readboard
             webViewIdentityState = new ReadBoardIdentityUiState();
             if (restoreManualMode)
                 ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);
-            PostWebViewState();
         }
     }
 }
