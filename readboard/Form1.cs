@@ -46,6 +46,7 @@ namespace readboard
         private readonly ILegacySelectionCalibrationService selectionCalibrationService;
         private readonly UiThreadInvoker uiThreadInvoker;
         private readonly SerialBackgroundWorkQueue placeRequestQueue;
+        private HostedUpdateJourney hostedUpdateJourney;
         private readonly object placeProtocolSyncRoot = new object();
         private readonly object protocolCommandSyncRoot = new object();
         private readonly GitHubUpdateChecker updateChecker = new GitHubUpdateChecker();
@@ -2423,6 +2424,14 @@ namespace readboard
             this.selectionCalibrationService = selectionCalibrationService;
             this.uiThreadInvoker = new UiThreadInvoker(this);
             this.placeRequestQueue = new SerialBackgroundWorkQueue("ReadboardPlaceRequestQueue");
+            this.hostedUpdateJourney = new HostedUpdateJourney(
+                new HostedUpdatePackageDownloader(),
+                new HostedUpdatePackageVerifier(),
+                delegate(string tag, string zipPath)
+                {
+                    this.sessionCoordinator.SendReadboardUpdateReady(tag, zipPath);
+                },
+                OnHostedUpdateObservation);
             InitializeComponent();
             using (System.Drawing.Bitmap bitmap = new Bitmap(1, 1))
             using (System.Drawing.Graphics graphics2 = Graphics.FromImage(bitmap))

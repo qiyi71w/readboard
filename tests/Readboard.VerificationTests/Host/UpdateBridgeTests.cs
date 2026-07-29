@@ -76,6 +76,31 @@ namespace Readboard.VerificationTests.Host
                 () => MainForm.CreateWebViewDownloadStartInfo(null));
         }
 
+        [Theory]
+        [InlineData("{\"type\":\"about.checkUpdate\",\"payload\":{}}", "Check")]
+        [InlineData("{\"type\":\"update.close\",\"payload\":{}}", "Close")]
+        [InlineData("{\"type\":\"update.install\",\"payload\":{}}", "Install")]
+        [InlineData("{\"type\":\"update.openDownload\",\"payload\":{}}", "OpenDownload")]
+        public void StrictUpdateJson_IsConvertedToTypedIntent(
+            string json,
+            string expectedIntentName)
+        {
+            Assert.True(MainForm.TryParseWebViewCommand(json, out ReadBoardUiCommand command));
+
+            Assert.True(MainForm.TryParseWebViewUpdateIntent(command, out ReadBoardUpdateIntent actualIntent));
+            Assert.Equal(expectedIntentName, actualIntent.ToString());
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("not-json")]
+        [InlineData("{\"type\":\"update.install\",\"payload\":{\"extra\":true}}")]
+        public void InvalidUpdateJson_DoesNotProduceTypedIntent(string json)
+        {
+            Assert.False(MainForm.TryParseWebViewCommand(json, out ReadBoardUiCommand command));
+            Assert.False(MainForm.TryParseWebViewUpdateIntent(command, out _));
+        }
+
         private static UpdateCheckResult CreateResult()
         {
             return new UpdateCheckResult

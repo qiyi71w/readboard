@@ -283,6 +283,24 @@ namespace readboard
             if (!TryParseWebViewCommand(e.WebMessageAsJson, out command))
                 return;
 
+            ReadBoardUpdateIntent updateIntent;
+            bool updateCommand = TryParseWebViewUpdateIntent(command, out updateIntent);
+
+            if (updateCommand)
+            {
+                HandleWebViewUpdateIntent(updateIntent);
+            }
+            else
+            {
+                DispatchNonUpdateWebViewCommand(command);
+            }
+
+            if (!updateCommand)
+                PostWebViewState();
+        }
+
+        private void DispatchNonUpdateWebViewCommand(ReadBoardUiCommand command)
+        {
             switch (command.Type)
             {
                 case "window.minimize":
@@ -336,25 +354,59 @@ namespace readboard
                 case "about.openRepository":
                     OpenExternalUri(ReadBoardRepositoryUrl);
                     break;
-                case "about.checkUpdate":
-                    _ = CheckForWebViewUpdateAsync();
-                    break;
-                case "update.close":
-                    CloseWebViewUpdate();
-                    break;
-                case "update.install":
-                    _ = InstallWebViewUpdateAsync();
-                    break;
-                case "update.openDownload":
-                    OpenWebViewUpdateDownload();
-                    break;
                 default:
                     if (!HandleWebViewIdentityCommand(command))
                         HandleWebViewSettingsCommand(command);
                     break;
             }
+        }
 
-            PostWebViewState();
+        private void HandleWebViewUpdateIntent(ReadBoardUpdateIntent intent)
+        {
+            switch (intent)
+            {
+                case ReadBoardUpdateIntent.Check:
+                    _ = CheckForWebViewUpdateAsync();
+                    break;
+                case ReadBoardUpdateIntent.Close:
+                    CloseWebViewUpdate();
+                    break;
+                case ReadBoardUpdateIntent.Install:
+                    _ = InstallWebViewUpdateAsync();
+                    break;
+                case ReadBoardUpdateIntent.OpenDownload:
+                    OpenWebViewUpdateDownload();
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(intent));
+            }
+        }
+
+        internal static bool TryParseWebViewUpdateIntent(
+            ReadBoardUiCommand command,
+            out ReadBoardUpdateIntent intent)
+        {
+            intent = default(ReadBoardUpdateIntent);
+            if (command == null || !HasEmptyPayload(command.Payload))
+                return false;
+
+            switch (command.Type)
+            {
+                case "about.checkUpdate":
+                    intent = ReadBoardUpdateIntent.Check;
+                    return true;
+                case "update.close":
+                    intent = ReadBoardUpdateIntent.Close;
+                    return true;
+                case "update.install":
+                    intent = ReadBoardUpdateIntent.Install;
+                    return true;
+                case "update.openDownload":
+                    intent = ReadBoardUpdateIntent.OpenDownload;
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         internal static bool TryParseWebViewCommand(string json, out ReadBoardUiCommand command)

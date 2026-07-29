@@ -348,29 +348,6 @@ namespace Readboard.VerificationTests.Architecture
                     result));
         }
 
-        // Temporary source-slice fence. Ticket 02/03 should replace this with an interface-level journey test.
-        [Fact]
-        [Trait("ContractLevel", "SourceSliceTemporary")]
-        public void HostedUpdateContract_SourceOrdersHashZipAndHostHandoff()
-        {
-            string root = VerificationFixtureLocator.RepositoryRoot();
-            string updateSource = File.ReadAllText(Path.Combine(root, "readboard", "MainForm.WebView.Update.cs"));
-            string downloaderSource = File.ReadAllText(Path.Combine(root, "readboard", "HostedUpdatePackageDownloader.cs"));
-
-            int installStart = updateSource.IndexOf(
-                "internal async Task InstallWebViewUpdateAsync()",
-                StringComparison.Ordinal);
-            int download = updateSource.IndexOf("await downloader.DownloadAsync", installStart, StringComparison.Ordinal);
-            int zipVerify = updateSource.IndexOf("new HostedUpdatePackageVerifier().Verify", download, StringComparison.Ordinal);
-            int hostNotify = updateSource.IndexOf("sessionCoordinator.SendReadboardUpdateReady", zipVerify, StringComparison.Ordinal);
-            int hash = downloaderSource.IndexOf("actualSha256", StringComparison.Ordinal);
-            int finalMove = downloaderSource.IndexOf("File.Move(tempPath, finalPath)", hash, StringComparison.Ordinal);
-
-            Assert.True(installStart >= 0);
-            Assert.True(download >= 0 && zipVerify > download && hostNotify > zipVerify);
-            Assert.True(hash >= 0 && finalMove > hash);
-        }
-
         [Fact]
         public void FoxAutoplayContract_UnknownOrWatchingStateRemainsFailClosed()
         {

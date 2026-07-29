@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Threading;
 
 namespace readboard
 {
-    internal sealed class HostedUpdatePackageVerifier
+    internal sealed class HostedUpdatePackageVerifier : IHostedUpdatePackageVerifier
     {
         private const string LegacyPackagePrefix = "readboard-github-release-";
         private const string WebView2PackagePrefix = "readboard-webview2-";
@@ -22,6 +23,24 @@ namespace readboard
 
         public void Verify(string versionTag, string zipPath)
         {
+            Verify(versionTag, zipPath, CancellationToken.None);
+        }
+
+        public void Verify(
+            HostedUpdateRequest request,
+            string zipPath,
+            CancellationToken cancellationToken)
+        {
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+            Verify(request.VersionTag, zipPath, cancellationToken);
+        }
+
+        private void Verify(
+            string versionTag,
+            string zipPath,
+            CancellationToken cancellationToken)
+        {
             if (string.IsNullOrWhiteSpace(versionTag))
             {
                 throw new ArgumentException("Version tag is required.", nameof(versionTag));
@@ -31,6 +50,8 @@ namespace readboard
             {
                 throw new ArgumentException("Zip path is required.", nameof(zipPath));
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             string expectedLegacyFileName = BuildFileName(LegacyPackagePrefix, versionTag);
             string expectedWebView2FileName = BuildFileName(WebView2PackagePrefix, versionTag);
@@ -44,7 +65,7 @@ namespace readboard
 
             using (ZipArchive archive = ZipFile.OpenRead(zipPath))
             {
-                VerifyArchiveEntries(archive);
+                VerifyArchiveEntries(archive, cancellationToken);
             }
         }
 
@@ -75,11 +96,14 @@ namespace readboard
             return prefix + versionTag + ".zip";
         }
 
-        private static void VerifyArchiveEntries(ZipArchive archive)
+        private static void VerifyArchiveEntries(
+            ZipArchive archive,
+            CancellationToken cancellationToken)
         {
             var fileEntries = new List<string>();
             foreach (ZipArchiveEntry entry in archive.Entries)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 string normalizedEntryName = NormalizeAndValidateEntryName(entry.FullName);
                 if (normalizedEntryName.EndsWith("/", StringComparison.Ordinal))
                 {
@@ -109,6 +133,7 @@ namespace readboard
             var presentFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string entryName in fileEntries)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 string relativeEntryName = useZipRoot
                     ? entryName
                     : entryName.Substring(commonTopLevelDirectory.Length + 1);

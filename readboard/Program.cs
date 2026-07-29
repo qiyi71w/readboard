@@ -448,6 +448,10 @@ namespace readboard
             langItems["Update_verifyingPackage"] = "正在校验更新包...";
             langItems["Update_notifyingHost"] = "正在通知宿主安装...";
             langItems["Update_waitingForHostInstall"] = "等待宿主安装...";
+            langItems["Update_cancelled"] = "更新准备已取消。";
+            langItems["Update_operationAlreadyRunning"] = "更新准备正在进行中。";
+            langItems["Update_prepareFailed"] = "更新包准备失败。";
+            langItems["Update_handoffFailed"] = "向宿主交接更新包失败。";
             langItems["Update_hostInstalling"] = "宿主正在安装更新...";
             langItems["Update_hostCancelled"] = "宿主已取消安装。";
             langItems["Update_hostFailed"] = "宿主安装失败。";

@@ -4,18 +4,19 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace readboard
 {
-    internal sealed class HostedUpdatePackageDownloader
+    internal sealed class HostedUpdatePackageDownloader : IHostedUpdatePackageDownloader
     {
         private const string GitHubAcceptHeader = "application/octet-stream";
         private const string GitHubUserAgent = "readboard-update-checker";
         private const int RequestTimeoutMilliseconds = 15000;
 
         private readonly string _packageRootDirectory;
-        private readonly Func<Uri, string, Task> _downloadAsync;
+        private readonly Func<Uri, string, CancellationToken, Task> _downloadAsync;
 
         public HostedUpdatePackageDownloader()
             : this(GetDefaultPackageRootDirectory(), DownloadPackageAsync)
@@ -25,6 +26,15 @@ namespace readboard
         internal HostedUpdatePackageDownloader(
             string packageRootDirectory,
             Func<Uri, string, Task> downloadAsync)
+            : this(
+                packageRootDirectory,
+                AdaptDownloadDelegate(downloadAsync))
+        {
+        }
+
+        internal HostedUpdatePackageDownloader(
+            string packageRootDirectory,
+            Func<Uri, string, CancellationToken, Task> downloadAsync)
         {
             if (string.IsNullOrWhiteSpace(packageRootDirectory))
             {
@@ -40,11 +50,41 @@ namespace readboard
             _downloadAsync = downloadAsync;
         }
 
-        public async Task<string> DownloadAsync(
+        public Task<string> DownloadAsync(
             string versionTag,
             string assetName,
             string assetDownloadUrl,
             string expectedSha256)
+        {
+            return DownloadAsync(
+                versionTag,
+                assetName,
+                assetDownloadUrl,
+                expectedSha256,
+                CancellationToken.None);
+        }
+
+        public Task<string> DownloadAsync(
+            HostedUpdateRequest request,
+            CancellationToken cancellationToken)
+        {
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+
+            return DownloadAsync(
+                request.VersionTag,
+                request.AssetName,
+                request.AssetDownloadUrl,
+                request.ExpectedSha256,
+                cancellationToken);
+        }
+
+        private async Task<string> DownloadAsync(
+            string versionTag,
+            string assetName,
+            string assetDownloadUrl,
+            string expectedSha256,
+            CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(versionTag))
             {
@@ -78,12 +118,9 @@ namespace readboard
 
             try
             {
-                await _downloadAsync(downloadUri, tempPath).ConfigureAwait(false);
-                string actualSha256;
-                using (FileStream stream = File.OpenRead(tempPath))
-                {
-                    actualSha256 = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-                }
+                cancellationToken.ThrowIfCancellationRequested();
+                await _downloadAsync(downloadUri, tempPath, cancellationToken).ConfigureAwait(false);
+                string actualSha256 = await ComputeSha256Async(tempPath, cancellationToken).ConfigureAwait(false);
 
                 if (!string.Equals(actualSha256, expectedSha256, StringComparison.Ordinal))
                 {
@@ -96,18 +133,33 @@ namespace readboard
                     File.Delete(finalPath);
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 File.Move(tempPath, finalPath);
+                cancellationToken.ThrowIfCancellationRequested();
                 return finalPath;
             }
             catch
             {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
+                DeleteFileIfPresent(tempPath);
+                if (cancellationToken.IsCancellationRequested)
+                    DeletePackageArtifacts(finalPath);
 
                 throw;
             }
+        }
+
+        public void Cleanup(HostedUpdateRequest request, string packagePath)
+        {
+            if (request == null)
+                return;
+
+            string finalPath = Path.Combine(
+                Path.Combine(_packageRootDirectory, request.VersionTag),
+                request.AssetName);
+            DeletePackageArtifacts(finalPath);
+            if (!string.IsNullOrWhiteSpace(packagePath) &&
+                !string.Equals(packagePath, finalPath, StringComparison.OrdinalIgnoreCase))
+                DeletePackageArtifacts(packagePath);
         }
 
         private static string GetDefaultPackageRootDirectory()
@@ -118,7 +170,20 @@ namespace readboard
                 "readboard-updates");
         }
 
-        private static async Task DownloadPackageAsync(Uri downloadUri, string destinationPath)
+        private static Func<Uri, string, CancellationToken, Task> AdaptDownloadDelegate(
+            Func<Uri, string, Task> downloadAsync)
+        {
+            if (downloadAsync == null)
+                throw new ArgumentNullException(nameof(downloadAsync));
+
+            return (downloadUri, destinationPath, cancellationToken) =>
+                downloadAsync(downloadUri, destinationPath);
+        }
+
+        private static async Task DownloadPackageAsync(
+            Uri downloadUri,
+            string destinationPath,
+            CancellationToken cancellationToken)
         {
             var handler = new HttpClientHandler
             {
@@ -128,16 +193,59 @@ namespace readboard
             using (HttpClient client = CreateClient(handler))
             using (HttpResponseMessage response = await client.GetAsync(
                 downloadUri,
-                HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken).ConfigureAwait(false))
             {
                 response.EnsureSuccessStatusCode();
 
-                using (Stream responseStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                using (Stream responseStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
                 using (FileStream destinationStream = File.Create(destinationPath))
                 {
-                    await responseStream.CopyToAsync(destinationStream).ConfigureAwait(false);
+                    await responseStream.CopyToAsync(destinationStream, 81920, cancellationToken).ConfigureAwait(false);
                 }
             }
+        }
+
+        private static async Task<string> ComputeSha256Async(
+            string path,
+            CancellationToken cancellationToken)
+        {
+            using (FileStream stream = File.OpenRead(path))
+            using (SHA256 sha256 = SHA256.Create())
+            {
+                byte[] buffer = new byte[81920];
+                int bytesRead;
+                while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+                {
+                    sha256.TransformBlock(buffer, 0, bytesRead, buffer, 0);
+                }
+
+                sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                return Convert.ToHexString(sha256.Hash).ToLowerInvariant();
+            }
+        }
+
+        private static void DeletePackageArtifacts(string finalPath)
+        {
+            if (string.IsNullOrWhiteSpace(finalPath))
+                return;
+
+            DeleteFileIfPresent(finalPath);
+            string directory = Path.GetDirectoryName(finalPath);
+            string fileName = Path.GetFileName(finalPath);
+            if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(fileName) ||
+                !Directory.Exists(directory))
+                return;
+
+            foreach (string path in Directory.GetFiles(directory, fileName + ".tmp-*"))
+                DeleteFileIfPresent(path);
+        }
+
+        private static void DeleteFileIfPresent(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                return;
+            File.Delete(path);
         }
 
         private static HttpClient CreateClient(HttpClientHandler handler)

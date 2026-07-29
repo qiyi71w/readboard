@@ -18,7 +18,9 @@ namespace readboard
         private Uri webViewManualDownloadUri = GetWebViewManualDownloadUri();
         private bool webViewUpdateInitialized;
         private bool webViewHostedInstallFallbackActive;
+        private bool webViewHostedUpdateHostInstalling;
         private int webViewUpdateOperationId;
+        private int webViewHostedUpdateGeneration;
 
         internal void InitializeWebViewUpdateBridge()
         {
@@ -46,6 +48,7 @@ namespace readboard
             InitializeWebViewUpdateBridge();
             webViewHostedUpdateResponseTimer.Stop();
             webViewHostedInstallFallbackActive = false;
+            webViewHostedUpdateHostInstalling = false;
             webViewUpdateResult = null;
             webViewManualDownloadUri = GetWebViewManualDownloadUri();
             webViewUpdateState = new ReadBoardUpdateUiState
@@ -84,17 +87,31 @@ namespace readboard
 
         internal void CloseWebViewUpdate()
         {
+            if (hostedUpdateJourney != null && hostedUpdateJourney.Cancel())
+            {
+                webViewHostedUpdateResponseTimer.Stop();
+                webViewHostedUpdateHostInstalling = false;
+                return;
+            }
+
+            if (!webViewUpdateState.Open &&
+                string.Equals(webViewUpdateState.Status, "closed", StringComparison.Ordinal))
+                return;
+
+            int journeyGeneration = hostedUpdateJourney == null ? 0 : hostedUpdateJourney.Generation;
+            if (journeyGeneration >= webViewHostedUpdateGeneration)
+                webViewHostedUpdateGeneration = journeyGeneration + 1;
             webViewUpdateOperationId++;
             webViewHostedUpdateResponseTimer.Stop();
-            webViewUpdateState.Open = false;
+            webViewHostedUpdateHostInstalling = false;
+            webViewUpdateState = CreateClosedWebViewUpdateState();
             PostWebViewState();
         }
 
-        internal async Task InstallWebViewUpdateAsync()
+        internal Task InstallWebViewUpdateAsync()
         {
             if (!webViewUpdateState.Open || webViewUpdateState.Status != "available")
-                return;
-            int operationId = ++webViewUpdateOperationId;
+                return Task.CompletedTask;
             InitializeWebViewUpdateBridge();
             UpdateCheckResult result = webViewUpdateResult;
             if (!CanOfferWebViewHostedInstall(
@@ -105,48 +122,16 @@ namespace readboard
                 result))
             {
                 OpenWebViewUpdateDownload();
-                return;
+                return Task.CompletedTask;
             }
 
-            SetWebViewUpdateProcessing(
-                getLangStr("Update_downloadingPackage"),
-                0);
-            try
-            {
-                HostedUpdatePackageDownloader downloader = new HostedUpdatePackageDownloader();
-                string zipPath = await downloader.DownloadAsync(
-                    result.Tag,
-                    result.AssetName,
-                    result.AssetDownloadUrl,
-                    result.AssetSha256);
-                if (operationId != webViewUpdateOperationId)
-                    return;
-
-                SetWebViewUpdateProcessing(
-                    getLangStr("Update_verifyingPackage"),
-                    1);
-                new HostedUpdatePackageVerifier().Verify(result.Tag, zipPath);
-
-                SetWebViewUpdateProcessing(
-                    getLangStr("Update_notifyingHost"),
-                    2);
-                sessionCoordinator.SendReadboardUpdateReady(result.Tag, zipPath);
-
-                SetWebViewUpdateProcessing(
-                    getLangStr("Update_waitingForHostInstall"),
-                    2);
-                webViewHostedUpdateResponseTimer.Stop();
-                webViewHostedUpdateResponseTimer.Start();
-            }
-            catch (Exception exception)
-            {
-                if (operationId != webViewUpdateOperationId)
-                    return;
-                Trace.TraceError(exception.ToString());
-                ActivateWebViewManualDownloadFallback(
-                    getLangStr("Update_hostFailed"),
-                    SanitizeWebViewHostedDetail(exception.Message));
-            }
+            webViewHostedUpdateHostInstalling = false;
+            HostedUpdateRequest request = new HostedUpdateRequest(
+                result.Tag,
+                result.AssetName,
+                result.AssetDownloadUrl,
+                result.AssetSha256);
+            return hostedUpdateJourney.StartAsync(request);
         }
 
         internal void OpenWebViewUpdateDownload()
@@ -167,14 +152,68 @@ namespace readboard
             }
         }
 
+        private void OnHostedUpdateObservation(HostedUpdateObservation observation)
+        {
+            if (observation == null)
+                return;
+
+            InvokeUiHostAction(delegate
+            {
+                ApplyHostedUpdateObservation(observation);
+            });
+        }
+
+        private void ApplyHostedUpdateObservation(HostedUpdateObservation observation)
+        {
+            if (observation.Generation < webViewHostedUpdateGeneration)
+                return;
+            webViewHostedUpdateGeneration = observation.Generation;
+
+            switch (observation.Stage)
+            {
+                case HostedUpdateStage.Downloading:
+                    SetWebViewUpdateProcessing(observation.Message, 0);
+                    break;
+                case HostedUpdateStage.Verifying:
+                    SetWebViewUpdateProcessing(observation.Message, 1);
+                    break;
+                case HostedUpdateStage.NotifyingHost:
+                    SetWebViewUpdateProcessing(observation.Message, 2);
+                    break;
+                case HostedUpdateStage.WaitingForHostInstall:
+                    if (webViewHostedInstallFallbackActive || webViewHostedUpdateHostInstalling)
+                        return;
+                    SetWebViewUpdateProcessing(observation.Message, 2);
+                    webViewHostedUpdateResponseTimer.Stop();
+                    webViewHostedUpdateResponseTimer.Start();
+                    break;
+                case HostedUpdateStage.Cancelled:
+                    webViewHostedUpdateResponseTimer.Stop();
+                    webViewHostedInstallFallbackActive = false;
+                    webViewHostedUpdateHostInstalling = false;
+                    webViewUpdateState = CreateClosedWebViewUpdateState();
+                    PostWebViewState();
+                    break;
+                case HostedUpdateStage.Failed:
+                    ActivateWebViewManualDownloadFallback(observation.Message);
+                    break;
+                case HostedUpdateStage.Rejected:
+                    PostWebViewState();
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(observation.Stage));
+            }
+        }
+
         internal void MarkWebViewHostedUpdateInstalling()
         {
             if (!IsWebViewHostedUpdatePending())
                 return;
 
             webViewHostedUpdateResponseTimer.Stop();
+            webViewHostedUpdateHostInstalling = true;
             SetWebViewUpdateProcessing(
-                getLangStr("Update_hostInstalling"),
+                new HostedUpdateSemanticMessage("Update_hostInstalling"),
                 3);
         }
 
@@ -184,8 +223,7 @@ namespace readboard
                 return;
 
             ActivateWebViewManualDownloadFallback(
-                getLangStr("Update_hostCancelled"),
-                string.Empty);
+                new HostedUpdateSemanticMessage("Update_hostCancelled"));
         }
 
         internal void MarkWebViewHostedUpdateFailed(string message)
@@ -194,14 +232,18 @@ namespace readboard
                 return;
 
             ActivateWebViewManualDownloadFallback(
-                getLangStr("Update_hostFailed"),
-                SanitizeWebViewHostedDetail(message));
+                new HostedUpdateSemanticMessage(
+                    "Update_hostFailed",
+                    SanitizeWebViewHostedDetail(message)));
         }
 
         internal void DisposeWebViewUpdateBridge()
         {
+            if (hostedUpdateJourney != null)
+                hostedUpdateJourney.Dispose();
             webViewUpdateOperationId++;
             webViewHostedUpdateResponseTimer.Stop();
+            webViewHostedUpdateHostInstalling = false;
             webViewHostedUpdateResponseTimer.Dispose();
         }
 
@@ -392,8 +434,11 @@ namespace readboard
                 : message + Environment.NewLine + incompatibleMessage;
         }
 
-        private void SetWebViewUpdateProcessing(string detail, int activeStep)
+        private void SetWebViewUpdateProcessing(
+            HostedUpdateSemanticMessage message,
+            int activeStep)
         {
+            string detail = ResolveHostedUpdateSemanticMessage(message);
             webViewUpdateState = new ReadBoardUpdateUiState
             {
                 Open = true,
@@ -432,10 +477,21 @@ namespace readboard
                 !webViewHostedInstallFallbackActive;
         }
 
+        private void ActivateWebViewManualDownloadFallback(HostedUpdateSemanticMessage message)
+        {
+            if (message == null)
+                throw new ArgumentNullException(nameof(message));
+
+            ActivateWebViewManualDownloadFallback(
+                getLangStr(message.Key),
+                message.DiagnosticDetail);
+        }
+
         private void ActivateWebViewManualDownloadFallback(string headline, string detail)
         {
             webViewHostedUpdateResponseTimer.Stop();
             webViewHostedInstallFallbackActive = true;
+            webViewHostedUpdateHostInstalling = false;
             webViewUpdateState = new ReadBoardUpdateUiState
             {
                 Open = true,
@@ -448,6 +504,17 @@ namespace readboard
                 Error = detail
             };
             PostWebViewState();
+        }
+
+        private string ResolveHostedUpdateSemanticMessage(HostedUpdateSemanticMessage message)
+        {
+            if (message == null)
+                return string.Empty;
+
+            string localized = getLangStr(message.Key);
+            return string.IsNullOrWhiteSpace(message.DiagnosticDetail)
+                ? localized
+                : localized + ": " + message.DiagnosticDetail;
         }
 
         private void WebViewHostedUpdateResponseTimer_Tick(object sender, EventArgs e)

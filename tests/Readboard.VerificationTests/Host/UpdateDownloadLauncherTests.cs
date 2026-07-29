@@ -10,23 +10,6 @@ namespace Readboard.VerificationTests.Host
         private const string PromotedSha256 =
             "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-        [Fact]
-        public void WebViewUpdate_WiresPromotedHashHostedInstallStagesAndResponseTimeout()
-        {
-            string source = LoadReadboardSource("MainForm.WebView.Update.cs");
-            string installSlice = GetMethodSlice(source, "internal async Task InstallWebViewUpdateAsync()");
-            string closeSlice = GetMethodSlice(source, "internal void CloseWebViewUpdate()");
-
-            Assert.Contains("webViewUpdateState.Status != \"available\"", installSlice);
-            Assert.Contains("CanOfferWebViewHostedInstall(", installSlice);
-            Assert.Contains("result.AssetSha256", installSlice);
-            Assert.Contains("new HostedUpdatePackageVerifier().Verify", installSlice);
-            Assert.Contains("sessionCoordinator.SendReadboardUpdateReady", installSlice);
-            Assert.Contains("webViewHostedUpdateResponseTimer.Start();", installSlice);
-            Assert.Contains("WebViewHostedUpdateResponseTimeoutMilliseconds = 15000", source);
-            Assert.Contains("webViewUpdateOperationId++", closeSlice);
-        }
-
         [Theory]
         [InlineData("readboard-github-release-v3.0.9.zip", "v3.0.9", false, true)]
         [InlineData("readboard-github-release-v3.0.9.zip", "v3.0.9", true, true)]
