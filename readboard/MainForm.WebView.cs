@@ -491,7 +491,7 @@ namespace readboard
             ControlCenterIntent controlCenterIntent;
             if (TryCreateControlCenterIntent(payload, out controlCenterIntent))
                 return true;
-            if (key == "two-way" || key == "auto-play" || key == "show-on-board")
+            if (key == "auto-play")
                 return value.ValueKind == JsonValueKind.True || value.ValueKind == JsonValueKind.False;
             if (key == "color")
                 return IsAllowedString(value, "black", "white", "auto");
@@ -543,6 +543,15 @@ namespace readboard
                 if (!ControlCenterPreferences.TryParseBoardSize(value.GetString(), out boardSizeKind))
                     return false;
                 intent = ControlCenterIntent.SetBoardSize(boardSizeKind);
+                return true;
+            }
+
+            if ((key == "two-way" || key == "show-on-board")
+                && (value.ValueKind == JsonValueKind.True || value.ValueKind == JsonValueKind.False))
+            {
+                intent = key == "two-way"
+                    ? ControlCenterIntent.SetTwoWaySync(value.GetBoolean())
+                    : ControlCenterIntent.SetShowOnBoard(value.GetBoolean());
                 return true;
             }
 
@@ -631,9 +640,7 @@ namespace readboard
             if (TryCreateControlCenterIntent(payload, out controlCenterIntent))
                 return ApplyControlCenterIntent(controlCenterIntent).ShouldPublishSnapshot;
 
-            if (key == "two-way")
-                UpdateBooleanControl(value, chkBothSync);
-            else if (key == "auto-play")
+            if (key == "auto-play")
                 UpdateBooleanControl(value, chkAutoPlay);
             else if (key == "color")
                 UpdateAutoPlayColor(value);
@@ -645,8 +652,6 @@ namespace readboard
                 UpdateNumericControl(value, textBox2, true, 0);
             else if (key == "first-policy")
                 UpdateNumericControl(value, textBox3, true, 0);
-            else if (key == "show-on-board" && SupportsShowInBoard())
-                UpdateBooleanControl(value, chkShowInBoard);
             return true;
         }
 
@@ -882,7 +887,7 @@ namespace readboard
                 BoardSize = ControlCenterPreferences.ToBoardSizeToken(controlCenter.BoardSizeKind),
                 BoardWidth = controlCenter.BoardWidth,
                 BoardHeight = controlCenter.BoardHeight,
-                TwoWaySync = sessionCoordinator.SyncBoth,
+                TwoWaySync = controlCenter.TwoWaySync,
                 AutoPlay = chkAutoPlay.Checked,
                 Color = radioAutoPlayColor.Checked ? "auto" : radioWhite.Checked ? "white" : "black",
                 Placement = radioAutoPlayMoveGma.Checked ? "engine" : "direct",
@@ -890,7 +895,7 @@ namespace readboard
                 Playouts = textBox2.Text,
                 FirstPolicy = textBox3.Text,
                 FirstPolicyEnabled = textBox3.Enabled,
-                ShowOnBoard = Program.showInBoard,
+                ShowOnBoard = controlCenter.ShowOnBoard,
                 QuickSyncActive = sessionCoordinator.IsContinuousSyncing,
                 ContinuousSyncActive = sessionCoordinator.StartedSync && !sessionCoordinator.IsContinuousSyncing,
                 QuickSyncEnabled = SupportsFastSyncType(CurrentSyncType)
@@ -901,7 +906,7 @@ namespace readboard
                 AnalysisStateAvailable = hostAnalysisRunning.HasValue,
                 AnalysisToggleEnabled = hostAnalysisRunning != false || hostAnalysisRunning.HasValue,
                 ConfigurationEnabled = controlCenter.ConfigurationEnabled,
-                TwoWaySyncEnabled = chkBothSync.Enabled,
+                TwoWaySyncEnabled = controlCenter.TwoWaySyncEnabled,
                 AutoPlayToggleEnabled = chkAutoPlay.Enabled,
                 AutoPlayControlsEnabled = radioBlack.Enabled,
                 CustomBoardSizeEnabled = controlCenter.CustomBoardSizeEnabled,
@@ -909,7 +914,7 @@ namespace readboard
                 PreferencesSaved = controlCenter.PreferencesSaved,
                 PersistenceError = controlCenter.PersistenceError,
                 IdentityEnabled = btnFoxAutoPlayIdentity.Enabled,
-                ShowOnBoardEnabled = chkShowInBoard.Enabled
+                ShowOnBoardEnabled = controlCenter.ShowOnBoardEnabled
             };
         }
 

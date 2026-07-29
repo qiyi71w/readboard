@@ -10,13 +10,10 @@ namespace readboard
         {
             AppConfig config = Program.CurrentContext.Config;
             ProjectControlCenterState();
-            SetSyncBoth(config.SyncBoth);
             posX = config.WindowPosX;
             posY = config.WindowPosY;
             ApplyAutoPlayColorMode(config.AutoPlayColorMode);
             ApplyAutoPlayMoveMode(config.AutoPlayMoveMode);
-            chkShowInBoard.Checked = Program.showInBoard;
-            Program.showInBoard = chkShowInBoard.Checked;
             ApplySyncModeControlState();
         }
 
@@ -44,7 +41,8 @@ namespace readboard
             config.BoardHeight = preferences.BoardHeight;
             config.CustomBoardWidth = preferences.CustomBoardWidth;
             config.CustomBoardHeight = preferences.CustomBoardHeight;
-            config.SyncBoth = sessionCoordinator.SyncBoth;
+            config.SyncBoth = preferences.TwoWaySync;
+            config.ShowInBoard = preferences.ShowOnBoard;
             config.SyncMode = preferences.Platform;
             config.WindowPosX = persistedWindowLocation.X;
             config.WindowPosY = persistedWindowLocation.Y;

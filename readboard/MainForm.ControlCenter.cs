@@ -9,6 +9,9 @@ namespace readboard
             private readonly MainForm form;
             private bool hasAppliedPlatform;
             private SyncMode appliedPlatform;
+            private bool hasAppliedPreferences;
+            private bool appliedTwoWaySync;
+            private bool appliedShowOnBoard;
 
             public MainFormControlCenterSessionAdapter(MainForm form)
             {
@@ -25,20 +28,36 @@ namespace readboard
                 if (preferences == null)
                     throw new ArgumentNullException("preferences");
 
+                bool platformChanged = !hasAppliedPlatform || appliedPlatform != preferences.Platform;
+                bool twoWaySyncChanged = hasAppliedPreferences
+                    && appliedTwoWaySync != preferences.TwoWaySync;
+                bool showOnBoardChanged = hasAppliedPreferences
+                    && appliedShowOnBoard != preferences.ShowOnBoard;
+
                 form.suppressControlCenterProjectionEvents = true;
                 try
                 {
-                    if (!hasAppliedPlatform || appliedPlatform != preferences.Platform)
+                    if (platformChanged)
                     {
                         form.ClearFoxAutoPlayColorDetectionState();
                         form.ResetWebViewSyncState();
                     }
                     form.ApplyControlCenterBoardSelection(preferences);
-                    form.ApplySyncModeSelection();
-                    form.ApplySyncModeControlState();
+                    if (platformChanged)
+                        form.ApplySyncModeSelection();
+                    if (!hasAppliedPreferences || twoWaySyncChanged)
+                        form.SetSyncBoth(preferences.TwoWaySync);
+                    form.chkBothSync.Checked = preferences.TwoWaySync;
+                    form.chkAutoPlay.Enabled = preferences.TwoWaySync;
+                    form.chkShowInBoard.Checked = preferences.ShowOnBoard;
+                    if (platformChanged)
+                        form.ApplySyncModeControlState();
                     form.ApplyControlCenterNativeEnablement();
                     hasAppliedPlatform = true;
                     appliedPlatform = preferences.Platform;
+                    hasAppliedPreferences = true;
+                    appliedTwoWaySync = preferences.TwoWaySync;
+                    appliedShowOnBoard = preferences.ShowOnBoard;
                 }
                 finally
                 {
@@ -47,6 +66,13 @@ namespace readboard
 
                 form.sessionCoordinator.SetSyncPlatform(MainForm.ResolveSyncPlatform(preferences.Platform));
                 form.ApplyMainWindowTitle();
+                if (!form.isInitializingProtocolState)
+                {
+                    if (twoWaySyncChanged)
+                        form.ApplyControlCenterTwoWaySyncEffect();
+                    if (showOnBoardChanged && !platformChanged)
+                        form.ApplyControlCenterShowOnBoardEffect(preferences.ShowOnBoard);
+                }
             }
         }
 
@@ -94,6 +120,54 @@ namespace readboard
             finally
             {
                 suppressWebViewStatePublication = false;
+            }
+        }
+
+        private void ApplyControlCenterTwoWaySyncEffect()
+        {
+            ControlCenterPreferences preferences = controlCenterRuntime.CurrentPreferences;
+            foreach (ControlCenterSessionEffect effect in ControlCenterSessionEffectPlanner.PlanTwoWaySync(
+                preferences,
+                CanUseForegroundFoxInBoardProtocol()))
+            {
+                ApplyControlCenterSessionEffect(effect);
+            }
+        }
+
+        private void ApplyControlCenterShowOnBoardEffect(bool enabled)
+        {
+            ControlCenterPreferences preferences = controlCenterRuntime.CurrentPreferences;
+            foreach (ControlCenterSessionEffect effect in ControlCenterSessionEffectPlanner.PlanShowOnBoard(
+                enabled,
+                preferences.TwoWaySync,
+                CanUseForegroundFoxInBoardProtocol(),
+                Program.showInBoardHint))
+            {
+                ApplyControlCenterSessionEffect(effect);
+            }
+        }
+
+        private void ApplyControlCenterSessionEffect(ControlCenterSessionEffect effect)
+        {
+            switch (effect.Kind)
+            {
+                case ControlCenterSessionEffectKind.SendBothSync:
+                    SendBothSyncCommand(effect.Enabled);
+                    return;
+                case ControlCenterSessionEffectKind.SendForegroundFoxInBoard:
+                    SendForegroundFoxInBoardCommand(effect.Enabled);
+                    return;
+                case ControlCenterSessionEffectKind.SendNotInBoard:
+                    SendNotInBoardCommand();
+                    return;
+                case ControlCenterSessionEffectKind.ShowOnBoardHint:
+                    webViewSettingsDialog = new ReadBoardDialogUiState { Open = true, Kind = "showInBoardHint" };
+                    return;
+                case ControlCenterSessionEffectKind.ResendSyncSessionState:
+                    ResendSyncSessionState();
+                    return;
+                default:
+                    throw new ArgumentOutOfRangeException("effect");
             }
         }
 

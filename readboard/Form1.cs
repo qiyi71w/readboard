@@ -126,11 +126,6 @@ namespace readboard
             return IsFoxSyncType(syncType) || syncType == TYPE_TYGEM || syncType == TYPE_SINA || syncType == TYPE_YIKE;
         }
 
-        private bool SupportsShowInBoard()
-        {
-            return CurrentSyncType != TYPE_FOREGROUND;
-        }
-
         private int CurrentSyncType
         {
             get
@@ -1291,8 +1286,7 @@ namespace readboard
                 return;
             ControlCenterApplyResult result = ApplyControlCenterIntent(
                 ControlCenterIntent.SetPlatform((SyncMode)syncType));
-            if (result.ShouldPublishSnapshot)
-                PostWebViewState();
+            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void setManualSelectionMode(int syncType)
@@ -1303,8 +1297,7 @@ namespace readboard
                 return;
             ControlCenterApplyResult result = ApplyControlCenterIntent(
                 ControlCenterIntent.SetPlatform((SyncMode)syncType));
-            if (result.ShouldPublishSnapshot)
-                PostWebViewState();
+            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void ApplySyncModeControlState()
@@ -1324,7 +1317,7 @@ namespace readboard
 
         private void ApplyShowInBoardControlState()
         {
-            bool supportsShowInBoard = SupportsShowInBoard();
+            bool supportsShowInBoard = controlCenterRuntime.Snapshot.ShowOnBoardEnabled;
             chkShowInBoard.Enabled = supportsShowInBoard;
             if (!supportsShowInBoard && chkShowInBoard.Checked)
                 chkShowInBoard.Checked = false;
@@ -1379,6 +1372,10 @@ namespace readboard
             bool customBoardSizeEnabled = controlCenter == null
                 ? manualSelectionEnabled
                 : controlCenter.CustomBoardSizeEnabled;
+            bool twoWaySyncEnabled = controlCenter == null
+                || controlCenter.TwoWaySyncEnabled;
+            bool showOnBoardEnabled = controlCenter == null
+                || controlCenter.ShowOnBoardEnabled;
 
             rdoFox.Enabled = configurationEnabled;
             rdoFoxBack.Enabled = configurationEnabled;
@@ -1393,6 +1390,8 @@ namespace readboard
             rdoFore.Enabled = configurationEnabled;
             txtBoardWidth.Enabled = customBoardDimensionsEnabled;
             txtBoardHeight.Enabled = customBoardDimensionsEnabled;
+            chkBothSync.Enabled = twoWaySyncEnabled;
+            chkShowInBoard.Enabled = showOnBoardEnabled;
         }
 
         private void DisableBoardSelectionControls()
@@ -1427,7 +1426,7 @@ namespace readboard
 
         private void SendPlayCommandIfSelected()
         {
-            if (!sessionCoordinator.SyncBoth || !chkAutoPlay.Checked)
+            if (!controlCenterRuntime.CurrentPreferences.TwoWaySync || !chkAutoPlay.Checked)
                 return;
             AutoPlayColorResolution autoPlayColor = ResolveCurrentAutoPlayColor(
                 GetSelectedAutoPlayColorMode() == AutoPlayColorMode.FoxAuto ? ResolveFoxWindowContext() : FoxWindowContext.Unknown());
@@ -1479,9 +1478,10 @@ namespace readboard
 
         private void SendBothSyncStateChange()
         {
-            SendBothSyncCommand(sessionCoordinator.SyncBoth);
-            if (Program.showInBoard && CanUseForegroundFoxInBoardProtocol())
-                SendForegroundFoxInBoardCommand(sessionCoordinator.SyncBoth);
+            ControlCenterPreferences preferences = controlCenterRuntime.CurrentPreferences;
+            SendBothSyncCommand(preferences.TwoWaySync);
+            if (preferences.ShowOnBoard && CanUseForegroundFoxInBoardProtocol())
+                SendForegroundFoxInBoardCommand(preferences.TwoWaySync);
         }
 
         private void ResendSyncSessionState()
@@ -2014,7 +2014,7 @@ namespace readboard
                 SelectedWindowHandle = hwnd,
                 DpiScale = factor,
                 LegacyTypeToken = ((int)syncMode).ToString(),
-                ShowInBoard = Program.showInBoard,
+                ShowInBoard = controlCenter.ShowOnBoard,
                 SupportsForegroundFoxInBoardProtocol = CanUseForegroundFoxInBoardProtocol(),
                 AutoMinimize = Program.autoMin,
                 SampleIntervalMs = Program.timeinterval,
@@ -2517,7 +2517,7 @@ namespace readboard
             textBox1.Enabled = false;
             textBox2.Enabled = false;
             textBox3.Enabled = false;
-            if (sessionCoordinator.SyncBoth)
+            if (controlCenterRuntime.CurrentPreferences.TwoWaySync)
             {
                 chkBothSync.Checked = true;
                 chkAutoPlay.Enabled = true;
@@ -2990,8 +2990,7 @@ namespace readboard
             {
                 ControlCenterApplyResult result = ApplyControlCenterIntent(
                     ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Preset19));
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
             }
         }
 
@@ -3005,8 +3004,7 @@ namespace readboard
             {
                 ControlCenterApplyResult result = ApplyControlCenterIntent(
                     ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Preset13));
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
             }
         }
 
@@ -3020,8 +3018,7 @@ namespace readboard
             {
                 ControlCenterApplyResult result = ApplyControlCenterIntent(
                     ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Preset9));
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
             }
         }
 
@@ -3161,13 +3158,14 @@ namespace readboard
 
         private void checkBox1_CheckedChanged_1(object sender, EventArgs e)
         {
-            SetSyncBoth(chkBothSync.Checked);
-            chkAutoPlay.Enabled = sessionCoordinator.SyncBoth;
             if (isInitializingProtocolState)
                 return;
-            SendBothSyncStateChange();
-            ResendSyncSessionState();
-            this.saveOtherConfig();
+            if (suppressControlCenterProjectionEvents)
+                return;
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetTwoWaySync(chkBothSync.Checked));
+            chkAutoPlay.Enabled = controlCenterRuntime.CurrentPreferences.TwoWaySync;
+            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -3236,8 +3234,7 @@ namespace readboard
             {
                 ControlCenterApplyResult result = ApplyControlCenterIntent(
                     ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Custom));
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
             }
         }
 
@@ -3255,8 +3252,7 @@ namespace readboard
                 return;
             ControlCenterApplyResult result = ApplyControlCenterIntent(
                 ControlCenterIntent.SetCustomBoardWidth(parsed));
-            if (result.ShouldPublishSnapshot)
-                PostWebViewState();
+            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void parseHeight(object sender, EventArgs e)
@@ -3271,8 +3267,7 @@ namespace readboard
                 return;
             ControlCenterApplyResult result = ApplyControlCenterIntent(
                 ControlCenterIntent.SetCustomBoardHeight(parsed));
-            if (result.ShouldPublishSnapshot)
-                PostWebViewState();
+            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void tb_KeyPressWidth(object sender, KeyPressEventArgs e)
@@ -3389,26 +3384,13 @@ namespace readboard
 
         private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)
         {
-            if (chkShowInBoard.Checked && CurrentSyncType == TYPE_FOREGROUND)
-            {
-                chkShowInBoard.Checked = false;
+            if (isInitializingProtocolState)
                 return;
-            }
-            Program.showInBoard = chkShowInBoard.Checked;
-            if (isInitializingProtocolState || suppressControlCenterProjectionEvents)
+            if (suppressControlCenterProjectionEvents)
                 return;
-            PersistConfiguration();
-            if (CanUseForegroundFoxInBoardProtocol())
-                SendForegroundFoxInBoardCommand(chkShowInBoard.Checked && sessionCoordinator.SyncBoth);
-            if (chkShowInBoard.Checked)
-            {
-                if (Program.showInBoardHint)
-                    webViewSettingsDialog = new ReadBoardDialogUiState { Open = true, Kind = "showInBoardHint" };
-            }
-            else
-            {
-                SendNotInBoardCommand();
-            }
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetShowOnBoard(chkShowInBoard.Checked));
+            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void button9_Click(object sender, EventArgs e)

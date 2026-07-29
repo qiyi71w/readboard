@@ -240,7 +240,6 @@ namespace readboard
                 throw new ArgumentNullException("config");
 
             runtimeContext.Config = config.Clone();
-            runtimeContext.Session.SyncBoth = runtimeContext.Config.SyncBoth;
             configStore.Save(runtimeContext.Config);
             runtimeContext.HasConfigFile = true;
         }

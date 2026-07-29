@@ -45,17 +45,6 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void ApplyLoadedConfiguration_ReappliesShowInBoardConstraintsAfterRestoringConfig()
-        {
-            string source = LoadSource("readboard", "MainForm.Configuration.cs");
-
-            int restoreIndex = IndexOfRequired(source, "chkShowInBoard.Checked = Program.showInBoard;");
-            int normalizeIndex = source.LastIndexOf("ApplySyncModeControlState();", StringComparison.Ordinal);
-
-            Assert.True(normalizeIndex > restoreIndex, "Loaded show-in-board state must be normalized after restoring the saved checkbox value.");
-        }
-
-        [Fact]
         public void ApplyLoadedConfiguration_DefersWindowClampUntilFinalUiLayout()
         {
             string source = LoadSource("readboard", "MainForm.Configuration.cs");
@@ -209,19 +198,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("DisplayScaling.GetScaleForPoint(startupReferencePoint.Value)", scaleSlice);
             Assert.Contains("ResolveLayoutReferencePoint()", workingAreaSlice);
             Assert.Contains("if (isMainFormSizeInitialized || posX == -1 || posY == -1)", startupPointSlice);
-        }
-
-        [Fact]
-        public void ShowInBoardToggle_RejectsOnlyForegroundSyncMode()
-        {
-            string source = LoadSource("readboard", "Form1.cs");
-            string supportSlice = GetMethodSlice(source, "private bool SupportsShowInBoard()");
-            string methodSlice = GetMethodSlice(source, "private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)");
-
-            Assert.Contains("CurrentSyncType != TYPE_FOREGROUND", supportSlice);
-            Assert.DoesNotContain("UsesManualSelectionType(CurrentSyncType)", supportSlice);
-            Assert.Contains("CurrentSyncType == TYPE_FOREGROUND", methodSlice);
-            Assert.Contains("chkShowInBoard.Checked = false;", methodSlice);
         }
 
         [Fact]
@@ -389,16 +365,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("ClearFoxAutoPlayColorDetectionState();", handleSlice);
             Assert.Contains("BuildFoxAutoPlayColorDetectionContextSignature(", updateTitleSlice);
             Assert.DoesNotContain("TitleFingerprint", updateTitleSlice);
-        }
-
-        [Fact]
-        public void ShowInBoardToggle_ReplaysForegroundFoxProtocolStateImmediately()
-        {
-            string source = LoadSource("readboard", "Form1.cs");
-            string methodSlice = GetMethodSlice(source, "private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)");
-
-            Assert.Contains("CanUseForegroundFoxInBoardProtocol()", methodSlice);
-            Assert.Contains("SendForegroundFoxInBoardCommand(chkShowInBoard.Checked && sessionCoordinator.SyncBoth);", methodSlice);
         }
 
         [Fact]

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using readboard;
 using Xunit;
 
@@ -309,6 +310,252 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(13, result.Snapshot.BoardHeight);
         }
 
+        [Fact]
+        public void TwoWaySyncIntent_UpdatesSessionAndPersistsOnce()
+        {
+            ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
+                AppConfig.CreateDefault("220430", "TEST"));
+            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RecordingPersistence persistence = new RecordingPersistence();
+            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence);
+
+            ControlCenterApplyResult result = runtime.Apply(
+                ControlCenterIntent.SetTwoWaySync(true));
+
+            Assert.Equal(ControlCenterApplyOutcome.Changed, result.Outcome);
+            Assert.True(result.Snapshot.TwoWaySync);
+            Assert.True(session.Applied[0].TwoWaySync);
+            Assert.Single(persistence.Saved);
+            Assert.True(persistence.Saved[0].TwoWaySync);
+            Assert.True(result.Snapshot.TwoWaySyncEnabled);
+        }
+
+        [Fact]
+        public void ShowOnBoardIntent_OnSupportedPlatformUpdatesSessionAndPersistsOnce()
+        {
+            ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
+                AppConfig.CreateDefault("220430", "TEST"));
+            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RecordingPersistence persistence = new RecordingPersistence();
+            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence);
+
+            ControlCenterApplyResult result = runtime.Apply(
+                ControlCenterIntent.SetShowOnBoard(true));
+
+            Assert.Equal(ControlCenterApplyOutcome.Changed, result.Outcome);
+            Assert.True(result.Snapshot.ShowOnBoard);
+            Assert.True(result.Snapshot.ShowOnBoardEnabled);
+            Assert.True(session.Applied[0].ShowOnBoard);
+            Assert.Single(persistence.Saved);
+            Assert.True(persistence.Saved[0].ShowOnBoard);
+        }
+
+        [Fact]
+        public void ShowOnBoardIntent_OnForegroundIsRejectedWithoutSessionOrPersistence()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncMode = SyncMode.Foreground;
+            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RecordingPersistence persistence = new RecordingPersistence();
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(config),
+                session,
+                persistence);
+
+            ControlCenterApplyResult result = runtime.Apply(
+                ControlCenterIntent.SetShowOnBoard(true));
+
+            Assert.Equal(ControlCenterApplyOutcome.Rejected, result.Outcome);
+            Assert.False(result.Snapshot.ShowOnBoard);
+            Assert.False(result.Snapshot.ShowOnBoardEnabled);
+            Assert.Empty(session.Applied);
+            Assert.Empty(persistence.Saved);
+            Assert.True(result.ShouldPublishSnapshot);
+        }
+
+        [Fact]
+        public void RuntimeConstructor_NormalizesUnsupportedShowOnBoardPreference()
+        {
+            ControlCenterPreferences initial = new ControlCenterPreferences
+            {
+                Platform = SyncMode.Foreground,
+                BoardSizeKind = ControlCenterBoardSizeKind.Preset19,
+                BoardWidth = 19,
+                BoardHeight = 19,
+                ShowOnBoard = true
+            };
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                initial,
+                new RecordingSessionAdapter(),
+                new RecordingPersistence());
+
+            Assert.False(runtime.Snapshot.ShowOnBoard);
+            Assert.False(runtime.Snapshot.ShowOnBoardEnabled);
+        }
+
+        [Fact]
+        public void PlatformIntent_NormalizesShowOnBoardWhenSwitchingToForeground()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.ShowInBoard = true;
+            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RecordingPersistence persistence = new RecordingPersistence();
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(config),
+                session,
+                persistence);
+
+            ControlCenterApplyResult result = runtime.Apply(
+                ControlCenterIntent.SetPlatform(SyncMode.Foreground));
+
+            Assert.Equal(ControlCenterApplyOutcome.Changed, result.Outcome);
+            Assert.Equal(SyncMode.Foreground, result.Snapshot.Platform);
+            Assert.False(result.Snapshot.ShowOnBoard);
+            Assert.False(result.Snapshot.ShowOnBoardEnabled);
+            Assert.Single(session.Applied);
+            Assert.False(session.Applied[0].ShowOnBoard);
+            Assert.Single(persistence.Saved);
+            Assert.False(persistence.Saved[0].ShowOnBoard);
+        }
+
+        [Fact]
+        public void SyncPreferences_CanChangeWhileSyncOperationIsActive()
+        {
+            ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
+                AppConfig.CreateDefault("220430", "TEST"));
+            RecordingSessionAdapter session = new RecordingSessionAdapter { HasActiveSyncOperation = true };
+            RecordingPersistence persistence = new RecordingPersistence();
+            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence);
+
+            ControlCenterApplyResult twoWay = runtime.Apply(
+                ControlCenterIntent.SetTwoWaySync(true));
+            ControlCenterApplyResult show = runtime.Apply(
+                ControlCenterIntent.SetShowOnBoard(true));
+
+            Assert.Equal(ControlCenterApplyOutcome.Changed, twoWay.Outcome);
+            Assert.Equal(ControlCenterApplyOutcome.Changed, show.Outcome);
+            Assert.Equal(2, session.Applied.Count);
+            Assert.Equal(2, persistence.Saved.Count);
+            Assert.False(twoWay.Snapshot.ConfigurationEnabled);
+            Assert.True(twoWay.Snapshot.TwoWaySyncEnabled);
+            Assert.True(show.Snapshot.ShowOnBoardEnabled);
+        }
+
+        [Fact]
+        public void ShowOnBoardPersistenceFailure_LeavesActiveChoiceAndMarksNotSaved()
+        {
+            ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
+                AppConfig.CreateDefault("220430", "TEST"));
+            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RecordingPersistence persistence = new RecordingPersistence
+            {
+                Failure = new IOException("disk full")
+            };
+            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence);
+
+            ControlCenterApplyResult result = runtime.Apply(
+                ControlCenterIntent.SetShowOnBoard(true));
+
+            Assert.Equal(ControlCenterApplyOutcome.Changed, result.Outcome);
+            Assert.True(runtime.Snapshot.ShowOnBoard);
+            Assert.False(result.Snapshot.PreferencesSaved);
+            Assert.Equal("disk full", result.Snapshot.PersistenceError);
+            Assert.Single(session.Applied);
+            Assert.Single(persistence.Saved);
+        }
+
+        [Fact]
+        public void TwoWaySyncEffectPlan_PreservesProtocolOrderAndForegroundFoxCondition()
+        {
+            ControlCenterPreferences preferences = ControlCenterPreferences.FromConfig(
+                AppConfig.CreateDefault("220430", "TEST"));
+            preferences.TwoWaySync = true;
+            preferences.ShowOnBoard = true;
+
+            IList<ControlCenterSessionEffect> effects = ControlCenterSessionEffectPlanner.PlanTwoWaySync(
+                preferences,
+                true);
+
+            Assert.Equal(
+                new[]
+                {
+                    ControlCenterSessionEffectKind.SendBothSync,
+                    ControlCenterSessionEffectKind.SendForegroundFoxInBoard,
+                    ControlCenterSessionEffectKind.ResendSyncSessionState
+                },
+                effects.Select(effect => effect.Kind));
+            Assert.True(effects[0].Enabled);
+            Assert.True(effects[1].Enabled);
+        }
+
+        [Fact]
+        public void ShowOnBoardEffectPlan_PreservesForegroundFoxNotInBoardAndHintSemantics()
+        {
+            IList<ControlCenterSessionEffect> enabledEffects = ControlCenterSessionEffectPlanner.PlanShowOnBoard(
+                true,
+                false,
+                true,
+                true);
+            IList<ControlCenterSessionEffect> disabledEffects = ControlCenterSessionEffectPlanner.PlanShowOnBoard(
+                false,
+                true,
+                true,
+                true);
+            IList<ControlCenterSessionEffect> noHintEffects = ControlCenterSessionEffectPlanner.PlanShowOnBoard(
+                true,
+                true,
+                true,
+                false);
+
+            Assert.Equal(
+                new[]
+                {
+                    ControlCenterSessionEffectKind.SendForegroundFoxInBoard,
+                    ControlCenterSessionEffectKind.ShowOnBoardHint
+                },
+                enabledEffects.Select(effect => effect.Kind));
+            Assert.False(enabledEffects[0].Enabled);
+            Assert.Equal(
+                new[]
+                {
+                    ControlCenterSessionEffectKind.SendForegroundFoxInBoard,
+                    ControlCenterSessionEffectKind.SendNotInBoard
+                },
+                disabledEffects.Select(effect => effect.Kind));
+            Assert.DoesNotContain(
+                noHintEffects,
+                effect => effect.Kind == ControlCenterSessionEffectKind.ShowOnBoardHint);
+        }
+
+        [Fact]
+        public void SnapshotPublisher_PublishesExactlyOnceForChangedRejectedAndInvalidResults()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncMode = SyncMode.Foreground;
+            ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(config);
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                initial,
+                new RecordingSessionAdapter(),
+                new RecordingPersistence());
+            int publicationCount = 0;
+            Action publish = delegate { publicationCount++; };
+
+            ControlCenterApplyResult changed = runtime.Apply(
+                ControlCenterIntent.SetTwoWaySync(true));
+            ControlCenterApplyResult noOp = runtime.Apply(
+                ControlCenterIntent.SetTwoWaySync(true));
+            ControlCenterApplyResult rejected = runtime.Apply(
+                ControlCenterIntent.SetShowOnBoard(true));
+            ControlCenterApplyResult invalid = runtime.Apply(
+                ControlCenterIntent.SetPlatform((SyncMode)99));
+
+            Assert.True(ControlCenterSnapshotPublisher.PublishIfNeeded(changed, publish));
+            Assert.False(ControlCenterSnapshotPublisher.PublishIfNeeded(noOp, publish));
+            Assert.True(ControlCenterSnapshotPublisher.PublishIfNeeded(rejected, publish));
+            Assert.True(ControlCenterSnapshotPublisher.PublishIfNeeded(invalid, publish));
+            Assert.Equal(3, publicationCount);
+        }
+
         [Theory]
         [InlineData("fox", (int)SyncMode.Fox)]
         [InlineData("foxBackground", (int)SyncMode.FoxBackgroundPlace)]
@@ -363,6 +610,31 @@ namespace Readboard.VerificationTests.Host
             Assert.True(MainForm.TryCreateControlCenterIntent(command, out ControlCenterIntent intent));
             Assert.Equal((ControlCenterIntentKind)expectedKind, intent.Kind);
             Assert.Equal(expectedDimension, intent.Dimension);
+        }
+
+        [Theory]
+        [InlineData("two-way", true)]
+        [InlineData("two-way", false)]
+        [InlineData("show-on-board", true)]
+        [InlineData("show-on-board", false)]
+        public void WebViewBooleanPreferenceShape_IsConvertedToTypedIntent(
+            string key,
+            bool expectedValue)
+        {
+            string json = "{\"type\":\"control.update\",\"payload\":{\"key\":\""
+                + key
+                + "\",\"value\":"
+                + (expectedValue ? "true" : "false")
+                + "}}";
+
+            Assert.True(MainForm.TryParseWebViewCommand(json, out ReadBoardUiCommand command));
+            Assert.True(MainForm.TryCreateControlCenterIntent(command, out ControlCenterIntent intent));
+            Assert.Equal(
+                key == "two-way"
+                    ? ControlCenterIntentKind.SetTwoWaySync
+                    : ControlCenterIntentKind.SetShowOnBoard,
+                intent.Kind);
+            Assert.Equal(expectedValue, intent.Enabled);
         }
 
         private sealed class RecordingSessionAdapter : IControlCenterSessionAdapter

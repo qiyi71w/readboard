@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace readboard
 {
@@ -7,7 +8,9 @@ namespace readboard
         SetPlatform = 0,
         SetBoardSize = 1,
         SetCustomBoardWidth = 2,
-        SetCustomBoardHeight = 3
+        SetCustomBoardHeight = 3,
+        SetTwoWaySync = 4,
+        SetShowOnBoard = 5
     }
 
     internal enum ControlCenterBoardSizeKind
@@ -36,6 +39,7 @@ namespace readboard
         public SyncMode Platform { get; private set; }
         public ControlCenterBoardSizeKind BoardSizeKind { get; private set; }
         public int Dimension { get; private set; }
+        public bool Enabled { get; private set; }
 
         public static ControlCenterIntent SetPlatform(SyncMode platform)
         {
@@ -68,6 +72,22 @@ namespace readboard
                 Dimension = height
             };
         }
+
+        public static ControlCenterIntent SetTwoWaySync(bool enabled)
+        {
+            return new ControlCenterIntent(ControlCenterIntentKind.SetTwoWaySync)
+            {
+                Enabled = enabled
+            };
+        }
+
+        public static ControlCenterIntent SetShowOnBoard(bool enabled)
+        {
+            return new ControlCenterIntent(ControlCenterIntentKind.SetShowOnBoard)
+            {
+                Enabled = enabled
+            };
+        }
     }
 
     internal sealed class ControlCenterPreferences
@@ -78,6 +98,8 @@ namespace readboard
         public int BoardHeight { get; set; }
         public int CustomBoardWidth { get; set; }
         public int CustomBoardHeight { get; set; }
+        public bool TwoWaySync { get; set; }
+        public bool ShowOnBoard { get; set; }
 
         public static ControlCenterPreferences FromConfig(AppConfig config)
         {
@@ -95,7 +117,9 @@ namespace readboard
                 BoardWidth = NormalizeDimension(config.BoardWidth, 19),
                 BoardHeight = NormalizeDimension(config.BoardHeight, 19),
                 CustomBoardWidth = config.CustomBoardWidth,
-                CustomBoardHeight = config.CustomBoardHeight
+                CustomBoardHeight = config.CustomBoardHeight,
+                TwoWaySync = config.SyncBoth,
+                ShowOnBoard = config.ShowInBoard
             };
             if (!UsesManualSelection(platform)
                 && preferences.BoardSizeKind == ControlCenterBoardSizeKind.Custom)
@@ -104,6 +128,8 @@ namespace readboard
                 preferences.BoardWidth = 19;
                 preferences.BoardHeight = 19;
             }
+            if (!SupportsShowOnBoard(platform))
+                preferences.ShowOnBoard = false;
             return preferences;
         }
 
@@ -132,6 +158,8 @@ namespace readboard
             config.BoardHeight = BoardHeight;
             config.CustomBoardWidth = CustomBoardWidth;
             config.CustomBoardHeight = CustomBoardHeight;
+            config.SyncBoth = TwoWaySync;
+            config.ShowInBoard = ShowOnBoard;
         }
 
         internal static ControlCenterBoardSizeKind ResolveBoardSizeKind(int width, int height)
@@ -240,6 +268,11 @@ namespace readboard
             return platform == SyncMode.Background || platform == SyncMode.Foreground;
         }
 
+        internal static bool SupportsShowOnBoard(SyncMode platform)
+        {
+            return platform != SyncMode.Foreground;
+        }
+
         internal static bool Equals(
             ControlCenterPreferences left,
             ControlCenterPreferences right)
@@ -252,7 +285,9 @@ namespace readboard
                 && left.BoardWidth == right.BoardWidth
                 && left.BoardHeight == right.BoardHeight
                 && left.CustomBoardWidth == right.CustomBoardWidth
-                && left.CustomBoardHeight == right.CustomBoardHeight;
+                && left.CustomBoardHeight == right.CustomBoardHeight
+                && left.TwoWaySync == right.TwoWaySync
+                && left.ShowOnBoard == right.ShowOnBoard;
         }
     }
 
@@ -264,9 +299,13 @@ namespace readboard
         public int BoardHeight { get; set; }
         public int CustomBoardWidth { get; set; }
         public int CustomBoardHeight { get; set; }
+        public bool TwoWaySync { get; set; }
+        public bool ShowOnBoard { get; set; }
         public bool ConfigurationEnabled { get; set; }
         public bool CustomBoardSizeEnabled { get; set; }
         public bool CustomBoardDimensionsEnabled { get; set; }
+        public bool TwoWaySyncEnabled { get; set; }
+        public bool ShowOnBoardEnabled { get; set; }
         public bool PreferencesSaved { get; set; }
         public string PersistenceError { get; set; }
     }
@@ -286,6 +325,123 @@ namespace readboard
         public bool ShouldPublishSnapshot
         {
             get { return Outcome != ControlCenterApplyOutcome.NoOp; }
+        }
+    }
+
+    internal enum ControlCenterSessionEffectKind
+    {
+        SendBothSync = 0,
+        SendForegroundFoxInBoard = 1,
+        SendNotInBoard = 2,
+        ShowOnBoardHint = 3,
+        ResendSyncSessionState = 4
+    }
+
+    internal sealed class ControlCenterSessionEffect
+    {
+        private ControlCenterSessionEffect(
+            ControlCenterSessionEffectKind kind,
+            bool enabled)
+        {
+            Kind = kind;
+            Enabled = enabled;
+        }
+
+        public ControlCenterSessionEffectKind Kind { get; private set; }
+        public bool Enabled { get; private set; }
+
+        public static ControlCenterSessionEffect SendBothSync(bool enabled)
+        {
+            return new ControlCenterSessionEffect(
+                ControlCenterSessionEffectKind.SendBothSync,
+                enabled);
+        }
+
+        public static ControlCenterSessionEffect SendForegroundFoxInBoard(bool enabled)
+        {
+            return new ControlCenterSessionEffect(
+                ControlCenterSessionEffectKind.SendForegroundFoxInBoard,
+                enabled);
+        }
+
+        public static ControlCenterSessionEffect SendNotInBoard()
+        {
+            return new ControlCenterSessionEffect(
+                ControlCenterSessionEffectKind.SendNotInBoard,
+                false);
+        }
+
+        public static ControlCenterSessionEffect ShowOnBoardHint()
+        {
+            return new ControlCenterSessionEffect(
+                ControlCenterSessionEffectKind.ShowOnBoardHint,
+                false);
+        }
+
+        public static ControlCenterSessionEffect ResendSyncSessionState()
+        {
+            return new ControlCenterSessionEffect(
+                ControlCenterSessionEffectKind.ResendSyncSessionState,
+                false);
+        }
+    }
+
+    internal static class ControlCenterSessionEffectPlanner
+    {
+        public static IList<ControlCenterSessionEffect> PlanTwoWaySync(
+            ControlCenterPreferences preferences,
+            bool canUseForegroundFoxInBoardProtocol)
+        {
+            if (preferences == null)
+                throw new ArgumentNullException("preferences");
+
+            List<ControlCenterSessionEffect> effects = new List<ControlCenterSessionEffect>
+            {
+                ControlCenterSessionEffect.SendBothSync(preferences.TwoWaySync)
+            };
+            if (preferences.ShowOnBoard && canUseForegroundFoxInBoardProtocol)
+                effects.Add(ControlCenterSessionEffect.SendForegroundFoxInBoard(preferences.TwoWaySync));
+            effects.Add(ControlCenterSessionEffect.ResendSyncSessionState());
+            return effects;
+        }
+
+        public static IList<ControlCenterSessionEffect> PlanShowOnBoard(
+            bool enabled,
+            bool twoWaySync,
+            bool canUseForegroundFoxInBoardProtocol,
+            bool showInBoardHint)
+        {
+            List<ControlCenterSessionEffect> effects = new List<ControlCenterSessionEffect>();
+            if (canUseForegroundFoxInBoardProtocol)
+                effects.Add(ControlCenterSessionEffect.SendForegroundFoxInBoard(enabled && twoWaySync));
+            if (enabled)
+            {
+                if (showInBoardHint)
+                    effects.Add(ControlCenterSessionEffect.ShowOnBoardHint());
+            }
+            else
+            {
+                effects.Add(ControlCenterSessionEffect.SendNotInBoard());
+            }
+            return effects;
+        }
+    }
+
+    internal static class ControlCenterSnapshotPublisher
+    {
+        public static bool PublishIfNeeded(
+            ControlCenterApplyResult result,
+            Action publishSnapshot)
+        {
+            if (result == null)
+                throw new ArgumentNullException("result");
+            if (!result.ShouldPublishSnapshot)
+                return false;
+            if (publishSnapshot == null)
+                throw new ArgumentNullException("publishSnapshot");
+
+            publishSnapshot();
+            return true;
         }
     }
 
@@ -340,6 +496,8 @@ namespace readboard
             preferences = initialPreferences == null
                 ? throw new ArgumentNullException("initialPreferences")
                 : initialPreferences.Clone();
+            if (!ControlCenterPreferences.SupportsShowOnBoard(preferences.Platform))
+                preferences.ShowOnBoard = false;
             this.sessionAdapter = sessionAdapter ?? throw new ArgumentNullException("sessionAdapter");
             this.persistence = persistence ?? throw new ArgumentNullException("persistence");
             preferencesSaved = true;
@@ -421,6 +579,8 @@ namespace readboard
                         candidate.BoardWidth = 19;
                         candidate.BoardHeight = 19;
                     }
+                    if (!ControlCenterPreferences.SupportsShowOnBoard(intent.Platform))
+                        candidate.ShowOnBoard = false;
                     return true;
                 case ControlCenterIntentKind.SetBoardSize:
                     if (!IsDefinedBoardSize(intent.BoardSizeKind))
@@ -465,6 +625,14 @@ namespace readboard
                     candidate.CustomBoardHeight = intent.Dimension;
                     candidate.BoardHeight = intent.Dimension;
                     return true;
+                case ControlCenterIntentKind.SetTwoWaySync:
+                    candidate.TwoWaySync = intent.Enabled;
+                    return true;
+                case ControlCenterIntentKind.SetShowOnBoard:
+                    if (intent.Enabled && !ControlCenterPreferences.SupportsShowOnBoard(candidate.Platform))
+                        return false;
+                    candidate.ShowOnBoard = intent.Enabled;
+                    return true;
                 default:
                     return false;
             }
@@ -474,7 +642,11 @@ namespace readboard
             ControlCenterIntent intent,
             ControlCenterPreferences candidate)
         {
-            if (sessionAdapter.HasActiveSyncOperation)
+            if (sessionAdapter.HasActiveSyncOperation
+                && (intent.Kind == ControlCenterIntentKind.SetPlatform
+                    || intent.Kind == ControlCenterIntentKind.SetBoardSize
+                    || intent.Kind == ControlCenterIntentKind.SetCustomBoardWidth
+                    || intent.Kind == ControlCenterIntentKind.SetCustomBoardHeight))
                 return false;
 
             if ((intent.Kind == ControlCenterIntentKind.SetBoardSize
@@ -510,12 +682,16 @@ namespace readboard
                 BoardHeight = preferences.BoardHeight,
                 CustomBoardWidth = preferences.CustomBoardWidth,
                 CustomBoardHeight = preferences.CustomBoardHeight,
+                TwoWaySync = preferences.TwoWaySync,
+                ShowOnBoard = preferences.ShowOnBoard,
                 ConfigurationEnabled = configurationEnabled,
                 CustomBoardSizeEnabled = configurationEnabled
                     && ControlCenterPreferences.UsesManualSelection(preferences.Platform),
                 CustomBoardDimensionsEnabled = configurationEnabled
                     && ControlCenterPreferences.UsesManualSelection(preferences.Platform)
                     && preferences.BoardSizeKind == ControlCenterBoardSizeKind.Custom,
+                TwoWaySyncEnabled = true,
+                ShowOnBoardEnabled = ControlCenterPreferences.SupportsShowOnBoard(preferences.Platform),
                 PreferencesSaved = preferencesSaved,
                 PersistenceError = persistenceError
             };
