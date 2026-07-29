@@ -47,6 +47,10 @@ namespace readboard
         Verifying,
         NotifyingHost,
         WaitingForHostInstall,
+        HostInstalling,
+        HostCancelled,
+        HostFailed,
+        HostTimedOut,
         Cancelled,
         Failed,
         Rejected
@@ -115,6 +119,10 @@ namespace readboard
         private string activePackagePath;
         private int generation;
         private bool handoffSent;
+        private bool handoffInProgress;
+        private bool handoffBudgetConsumed;
+        private bool hostInstallStarted;
+        private bool hostOutcomeSettled;
         private bool disposed;
 
         public HostedUpdateJourney(
@@ -147,6 +155,19 @@ namespace readboard
             }
         }
 
+        public bool CanStartHostedInstall
+        {
+            get
+            {
+                lock (stateSyncRoot)
+                {
+                    return !disposed &&
+                        !handoffBudgetConsumed &&
+                        operationCancellation == null;
+                }
+            }
+        }
+
         public Task<bool> StartAsync(HostedUpdateRequest request)
         {
             if (request == null)
@@ -155,12 +176,14 @@ namespace readboard
             CancellationTokenSource cancellationSource;
             int operationGeneration;
             bool rejected;
+            bool handoffAlreadySent;
             lock (stateSyncRoot)
             {
                 if (disposed)
                     throw new ObjectDisposedException(nameof(HostedUpdateJourney));
 
-                rejected = operationCancellation != null;
+                handoffAlreadySent = handoffBudgetConsumed;
+                rejected = handoffAlreadySent || operationCancellation != null;
                 if (rejected)
                 {
                     cancellationSource = null;
@@ -173,6 +196,9 @@ namespace readboard
                     activeRequest = request;
                     activePackagePath = null;
                     handoffSent = false;
+                    handoffInProgress = false;
+                    hostInstallStarted = false;
+                    hostOutcomeSettled = false;
                     cancellationSource = new CancellationTokenSource();
                     operationCancellation = cancellationSource;
                 }
@@ -182,7 +208,10 @@ namespace readboard
             {
                 Emit(
                     HostedUpdateStage.Rejected,
-                    new HostedUpdateSemanticMessage("Update_operationAlreadyRunning"),
+                    new HostedUpdateSemanticMessage(
+                        handoffAlreadySent
+                            ? "Update_handoffAlreadySent"
+                            : "Update_operationAlreadyRunning"),
                     null,
                     operationGeneration);
                 return Task.FromResult(false);
@@ -202,7 +231,7 @@ namespace readboard
             int cancellationGeneration;
             lock (stateSyncRoot)
             {
-                if (disposed || operationCancellation == null || handoffSent)
+                if (disposed || operationCancellation == null || handoffSent || handoffInProgress)
                     return false;
 
                 cancellation = operationCancellation;
@@ -221,6 +250,49 @@ namespace readboard
                 null,
                 cancellationGeneration);
             return true;
+        }
+
+        public bool MarkHostInstalling()
+        {
+            int observationGeneration;
+            lock (stateSyncRoot)
+            {
+                if (!CanAcceptHostObservationUnsafe() || hostOutcomeSettled || hostInstallStarted)
+                    return false;
+
+                hostInstallStarted = true;
+                observationGeneration = generation;
+            }
+
+            Emit(
+                HostedUpdateStage.HostInstalling,
+                new HostedUpdateSemanticMessage("Update_hostInstalling"),
+                null,
+                observationGeneration);
+            return true;
+        }
+
+        public bool MarkHostCancelled()
+        {
+            return SetHostOutcome(
+                HostedUpdateStage.HostCancelled,
+                new HostedUpdateSemanticMessage("Update_hostCancelled"));
+        }
+
+        public bool MarkHostFailed(string detail)
+        {
+            return SetHostOutcome(
+                HostedUpdateStage.HostFailed,
+                new HostedUpdateSemanticMessage(
+                    "Update_hostFailed",
+                    SanitizeDiagnosticDetail(detail)));
+        }
+
+        public bool MarkHostTimedOut()
+        {
+            return SetHostOutcome(
+                HostedUpdateStage.HostTimedOut,
+                new HostedUpdateSemanticMessage("Update_hostTimedOut"));
         }
 
         public void Dispose()
@@ -291,11 +363,14 @@ namespace readboard
                 }
                 handoffDelivered = true;
 
-                Emit(
-                    HostedUpdateStage.WaitingForHostInstall,
-                    new HostedUpdateSemanticMessage("Update_waitingForHostInstall"),
-                    packagePath,
-                    operationGeneration);
+                if (ShouldWaitForHost(operationGeneration, cancellationSource))
+                {
+                    Emit(
+                        HostedUpdateStage.WaitingForHostInstall,
+                        new HostedUpdateSemanticMessage("Update_waitingForHostInstall"),
+                        packagePath,
+                        operationGeneration);
+                }
                 CompleteOperation(cancellationSource);
                 return true;
             }
@@ -381,7 +456,7 @@ namespace readboard
                 if (!IsCurrentUnsafe(operationGeneration, cancellationSource))
                     return false;
 
-                handoffSent = true;
+                handoffInProgress = true;
             }
 
             try
@@ -392,18 +467,59 @@ namespace readboard
             {
                 lock (stateSyncRoot)
                 {
+                    handoffInProgress = false;
                     if (ReferenceEquals(operationCancellation, cancellationSource))
+                    {
                         handoffSent = false;
+                    }
                 }
                 throw;
             }
 
             lock (stateSyncRoot)
             {
+                handoffInProgress = false;
+                handoffSent = true;
+                handoffBudgetConsumed = true;
                 if (ReferenceEquals(operationCancellation, cancellationSource))
                     activePackagePath = null;
             }
             return true;
+        }
+
+        private bool SetHostOutcome(
+            HostedUpdateStage stage,
+            HostedUpdateSemanticMessage message)
+        {
+            int observationGeneration;
+            lock (stateSyncRoot)
+            {
+                if (!CanAcceptHostObservationUnsafe() || hostOutcomeSettled)
+                    return false;
+
+                hostOutcomeSettled = true;
+                observationGeneration = generation;
+            }
+
+            Emit(stage, message, null, observationGeneration);
+            return true;
+        }
+
+        private bool CanAcceptHostObservationUnsafe()
+        {
+            return !disposed && handoffSent;
+        }
+
+        private bool ShouldWaitForHost(
+            int operationGeneration,
+            CancellationTokenSource cancellationSource)
+        {
+            lock (stateSyncRoot)
+            {
+                return IsCurrentUnsafe(operationGeneration, cancellationSource) &&
+                    !hostInstallStarted &&
+                    !hostOutcomeSettled;
+            }
         }
 
         private void FailCurrentOperation(

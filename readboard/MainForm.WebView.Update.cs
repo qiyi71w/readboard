@@ -114,12 +114,7 @@ namespace readboard
                 return Task.CompletedTask;
             InitializeWebViewUpdateBridge();
             UpdateCheckResult result = webViewUpdateResult;
-            if (!CanOfferWebViewHostedInstall(
-                launchOptions.TransportKind,
-                sessionCoordinator.IsProtocolSessionActive,
-                hostedUpdateSupported,
-                hostedUpdatePackageV2Supported,
-                result))
+            if (!CanOfferWebViewHostedInstallForCurrentProcess(result))
             {
                 OpenWebViewUpdateDownload();
                 return Task.CompletedTask;
@@ -187,6 +182,18 @@ namespace readboard
                     webViewHostedUpdateResponseTimer.Stop();
                     webViewHostedUpdateResponseTimer.Start();
                     break;
+                case HostedUpdateStage.HostInstalling:
+                    if (webViewHostedInstallFallbackActive)
+                        return;
+                    webViewHostedUpdateResponseTimer.Stop();
+                    webViewHostedUpdateHostInstalling = true;
+                    SetWebViewUpdateProcessing(observation.Message, 3);
+                    break;
+                case HostedUpdateStage.HostCancelled:
+                case HostedUpdateStage.HostFailed:
+                case HostedUpdateStage.HostTimedOut:
+                    ActivateWebViewManualDownloadFallback(observation.Message);
+                    break;
                 case HostedUpdateStage.Cancelled:
                     webViewHostedUpdateResponseTimer.Stop();
                     webViewHostedInstallFallbackActive = false;
@@ -207,34 +214,20 @@ namespace readboard
 
         internal void MarkWebViewHostedUpdateInstalling()
         {
-            if (!IsWebViewHostedUpdatePending())
-                return;
-
-            webViewHostedUpdateResponseTimer.Stop();
-            webViewHostedUpdateHostInstalling = true;
-            SetWebViewUpdateProcessing(
-                new HostedUpdateSemanticMessage("Update_hostInstalling"),
-                3);
+            if (hostedUpdateJourney != null)
+                hostedUpdateJourney.MarkHostInstalling();
         }
 
         internal void MarkWebViewHostedUpdateCancelled()
         {
-            if (!IsWebViewHostedUpdatePending())
-                return;
-
-            ActivateWebViewManualDownloadFallback(
-                new HostedUpdateSemanticMessage("Update_hostCancelled"));
+            if (hostedUpdateJourney != null)
+                hostedUpdateJourney.MarkHostCancelled();
         }
 
         internal void MarkWebViewHostedUpdateFailed(string message)
         {
-            if (!IsWebViewHostedUpdatePending())
-                return;
-
-            ActivateWebViewManualDownloadFallback(
-                new HostedUpdateSemanticMessage(
-                    "Update_hostFailed",
-                    SanitizeWebViewHostedDetail(message)));
+            if (hostedUpdateJourney != null)
+                hostedUpdateJourney.MarkHostFailed(message);
         }
 
         internal void DisposeWebViewUpdateBridge()
@@ -301,12 +294,7 @@ namespace readboard
             switch (result.Status)
             {
                 case UpdateCheckStatus.UpdateAvailable:
-                    bool hostedInstallAvailable = CanOfferWebViewHostedInstall(
-                        launchOptions.TransportKind,
-                        sessionCoordinator.IsProtocolSessionActive,
-                        hostedUpdateSupported,
-                        hostedUpdatePackageV2Supported,
-                        result);
+                    bool hostedInstallAvailable = CanOfferWebViewHostedInstallForCurrentProcess(result);
                     string channelNotice = BuildWebViewChannelNotice(result);
                     webViewUpdateState = new ReadBoardUpdateUiState
                     {
@@ -470,13 +458,6 @@ namespace readboard
             };
         }
 
-        private bool IsWebViewHostedUpdatePending()
-        {
-            return webViewUpdateState.Open &&
-                string.Equals(webViewUpdateState.Status, "processing", StringComparison.Ordinal) &&
-                !webViewHostedInstallFallbackActive;
-        }
-
         private void ActivateWebViewManualDownloadFallback(HostedUpdateSemanticMessage message)
         {
             if (message == null)
@@ -520,9 +501,20 @@ namespace readboard
         private void WebViewHostedUpdateResponseTimer_Tick(object sender, EventArgs e)
         {
             webViewHostedUpdateResponseTimer.Stop();
-            ActivateWebViewManualDownloadFallback(
-                getLangStr("Update_hostTimedOut"),
-                string.Empty);
+            if (hostedUpdateJourney != null)
+                hostedUpdateJourney.MarkHostTimedOut();
+        }
+
+        private bool CanOfferWebViewHostedInstallForCurrentProcess(UpdateCheckResult result)
+        {
+            return hostedUpdateJourney != null &&
+                hostedUpdateJourney.CanStartHostedInstall &&
+                CanOfferWebViewHostedInstall(
+                    launchOptions.TransportKind,
+                    sessionCoordinator.IsProtocolSessionActive,
+                    hostedUpdateSupported,
+                    hostedUpdatePackageV2Supported,
+                    result);
         }
 
         private static ReadBoardUpdateUiState CreateClosedWebViewUpdateState()
@@ -539,11 +531,5 @@ namespace readboard
             return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         }
 
-        private static string SanitizeWebViewHostedDetail(string detail)
-        {
-            return string.IsNullOrWhiteSpace(detail)
-                ? string.Empty
-                : detail.Replace("\r", " ").Replace("\n", " ").Replace("\t", " ").Trim();
-        }
     }
 }

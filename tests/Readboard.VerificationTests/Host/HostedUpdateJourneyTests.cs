@@ -144,6 +144,224 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public async Task SuccessfulHandoff_ConsumesProcessBudgetAndRejectsLaterAttempt()
+        {
+            var downloader = new ControlledDownloader { ImmediateResult = "candidate.zip" };
+            var verifier = new RecordingVerifier();
+            var host = new RecordingHost();
+            var observations = new List<HostedUpdateObservation>();
+            var journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                host.SendReady,
+                observations.Add);
+
+            Assert.True(await journey.StartAsync(Request));
+
+            Assert.False(await journey.StartAsync(Request));
+
+            Assert.Equal(1, downloader.DownloadCallCount);
+            Assert.Single(host.ReadyMessages);
+            Assert.Equal(HostedUpdateStage.Rejected, observations[4].Stage);
+            Assert.Equal("Update_handoffAlreadySent", observations[4].Message.Key);
+        }
+
+        [Fact]
+        public async Task PreparationCancellation_DoesNotConsumeProcessBudget()
+        {
+            var downloader = new ControlledDownloader();
+            var verifier = new RecordingVerifier();
+            var host = new RecordingHost();
+            var observations = new List<HostedUpdateObservation>();
+            var journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                host.SendReady,
+                observations.Add);
+
+            Task first = journey.StartAsync(Request);
+            Assert.True(journey.Cancel());
+            downloader.Complete("cancelled.zip");
+            await first;
+
+            downloader.ImmediateResult = "retry.zip";
+            Assert.True(await journey.StartAsync(Request));
+
+            Assert.Single(host.ReadyMessages);
+            Assert.True(journey.HandoffSent);
+        }
+
+        [Fact]
+        public async Task PreparationFailure_DoesNotConsumeProcessBudget()
+        {
+            var downloader = new ControlledDownloader { ImmediateResult = "candidate.zip" };
+            var verifier = new FailsOnceVerifier();
+            var host = new RecordingHost();
+            var observations = new List<HostedUpdateObservation>();
+            var journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                host.SendReady,
+                observations.Add);
+
+            Assert.False(await journey.StartAsync(Request));
+            Assert.True(await journey.StartAsync(Request));
+
+            Assert.Single(host.ReadyMessages);
+            Assert.True(journey.HandoffSent);
+        }
+
+        [Fact]
+        public async Task HostCancellationAfterHandoff_ConsumesBudgetAndIgnoresLateReplies()
+        {
+            var downloader = new ControlledDownloader { ImmediateResult = "handed-off.zip" };
+            var verifier = new RecordingVerifier();
+            var host = new RecordingHost();
+            var observations = new List<HostedUpdateObservation>();
+            var journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                host.SendReady,
+                observations.Add);
+
+            Assert.True(await journey.StartAsync(Request));
+            int observationCount = observations.Count;
+
+            Assert.True(journey.MarkHostCancelled());
+            Assert.False(journey.MarkHostFailed("late failure"));
+            Assert.False(journey.MarkHostTimedOut());
+            Assert.False(await journey.StartAsync(Request));
+
+            Assert.Equal(observationCount + 2, observations.Count);
+            Assert.Equal(HostedUpdateStage.HostCancelled, observations[observationCount].Stage);
+            Assert.Equal("Update_hostCancelled", observations[observationCount].Message.Key);
+            Assert.Equal(HostedUpdateStage.Rejected, observations[observationCount + 1].Stage);
+            Assert.Null(downloader.CleanedPackagePath);
+        }
+
+        [Fact]
+        public async Task HostInstallingAfterHandoff_IsPublishedOnce()
+        {
+            var downloader = new ControlledDownloader { ImmediateResult = "handed-off.zip" };
+            var verifier = new RecordingVerifier();
+            var host = new RecordingHost();
+            var observations = new List<HostedUpdateObservation>();
+            var journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                host.SendReady,
+                observations.Add);
+
+            Assert.True(await journey.StartAsync(Request));
+            int observationCount = observations.Count;
+
+            Assert.True(journey.MarkHostInstalling());
+            Assert.False(journey.MarkHostInstalling());
+
+            Assert.Equal(observationCount + 1, observations.Count);
+            Assert.Equal(HostedUpdateStage.HostInstalling, observations[observationCount].Stage);
+            Assert.Equal("Update_hostInstalling", observations[observationCount].Message.Key);
+        }
+
+        [Fact]
+        public async Task HostFailureAfterHandoff_SanitizesDetailWithoutCleaningHandedOffPackage()
+        {
+            var downloader = new ControlledDownloader { ImmediateResult = "handed-off.zip" };
+            var verifier = new RecordingVerifier();
+            var host = new RecordingHost();
+            var observations = new List<HostedUpdateObservation>();
+            var journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                host.SendReady,
+                observations.Add);
+
+            Assert.True(await journey.StartAsync(Request));
+
+            Assert.True(journey.MarkHostFailed("bad\r\nzip\tpath"));
+
+            HostedUpdateObservation failure = observations[observations.Count - 1];
+            Assert.Equal(HostedUpdateStage.HostFailed, failure.Stage);
+            Assert.Equal("Update_hostFailed", failure.Message.Key);
+            Assert.Equal("bad  zip path", failure.Message.DiagnosticDetail);
+            Assert.Null(downloader.CleanedPackagePath);
+            Assert.False(await journey.StartAsync(Request));
+        }
+
+        [Fact]
+        public async Task HostTimeoutAfterHandoff_IsDeterministicAndRejectsLateReply()
+        {
+            var downloader = new ControlledDownloader { ImmediateResult = "handed-off.zip" };
+            var verifier = new RecordingVerifier();
+            var host = new RecordingHost();
+            var observations = new List<HostedUpdateObservation>();
+            var journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                host.SendReady,
+                observations.Add);
+
+            Assert.True(await journey.StartAsync(Request));
+
+            Assert.True(journey.MarkHostTimedOut());
+            Assert.False(journey.MarkHostInstalling());
+
+            HostedUpdateObservation timeout = observations[observations.Count - 1];
+            Assert.Equal(HostedUpdateStage.HostTimedOut, timeout.Stage);
+            Assert.Equal("Update_hostTimedOut", timeout.Message.Key);
+            Assert.False(await journey.StartAsync(Request));
+            Assert.Null(downloader.CleanedPackagePath);
+        }
+
+        [Fact]
+        public async Task DisposeAfterHandoff_DoesNotCancelOrCleanHandedOffPackage()
+        {
+            var downloader = new ControlledDownloader { ImmediateResult = "handed-off.zip" };
+            var verifier = new RecordingVerifier();
+            var host = new RecordingHost();
+            var observations = new List<HostedUpdateObservation>();
+            var journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                host.SendReady,
+                observations.Add);
+
+            Assert.True(await journey.StartAsync(Request));
+
+            journey.Dispose();
+
+            Assert.False(downloader.CancellationToken.IsCancellationRequested);
+            Assert.Null(downloader.CleanedPackagePath);
+            Assert.False(journey.MarkHostFailed("late failure"));
+        }
+
+        [Fact]
+        public async Task NewJourneyInstance_StartsWithFreshHandoffBudget()
+        {
+            var firstDownloader = new ControlledDownloader { ImmediateResult = "first.zip" };
+            var firstHost = new RecordingHost();
+            var firstJourney = new HostedUpdateJourney(
+                firstDownloader,
+                new RecordingVerifier(),
+                firstHost.SendReady,
+                _ => { });
+
+            Assert.True(await firstJourney.StartAsync(Request));
+            Assert.False(await firstJourney.StartAsync(Request));
+
+            var secondDownloader = new ControlledDownloader { ImmediateResult = "second.zip" };
+            var secondHost = new RecordingHost();
+            var secondJourney = new HostedUpdateJourney(
+                secondDownloader,
+                new RecordingVerifier(),
+                secondHost.SendReady,
+                _ => { });
+
+            Assert.True(await secondJourney.StartAsync(Request));
+            Assert.Single(secondHost.ReadyMessages);
+        }
+
+        [Fact]
         public async Task PreparationFailure_UsesPreparationSemanticMessageAndCleansCandidate()
         {
             var downloader = new ControlledDownloader { ImmediateResult = "candidate.zip" };
@@ -222,6 +440,8 @@ namespace Readboard.VerificationTests.Host
 
             public string ImmediateResult { get; set; }
 
+            public int DownloadCallCount { get; private set; }
+
             public CancellationToken CancellationToken { get; private set; }
 
             public HostedUpdateRequest CleanedRequest { get; private set; }
@@ -230,6 +450,7 @@ namespace Readboard.VerificationTests.Host
 
             public Task<string> DownloadAsync(HostedUpdateRequest request, CancellationToken cancellationToken)
             {
+                DownloadCallCount++;
                 CancellationToken = cancellationToken;
                 if (ImmediateResult != null)
                     return Task.FromResult(ImmediateResult);
@@ -269,6 +490,20 @@ namespace Readboard.VerificationTests.Host
             public void Verify(HostedUpdateRequest request, string packagePath, CancellationToken cancellationToken)
             {
                 throw new InvalidOperationException("package is invalid");
+            }
+        }
+
+        private sealed class FailsOnceVerifier : IHostedUpdatePackageVerifier
+        {
+            private bool failNext = true;
+
+            public void Verify(HostedUpdateRequest request, string packagePath, CancellationToken cancellationToken)
+            {
+                if (failNext)
+                {
+                    failNext = false;
+                    throw new InvalidOperationException("package is invalid");
+                }
             }
         }
 
