@@ -159,7 +159,9 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 - `config_readboard.txt`：旧主配置镜像
 - `config_readboard_others.txt`：旧扩展配置镜像
 
-`DualFormatAppConfigStore` 优先读 JSON；没有 JSON 时尝试导入旧格式。保存时同时写 JSON 和旧格式镜像，保证老集成路径仍能读到配置。
+`DualFormatAppConfigStore` 优先读 JSON；没有 JSON 时尝试导入旧格式。保存时先在同一运行目录的临时事务目录中写完 JSON 和两份 legacy 内容，再逐个替换三个目标文件。普通进程内的替换失败会尝试用旧文件集合回滚；回滚失败或事务目录清理失败会抛出 `DurableConfigurationException`，其中包含应人工诊断的事务目录路径，并保留该目录作为有界证据。成功或可恢复失败会清理事务目录。
+
+这不是跨文件的文件系统事务：每个目标文件的替换具备单文件语义，但进程崩溃或操作系统故障可能仍留下混合集合。不要把该实现描述为跨文件原子提交；事务目录前缀为 `.readboard-config-transaction-`，残留目录应作为故障证据处理。
 
 改配置字段时：
 

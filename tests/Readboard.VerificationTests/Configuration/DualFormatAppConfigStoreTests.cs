@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using Xunit;
@@ -10,6 +12,168 @@ namespace Readboard.VerificationTests
         private const string ProtocolVersion = "220430";
         private const string FixtureMachineKey = "MACHINE-001";
         private const string SaveMachineKey = "SECONDARY-HOST";
+
+        private enum FailurePoint
+        {
+            BeforeStaging,
+            StageJson,
+            StageLegacyMain,
+            StageLegacyOther,
+            CommitJson,
+            CommitLegacyMain,
+            CommitLegacyOther,
+            RollbackJson,
+            RollbackLegacyMain,
+            RollbackLegacyOther,
+            Cleanup
+        }
+
+        [Theory]
+        [InlineData((int)FailurePoint.BeforeStaging)]
+        [InlineData((int)FailurePoint.StageJson)]
+        [InlineData((int)FailurePoint.StageLegacyMain)]
+        [InlineData((int)FailurePoint.StageLegacyOther)]
+        public void Save_FailureDuringStagingLeavesExistingFilesUnchangedAndCleansTransactionArtifacts(
+            int failingStepValue)
+        {
+            FailurePoint failingStep = (FailurePoint)failingStepValue;
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                string oldJson = "{\"MachineKey\":\"SECONDARY-HOST\",\"BoardWidth\":19}";
+                string oldLegacyMain = "old-main";
+                string oldLegacyOther = "old-other";
+                File.WriteAllText(workspace.PathFor("config.readboard.json"), oldJson);
+                File.WriteAllText(workspace.PathFor("config_readboard.txt"), oldLegacyMain);
+                File.WriteAllText(workspace.PathFor("config_readboard_others.txt"), oldLegacyOther);
+
+                FailureInjectingConfigFileSystem fileSystem =
+                    new FailureInjectingConfigFileSystem(failingStep);
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(
+                    workspace.RootPath, SaveMachineKey, ProtocolVersion, fileSystem);
+
+                Assert.Throws<IOException>(delegate
+                {
+                    store.Save(AppConfig.CreateDefault(ProtocolVersion, SaveMachineKey));
+                });
+
+                Assert.Equal(oldJson, File.ReadAllText(workspace.PathFor("config.readboard.json")));
+                Assert.Equal(oldLegacyMain, File.ReadAllText(workspace.PathFor("config_readboard.txt")));
+                Assert.Equal(oldLegacyOther, File.ReadAllText(workspace.PathFor("config_readboard_others.txt")));
+                AssertNoTransactionArtifacts(workspace.RootPath);
+            }
+        }
+
+        [Theory]
+        [InlineData((int)FailurePoint.CommitJson)]
+        [InlineData((int)FailurePoint.CommitLegacyMain)]
+        [InlineData((int)FailurePoint.CommitLegacyOther)]
+        public void Save_CommitFailureRestoresThePreviousCompleteFileSet(
+            int failingStepValue)
+        {
+            FailurePoint failingStep = (FailurePoint)failingStepValue;
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                string oldJson = "{\"MachineKey\":\"SECONDARY-HOST\",\"BoardWidth\":19}";
+                string oldLegacyMain = "old-main";
+                string oldLegacyOther = "old-other";
+                File.WriteAllText(workspace.PathFor("config.readboard.json"), oldJson);
+                File.WriteAllText(workspace.PathFor("config_readboard.txt"), oldLegacyMain);
+                File.WriteAllText(workspace.PathFor("config_readboard_others.txt"), oldLegacyOther);
+
+                FailureInjectingConfigFileSystem fileSystem =
+                    new FailureInjectingConfigFileSystem(failingStep);
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(
+                    workspace.RootPath, SaveMachineKey, ProtocolVersion, fileSystem);
+
+                Exception failure = Assert.Throws<IOException>(delegate
+                {
+                    store.Save(AppConfig.CreateDefault(ProtocolVersion, SaveMachineKey));
+                });
+
+                Assert.IsNotType<DurableConfigurationException>(failure);
+                Assert.Equal(oldJson, File.ReadAllText(workspace.PathFor("config.readboard.json")));
+                Assert.Equal(oldLegacyMain, File.ReadAllText(workspace.PathFor("config_readboard.txt")));
+                Assert.Equal(oldLegacyOther, File.ReadAllText(workspace.PathFor("config_readboard_others.txt")));
+                AssertNoTransactionArtifacts(workspace.RootPath);
+            }
+        }
+
+        [Fact]
+        public void Save_RollbackFailureRaisesDurableConfigurationError()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(workspace.PathFor("config.readboard.json"), "old-json");
+                File.WriteAllText(workspace.PathFor("config_readboard.txt"), "old-main");
+                File.WriteAllText(workspace.PathFor("config_readboard_others.txt"), "old-other");
+
+                FailureInjectingConfigFileSystem fileSystem =
+                    new FailureInjectingConfigFileSystem(
+                        FailurePoint.CommitLegacyOther,
+                        FailurePoint.RollbackLegacyMain);
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(
+                    workspace.RootPath, SaveMachineKey, ProtocolVersion, fileSystem);
+
+                DurableConfigurationException failure = Assert.Throws<DurableConfigurationException>(delegate
+                {
+                    store.Save(AppConfig.CreateDefault(ProtocolVersion, SaveMachineKey));
+                });
+
+                Assert.NotNull(failure.PrimaryFailure);
+                Assert.NotNull(failure.RecoveryFailure);
+                Assert.Contains("rollback failed", failure.Message);
+                AssertTransactionDirectoryRetained(workspace, failure);
+            }
+        }
+
+        [Fact]
+        public void Save_CleanupFailureRaisesDurableConfigurationErrorAndRetainsTransactionDirectory()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                FailureInjectingConfigFileSystem fileSystem =
+                    new FailureInjectingConfigFileSystem(FailurePoint.Cleanup);
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(
+                    workspace.RootPath, SaveMachineKey, ProtocolVersion, fileSystem);
+
+                DurableConfigurationException failure = Assert.Throws<DurableConfigurationException>(delegate
+                {
+                    store.Save(AppConfig.CreateDefault(ProtocolVersion, SaveMachineKey));
+                });
+
+                Assert.Null(failure.PrimaryFailure);
+                Assert.NotNull(failure.RecoveryFailure);
+                AssertTransactionDirectoryRetained(workspace, failure);
+                Assert.Contains(
+                    "\"MachineKey\": \"SECONDARY-HOST\"",
+                    File.ReadAllText(workspace.PathFor("config.readboard.json")));
+                Assert.Equal(12, File.ReadAllText(workspace.PathFor("config_readboard.txt")).Split('_').Length);
+                Assert.Equal(23, File.ReadAllText(workspace.PathFor("config_readboard_others.txt")).Split('_').Length);
+            }
+        }
+
+        [Fact]
+        public void Save_CommitFailureWithNoPreviousFilesRestoresTheAbsentFileSet()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                FailureInjectingConfigFileSystem fileSystem =
+                    new FailureInjectingConfigFileSystem(FailurePoint.CommitLegacyMain);
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(
+                    workspace.RootPath, SaveMachineKey, ProtocolVersion, fileSystem);
+
+                Exception failure = Assert.Throws<IOException>(delegate
+                {
+                    store.Save(AppConfig.CreateDefault(ProtocolVersion, SaveMachineKey));
+                });
+
+                Assert.IsNotType<DurableConfigurationException>(failure);
+                Assert.False(File.Exists(workspace.PathFor("config.readboard.json")));
+                Assert.False(File.Exists(workspace.PathFor("config_readboard.txt")));
+                Assert.False(File.Exists(workspace.PathFor("config_readboard_others.txt")));
+                AssertNoTransactionArtifacts(workspace.RootPath);
+            }
+        }
 
         [Fact]
         public void Load_ImportsLegacyFixturesAndWritesJsonMirror()
@@ -72,6 +236,7 @@ namespace Readboard.VerificationTests
                 }
                 Assert.Equal("96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5", legacyMain);
                 Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc_1_1100_680_0_host", legacyOther);
+                AssertNoTransactionArtifacts(workspace.RootPath);
             }
         }
 
@@ -562,6 +727,135 @@ namespace Readboard.VerificationTests
                 }
                 Assert.True(loaded.DebugDiagnosticsEnabled);
                 Assert.Equal(23, legacyOther.Split('_').Length);
+            }
+        }
+
+        private static void AssertNoTransactionArtifacts(string rootPath)
+        {
+            Assert.Empty(Directory.GetDirectories(rootPath, ".readboard-config-transaction-*"));
+        }
+
+        private static void AssertTransactionDirectoryRetained(
+            LegacyConfigWorkspace workspace,
+            DurableConfigurationException failure)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(failure.TransactionDirectory));
+            Assert.True(Directory.Exists(failure.TransactionDirectory));
+            Assert.Equal(
+                failure.TransactionDirectory,
+                Assert.Single(Directory.GetDirectories(workspace.RootPath, ".readboard-config-transaction-*")));
+            Assert.Contains("Transaction directory:", failure.Message);
+        }
+
+        private sealed class FailureInjectingConfigFileSystem : IConfigFileSystem
+        {
+            private readonly IConfigFileSystem physicalFileSystem = new PhysicalConfigFileSystem();
+            private readonly HashSet<FailurePoint> failurePoints;
+
+            public FailureInjectingConfigFileSystem(params FailurePoint[] failurePoints)
+            {
+                this.failurePoints = new HashSet<FailurePoint>(failurePoints);
+            }
+
+            public void CreateDirectory(string path)
+            {
+                ThrowIf(FailurePoint.BeforeStaging);
+                physicalFileSystem.CreateDirectory(path);
+            }
+
+            public bool DirectoryExists(string path)
+            {
+                return physicalFileSystem.DirectoryExists(path);
+            }
+
+            public void WriteAllText(string path, string content)
+            {
+                ThrowIf(StageFailureFor(Path.GetFileName(path)));
+                physicalFileSystem.WriteAllText(path, content);
+            }
+
+            public bool FileExists(string path)
+            {
+                return physicalFileSystem.FileExists(path);
+            }
+
+            public void Copy(string sourcePath, string destinationPath)
+            {
+                physicalFileSystem.Copy(sourcePath, destinationPath);
+            }
+
+            public void ReplaceOrMove(string sourcePath, string destinationPath)
+            {
+                string sourceFileName = Path.GetFileName(sourcePath);
+                string destinationFileName = Path.GetFileName(destinationPath);
+                if (sourceFileName.EndsWith(".backup", StringComparison.OrdinalIgnoreCase))
+                    ThrowIf(RollbackFailureFor(destinationFileName));
+                else
+                    ThrowIf(CommitFailureFor(destinationFileName));
+                physicalFileSystem.ReplaceOrMove(sourcePath, destinationPath);
+            }
+
+            public void DeleteFile(string path)
+            {
+                ThrowIf(RollbackFailureFor(Path.GetFileName(path)));
+                physicalFileSystem.DeleteFile(path);
+            }
+
+            public void DeleteDirectory(string path)
+            {
+                ThrowIf(FailurePoint.Cleanup);
+                physicalFileSystem.DeleteDirectory(path);
+            }
+
+            private void ThrowIf(FailurePoint? point)
+            {
+                if (point.HasValue && failurePoints.Contains(point.Value))
+                    throw new IOException("Injected configuration file-system failure at " + point.Value + ".");
+            }
+
+            private static FailurePoint? StageFailureFor(string fileName)
+            {
+                switch (fileName)
+                {
+                    case "config.readboard.json":
+                        return FailurePoint.StageJson;
+                    case "config_readboard.txt":
+                        return FailurePoint.StageLegacyMain;
+                    case "config_readboard_others.txt":
+                        return FailurePoint.StageLegacyOther;
+                    default:
+                        return null;
+                }
+            }
+
+            private static FailurePoint? CommitFailureFor(string fileName)
+            {
+                switch (fileName)
+                {
+                    case "config.readboard.json":
+                        return FailurePoint.CommitJson;
+                    case "config_readboard.txt":
+                        return FailurePoint.CommitLegacyMain;
+                    case "config_readboard_others.txt":
+                        return FailurePoint.CommitLegacyOther;
+                    default:
+                        return null;
+                }
+            }
+
+            private static FailurePoint? RollbackFailureFor(string fileName)
+            {
+                switch (fileName)
+                {
+                    case "config.readboard.json":
+                        return FailurePoint.RollbackJson;
+                    case "config_readboard.txt":
+                        return FailurePoint.RollbackLegacyMain;
+                    case "config_readboard_others.txt":
+                        return FailurePoint.RollbackLegacyOther;
+                    default:
+                        return null;
+                }
             }
         }
     }
