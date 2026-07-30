@@ -15,7 +15,6 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Contains("private const int TYPE_YIKE = 6;", formSource);
             Assert.Contains("private YikeWindowContext lastYikeWindowContext = YikeWindowContext.Unknown();", formSource);
-            Assert.Contains("return IsFoxSyncType(syncType) || syncType == TYPE_TYGEM || syncType == TYPE_SINA || syncType == TYPE_YIKE;", formSource);
             Assert.Contains("case TYPE_YIKE:", formSource);
             Assert.Contains("return SyncMode.Yike;", formSource);
             Assert.Contains("return ProtocolKeywords.Yike;", formSource);

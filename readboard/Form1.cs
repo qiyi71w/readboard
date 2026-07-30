@@ -117,16 +117,6 @@ namespace readboard
             return syncType == TYPE_FOX || syncType == TYPE_FOX_BACKGROUND_PLACE;
         }
 
-        private static Boolean UsesManualSelectionType(int syncType)
-        {
-            return syncType == TYPE_BACKGROUND || syncType == TYPE_FOREGROUND;
-        }
-
-        private static Boolean SupportsFastSyncType(int syncType)
-        {
-            return IsFoxSyncType(syncType) || syncType == TYPE_TYGEM || syncType == TYPE_SINA || syncType == TYPE_YIKE;
-        }
-
         private int CurrentSyncType
         {
             get
@@ -1303,64 +1293,12 @@ namespace readboard
 
         private void ApplySyncModeControlState()
         {
-            bool manualSelectionMode = UsesManualSelectionType(CurrentSyncType);
             if (CurrentSyncType != TYPE_YIKE)
                 ClearYikeContext();
-            btnCircleBoard.Enabled = manualSelectionMode;
-            btnCircleRow1.Enabled = manualSelectionMode;
-            btnClickBoard.Enabled = !manualSelectionMode;
             ApplyControlCenterNativeEnablement();
-            ApplyShowInBoardControlState();
-            ApplyAutoPlayColorAvailability();
-            ResetMainWindowTitle();
-        }
-
-        private void ApplyShowInBoardControlState()
-        {
-            bool supportsShowInBoard = controlCenterRuntime.Snapshot.ShowOnBoardEnabled;
-            chkShowInBoard.Enabled = supportsShowInBoard;
-            if (!supportsShowInBoard && chkShowInBoard.Checked)
-                chkShowInBoard.Checked = false;
-        }
-
-        private void ApplyAutoPlayColorAvailability()
-        {
-            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime == null
-                ? null
-                : controlCenterRuntime.Snapshot;
-            bool autoPlayEnabled = controlCenter == null
-                ? false
-                : controlCenter.AutoPlayEnabled;
-            bool foxAutoEnabled = controlCenter != null && controlCenter.FoxAutoColorEnabled;
-            radioBlack.Enabled = controlCenter != null && controlCenter.ManualColorEnabled;
-            radioWhite.Enabled = controlCenter != null && controlCenter.ManualColorEnabled;
-            radioAutoPlayColor.Enabled = foxAutoEnabled;
-            btnFoxAutoPlayIdentity.Enabled = IsFoxSyncType(CurrentSyncType);
-            if (!autoPlayEnabled)
+            if (controlCenterRuntime == null || !controlCenterRuntime.Snapshot.AutoPlayEnabled)
                 UpdateAutoPlayColorStatus(null);
-        }
-
-        private void SetSyncConfigurationControlsEnabled(bool enabled)
-        {
-            if (!enabled)
-            {
-                rdoFox.Enabled = false;
-                rdoFoxBack.Enabled = false;
-                rdoYike.Enabled = false;
-                rdoTygem.Enabled = false;
-                rdoBack.Enabled = false;
-                rdoSina.Enabled = false;
-                rdo19x19.Enabled = false;
-                rdo13x13.Enabled = false;
-                rdo9x9.Enabled = false;
-                rdoOtherBoard.Enabled = false;
-                rdoFore.Enabled = false;
-                txtBoardWidth.Enabled = false;
-                txtBoardHeight.Enabled = false;
-                return;
-            }
-
-            ApplyControlCenterNativeEnablement();
+            ResetMainWindowTitle();
         }
 
         private void ApplyControlCenterNativeEnablement()
@@ -1368,21 +1306,14 @@ namespace readboard
             ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime == null
                 ? null
                 : controlCenterRuntime.Snapshot;
-            bool configurationEnabled = controlCenter == null || controlCenter.ConfigurationEnabled;
-            bool manualSelectionEnabled = configurationEnabled
-                && (controlCenter == null
-                    ? UsesManualSelectionType(CurrentSyncType)
-                    : ControlCenterPreferences.UsesManualSelection(controlCenter.Platform));
-            bool customBoardDimensionsEnabled = controlCenter == null
-                ? manualSelectionEnabled && rdoOtherBoard.Checked
-                : controlCenter.CustomBoardDimensionsEnabled;
-            bool customBoardSizeEnabled = controlCenter == null
-                ? manualSelectionEnabled
-                : controlCenter.CustomBoardSizeEnabled;
-            bool twoWaySyncEnabled = controlCenter == null
-                || controlCenter.TwoWaySyncEnabled;
-            bool showOnBoardEnabled = controlCenter == null
-                || controlCenter.ShowOnBoardEnabled;
+            if (controlCenter == null)
+                return;
+
+            bool configurationEnabled = controlCenter.ConfigurationEnabled;
+            bool customBoardDimensionsEnabled = controlCenter.CustomBoardDimensionsEnabled;
+            bool customBoardSizeEnabled = controlCenter.CustomBoardSizeEnabled;
+            bool twoWaySyncEnabled = controlCenter.TwoWaySyncEnabled;
+            bool showOnBoardEnabled = controlCenter.ShowOnBoardEnabled;
 
             rdoFox.Enabled = configurationEnabled;
             rdoFoxBack.Enabled = configurationEnabled;
@@ -1399,38 +1330,22 @@ namespace readboard
             txtBoardHeight.Enabled = customBoardDimensionsEnabled;
             chkBothSync.Enabled = twoWaySyncEnabled;
             chkShowInBoard.Enabled = showOnBoardEnabled;
-            if (controlCenter != null)
-            {
-                chkAutoPlay.Enabled = controlCenter.AutoPlayToggleEnabled;
-                radioBlack.Enabled = controlCenter.ManualColorEnabled;
-                radioWhite.Enabled = controlCenter.ManualColorEnabled;
-                radioAutoPlayColor.Enabled = controlCenter.FoxAutoColorEnabled;
-                radioAutoPlayMoveFirst.Enabled = controlCenter.MoveModeEnabled;
-                radioAutoPlayMoveGma.Enabled = controlCenter.MoveModeEnabled;
-                textBox1.Enabled = controlCenter.AiTimeEnabled;
-                textBox2.Enabled = controlCenter.PlayoutsEnabled;
-                textBox3.Enabled = controlCenter.FirstPolicyEnabled;
-                btnFastSync.Enabled = controlCenter.QuickSyncEnabled;
-                btnKeepSync.Enabled = controlCenter.ContinuousSyncEnabled;
-                btnOneTimeSync.Enabled = controlCenter.OneTimeSyncEnabled;
-                btnClickBoard.Enabled = controlCenter.BoardSelectionInsideEnabled;
-                btnCircleBoard.Enabled = controlCenter.BoardSelectionRectangleEnabled;
-                btnCircleRow1.Enabled = controlCenter.BoardSelectionLine1Enabled;
-            }
-        }
-
-        private void DisableBoardSelectionControls()
-        {
-            btnCircleRow1.Enabled = false;
-            btnCircleBoard.Enabled = false;
-            btnClickBoard.Enabled = false;
-            btnOneTimeSync.Enabled = false;
-        }
-
-        private void RestoreBoardSelectionControls()
-        {
-            ApplySyncModeControlState();
-            btnOneTimeSync.Enabled = true;
+            chkAutoPlay.Enabled = controlCenter.AutoPlayToggleEnabled;
+            radioBlack.Enabled = controlCenter.ManualColorEnabled;
+            radioWhite.Enabled = controlCenter.ManualColorEnabled;
+            radioAutoPlayColor.Enabled = controlCenter.FoxAutoColorEnabled;
+            radioAutoPlayMoveFirst.Enabled = controlCenter.MoveModeEnabled;
+            radioAutoPlayMoveGma.Enabled = controlCenter.MoveModeEnabled;
+            btnFoxAutoPlayIdentity.Enabled = controlCenter.IdentityEnabled;
+            textBox1.Enabled = controlCenter.AiTimeEnabled;
+            textBox2.Enabled = controlCenter.PlayoutsEnabled;
+            textBox3.Enabled = controlCenter.FirstPolicyEnabled;
+            btnFastSync.Enabled = controlCenter.QuickSyncEnabled;
+            btnKeepSync.Enabled = controlCenter.ContinuousSyncEnabled;
+            btnOneTimeSync.Enabled = controlCenter.OneTimeSyncEnabled;
+            btnClickBoard.Enabled = controlCenter.BoardSelectionInsideEnabled;
+            btnCircleBoard.Enabled = controlCenter.BoardSelectionRectangleEnabled;
+            btnCircleRow1.Enabled = controlCenter.BoardSelectionLine1Enabled;
         }
 
         private void SetSyncBoth(bool enabled)
@@ -1638,16 +1553,6 @@ namespace readboard
             return new PixelRect(selectionX1, selectionY1, ox2 - selectionX1, oy2 - selectionY1);
         }
 
-        private AutoPlayColorMode GetSelectedAutoPlayColorMode()
-        {
-            return controlCenterRuntime.CurrentPreferences.AutoPlayColorMode;
-        }
-
-        private AutoPlayMoveMode GetSelectedAutoPlayMoveMode()
-        {
-            return controlCenterRuntime.CurrentPreferences.AutoPlayMoveMode;
-        }
-
         private void ApplyAutoPlayColorMode(AutoPlayColorMode mode)
         {
             suppressAutoPlayColorModeEvents = true;
@@ -1678,32 +1583,11 @@ namespace readboard
             {
                 radioAutoPlayMoveFirst.Checked = mode == AutoPlayMoveMode.FirstCandidate;
                 radioAutoPlayMoveGma.Checked = mode == AutoPlayMoveMode.GenmoveAnalyze;
-                if (!radioAutoPlayMoveFirst.Checked && !radioAutoPlayMoveGma.Checked)
-                    radioAutoPlayMoveFirst.Checked = true;
             }
             finally
             {
                 suppressAutoPlayMoveModeEvents = false;
             }
-            ApplyAutoPlayMoveModeControlState();
-        }
-
-        private void ApplyAutoPlayMoveModeControlState()
-        {
-            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime == null
-                ? null
-                : controlCenterRuntime.Snapshot;
-            if (controlCenter == null)
-            {
-                radioAutoPlayMoveFirst.Enabled = false;
-                radioAutoPlayMoveGma.Enabled = false;
-                textBox3.Enabled = false;
-                return;
-            }
-
-            radioAutoPlayMoveFirst.Enabled = controlCenter.MoveModeEnabled;
-            radioAutoPlayMoveGma.Enabled = controlCenter.MoveModeEnabled;
-            textBox3.Enabled = controlCenter.FirstPolicyEnabled;
         }
 
         private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)
@@ -2546,8 +2430,6 @@ namespace readboard
         {
             btnKeepSync.Text = getLangStr("stopSync");
             btnFastSync.Text = getLangStr("stopSync");
-            SetSyncConfigurationControlsEnabled(false);
-            DisableBoardSelectionControls();
             hasRetainedFoxTitleSnapshot = false;
             if (lastMainWindowTitleTurn == MainWindowTitleTurn.None)
                 lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
@@ -2585,18 +2467,12 @@ namespace readboard
                 return;
             }
             btnFastSync.Text = getLangStr("fastSync");
-            btnKeepSync.Enabled = true;
-            SetSyncConfigurationControlsEnabled(true);
-            RestoreBoardSelectionControls();
             ResetMainWindowTitle();
         }
 
         private void ApplyContinuousSyncStartedUi()
         {
             btnFastSync.Text = getLangStr("stopSync");
-            btnKeepSync.Enabled = false;
-            SetSyncConfigurationControlsEnabled(false);
-            DisableBoardSelectionControls();
             hasRetainedFoxTitleSnapshot = false;
             lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
             RefreshMainWindowTitleFromCurrentWindow();
@@ -2678,25 +2554,6 @@ namespace readboard
             }
             ApplyLoadedConfiguration();
             this.MaximizeBox = false;
-            radioWhite.Enabled = false;
-            radioBlack.Enabled = false;
-            radioAutoPlayColor.Enabled = false;
-            radioAutoPlayMoveFirst.Enabled = false;
-            radioAutoPlayMoveGma.Enabled = false;
-            btnFoxAutoPlayIdentity.Enabled = false;
-            textBox1.Enabled = false;
-            textBox2.Enabled = false;
-            textBox3.Enabled = false;
-            if (controlCenterRuntime.CurrentPreferences.TwoWaySync)
-            {
-                chkBothSync.Checked = true;
-                chkAutoPlay.Enabled = true;
-            }
-            else
-            {
-                chkBothSync.Checked = false;
-                chkAutoPlay.Enabled = false;
-            }
             this.rdoFox.Text = getLangStr("MainForm_rdoFox");
             this.rdoFoxBack.Text = getLangStr("MainForm_rdoFoxBack");
             this.rdoYike.Text = getLangStr("MainForm_rdoYike");
@@ -3194,7 +3051,12 @@ namespace readboard
 
         public void stopInBoard()
         {
-            this.chkShowInBoard.Checked = false;
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetShowOnBoard(false));
+            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
+                ProjectControlCenterState();
+            else
+                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
         [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetForegroundWindow", CharSet = System.Runtime.InteropServices.CharSet.Auto, ExactSpelling = true)]
         public static extern IntPtr GetF();

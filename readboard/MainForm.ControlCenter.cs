@@ -347,6 +347,7 @@ namespace readboard
             if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
                 return result;
 
+            ProjectControlCenterState();
             for (int i = 0; i < result.SemanticMessages.Count; i++)
             {
                 ControlCenterSemanticMessage message = result.SemanticMessages[i];

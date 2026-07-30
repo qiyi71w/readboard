@@ -1051,7 +1051,7 @@ namespace readboard
                 CustomBoardDimensionsEnabled = controlCenter.CustomBoardDimensionsEnabled,
                 PreferencesSaved = controlCenter.PreferencesSaved,
                 PersistenceError = controlCenter.PersistenceError,
-                IdentityEnabled = btnFoxAutoPlayIdentity.Enabled,
+                IdentityEnabled = controlCenter.IdentityEnabled,
                 ShowOnBoardEnabled = controlCenter.ShowOnBoardEnabled
             };
         }

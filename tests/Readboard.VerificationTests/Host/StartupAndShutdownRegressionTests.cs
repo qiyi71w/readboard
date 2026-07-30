@@ -447,21 +447,6 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void MainForm_KeepSyncStopUi_PreservesContinuousSyncLockout()
-        {
-            string source = LoadSource("readboard", "Form1.cs");
-            string methodSlice = GetMethodSlice(source, "private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)");
-
-            int lockoutIndex = IndexOfRequired(
-                methodSlice,
-                "if (!SyncToolbarTextResolver.ShouldRestoreIdleUiAfterKeepSyncStop(continuousSyncActive))");
-            int returnIndex = IndexOfRequired(methodSlice, "return;", lockoutIndex);
-            int restoreIndex = IndexOfRequired(methodSlice, "SetSyncConfigurationControlsEnabled(true);");
-
-            Assert.True(returnIndex < restoreIndex, "Continuous sync must remain locked before idle controls are restored.");
-        }
-
-        [Fact]
         public void SelectionMagnifier_DoesNotUseSelectionOverlayAsShowOwner()
         {
             string source = LoadSource("readboard", "Form2.cs");

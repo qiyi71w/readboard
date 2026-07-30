@@ -9,13 +9,9 @@ namespace readboard
         private void ApplyLoadedConfiguration()
         {
             AppConfig config = Program.CurrentContext.Config;
-            ControlCenterPreferences preferences = controlCenterRuntime.CurrentPreferences;
             ProjectControlCenterState();
             posX = config.WindowPosX;
             posY = config.WindowPosY;
-            ApplyAutoPlayColorMode(preferences.AutoPlayColorMode);
-            ApplyAutoPlayMoveMode(preferences.AutoPlayMoveMode);
-            ApplySyncModeControlState();
         }
 
         public void PersistConfiguration()

@@ -505,6 +505,7 @@ namespace readboard
         public bool AiTimeEnabled { get; set; }
         public bool PlayoutsEnabled { get; set; }
         public bool FirstPolicyEnabled { get; set; }
+        public bool IdentityEnabled { get; set; }
         public bool PreferencesSaved { get; set; }
         public string PersistenceError { get; set; }
     }
@@ -1418,6 +1419,7 @@ namespace readboard
                 PlayoutsEnabled = autoPlayEnabled,
                 FirstPolicyEnabled = autoPlayEnabled
                     && preferences.AutoPlayMoveMode == AutoPlayMoveMode.FirstCandidate,
+                IdentityEnabled = IsFoxPlatform(preferences.Platform),
                 PreferencesSaved = preferencesSaved,
                 PersistenceError = persistenceError
             };

@@ -26,6 +26,31 @@ namespace Readboard.VerificationTests.Host
             Assert.False(state.AutoPlayEnabled);
         }
 
+        public static IEnumerable<object[]> IdentityEnablementCases()
+        {
+            yield return new object[] { (int)SyncMode.Fox, true };
+            yield return new object[] { (int)SyncMode.FoxBackgroundPlace, true };
+            yield return new object[] { (int)SyncMode.Yike, false };
+            yield return new object[] { (int)SyncMode.Foreground, false };
+        }
+
+        [Theory]
+        [MemberData(nameof(IdentityEnablementCases))]
+        public void Snapshot_IdentityEnablementComesFromPlatformRuntime(
+            int platformValue,
+            bool expectedEnabled)
+        {
+            SyncMode platform = (SyncMode)platformValue;
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncMode = platform;
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(config),
+                new RecordingSessionAdapter(),
+                new RecordingPersistence());
+
+            Assert.Equal(expectedEnabled, runtime.Snapshot.IdentityEnabled);
+        }
+
         [Fact]
         public void PlatformIntent_UpdatesSessionPersistsOnceAndPublishesSavedSnapshot()
         {
