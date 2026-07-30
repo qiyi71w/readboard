@@ -64,10 +64,17 @@ namespace readboard
         public bool ContinuousSyncActive { get; set; }
         public bool QuickSyncEnabled { get; set; }
         public bool ContinuousSyncEnabled { get; set; }
+        public bool OneTimeSyncEnabled { get; set; }
         public int SyncInterval { get; set; }
         public bool AnalysisRunning { get; set; }
         public bool AnalysisStateAvailable { get; set; }
         public bool AnalysisToggleEnabled { get; set; }
+        public bool SwapOrderEnabled { get; set; }
+        public bool ForceRebuildEnabled { get; set; }
+        public bool ClearBoardEnabled { get; set; }
+        public bool BoardSelectionInsideEnabled { get; set; }
+        public bool BoardSelectionRectangleEnabled { get; set; }
+        public bool BoardSelectionLine1Enabled { get; set; }
         public bool ConfigurationEnabled { get; set; }
         public bool TwoWaySyncEnabled { get; set; }
         public bool AutoPlayToggleEnabled { get; set; }

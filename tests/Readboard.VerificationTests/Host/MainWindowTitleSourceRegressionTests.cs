@@ -53,7 +53,7 @@ namespace Readboard.VerificationTests.Host
         {
             string source = LoadSource("readboard", "Form1.cs");
             string updateHandleSlice = GetMethodSlice(source, "void ISyncCoordinatorHost.UpdateSelectedWindowHandle(\n            IntPtr handle,");
-            string forceRebuildSlice = GetMethodSlice(source, "private void btnForceRebuild_Click(object sender, EventArgs e)");
+            string forceRebuildSlice = GetMethodSlice(source, "private void ArmForceRebuildAction()");
 
             Assert.Contains(
                 "hasRetainedFoxTitleSnapshot = false;",
@@ -91,7 +91,7 @@ namespace Readboard.VerificationTests.Host
         public void MainForm_OneTimeSyncRetainsOnlySuccessfulFoxSnapshots()
         {
             string source = LoadSource("readboard", "Form1.cs");
-            string oneTimeSyncSlice = GetMethodSlice(source, "private void oneTimeSync()");
+            string oneTimeSyncSlice = GetMethodSlice(source, "private bool TryRunOneTimeSyncAction()");
 
             Assert.Contains("hasRetainedFoxTitleSnapshot = false;", oneTimeSyncSlice);
             Assert.Contains("sessionCoordinator.TryRunOneTimeSync();", oneTimeSyncSlice);

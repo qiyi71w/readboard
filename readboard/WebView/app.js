@@ -55,10 +55,17 @@
       continuousSyncActive: false,
       quickSyncEnabled: true,
       continuousSyncEnabled: true,
+      oneTimeSyncEnabled: true,
       syncInterval: 200,
       analysisRunning: false,
       analysisStateAvailable: false,
-      analysisToggleEnabled: true,
+      analysisToggleEnabled: false,
+      swapOrderEnabled: true,
+      forceRebuildEnabled: true,
+      clearBoardEnabled: true,
+      boardSelectionInsideEnabled: true,
+      boardSelectionRectangleEnabled: false,
+      boardSelectionLine1Enabled: false,
       configurationEnabled: true,
       twoWaySyncEnabled: true,
       autoPlayToggleEnabled: true,
@@ -309,7 +316,14 @@
     text("analysis-label", control.analysisRunning ? t("WebView_pauseAnalysis", "暂停分析") : t("WebView_resumeAnalysis", "继续分析"));
     setDisabled('[data-command="sync.quick"]', !control.quickSyncEnabled);
     setDisabled('[data-command="sync.continuous"]', !control.continuousSyncEnabled);
-    setDisabled('[data-command="sync.toggleAnalysis"]', !control.analysisToggleEnabled || (!control.analysisRunning && !control.analysisStateAvailable));
+    setDisabled('[data-command="sync.once"]', !control.oneTimeSyncEnabled);
+    setDisabled('[data-command="sync.toggleAnalysis"]', !control.analysisToggleEnabled);
+    setDisabled('[data-command="sync.swapOrder"]', !control.swapOrderEnabled);
+    setDisabled('[data-command="sync.rebuild"]', !control.forceRebuildEnabled);
+    setDisabled('[data-command="sync.clearBoard"]', !control.clearBoardEnabled);
+    setDisabled('[data-command="board.select"][data-board-mode="inside"]', !control.boardSelectionInsideEnabled);
+    setDisabled('[data-command="board.select"][data-board-mode="rectangle"]', !control.boardSelectionRectangleEnabled);
+    setDisabled('[data-command="board.select"][data-board-mode="line1"]', !control.boardSelectionLine1Enabled);
     const quick = $("[data-command='sync.quick']");
     if (quick) {
       quick.classList.toggle("running", Boolean(control.quickSyncActive));

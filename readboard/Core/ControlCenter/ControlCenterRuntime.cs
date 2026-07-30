@@ -474,8 +474,18 @@ namespace readboard
         public bool PlacementRegionResolved { get; set; }
         public bool QuickSyncActive { get; set; }
         public bool ContinuousSyncActive { get; set; }
+        public bool QuickSyncEnabled { get; set; }
+        public bool ContinuousSyncEnabled { get; set; }
+        public bool OneTimeSyncEnabled { get; set; }
         public bool AnalysisRunning { get; set; }
         public bool AnalysisStateAvailable { get; set; }
+        public bool AnalysisToggleEnabled { get; set; }
+        public bool SwapOrderEnabled { get; set; }
+        public bool ForceRebuildEnabled { get; set; }
+        public bool ClearBoardEnabled { get; set; }
+        public bool BoardSelectionInsideEnabled { get; set; }
+        public bool BoardSelectionRectangleEnabled { get; set; }
+        public bool BoardSelectionLine1Enabled { get; set; }
         public string LastSync { get; set; }
         public int StoneCount { get; set; }
         public string Duration { get; set; }
@@ -632,6 +642,21 @@ namespace readboard
             publishSnapshot();
             return true;
         }
+
+        public static bool PublishIfNeeded(
+            ControlCenterActionApplyResult result,
+            Action publishSnapshot)
+        {
+            if (result == null)
+                throw new ArgumentNullException("result");
+            if (!result.ShouldPublishSnapshot)
+                return false;
+            if (publishSnapshot == null)
+                throw new ArgumentNullException("publishSnapshot");
+
+            publishSnapshot();
+            return true;
+        }
     }
 
     internal interface IControlCenterSessionAdapter
@@ -675,6 +700,7 @@ namespace readboard
     {
         private readonly IControlCenterSessionAdapter sessionAdapter;
         private readonly IControlCenterPreferencePersistence persistence;
+        private readonly IControlCenterActionAdapter actionAdapter;
         private readonly object observationSyncRoot = new object();
         private ControlCenterPreferences preferences;
         private ControlCenterSessionState sessionState;
@@ -691,7 +717,8 @@ namespace readboard
                 initialPreferences,
                 new ControlCenterSessionState(),
                 sessionAdapter,
-                persistence)
+                persistence,
+                new RejectingControlCenterActionAdapter())
         {
         }
 
@@ -700,6 +727,21 @@ namespace readboard
             ControlCenterSessionState initialSessionState,
             IControlCenterSessionAdapter sessionAdapter,
             IControlCenterPreferencePersistence persistence)
+            : this(
+                initialPreferences,
+                initialSessionState,
+                sessionAdapter,
+                persistence,
+                new RejectingControlCenterActionAdapter())
+        {
+        }
+
+        public ControlCenterRuntime(
+            ControlCenterPreferences initialPreferences,
+            ControlCenterSessionState initialSessionState,
+            IControlCenterSessionAdapter sessionAdapter,
+            IControlCenterPreferencePersistence persistence,
+            IControlCenterActionAdapter actionAdapter)
         {
             preferences = initialPreferences == null
                 ? throw new ArgumentNullException("initialPreferences")
@@ -719,6 +761,7 @@ namespace readboard
             preferences.AutoPlayMoveMode = AppConfig.NormalizeAutoPlayMoveMode(preferences.AutoPlayMoveMode);
             this.sessionAdapter = sessionAdapter ?? throw new ArgumentNullException("sessionAdapter");
             this.persistence = persistence ?? throw new ArgumentNullException("persistence");
+            this.actionAdapter = actionAdapter ?? throw new ArgumentNullException("actionAdapter");
             preferencesSaved = true;
         }
 
@@ -984,6 +1027,35 @@ namespace readboard
                 BuildSnapshot());
         }
 
+        public ControlCenterActionApplyResult ApplyAction(ControlCenterActionIntent intent)
+        {
+            if (intent == null)
+                throw new ArgumentNullException("intent");
+
+            IList<ControlCenterActionEffect> effects;
+            if (!TryPlanAction(intent, out effects))
+                return new ControlCenterActionApplyResult(
+                    ControlCenterActionApplyOutcome.Rejected,
+                    BuildSnapshot());
+
+            for (int i = 0; i < effects.Count; i++)
+            {
+                ControlCenterActionExecutionOutcome execution = actionAdapter.Execute(effects[i]);
+                if (execution == ControlCenterActionExecutionOutcome.Rejected)
+                    return new ControlCenterActionApplyResult(
+                        ControlCenterActionApplyOutcome.Rejected,
+                        BuildSnapshot());
+                if (execution == ControlCenterActionExecutionOutcome.NoOp)
+                    return new ControlCenterActionApplyResult(
+                        ControlCenterActionApplyOutcome.NoOp,
+                        BuildSnapshot());
+            }
+
+            return new ControlCenterActionApplyResult(
+                ControlCenterActionApplyOutcome.Accepted,
+                BuildSnapshot());
+        }
+
         public void MarkPersistenceSucceeded()
         {
             preferencesSaved = true;
@@ -996,6 +1068,82 @@ namespace readboard
             persistenceError = exception == null
                 ? "Configuration persistence failed."
                 : exception.Message;
+        }
+
+        private bool TryPlanAction(
+            ControlCenterActionIntent intent,
+            out IList<ControlCenterActionEffect> effects)
+        {
+            effects = new List<ControlCenterActionEffect>();
+            ControlCenterRuntimeSnapshot snapshot = BuildSnapshot();
+            switch (intent.Kind)
+            {
+                case ControlCenterActionKind.QuickSync:
+                    if (!snapshot.QuickSyncEnabled)
+                        return false;
+                    effects.Add(snapshot.QuickSyncActive || snapshot.ContinuousSyncActive
+                        ? ControlCenterActionEffect.StopSync()
+                        : ControlCenterActionEffect.StartQuickSync());
+                    return true;
+                case ControlCenterActionKind.ContinuousSync:
+                    if (!snapshot.ContinuousSyncEnabled)
+                        return false;
+                    effects.Add(snapshot.ContinuousSyncActive
+                        ? ControlCenterActionEffect.StopSync()
+                        : ControlCenterActionEffect.StartContinuousSync());
+                    return true;
+                case ControlCenterActionKind.OneTimeSync:
+                    if (!snapshot.OneTimeSyncEnabled)
+                        return false;
+                    effects.Add(ControlCenterActionEffect.RunOneTimeSync());
+                    return true;
+                case ControlCenterActionKind.ToggleAnalysis:
+                    if (!snapshot.AnalysisToggleEnabled)
+                        return false;
+                    effects.Add(snapshot.AnalysisRunning
+                        ? ControlCenterActionEffect.PauseAnalysis()
+                        : ControlCenterActionEffect.ResumeAnalysis());
+                    return true;
+                case ControlCenterActionKind.SwapOrder:
+                    if (!snapshot.SwapOrderEnabled)
+                        return false;
+                    effects.Add(ControlCenterActionEffect.SwapOrder());
+                    return true;
+                case ControlCenterActionKind.ForceRebuild:
+                    if (!snapshot.ForceRebuildEnabled)
+                        return false;
+                    effects.Add(ControlCenterActionEffect.ForceRebuild());
+                    return true;
+                case ControlCenterActionKind.ClearBoard:
+                    if (!snapshot.ClearBoardEnabled)
+                        return false;
+                    effects.Add(ControlCenterActionEffect.ClearBoard());
+                    return true;
+                case ControlCenterActionKind.SelectBoard:
+                    if (!IsBoardSelectionEnabled(snapshot, intent.BoardSelectionMode))
+                        return false;
+                    effects.Add(ControlCenterActionEffect.SelectBoard(intent.BoardSelectionMode));
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsBoardSelectionEnabled(
+            ControlCenterRuntimeSnapshot snapshot,
+            ControlCenterBoardSelectionMode mode)
+        {
+            switch (mode)
+            {
+                case ControlCenterBoardSelectionMode.Inside:
+                    return snapshot.BoardSelectionInsideEnabled;
+                case ControlCenterBoardSelectionMode.Rectangle:
+                    return snapshot.BoardSelectionRectangleEnabled;
+                case ControlCenterBoardSelectionMode.Line1:
+                    return snapshot.BoardSelectionLine1Enabled;
+                default:
+                    return false;
+            }
         }
 
         private bool TryBuildCandidate(
@@ -1191,7 +1339,14 @@ namespace readboard
 
         private ControlCenterRuntimeSnapshot BuildSnapshot()
         {
-            bool configurationEnabled = !sessionAdapter.HasActiveSyncOperation;
+            bool liveSyncOperationActive = sessionAdapter.HasActiveSyncOperation;
+            bool configurationEnabled = !liveSyncOperationActive;
+            bool quickSyncEnabled = IsFastSyncPlatform(preferences.Platform);
+            bool continuousSyncEnabled = !sessionState.QuickSyncActive;
+            bool oneTimeSyncEnabled = !sessionState.QuickSyncActive
+                && !sessionState.ContinuousSyncActive
+                && !liveSyncOperationActive;
+            bool boardSelectionEnabled = oneTimeSyncEnabled;
             AutoPlayColorResolution autoPlayColor = ResolveAutoPlayColor();
             bool autoPlayEnabled = sessionState.AutoPlayEnabled;
             bool autoPlayToggleEnabled = preferences.TwoWaySync;
@@ -1224,8 +1379,22 @@ namespace readboard
                 PlacementRegionResolved = sessionState.PlacementRegionResolved,
                 QuickSyncActive = sessionState.QuickSyncActive,
                 ContinuousSyncActive = sessionState.ContinuousSyncActive,
+                QuickSyncEnabled = quickSyncEnabled,
+                ContinuousSyncEnabled = continuousSyncEnabled,
+                OneTimeSyncEnabled = oneTimeSyncEnabled,
                 AnalysisRunning = sessionState.AnalysisRunning,
                 AnalysisStateAvailable = sessionState.AnalysisStateAvailable,
+                AnalysisToggleEnabled = sessionState.AnalysisStateAvailable
+                    || sessionState.AnalysisRunning,
+                SwapOrderEnabled = true,
+                ForceRebuildEnabled = true,
+                ClearBoardEnabled = true,
+                BoardSelectionInsideEnabled = boardSelectionEnabled
+                    && !ControlCenterPreferences.UsesManualSelection(preferences.Platform),
+                BoardSelectionRectangleEnabled = boardSelectionEnabled
+                    && ControlCenterPreferences.UsesManualSelection(preferences.Platform),
+                BoardSelectionLine1Enabled = boardSelectionEnabled
+                    && ControlCenterPreferences.UsesManualSelection(preferences.Platform),
                 LastSync = sessionState.LastSync,
                 StoneCount = sessionState.StoneCount,
                 Duration = sessionState.Duration,
@@ -1252,6 +1421,15 @@ namespace readboard
                 PreferencesSaved = preferencesSaved,
                 PersistenceError = persistenceError
             };
+        }
+
+        private static bool IsFastSyncPlatform(SyncMode platform)
+        {
+            return platform == SyncMode.Fox
+                || platform == SyncMode.FoxBackgroundPlace
+                || platform == SyncMode.Yike
+                || platform == SyncMode.Tygem
+                || platform == SyncMode.Sina;
         }
 
         private static bool SetIfDifferent<T>(

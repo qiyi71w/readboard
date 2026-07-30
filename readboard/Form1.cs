@@ -1309,7 +1309,6 @@ namespace readboard
             btnCircleBoard.Enabled = manualSelectionMode;
             btnCircleRow1.Enabled = manualSelectionMode;
             btnClickBoard.Enabled = !manualSelectionMode;
-            btnFastSync.Enabled = SupportsFastSyncType(CurrentSyncType);
             ApplyControlCenterNativeEnablement();
             ApplyShowInBoardControlState();
             ApplyAutoPlayColorAvailability();
@@ -1411,6 +1410,12 @@ namespace readboard
                 textBox1.Enabled = controlCenter.AiTimeEnabled;
                 textBox2.Enabled = controlCenter.PlayoutsEnabled;
                 textBox3.Enabled = controlCenter.FirstPolicyEnabled;
+                btnFastSync.Enabled = controlCenter.QuickSyncEnabled;
+                btnKeepSync.Enabled = controlCenter.ContinuousSyncEnabled;
+                btnOneTimeSync.Enabled = controlCenter.OneTimeSyncEnabled;
+                btnClickBoard.Enabled = controlCenter.BoardSelectionInsideEnabled;
+                btnCircleBoard.Enabled = controlCenter.BoardSelectionRectangleEnabled;
+                btnCircleRow1.Enabled = controlCenter.BoardSelectionLine1Enabled;
             }
         }
 
@@ -2656,7 +2661,8 @@ namespace readboard
                 new MainFormControlCenterSessionAdapter(this),
                 new AppConfigControlCenterPreferencePersistence(
                     delegate { return Program.CurrentConfig; },
-                    Program.SaveAppConfig));
+                    Program.SaveAppConfig),
+                new MainFormControlCenterActionAdapter(this));
             this.controlCenterRuntime.UpdateAutoPlayObservation(
                 Program.CurrentConfig.FoxAutoPlayNicknameSignature,
                 FoxWindowContext.Unknown(),
@@ -2914,13 +2920,13 @@ namespace readboard
 
         private void button3_Click(object sender, EventArgs e)
         {
-            mouseHook.Enabled = true;
-            clicked = true;
+            ApplyNativeControlCenterAction(ControlCenterActionIntent.SelectBoard(
+                ControlCenterBoardSelectionMode.Inside));
         }
 
         private void button4_Click(object sender, EventArgs e)
         {
-            oneTimeSync();
+            ApplyNativeControlCenterAction(ControlCenterActionIntent.OneTimeSync());
         }
 
         [DllImport("user32.dll")]
@@ -2936,20 +2942,21 @@ namespace readboard
             return WindowFromPoint(p);
         }
 
-        private void oneTimeSync()
+        private bool TryRunOneTimeSyncAction()
         {
             hasRetainedFoxTitleSnapshot = false;
             bool oneTimeSyncSucceeded = sessionCoordinator.TryRunOneTimeSync();
             if (!oneTimeSyncSucceeded)
             {
                 ResetMainWindowTitle();
-                return;
+                return false;
             }
             if (IsFoxSyncType(CurrentSyncType))
             {
                 hasRetainedFoxTitleSnapshot = true;
                 ApplyMainWindowTitle();
             }
+            return true;
         }
 
         public void resetBtnKeepSyncName()
@@ -2963,18 +2970,7 @@ namespace readboard
 
         private void button5_Click(object sender, EventArgs e)
         {
-            if (sessionCoordinator.IsContinuousSyncing)
-            {
-                sessionCoordinator.EndContinuousSync();
-            }
-            if (!sessionCoordinator.StartedSync)
-            {
-                sessionCoordinator.TryStartKeepSync();
-            }
-            else
-            {
-                stopSync();
-            }
+            ApplyNativeControlCenterAction(ControlCenterActionIntent.ContinuousSync());
         }
 
         private void stopSync()
@@ -2984,10 +2980,15 @@ namespace readboard
 
         private void button6_Click(object sender, EventArgs e)
         {
-            SendClearCommand();
+            ApplyNativeControlCenterAction(ControlCenterActionIntent.ClearBoard());
         }
 
         private void btnForceRebuild_Click(object sender, EventArgs e)
+        {
+            ApplyNativeControlCenterAction(ControlCenterActionIntent.ForceRebuild());
+        }
+
+        private void ArmForceRebuildAction()
         {
             sessionCoordinator.ArmForceRebuild();
             if (HasActiveSyncOperation())
@@ -3542,7 +3543,7 @@ namespace readboard
 
         private void button8_Click(object sender, EventArgs e)
         {
-            SendPassCommand();
+            ApplyNativeControlCenterAction(ControlCenterActionIntent.SwapOrder());
         }
 
         private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)
@@ -3582,25 +3583,42 @@ namespace readboard
 
         private void button10_Click(object sender, EventArgs e)
         {
-            if (!sessionCoordinator.IsContinuousSyncing && !sessionCoordinator.StartedSync)
-            {
-                sessionCoordinator.TryStartContinuousSync();
-            }
-            else
-            {
-                stopSync();
-            }
+            ApplyNativeControlCenterAction(ControlCenterActionIntent.QuickSync());
         }
 
         private void Button2_Click(object sender, EventArgs e)
         {
-            isMannulCircle = false;
-            selectBoard();
+            ApplyNativeControlCenterAction(ControlCenterActionIntent.SelectBoard(
+                ControlCenterBoardSelectionMode.Rectangle));
         }
 
         private void button11_Click(object sender, EventArgs e)
         {
-            isMannulCircle = true;
+            ApplyNativeControlCenterAction(ControlCenterActionIntent.SelectBoard(
+                ControlCenterBoardSelectionMode.Line1));
+        }
+
+        private void ApplyNativeBoardSelection(ControlCenterBoardSelectionMode mode)
+        {
+            if (mode == ControlCenterBoardSelectionMode.Inside)
+            {
+                mouseHook.Enabled = true;
+                clicked = true;
+                return;
+            }
+
+            if (mode == ControlCenterBoardSelectionMode.Rectangle)
+            {
+                isMannulCircle = false;
+            }
+            else if (mode == ControlCenterBoardSelectionMode.Line1)
+            {
+                isMannulCircle = true;
+            }
+            else
+            {
+                throw new ArgumentOutOfRangeException("mode");
+            }
             selectBoard();
         }
 

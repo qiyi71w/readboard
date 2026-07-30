@@ -127,12 +127,30 @@ namespace Readboard.VerificationTests.Host
         [Fact]
         public void WebViewClearBoard_UsesAtomicStopAndClearOperation()
         {
-            string source = LoadSource("readboard", "MainForm.WebView.cs");
-            int commandIndex = source.IndexOf("case \"sync.clearBoard\":", StringComparison.Ordinal);
-            int operationIndex = source.IndexOf("sessionCoordinator.StopSyncSessionAndClearBoard();", commandIndex, StringComparison.Ordinal);
+            string webViewSource = LoadSource("readboard", "MainForm.WebView.cs");
+            string adapterSource = LoadSource("readboard", "MainForm.ControlCenter.cs");
+            string formSource = LoadSource("readboard", "Form1.cs");
+            int commandIndex = webViewSource.IndexOf("case \"sync.clearBoard\":", StringComparison.Ordinal);
+            int dispatchIndex = webViewSource.IndexOf("return HandleControlCenterAction(command);", commandIndex, StringComparison.Ordinal);
 
             Assert.True(commandIndex >= 0);
-            Assert.True(operationIndex > commandIndex);
+            Assert.True(dispatchIndex > commandIndex);
+            Assert.Contains("form.SendClearCommand();", adapterSource);
+            Assert.Contains("sessionCoordinator.StopSyncSessionAndClearBoard();", formSource);
+        }
+
+        [Fact]
+        public void WebViewActionHandler_LeavesSingleSnapshotPublicationToOuterDispatcher()
+        {
+            string source = LoadSource("readboard", "MainForm.WebView.cs");
+            int start = source.IndexOf("private bool HandleControlCenterAction(", StringComparison.Ordinal);
+            int end = source.IndexOf("private static bool TryReadInteger(", start, StringComparison.Ordinal);
+
+            Assert.True(start >= 0);
+            Assert.True(end > start);
+            string slice = source.Substring(start, end - start);
+            Assert.Contains("return result.ShouldPublishSnapshot;", slice);
+            Assert.DoesNotContain("ControlCenterSnapshotPublisher.PublishIfNeeded", slice);
         }
 
         [Fact]

@@ -132,6 +132,61 @@ namespace readboard
             }
         }
 
+        private sealed class MainFormControlCenterActionAdapter : IControlCenterActionAdapter
+        {
+            private readonly MainForm form;
+
+            public MainFormControlCenterActionAdapter(MainForm form)
+            {
+                this.form = form ?? throw new ArgumentNullException("form");
+            }
+
+            public ControlCenterActionExecutionOutcome Execute(ControlCenterActionEffect effect)
+            {
+                if (effect == null)
+                    throw new ArgumentNullException("effect");
+
+                switch (effect.Kind)
+                {
+                    case ControlCenterActionEffectKind.StartQuickSync:
+                        return form.sessionCoordinator.TryStartContinuousSync()
+                            ? ControlCenterActionExecutionOutcome.Applied
+                            : ControlCenterActionExecutionOutcome.Rejected;
+                    case ControlCenterActionEffectKind.StopSync:
+                        form.stopSync();
+                        return ControlCenterActionExecutionOutcome.Applied;
+                    case ControlCenterActionEffectKind.StartContinuousSync:
+                        return form.sessionCoordinator.TryStartKeepSync()
+                            ? ControlCenterActionExecutionOutcome.Applied
+                            : ControlCenterActionExecutionOutcome.Rejected;
+                    case ControlCenterActionEffectKind.RunOneTimeSync:
+                        return form.TryRunOneTimeSyncAction()
+                            ? ControlCenterActionExecutionOutcome.Applied
+                            : ControlCenterActionExecutionOutcome.Rejected;
+                    case ControlCenterActionEffectKind.ResumeAnalysis:
+                        form.sessionCoordinator.SendResumePonder();
+                        return ControlCenterActionExecutionOutcome.Applied;
+                    case ControlCenterActionEffectKind.PauseAnalysis:
+                        form.sessionCoordinator.SendNoPonder();
+                        return ControlCenterActionExecutionOutcome.Applied;
+                    case ControlCenterActionEffectKind.SwapOrder:
+                        form.SendPassCommand();
+                        return ControlCenterActionExecutionOutcome.Applied;
+                    case ControlCenterActionEffectKind.ForceRebuild:
+                        form.ArmForceRebuildAction();
+                        return ControlCenterActionExecutionOutcome.Applied;
+                    case ControlCenterActionEffectKind.ClearBoard:
+                        form.SendClearCommand();
+                        return ControlCenterActionExecutionOutcome.Applied;
+                    case ControlCenterActionEffectKind.SelectBoard:
+                        form.ApplyNativeBoardSelection(effect.BoardSelectionMode);
+                        return ControlCenterActionExecutionOutcome.Applied;
+                    default:
+                        throw new ArgumentOutOfRangeException("effect");
+                }
+            }
+        }
+
         private void ApplyControlCenterBoardSelection(ControlCenterPreferences preferences)
         {
             if (preferences.BoardSizeKind == ControlCenterBoardSizeKind.Custom)
@@ -177,6 +232,25 @@ namespace readboard
             {
                 suppressWebViewStatePublication = false;
             }
+        }
+
+        private ControlCenterActionApplyResult ApplyControlCenterAction(ControlCenterActionIntent intent)
+        {
+            suppressWebViewStatePublication = true;
+            try
+            {
+                return controlCenterRuntime.ApplyAction(intent);
+            }
+            finally
+            {
+                suppressWebViewStatePublication = false;
+            }
+        }
+
+        private void ApplyNativeControlCenterAction(ControlCenterActionIntent intent)
+        {
+            ControlCenterActionApplyResult result = ApplyControlCenterAction(intent);
+            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
         }
 
         private void ApplyControlCenterTwoWaySyncEffect()

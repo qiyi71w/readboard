@@ -216,7 +216,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("control.quickSyncActive ? t(\"WebView_stopQuickSync\", \"停止快速同步\") : t(\"WebView_quickSync\", \"快速同步\")", script);
             Assert.Contains("control.continuousSyncActive ? t(\"WebView_stopContinuousSync\", \"停止持续同步\") : t(\"WebView_continuousSync\", \"持续同步\")", script);
             Assert.Contains("control.analysisRunning ? t(\"WebView_pauseAnalysis\", \"暂停分析\") : t(\"WebView_resumeAnalysis\", \"继续分析\")", script);
-            Assert.Contains("!control.analysisRunning && !control.analysisStateAvailable", script);
+            Assert.Contains("!control.analysisToggleEnabled", script);
         }
 
         [Fact]

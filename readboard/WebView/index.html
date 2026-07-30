@@ -103,9 +103,9 @@
 
         <fieldset class="card compact"><legend data-i18n="WebView_boardSelection">棋盘选择方式</legend>
           <div class="board-select-grid">
-            <button class="selected" type="button" data-command="board.select" data-payload='{"mode":"inside"}'><i class="icon">&#xE7C9;</i><span data-i18n="MainForm_btnClickBoard">选择棋盘(点击棋盘内部)</span></button>
-            <button type="button" data-command="board.select" data-payload='{"mode":"rectangle"}'><i class="icon">&#xE9A6;</i><span data-i18n="MainForm_btnCircleBoard">框选棋盘</span></button>
-            <button type="button" data-command="board.select" data-payload='{"mode":"line1"}'><i class="icon">&#xE9A6;</i><span data-i18n="MainForm_btnCircleRow1">框选1路线</span></button>
+            <button class="selected" type="button" data-command="board.select" data-board-mode="inside" data-payload='{"mode":"inside"}'><i class="icon">&#xE7C9;</i><span data-i18n="MainForm_btnClickBoard">选择棋盘(点击棋盘内部)</span></button>
+            <button type="button" data-command="board.select" data-board-mode="rectangle" data-payload='{"mode":"rectangle"}'><i class="icon">&#xE9A6;</i><span data-i18n="MainForm_btnCircleBoard">框选棋盘</span></button>
+            <button type="button" data-command="board.select" data-board-mode="line1" data-payload='{"mode":"line1"}'><i class="icon">&#xE9A6;</i><span data-i18n="MainForm_btnCircleRow1">框选1路线</span></button>
             <label><input id="show-on-board" type="checkbox"><span data-i18n="MainForm_chkShowInBoard">原棋盘上显示选点</span></label>
           </div>
         </fieldset>

@@ -320,33 +320,14 @@ namespace readboard
                 case "control.update":
                     return HandleControlUpdate(command.Payload);
                 case "sync.quick":
-                    if (SupportsFastSyncType(CurrentSyncType)
-                        && (!sessionCoordinator.StartedSync || sessionCoordinator.IsContinuousSyncing))
-                        button10_Click(this, EventArgs.Empty);
-                    break;
                 case "sync.continuous":
-                    if (!sessionCoordinator.IsContinuousSyncing)
-                        button5_Click(this, EventArgs.Empty);
-                    break;
                 case "sync.once":
-                    if (!HasActiveSyncOperation())
-                        button4_Click(this, EventArgs.Empty);
-                    break;
                 case "sync.toggleAnalysis":
-                    HandleWebViewToggleAnalysis();
-                    break;
                 case "sync.swapOrder":
-                    button8_Click(this, EventArgs.Empty);
-                    break;
                 case "sync.rebuild":
-                    btnForceRebuild_Click(this, EventArgs.Empty);
-                    break;
                 case "sync.clearBoard":
-                    sessionCoordinator.StopSyncSessionAndClearBoard();
-                    break;
                 case "board.select":
-                    HandleBoardSelect(command.Payload);
-                    break;
+                    return HandleControlCenterAction(command);
                 case "rules.openManual":
                     OpenWebViewManual();
                     break;
@@ -621,6 +602,88 @@ namespace readboard
             return false;
         }
 
+        internal static bool TryCreateControlCenterActionIntent(
+            ReadBoardUiCommand command,
+            out ControlCenterActionIntent intent)
+        {
+            intent = null;
+            if (command == null)
+                return false;
+
+            switch (command.Type)
+            {
+                case "sync.quick":
+                    if (!HasEmptyPayload(command.Payload))
+                        return false;
+                    intent = ControlCenterActionIntent.QuickSync();
+                    return true;
+                case "sync.continuous":
+                    if (!HasEmptyPayload(command.Payload))
+                        return false;
+                    intent = ControlCenterActionIntent.ContinuousSync();
+                    return true;
+                case "sync.once":
+                    if (!HasEmptyPayload(command.Payload))
+                        return false;
+                    intent = ControlCenterActionIntent.OneTimeSync();
+                    return true;
+                case "sync.toggleAnalysis":
+                    if (!HasEmptyPayload(command.Payload))
+                        return false;
+                    intent = ControlCenterActionIntent.ToggleAnalysis();
+                    return true;
+                case "sync.swapOrder":
+                    if (!HasEmptyPayload(command.Payload))
+                        return false;
+                    intent = ControlCenterActionIntent.SwapOrder();
+                    return true;
+                case "sync.rebuild":
+                    if (!HasEmptyPayload(command.Payload))
+                        return false;
+                    intent = ControlCenterActionIntent.ForceRebuild();
+                    return true;
+                case "sync.clearBoard":
+                    if (!HasEmptyPayload(command.Payload))
+                        return false;
+                    intent = ControlCenterActionIntent.ClearBoard();
+                    return true;
+                case "board.select":
+                    return TryCreateBoardSelectionIntent(command.Payload, out intent);
+                default:
+                    return false;
+            }
+        }
+
+        private static bool TryCreateBoardSelectionIntent(
+            JsonElement payload,
+            out ControlCenterActionIntent intent)
+        {
+            intent = null;
+            if (payload.ValueKind != JsonValueKind.Object
+                || CountProperties(payload) != 1
+                || !payload.TryGetProperty("mode", out JsonElement modeValue)
+                || modeValue.ValueKind != JsonValueKind.String)
+                return false;
+
+            switch (modeValue.GetString())
+            {
+                case "inside":
+                    intent = ControlCenterActionIntent.SelectBoard(
+                        ControlCenterBoardSelectionMode.Inside);
+                    return true;
+                case "rectangle":
+                    intent = ControlCenterActionIntent.SelectBoard(
+                        ControlCenterBoardSelectionMode.Rectangle);
+                    return true;
+                case "line1":
+                    intent = ControlCenterActionIntent.SelectBoard(
+                        ControlCenterBoardSelectionMode.Line1);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         private static bool TryParseAutoPlayColorMode(
             string value,
             out AutoPlayColorMode mode)
@@ -741,6 +804,15 @@ namespace readboard
             return false;
         }
 
+        private bool HandleControlCenterAction(ReadBoardUiCommand command)
+        {
+            ControlCenterActionIntent intent;
+            if (!TryCreateControlCenterActionIntent(command, out intent))
+                return false;
+            ControlCenterActionApplyResult result = ApplyControlCenterAction(intent);
+            return result.ShouldPublishSnapshot;
+        }
+
         private static bool TryReadInteger(JsonElement value, bool allowEmpty, int minimum, out int parsed)
         {
             parsed = 0;
@@ -750,19 +822,6 @@ namespace readboard
             if (allowEmpty && string.IsNullOrEmpty(text))
                 return true;
             return int.TryParse(text, out parsed) && parsed >= minimum;
-        }
-
-        private void HandleBoardSelect(JsonElement payload)
-        {
-            if (HasActiveSyncOperation())
-                return;
-            string mode = payload.GetProperty("mode").GetString();
-            if (mode == "inside" && !UsesManualSelectionType(CurrentSyncType))
-                button3_Click(this, EventArgs.Empty);
-            else if (mode == "rectangle" && UsesManualSelectionType(CurrentSyncType))
-                Button2_Click(this, EventArgs.Empty);
-            else if (mode == "line1" && UsesManualSelectionType(CurrentSyncType))
-                button11_Click(this, EventArgs.Empty);
         }
 
         private static int CountProperties(JsonElement value)
@@ -971,13 +1030,19 @@ namespace readboard
                 ShowOnBoard = controlCenter.ShowOnBoard,
                 QuickSyncActive = controlCenter.QuickSyncActive,
                 ContinuousSyncActive = controlCenter.ContinuousSyncActive,
-                QuickSyncEnabled = SupportsFastSyncType(CurrentSyncType)
-                    && (!controlCenter.ContinuousSyncActive || controlCenter.QuickSyncActive),
-                ContinuousSyncEnabled = !controlCenter.QuickSyncActive,
+                QuickSyncEnabled = controlCenter.QuickSyncEnabled,
+                ContinuousSyncEnabled = controlCenter.ContinuousSyncEnabled,
+                OneTimeSyncEnabled = controlCenter.OneTimeSyncEnabled,
                 SyncInterval = Program.timeinterval,
-                AnalysisRunning = controlCenter.AnalysisStateAvailable && controlCenter.AnalysisRunning,
+                AnalysisRunning = controlCenter.AnalysisRunning,
                 AnalysisStateAvailable = controlCenter.AnalysisStateAvailable,
-                AnalysisToggleEnabled = controlCenter.AnalysisStateAvailable,
+                AnalysisToggleEnabled = controlCenter.AnalysisToggleEnabled,
+                SwapOrderEnabled = controlCenter.SwapOrderEnabled,
+                ForceRebuildEnabled = controlCenter.ForceRebuildEnabled,
+                ClearBoardEnabled = controlCenter.ClearBoardEnabled,
+                BoardSelectionInsideEnabled = controlCenter.BoardSelectionInsideEnabled,
+                BoardSelectionRectangleEnabled = controlCenter.BoardSelectionRectangleEnabled,
+                BoardSelectionLine1Enabled = controlCenter.BoardSelectionLine1Enabled,
                 ConfigurationEnabled = controlCenter.ConfigurationEnabled,
                 TwoWaySyncEnabled = controlCenter.TwoWaySyncEnabled,
                 AutoPlayToggleEnabled = controlCenter.AutoPlayToggleEnabled,
@@ -1029,17 +1094,6 @@ namespace readboard
                 && bounds.Height > 0
                 && boardPixelWidth > 0
                 && boardPixelHeight > 0;
-        }
-
-        private void HandleWebViewToggleAnalysis()
-        {
-            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
-            if (controlCenter.AnalysisStateAvailable && !controlCenter.AnalysisRunning)
-            {
-                sessionCoordinator.SendResumePonder();
-                return;
-            }
-            sessionCoordinator.SendNoPonder();
         }
 
         private void ResetWebViewSyncState()
