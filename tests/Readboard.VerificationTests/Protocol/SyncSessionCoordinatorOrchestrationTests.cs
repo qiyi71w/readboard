@@ -157,6 +157,54 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal(expectedBoardFrameCount, transport.CountLines("re=fox"));
         }
 
+        [Fact]
+        public void KeepSync_DoesNotSendPlayAfterFoxRoomAuthorizationIsInvalidated()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncPlatform("fox");
+            coordinator.SetSyncBoth(true);
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            Type descriptorInterfaceType = RequireType(assembly, "readboard.IWindowDescriptorFactory");
+
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, new IntPtr(5151));
+            SetProperty(snapshot, "PlayColor", "black");
+            FoxRoomAuthorizationSequenceHostRecorder hostRecorder = new FoxRoomAuthorizationSequenceHostRecorder(
+                snapshot,
+                coordinator,
+                CreateFoxLiveRoomContext("111号", 57),
+                CreateFoxLiveRoomContext("222号", 57));
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=fox")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            SetProperty(runtime, "WindowDescriptorFactory", CreateProxy(
+                descriptorInterfaceType,
+                new DescriptorFactoryRecorder().HandleCall));
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+            try
+            {
+                Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(5)));
+                Assert.True(hostRecorder.ThirdSnapshotCaptured.Wait(TimeSpan.FromSeconds(5)));
+            }
+            finally
+            {
+                Invoke(coordinator, "StopSyncSession");
+            }
+
+            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(5)));
+            Assert.Equal(1, transport.CountLines("play>black>0 0 0"));
+        }
+
         [Theory]
         [InlineData(0, "play>black>0 0 0")]
         [InlineData(1, "play>black>0 0 0 gma")]
@@ -2205,6 +2253,60 @@ namespace Readboard.VerificationTests.Protocol
                             Interlocked.Increment(ref snapshotRequests) - 1,
                             contexts.Length - 1);
                         coordinator.SetFoxWindowContext(contexts[contextIndex]);
+                        return snapshot;
+                    case "OnKeepSyncStarted":
+                        KeepStarted.Set();
+                        return null;
+                    case "OnKeepSyncStopped":
+                        KeepStopped.Set();
+                        return null;
+                    case "UpdateSelectedWindowHandle":
+                    case "OnSyncCachesReset":
+                    case "ShowMissingSyncSourceMessage":
+                    case "ShowRecognitionFailureMessage":
+                    case "MinimizeWindow":
+                        return null;
+                    default:
+                        return GetDefault(method.ReturnType);
+                }
+            }
+        }
+
+        private sealed class FoxRoomAuthorizationSequenceHostRecorder
+        {
+            private readonly object snapshot;
+            private readonly SyncSessionCoordinator coordinator;
+            private readonly FoxWindowContext[] contexts;
+            private int snapshotRequests;
+
+            public FoxRoomAuthorizationSequenceHostRecorder(
+                object snapshot,
+                SyncSessionCoordinator coordinator,
+                params FoxWindowContext[] contexts)
+            {
+                this.snapshot = snapshot;
+                this.coordinator = coordinator;
+                Assert.True(contexts != null && contexts.Length > 0);
+                this.contexts = contexts;
+            }
+
+            public ManualResetEventSlim KeepStarted { get; } = new ManualResetEventSlim(false);
+            public ManualResetEventSlim KeepStopped { get; } = new ManualResetEventSlim(false);
+            public ManualResetEventSlim ThirdSnapshotCaptured { get; } = new ManualResetEventSlim(false);
+
+            public object HandleCall(MethodInfo method, object[] args)
+            {
+                switch (method.Name)
+                {
+                    case "CaptureSnapshot":
+                        int snapshotRequest = Interlocked.Increment(ref snapshotRequests);
+                        int contextIndex = Math.Min(
+                            snapshotRequest - 1,
+                            contexts.Length - 1);
+                        coordinator.SetFoxWindowContext(contexts[contextIndex]);
+                        SetProperty(snapshot, "PlayColor", contextIndex == 0 ? "black" : null);
+                        if (snapshotRequest >= 3)
+                            ThirdSnapshotCaptured.Set();
                         return snapshot;
                     case "OnKeepSyncStarted":
                         KeepStarted.Set();

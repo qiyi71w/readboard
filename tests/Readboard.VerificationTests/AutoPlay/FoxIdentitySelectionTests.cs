@@ -197,6 +197,185 @@ namespace Readboard.VerificationTests.AutoPlay
             Assert.Empty(persistence.SavedSignatures);
         }
 
+        [Fact]
+        public void RoomChange_ClearsRoomDerivedStateButRetainsIdentityEvidence()
+        {
+            RecordingPersistence persistence = new RecordingPersistence("saved-signature");
+            FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
+
+            selection.Open(new[] { Candidate("current", "process-signature") }, true, AutoPlayColorMode.ManualBlack);
+            selection.Select("current");
+            selection.UseOnce();
+
+            FoxWindowContext roomOne = PlayingRoom("room-1");
+            FoxIdentityRoomSnapshot roomOneSnapshot = selection.BeginRoomContext(roomOne);
+            FoxIdentityRecognitionResult recognition = selection.ApplyRoomRecognition(
+                roomOneSnapshot.OperationGeneration,
+                roomOne,
+                SyncMode.Fox,
+                true,
+                AutoPlayColorResolution.Known("black", AutoPlayColorStatus.RecognizedBlack));
+            Assert.Equal(FoxIdentityRecognitionApplyOutcome.Applied, recognition.Outcome);
+            Assert.True(recognition.Snapshot.DerivedAuthorization.IsKnown);
+
+            FoxIdentityRoomSnapshot roomTwoSnapshot = selection.BeginRoomContext(PlayingRoom("room-2"));
+
+            Assert.Equal("process-signature", selection.EffectiveIdentitySignature);
+            Assert.Equal("saved-signature", persistence.CurrentSignature);
+            Assert.False(roomTwoSnapshot.PlayerRowMatched);
+            Assert.False(roomTwoSnapshot.ColorResult.IsKnown);
+            Assert.False(roomTwoSnapshot.DerivedAuthorization.IsKnown);
+        }
+
+        [Fact]
+        public void LateRecognitionFromPreviousRoom_IsRejectedWithoutRestoringAuthorization()
+        {
+            RecordingPersistence persistence = new RecordingPersistence("saved-signature");
+            FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
+            FoxWindowContext roomOne = PlayingRoom("room-1");
+            long roomOneGeneration = selection.BeginRoomContext(roomOne).OperationGeneration;
+
+            selection.BeginRoomContext(PlayingRoom("room-2"));
+            FoxIdentityRecognitionResult late = selection.ApplyRoomRecognition(
+                roomOneGeneration,
+                roomOne,
+                SyncMode.Fox,
+                true,
+                AutoPlayColorResolution.Known("black", AutoPlayColorStatus.RecognizedBlack));
+
+            Assert.Equal(FoxIdentityRecognitionApplyOutcome.Stale, late.Outcome);
+            Assert.False(selection.RoomSnapshot.DerivedAuthorization.IsKnown);
+        }
+
+        [Fact]
+        public void ReinvalidatedSameRoom_RejectsOlderGeneration()
+        {
+            FoxIdentitySelection selection = new FoxIdentitySelection(
+                new RecordingPersistence("saved-signature"));
+            FoxWindowContext room = PlayingRoom("room-1");
+            long oldGeneration = selection.BeginRoomContext(room).OperationGeneration;
+
+            selection.ClearRoomRecognition();
+            FoxIdentityRecognitionResult late = selection.ApplyRoomRecognition(
+                oldGeneration,
+                room,
+                SyncMode.Fox,
+                true,
+                AutoPlayColorResolution.Known("black", AutoPlayColorStatus.RecognizedBlack));
+
+            Assert.Equal(FoxIdentityRecognitionApplyOutcome.Stale, late.Outcome);
+            Assert.False(selection.RoomSnapshot.DerivedAuthorization.IsKnown);
+        }
+
+        [Fact]
+        public void CurrentRoomUniqueMatchAndColor_RebuildsDerivedAuthorization()
+        {
+            FoxIdentitySelection selection = new FoxIdentitySelection(
+                new RecordingPersistence("saved-signature"));
+            FoxWindowContext room = PlayingRoom("room-1");
+            FoxIdentityRoomSnapshot roomSnapshot = selection.BeginRoomContext(room);
+
+            FoxIdentityRecognitionResult result = selection.ApplyRoomRecognition(
+                roomSnapshot.OperationGeneration,
+                room,
+                SyncMode.Fox,
+                true,
+                AutoPlayColorResolution.Known("white", AutoPlayColorStatus.RecognizedWhite));
+
+            Assert.Equal(FoxIdentityRecognitionApplyOutcome.Applied, result.Outcome);
+            Assert.True(result.Snapshot.PlayerRowMatched);
+            Assert.Equal("white", result.Snapshot.ColorResult.PlayColor);
+            Assert.Equal("white", result.Snapshot.DerivedAuthorization.PlayColor);
+        }
+
+        [Fact]
+        public void AmbiguousPlayerMatch_RemainsFailClosedEvenWithDetectedColor()
+        {
+            FoxIdentitySelection selection = new FoxIdentitySelection(
+                new RecordingPersistence("saved-signature"));
+            FoxWindowContext room = PlayingRoom("room-1");
+            FoxIdentityRoomSnapshot roomSnapshot = selection.BeginRoomContext(room);
+
+            FoxIdentityRecognitionResult result = selection.ApplyRoomRecognition(
+                roomSnapshot.OperationGeneration,
+                room,
+                SyncMode.Fox,
+                false,
+                AutoPlayColorResolution.Known("black", AutoPlayColorStatus.RecognizedBlack));
+
+            Assert.Equal(FoxIdentityRecognitionApplyOutcome.Applied, result.Outcome);
+            Assert.True(result.Snapshot.ColorResult.IsKnown);
+            Assert.False(result.Snapshot.DerivedAuthorization.IsKnown);
+            Assert.Null(result.Snapshot.DerivedAuthorization.PlayColor);
+        }
+
+        [Theory]
+        [InlineData((int)FoxWindowKind.LiveRoom, (int)FoxLiveRoomState.Watching, (int)SyncMode.Fox)]
+        [InlineData((int)FoxWindowKind.RecordView, (int)FoxLiveRoomState.Unknown, (int)SyncMode.Fox)]
+        [InlineData((int)FoxWindowKind.LiveRoom, (int)FoxLiveRoomState.Playing, (int)SyncMode.Yike)]
+        [InlineData((int)FoxWindowKind.LiveRoom, (int)FoxLiveRoomState.Playing, (int)SyncMode.Foreground)]
+        public void UnsupportedRoomOrPlatform_RemainsFailClosed(
+            int kindValue,
+            int stateValue,
+            int syncModeValue)
+        {
+            FoxWindowKind kind = (FoxWindowKind)kindValue;
+            FoxLiveRoomState state = (FoxLiveRoomState)stateValue;
+            SyncMode syncMode = (SyncMode)syncModeValue;
+            FoxIdentitySelection selection = new FoxIdentitySelection(
+                new RecordingPersistence("saved-signature"));
+            FoxWindowContext context = new FoxWindowContext
+            {
+                Kind = kind,
+                LiveRoomState = state,
+                RoomToken = "room-1"
+            };
+            FoxIdentityRoomSnapshot roomSnapshot = selection.BeginRoomContext(context);
+
+            FoxIdentityRecognitionResult result = selection.ApplyRoomRecognition(
+                roomSnapshot.OperationGeneration,
+                context,
+                syncMode,
+                true,
+                AutoPlayColorResolution.Known("black", AutoPlayColorStatus.RecognizedBlack));
+
+            Assert.Equal(FoxIdentityRecognitionApplyOutcome.Applied, result.Outcome);
+            Assert.False(result.Snapshot.DerivedAuthorization.IsKnown);
+            Assert.Null(result.Snapshot.DerivedAuthorization.PlayColor);
+        }
+
+        [Fact]
+        public void UnknownColor_RemainsFailClosedAfterUniquePlayerMatch()
+        {
+            FoxIdentitySelection selection = new FoxIdentitySelection(
+                new RecordingPersistence("saved-signature"));
+            FoxWindowContext room = PlayingRoom("room-1");
+            FoxIdentityRoomSnapshot roomSnapshot = selection.BeginRoomContext(room);
+
+            FoxIdentityRecognitionResult result = selection.ApplyRoomRecognition(
+                roomSnapshot.OperationGeneration,
+                room,
+                SyncMode.Fox,
+                true,
+                AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown));
+
+            Assert.Equal(FoxIdentityRecognitionApplyOutcome.Applied, result.Outcome);
+            Assert.True(result.Snapshot.PlayerRowMatched);
+            Assert.False(result.Snapshot.ColorResult.IsKnown);
+            Assert.False(result.Snapshot.DerivedAuthorization.IsKnown);
+            Assert.Null(result.Snapshot.DerivedAuthorization.PlayColor);
+        }
+
+        private static FoxWindowContext PlayingRoom(string roomToken)
+        {
+            return new FoxWindowContext
+            {
+                Kind = FoxWindowKind.LiveRoom,
+                LiveRoomState = FoxLiveRoomState.Playing,
+                RoomToken = roomToken
+            };
+        }
+
         private static FoxIdentityCandidate Candidate(string id, string signature)
         {
             return new FoxIdentityCandidate(id, id, signature, null);

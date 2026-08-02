@@ -1599,51 +1599,92 @@ namespace readboard
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
             }
 
+            FoxIdentityRecognitionResult recognition = null;
             AutoPlayColorResolution detected = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
-                ? ResolveDetectedFoxAutoPlayColor(foxWindowContext)
+                ? ResolveDetectedFoxAutoPlayColor(foxWindowContext, out recognition)
                 : null;
-            controlCenterRuntime.UpdateAutoPlayObservation(
-                foxIdentitySelection.EffectiveIdentitySignature,
-                foxWindowContext,
-                detected);
+            if (recognition == null)
+            {
+                controlCenterRuntime.UpdateAutoPlayObservation(
+                    foxIdentitySelection.EffectiveIdentitySignature,
+                    foxWindowContext,
+                    detected);
+            }
+            else if (recognition.Accepted)
+            {
+                controlCenterRuntime.ApplyFoxIdentityRecognition(
+                    foxIdentitySelection.EffectiveIdentitySignature,
+                    foxWindowContext,
+                    recognition);
+            }
             AutoPlayColorResolution resolution = controlCenterRuntime.Snapshot.AutoPlayColorResolution;
             UpdateAutoPlayColorStatus(resolution);
             return resolution;
         }
 
-        private AutoPlayColorResolution ResolveDetectedFoxAutoPlayColor(FoxWindowContext foxWindowContext)
+        private AutoPlayColorResolution ResolveDetectedFoxAutoPlayColor(
+            FoxWindowContext foxWindowContext,
+            out FoxIdentityRecognitionResult recognitionResult)
         {
+            recognitionResult = null;
             string nicknameSignature = foxIdentitySelection.EffectiveIdentitySignature;
+            FoxIdentityRoomSnapshot roomSnapshot = foxIdentitySelection.BeginRoomContext(foxWindowContext);
+            long operationGeneration = roomSnapshot.OperationGeneration;
             if (!IsFoxSyncType(CurrentSyncType)
                 || hwnd == IntPtr.Zero
                 || string.IsNullOrWhiteSpace(nicknameSignature))
-                return null;
-
-            IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(hwnd);
-            if (captureHandle == IntPtr.Zero)
-                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
-
-            string contextSignature = BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext);
-            DateTime now = DateTime.UtcNow;
-            if (lastFoxAutoPlayColorDetection != null
-                && lastFoxAutoPlayColorDetectionWindowHandle == captureHandle
-                && string.Equals(lastFoxAutoPlayColorDetectionContextSignature, contextSignature, StringComparison.Ordinal)
-                && string.Equals(lastFoxAutoPlayColorDetectionNicknameSignature, nicknameSignature, StringComparison.Ordinal)
-                && (now - lastFoxAutoPlayColorDetectionTimestampUtc).TotalMilliseconds < FoxAutoPlayColorDetectionCacheMs)
-                return lastFoxAutoPlayColorDetection;
-
-            AutoPlayColorResolution detection;
-            using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(captureHandle))
             {
-                detection = FoxAutoPlayColorDetector.DetectPlayerListPanel(bitmap, nicknameSignature);
+                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
             }
 
-            lastFoxAutoPlayColorDetection = detection;
-            lastFoxAutoPlayColorDetectionWindowHandle = captureHandle;
-            lastFoxAutoPlayColorDetectionContextSignature = contextSignature;
-            lastFoxAutoPlayColorDetectionNicknameSignature = nicknameSignature;
-            lastFoxAutoPlayColorDetectionTimestampUtc = now;
-            return detection;
+            IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(hwnd);
+            AutoPlayColorResolution detection;
+            if (captureHandle == IntPtr.Zero)
+            {
+                detection = AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
+            }
+            else
+            {
+                string contextSignature = BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext);
+                DateTime now = DateTime.UtcNow;
+                if (lastFoxAutoPlayColorDetection != null
+                    && lastFoxAutoPlayColorDetectionWindowHandle == captureHandle
+                    && string.Equals(lastFoxAutoPlayColorDetectionContextSignature, contextSignature, StringComparison.Ordinal)
+                    && string.Equals(lastFoxAutoPlayColorDetectionNicknameSignature, nicknameSignature, StringComparison.Ordinal)
+                    && (now - lastFoxAutoPlayColorDetectionTimestampUtc).TotalMilliseconds < FoxAutoPlayColorDetectionCacheMs)
+                {
+                    detection = lastFoxAutoPlayColorDetection;
+                }
+                else
+                {
+                    using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(captureHandle))
+                    {
+                        detection = FoxAutoPlayColorDetector.DetectPlayerListPanel(bitmap, nicknameSignature);
+                    }
+
+                    lastFoxAutoPlayColorDetection = detection;
+                    lastFoxAutoPlayColorDetectionWindowHandle = captureHandle;
+                    lastFoxAutoPlayColorDetectionContextSignature = contextSignature;
+                    lastFoxAutoPlayColorDetectionNicknameSignature = nicknameSignature;
+                    lastFoxAutoPlayColorDetectionTimestampUtc = now;
+                }
+            }
+
+            FoxIdentityRecognitionResult recognition = foxIdentitySelection.ApplyRoomRecognition(
+                operationGeneration,
+                foxWindowContext,
+                (SyncMode)CurrentSyncType,
+                IsUniqueFoxIdentityMatch(detection),
+                detection);
+            recognitionResult = recognition;
+            return recognition.Snapshot.DerivedAuthorization;
+        }
+
+        private static bool IsUniqueFoxIdentityMatch(AutoPlayColorResolution detection)
+        {
+            return detection != null
+                && detection.Status != AutoPlayColorStatus.NicknameNotMatched
+                && detection.Status != AutoPlayColorStatus.Unconfigured;
         }
 
         private static string BuildFoxAutoPlayColorDetectionContextSignature(FoxWindowContext context)
@@ -1806,6 +1847,8 @@ namespace readboard
             lastFoxAutoPlayColorDetectionContextSignature = string.Empty;
             lastFoxAutoPlayColorDetectionNicknameSignature = string.Empty;
             lastFoxAutoPlayColorDetectionTimestampUtc = DateTime.MinValue;
+            if (foxIdentitySelection != null)
+                foxIdentitySelection.ClearRoomRecognition();
             if (controlCenterRuntime != null)
                 controlCenterRuntime.ClearAutoPlayObservation();
         }
@@ -2036,6 +2079,8 @@ namespace readboard
                 ClearFoxAutoPlayColorDetectionState();
             }
             lastFoxWindowContext = FoxWindowContext.CopyOf(foxWindowContext);
+            if (foxIdentitySelection != null)
+                foxIdentitySelection.BeginRoomContext(lastFoxWindowContext);
             ApplyMainWindowTitle();
             if (controlCenterRuntime != null)
             {

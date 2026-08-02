@@ -838,11 +838,22 @@ namespace readboard
                         observation.TargetWindowValid,
                         delegate { sessionState.TargetWindowValid = observation.TargetWindowValid; });
                 if (observation.HasFoxWindowContext)
-                    changed |= SetIfDifferent(
+                {
+                    bool foxRoomContextChanged = !AreSameFoxRoomIdentityContext(
+                        sessionState.FoxWindowContext,
+                        observation.FoxWindowContext);
+                    bool foxContextChanged = SetIfDifferent(
                         sessionState.FoxWindowContext,
                         observation.FoxWindowContext,
                         AreSameFoxWindowContext,
                         delegate { sessionState.FoxWindowContext = observation.FoxWindowContext; });
+                    changed |= foxContextChanged;
+                    if (foxRoomContextChanged && sessionState.DetectedAutoPlayColor != null)
+                    {
+                        sessionState.DetectedAutoPlayColor = null;
+                        changed = true;
+                    }
+                }
                 if (observation.HasYikeWindowContext)
                     changed |= SetIfDifferent(
                         sessionState.YikeWindowContext,
@@ -967,11 +978,54 @@ namespace readboard
             sessionAdapter.Apply(preferences.Clone(), sessionState.Clone());
         }
 
+        public bool ApplyFoxIdentityRecognition(
+            string nicknameSignature,
+            FoxWindowContext foxWindowContext,
+            FoxIdentityRecognitionResult recognition)
+        {
+            if (recognition == null
+                || !recognition.Accepted
+                || recognition.Snapshot == null)
+                return false;
+
+            string normalizedSignature = nicknameSignature ?? string.Empty;
+            FoxWindowContext normalizedContext = FoxWindowContext.CopyOf(foxWindowContext);
+            if (!string.Equals(
+                    recognition.Snapshot.RoomContextSignature,
+                    FoxIdentitySelection.BuildRoomContextSignature(normalizedContext),
+                    StringComparison.Ordinal)
+                || !string.Equals(
+                    sessionState.FoxAutoPlayNicknameSignature,
+                    normalizedSignature,
+                    StringComparison.Ordinal)
+                || !AreSameFoxRoomIdentityContext(
+                    sessionState.FoxWindowContext,
+                    normalizedContext))
+                return false;
+
+            AutoPlayColorResolution authorizedColor = recognition.Snapshot.DerivedAuthorization;
+            if (authorizedColor != null
+                && authorizedColor.IsKnown
+                && !IsRecognizedFoxColor(authorizedColor))
+                return false;
+
+            if (AreSameAutoPlayColorResolution(
+                    sessionState.DetectedAutoPlayColor,
+                    authorizedColor))
+                return false;
+
+            sessionState.DetectedAutoPlayColor = authorizedColor;
+            return true;
+        }
+
         public bool UpdateAutoPlayObservation(
             string nicknameSignature,
             FoxWindowContext foxWindowContext,
             AutoPlayColorResolution detectedColor)
         {
+            if (detectedColor != null && detectedColor.IsKnown)
+                return false;
+
             string normalizedSignature = nicknameSignature ?? string.Empty;
             FoxWindowContext normalizedContext = FoxWindowContext.CopyOf(foxWindowContext);
             if (string.Equals(sessionState.FoxAutoPlayNicknameSignature, normalizedSignature, StringComparison.Ordinal)
@@ -1566,6 +1620,21 @@ namespace readboard
                 && string.Equals(left.TitleFingerprint, right.TitleFingerprint, StringComparison.Ordinal);
         }
 
+        private static bool AreSameFoxRoomIdentityContext(
+            FoxWindowContext left,
+            FoxWindowContext right)
+        {
+            if (left == null || right == null)
+                return left == right;
+            if (left.Kind != right.Kind || left.LiveRoomState != right.LiveRoomState)
+                return false;
+            if (left.Kind == FoxWindowKind.LiveRoom)
+            {
+                return string.Equals(left.RoomToken, right.RoomToken, StringComparison.Ordinal);
+            }
+            return string.Equals(left.TitleFingerprint, right.TitleFingerprint, StringComparison.Ordinal);
+        }
+
         private static bool AreSameYikeWindowContext(
             YikeWindowContext left,
             YikeWindowContext right)
@@ -1587,6 +1656,16 @@ namespace readboard
             return left.IsKnown == right.IsKnown
                 && left.Status == right.Status
                 && string.Equals(left.PlayColor, right.PlayColor, StringComparison.Ordinal);
+        }
+
+        private static bool IsRecognizedFoxColor(AutoPlayColorResolution resolution)
+        {
+            return resolution != null
+                && resolution.IsKnown
+                && ((resolution.Status == AutoPlayColorStatus.RecognizedBlack
+                        && string.Equals(resolution.PlayColor, "black", StringComparison.Ordinal))
+                    || (resolution.Status == AutoPlayColorStatus.RecognizedWhite
+                        && string.Equals(resolution.PlayColor, "white", StringComparison.Ordinal)));
         }
 
     }

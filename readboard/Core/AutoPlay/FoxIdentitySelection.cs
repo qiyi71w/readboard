@@ -166,6 +166,53 @@ namespace readboard
         }
     }
 
+    internal enum FoxIdentityRecognitionApplyOutcome
+    {
+        Applied = 0,
+        Stale = 1
+    }
+
+    internal sealed class FoxIdentityRoomSnapshot
+    {
+        internal FoxIdentityRoomSnapshot(
+            long operationGeneration,
+            string roomContextSignature,
+            bool playerRowMatched,
+            AutoPlayColorResolution colorResult,
+            AutoPlayColorResolution derivedAuthorization)
+        {
+            OperationGeneration = operationGeneration;
+            RoomContextSignature = roomContextSignature ?? string.Empty;
+            PlayerRowMatched = playerRowMatched;
+            ColorResult = colorResult ?? AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
+            DerivedAuthorization = derivedAuthorization ?? AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
+        }
+
+        public long OperationGeneration { get; private set; }
+        public string RoomContextSignature { get; private set; }
+        public bool PlayerRowMatched { get; private set; }
+        public AutoPlayColorResolution ColorResult { get; private set; }
+        public AutoPlayColorResolution DerivedAuthorization { get; private set; }
+    }
+
+    internal sealed class FoxIdentityRecognitionResult
+    {
+        internal FoxIdentityRecognitionResult(
+            FoxIdentityRecognitionApplyOutcome outcome,
+            FoxIdentityRoomSnapshot snapshot)
+        {
+            Outcome = outcome;
+            Snapshot = snapshot;
+        }
+
+        public FoxIdentityRecognitionApplyOutcome Outcome { get; private set; }
+        public FoxIdentityRoomSnapshot Snapshot { get; private set; }
+        public bool Accepted
+        {
+            get { return Outcome == FoxIdentityRecognitionApplyOutcome.Applied; }
+        }
+    }
+
     internal sealed class FoxIdentitySelection
     {
         private readonly IFoxIdentityPersistence persistence;
@@ -176,6 +223,12 @@ namespace readboard
         private bool open;
         private bool restorePreviousManualModeOnCancel;
         private AutoPlayColorMode previousManualMode = AutoPlayColorMode.ManualBlack;
+
+        private string roomContextSignature = string.Empty;
+        private long roomOperationGeneration;
+        private bool roomPlayerRowMatched;
+        private AutoPlayColorResolution roomColorResult;
+        private AutoPlayColorResolution derivedAuthorization;
 
         public FoxIdentitySelection(IFoxIdentityPersistence persistence)
         {
@@ -211,6 +264,72 @@ namespace readboard
         public bool IsFirstAutomaticSelectionPending
         {
             get { return open && restorePreviousManualModeOnCancel; }
+        }
+        public FoxIdentityRoomSnapshot RoomSnapshot
+        {
+            get { return CreateRoomSnapshot(); }
+        }
+
+        public FoxIdentityRoomSnapshot BeginRoomContext(FoxWindowContext context)
+        {
+            string nextContextSignature = BuildRoomContextSignature(context);
+            if (!string.Equals(
+                roomContextSignature,
+                nextContextSignature,
+                StringComparison.Ordinal))
+            {
+                roomContextSignature = nextContextSignature;
+                ClearRoomRecognition();
+            }
+            return CreateRoomSnapshot();
+        }
+
+        public void ClearRoomRecognition()
+        {
+            roomOperationGeneration++;
+            roomPlayerRowMatched = false;
+            roomColorResult = null;
+            derivedAuthorization = null;
+        }
+
+        public FoxIdentityRecognitionResult ApplyRoomRecognition(
+            long operationGeneration,
+            FoxWindowContext context,
+            SyncMode syncMode,
+            bool uniquePlayerRowMatch,
+            AutoPlayColorResolution colorResult)
+        {
+            string contextSignature = BuildRoomContextSignature(context);
+            if (operationGeneration != roomOperationGeneration
+                || !string.Equals(
+                    roomContextSignature,
+                    contextSignature,
+                    StringComparison.Ordinal)
+                || string.IsNullOrWhiteSpace(EffectiveIdentitySignature))
+            {
+                return new FoxIdentityRecognitionResult(
+                    FoxIdentityRecognitionApplyOutcome.Stale,
+                    CreateRoomSnapshot());
+            }
+
+            AutoPlayColorResolution normalizedColor = CopyResolution(colorResult)
+                ?? AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
+            roomPlayerRowMatched = uniquePlayerRowMatch;
+            roomColorResult = normalizedColor;
+            bool authorizationEligible = IsSupportedPlayingFoxRoom(syncMode, context)
+                && uniquePlayerRowMatch
+                && IsRecognizedFoxColor(normalizedColor);
+            derivedAuthorization = authorizationEligible
+                ? CopyResolution(normalizedColor)
+                : AutoPlayColorResolution.Unknown(
+                    ResolveRoomRecognitionFailureStatus(
+                        syncMode,
+                        context,
+                        uniquePlayerRowMatch,
+                        normalizedColor));
+            return new FoxIdentityRecognitionResult(
+                FoxIdentityRecognitionApplyOutcome.Applied,
+                CreateRoomSnapshot());
         }
 
         public FoxIdentitySelectionSnapshot Open(
@@ -284,6 +403,8 @@ namespace readboard
             }
 
             savedIdentitySignature = string.Empty;
+            if (string.IsNullOrWhiteSpace(currentProcessIdentitySignature))
+                ClearRoomRecognition();
             return CreateResult(
                 FoxIdentitySelectionActionOutcome.Applied,
                 false,
@@ -326,6 +447,7 @@ namespace readboard
                 signature,
                 StringComparison.Ordinal);
             currentProcessIdentitySignature = signature;
+            ClearRoomRecognition();
 
             bool persistenceAttempted = false;
             bool persistedChanged = false;
@@ -399,6 +521,81 @@ namespace readboard
                 savedCandidateId,
                 currentProcessIdentitySignature,
                 savedIdentitySignature);
+        }
+        private FoxIdentityRoomSnapshot CreateRoomSnapshot()
+        {
+            return new FoxIdentityRoomSnapshot(
+                roomOperationGeneration,
+                roomContextSignature,
+                roomPlayerRowMatched,
+                roomColorResult,
+                derivedAuthorization);
+        }
+
+        internal static string BuildRoomContextSignature(FoxWindowContext context)
+        {
+            if (context == null)
+                return "unknown";
+
+            if (context.Kind == FoxWindowKind.LiveRoom)
+            {
+                return "live|state=" + (int)context.LiveRoomState
+                    + "|room=" + (context.RoomToken ?? string.Empty).Trim();
+            }
+
+            return "kind=" + (int)context.Kind
+                + "|state=" + (int)context.LiveRoomState
+                + "|fingerprint=" + (context.TitleFingerprint ?? string.Empty).Trim();
+        }
+
+        private static bool IsSupportedPlayingFoxRoom(
+            SyncMode syncMode,
+            FoxWindowContext context)
+        {
+            return (syncMode == SyncMode.Fox || syncMode == SyncMode.FoxBackgroundPlace)
+                && context != null
+                && context.Kind == FoxWindowKind.LiveRoom
+                && context.LiveRoomState == FoxLiveRoomState.Playing;
+        }
+
+        private static bool IsRecognizedFoxColor(AutoPlayColorResolution resolution)
+        {
+            return resolution != null
+                && resolution.IsKnown
+                && ((resolution.Status == AutoPlayColorStatus.RecognizedBlack
+                        && string.Equals(resolution.PlayColor, "black", StringComparison.Ordinal))
+                    || (resolution.Status == AutoPlayColorStatus.RecognizedWhite
+                        && string.Equals(resolution.PlayColor, "white", StringComparison.Ordinal)));
+        }
+
+        private static AutoPlayColorStatus ResolveRoomRecognitionFailureStatus(
+            SyncMode syncMode,
+            FoxWindowContext context,
+            bool uniquePlayerRowMatch,
+            AutoPlayColorResolution colorResult)
+        {
+            if (syncMode != SyncMode.Fox && syncMode != SyncMode.FoxBackgroundPlace)
+                return AutoPlayColorStatus.UnsupportedPlatform;
+            if (context == null || context.Kind != FoxWindowKind.LiveRoom)
+                return AutoPlayColorStatus.ColorUnknown;
+            if (context.LiveRoomState == FoxLiveRoomState.Watching)
+                return AutoPlayColorStatus.Spectating;
+            if (context.LiveRoomState != FoxLiveRoomState.Playing)
+                return AutoPlayColorStatus.ColorUnknown;
+            if (!uniquePlayerRowMatch)
+                return AutoPlayColorStatus.NicknameNotMatched;
+            return IsRecognizedFoxColor(colorResult)
+                ? colorResult.Status
+                : AutoPlayColorStatus.ColorUnknown;
+        }
+
+        private static AutoPlayColorResolution CopyResolution(AutoPlayColorResolution resolution)
+        {
+            if (resolution == null)
+                return null;
+            return resolution.IsKnown
+                ? AutoPlayColorResolution.Known(resolution.PlayColor, resolution.Status)
+                : AutoPlayColorResolution.Unknown(resolution.Status);
         }
 
         private string FindPreferredCandidateId()

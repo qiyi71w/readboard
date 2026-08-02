@@ -632,6 +632,11 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Equal("black", runtime.Snapshot.PlayColor);
             Assert.Equal(AutoPlayColorStatus.RecognizedBlack, runtime.Snapshot.AutoPlayColorStatus);
+            Assert.False(runtime.UpdateAutoPlayObservation(
+                "sig",
+                sessionState.FoxWindowContext,
+                AutoPlayColorResolution.Known("white", AutoPlayColorStatus.RecognizedWhite)));
+            Assert.Equal("black", runtime.Snapshot.PlayColor);
 
             runtime.UpdateAutoPlayObservation(
                 "sig",
@@ -645,6 +650,166 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(ControlCenterApplyOutcome.Changed, platform.Outcome);
             Assert.Null(platform.Snapshot.PlayColor);
             Assert.Equal(AutoPlayColorStatus.UnsupportedPlatform, platform.Snapshot.AutoPlayColorStatus);
+        }
+
+        [Fact]
+        public void FoxRoomContextChange_RevokesColorUntilCurrentRoomRecognition()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = true;
+            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
+            FoxWindowContext roomOne = PlayingRoom("room-1");
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(config),
+                new ControlCenterSessionState
+                {
+                    AutoPlayEnabled = true,
+                    FoxAutoPlayNicknameSignature = "sig",
+                    FoxWindowContext = roomOne,
+                    DetectedAutoPlayColor = AutoPlayColorResolution.Known(
+                        "black",
+                        AutoPlayColorStatus.RecognizedBlack)
+                },
+                new RecordingSessionAdapter(),
+                new RecordingPersistence());
+
+            ControlCenterSessionObservationApplyResult roomChange = runtime.ApplyObservation(
+                new ControlCenterSessionObservation(0)
+                    .WithFoxWindowContext(PlayingRoom("room-2")));
+
+            Assert.Equal(ControlCenterSessionObservationApplyOutcome.Applied, roomChange.Outcome);
+            Assert.Null(roomChange.Snapshot.PlayColor);
+            Assert.Equal(AutoPlayColorStatus.ColorUnknown, roomChange.Snapshot.AutoPlayColorStatus);
+
+            Assert.True(runtime.ApplyFoxIdentityRecognition(
+                "sig",
+                PlayingRoom("room-2"),
+                RecognizedFoxRoom("room-2", "white")));
+
+            Assert.Equal("white", runtime.Snapshot.PlayColor);
+        }
+
+        [Fact]
+        public void FoxLiveMoveChange_RetainsDetectedColorAuthorization()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = true;
+            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
+            FoxWindowContext roomOne = PlayingRoom("room-1");
+            roomOne.LiveTitleMove = 1;
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(config),
+                new ControlCenterSessionState
+                {
+                    AutoPlayEnabled = true,
+                    FoxAutoPlayNicknameSignature = "sig",
+                    FoxWindowContext = roomOne,
+                    DetectedAutoPlayColor = AutoPlayColorResolution.Known(
+                        "black",
+                        AutoPlayColorStatus.RecognizedBlack)
+                },
+                new RecordingSessionAdapter(),
+                new RecordingPersistence());
+
+            FoxWindowContext nextMove = PlayingRoom("room-1");
+            nextMove.LiveTitleMove = 2;
+            ControlCenterSessionObservationApplyResult result = runtime.ApplyObservation(
+                new ControlCenterSessionObservation(0)
+                    .WithFoxWindowContext(nextMove));
+
+            Assert.Equal(ControlCenterSessionObservationApplyOutcome.Applied, result.Outcome);
+            Assert.Equal("black", result.Snapshot.PlayColor);
+            Assert.Equal(AutoPlayColorStatus.RecognizedBlack, result.Snapshot.AutoPlayColorStatus);
+        }
+
+        [Fact]
+        public void PreviousRoomFoxIdentityRecognition_DoesNotMutateCurrentAuthorization()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = true;
+            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
+            FoxWindowContext currentRoom = PlayingRoom("room-2");
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(config),
+                new ControlCenterSessionState
+                {
+                    AutoPlayEnabled = true,
+                    FoxAutoPlayNicknameSignature = "sig",
+                    FoxWindowContext = currentRoom,
+                    DetectedAutoPlayColor = AutoPlayColorResolution.Known(
+                        "white",
+                        AutoPlayColorStatus.RecognizedWhite)
+                },
+                new RecordingSessionAdapter(),
+                new RecordingPersistence());
+
+            bool changed = runtime.ApplyFoxIdentityRecognition(
+                "sig",
+                PlayingRoom("room-1"),
+                RecognizedFoxRoom("room-1", "black"));
+
+            Assert.False(changed);
+            Assert.Equal("room-2", runtime.Snapshot.FoxWindowContext.RoomToken);
+            Assert.Equal("white", runtime.Snapshot.PlayColor);
+        }
+
+        [Fact]
+        public void MismatchedFoxIdentityRecognition_DoesNotMutateCurrentAuthorization()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = true;
+            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(config),
+                new ControlCenterSessionState
+                {
+                    AutoPlayEnabled = true,
+                    FoxAutoPlayNicknameSignature = "sig",
+                    FoxWindowContext = PlayingRoom("room-2"),
+                    DetectedAutoPlayColor = AutoPlayColorResolution.Known(
+                        "white",
+                        AutoPlayColorStatus.RecognizedWhite)
+                },
+                new RecordingSessionAdapter(),
+                new RecordingPersistence());
+
+            bool changed = runtime.ApplyFoxIdentityRecognition(
+                "other-sig",
+                PlayingRoom("room-2"),
+                RecognizedFoxRoom("room-2", "black"));
+
+            Assert.False(changed);
+            Assert.Equal("room-2", runtime.Snapshot.FoxWindowContext.RoomToken);
+            Assert.Equal("white", runtime.Snapshot.PlayColor);
+        }
+
+        private static FoxIdentityRecognitionResult RecognizedFoxRoom(
+            string roomToken,
+            string color)
+        {
+            FoxWindowContext context = PlayingRoom(roomToken);
+            AutoPlayColorStatus status = color == "black"
+                ? AutoPlayColorStatus.RecognizedBlack
+                : AutoPlayColorStatus.RecognizedWhite;
+            AutoPlayColorResolution resolution = AutoPlayColorResolution.Known(color, status);
+            return new FoxIdentityRecognitionResult(
+                FoxIdentityRecognitionApplyOutcome.Applied,
+                new FoxIdentityRoomSnapshot(
+                    1,
+                    FoxIdentitySelection.BuildRoomContextSignature(context),
+                    true,
+                    resolution,
+                    resolution));
+        }
+
+        private static FoxWindowContext PlayingRoom(string roomToken)
+        {
+            return new FoxWindowContext
+            {
+                Kind = FoxWindowKind.LiveRoom,
+                LiveRoomState = FoxLiveRoomState.Playing,
+                RoomToken = roomToken
+            };
         }
 
         [Fact]
