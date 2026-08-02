@@ -15,6 +15,7 @@ namespace readboard
 
         private static RuntimeContext runtimeContext;
         private static IAppConfigStore configStore;
+        private static Hashtable defaultLangItems;
         private static ISyncSessionCoordinator sessionCoordinator;
 
         private static AppConfig Config
@@ -239,8 +240,9 @@ namespace readboard
             if (config == null)
                 throw new ArgumentNullException("config");
 
-            runtimeContext.Config = config.Clone();
-            configStore.Save(runtimeContext.Config);
+            AppConfig candidate = config.Clone();
+            configStore.Save(candidate);
+            runtimeContext.Config = candidate;
             runtimeContext.HasConfigFile = true;
         }
 
@@ -271,6 +273,7 @@ namespace readboard
                 loadResult.Config.LanguagePreference,
                 options.Language);
             AddDefaultLangItems();
+            defaultLangItems = new Hashtable(langItems);
             LoadLanguageItems(baseDirectory, runtimeContext.Language);
         }
 
@@ -281,20 +284,54 @@ namespace readboard
                 return normalizedPreference;
             return AppConfig.IsSupportedLanguage(hostLanguage) ? hostLanguage : "cn";
         }
+        internal static bool ApplyLanguagePreferenceValue(
+            string preference,
+            string hostLanguage,
+            string currentLanguage,
+            Action<string> setLanguage,
+            Action reloadLanguageCatalog)
+        {
+            if (setLanguage == null)
+                throw new ArgumentNullException("setLanguage");
+            if (reloadLanguageCatalog == null)
+                throw new ArgumentNullException("reloadLanguageCatalog");
+
+            string effectiveLanguage = ResolveEffectiveLanguage(preference, hostLanguage);
+            bool changed = !string.Equals(
+                currentLanguage,
+                effectiveLanguage,
+                StringComparison.Ordinal);
+            if (changed)
+                setLanguage(effectiveLanguage);
+            reloadLanguageCatalog();
+            return changed;
+        }
 
         internal static bool ApplyLanguagePreference(string preference)
         {
-            string effectiveLanguage = ResolveEffectiveLanguage(
+            return ApplyLanguagePreferenceValue(
                 preference,
-                runtimeContext.LaunchOptions.Language);
-            if (string.Equals(runtimeContext.Language, effectiveLanguage, StringComparison.Ordinal))
-                return false;
-
-            runtimeContext.Language = effectiveLanguage;
-            langItems.Clear();
-            AddDefaultLangItems();
-            LoadLanguageItems(AppDomain.CurrentDomain.BaseDirectory, effectiveLanguage);
-            return true;
+                runtimeContext.LaunchOptions.Language,
+                runtimeContext.Language,
+                delegate(string value) { runtimeContext.Language = value; },
+                delegate
+                {
+                    langItems.Clear();
+                    AddDefaultLangItems();
+                    LoadLanguageItems(
+                        AppDomain.CurrentDomain.BaseDirectory,
+                        ResolveEffectiveLanguage(
+                            preference,
+                            runtimeContext.LaunchOptions.Language));
+                });
+        }
+        internal static string GetDefaultLanguageText(string key)
+        {
+            if (string.IsNullOrEmpty(key)
+                || defaultLangItems == null
+                || !defaultLangItems.ContainsKey(key))
+                return null;
+            return defaultLangItems[key] as string;
         }
 
         private static bool TryStartSession(IWin32Window owner)
@@ -351,6 +388,10 @@ namespace readboard
             langItems["WebView_candidateRowNumber"] = "玩家行 {0}";
             langItems["WebView_integerAtLeast"] = "请输入不小于 {0} 的整数";
             langItems["WebView_integerRange"] = "请输入 {0}–{1} 之间的整数";
+            langItems["WebView_settingsSaveFailed"] = "保存设置失败";
+            langItems["SettingsForm_invalidChoice"] = "设置值无效";
+            langItems["WebView_settingsDurableSaveFailed"] = "保存设置失败，配置状态需要诊断";
+            langItems["WebView_settingsEffectFailed"] = "设置已保存，但部分运行时效果未完成";
             langItems["WebView_language"] = "界面语言";
             langItems["WebView_languageDescription"] = "保存后立即应用";
             langItems["WebView_followHostLanguage"] = "跟随 LizzieYzy-Next";

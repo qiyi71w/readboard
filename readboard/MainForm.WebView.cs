@@ -315,8 +315,12 @@ namespace readboard
                     Close();
                     break;
                 case "navigate":
-                    HandleNavigate(command.Payload);
-                    break;
+                {
+                    WebViewNavigationIntent navigationIntent;
+                    if (!TryCreateWebViewNavigationIntent(command, out navigationIntent))
+                        return true;
+                    return HandleNavigate(navigationIntent);
+                }
                 case "control.update":
                     return HandleControlUpdate(command.Payload);
                 case "sync.quick":
@@ -335,9 +339,9 @@ namespace readboard
                     OpenExternalUri(ReadBoardRepositoryUrl);
                     break;
                 default:
-                    if (!HandleWebViewIdentityCommand(command))
-                        HandleWebViewSettingsCommand(command);
-                    break;
+                    if (HandleWebViewIdentityCommand(command))
+                        return true;
+                    return HandleWebViewSettingsCommand(command);
             }
             return true;
         }
@@ -406,6 +410,28 @@ namespace readboard
             }
         }
 
+        internal static bool TryCreateWebViewNavigationIntent(
+            ReadBoardUiCommand command,
+            out WebViewNavigationIntent intent)
+        {
+            intent = null;
+            if (command == null
+                || command.Type != "navigate"
+                || command.Payload.ValueKind != JsonValueKind.Object
+                || CountProperties(command.Payload) != 1)
+                return false;
+
+            JsonElement pageValue;
+            WebViewPage page;
+            if (!command.Payload.TryGetProperty("page", out pageValue)
+                || pageValue.ValueKind != JsonValueKind.String
+                || !WebViewPageNames.TryParse(pageValue.GetString(), out page))
+                return false;
+
+            intent = new WebViewNavigationIntent(page);
+            return true;
+        }
+
         private static bool IsValidWebViewCommand(ReadBoardUiCommand command)
         {
             if (command == null || string.IsNullOrWhiteSpace(command.Type))
@@ -430,7 +456,10 @@ namespace readboard
                 case "update.openDownload":
                     return HasEmptyPayload(command.Payload);
                 case "navigate":
-                    return HasSingleAllowedString(command.Payload, "page", "controlCenter", "settings", "rules", "about");
+                {
+                    WebViewNavigationIntent navigationIntent;
+                    return TryCreateWebViewNavigationIntent(command, out navigationIntent);
+                }
                 case "board.select":
                     return HasSingleAllowedString(command.Payload, "mode", "inside", "rectangle", "line1");
                 case "control.update":
@@ -740,6 +769,19 @@ namespace readboard
         {
             return JsonSerializer.Serialize(new { type = "state", payload = state }, WebViewJsonOptions);
         }
+        internal static string SerializeWebViewRuntimeEffect(string name, object value)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("Runtime effect name is required.", "name");
+
+            return JsonSerializer.Serialize(
+                new
+                {
+                    type = "runtimeEffect",
+                    payload = new { name = name, value = value }
+                },
+                WebViewJsonOptions);
+        }
 
         private static bool HasEmptyPayload(JsonElement payload)
         {
@@ -748,11 +790,17 @@ namespace readboard
                 || (payload.ValueKind == JsonValueKind.Object && !payload.EnumerateObject().MoveNext());
         }
 
-        private void HandleNavigate(JsonElement payload)
+        private bool HandleNavigate(WebViewNavigationIntent intent)
         {
-            webViewState.Page = payload.GetProperty("page").GetString();
-            if (webViewState.Page == "settings")
-                GetWebViewSettingsState();
+            if (intent == null)
+                return false;
+
+            EnsureWebViewSettingsDraft();
+            if (!webViewSettingsJourney.Navigate(intent))
+                return false;
+
+            webViewState.Page = WebViewPageNames.ToWireName(webViewSettingsJourney.Page);
+            return true;
         }
 
         private void OpenWebViewManual()

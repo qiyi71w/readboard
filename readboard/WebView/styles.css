@@ -306,6 +306,8 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .input-grid i { position: absolute; top: 9px; right: 10px; color: var(--secondary-text); font-style: normal; font-weight: 400; }
 .field-error { min-height: 12px; font-size: 11px; color: var(--danger); }
 .page[data-page-panel="settings"] .field-error:empty { display: none; }
+.settings-error { min-height: 18px; padding: 3px 10px; color: var(--danger); overflow-wrap: anywhere; }
+.settings-error:empty { display: none; }
 .appearance-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(200px, 1fr) 160px; align-items: center; gap: 24px; }
 .appearance-theme { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
 .appearance-theme .segments { flex: 1; }

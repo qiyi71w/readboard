@@ -101,4 +101,63 @@ namespace readboard
         public string Type { get; set; }
         public JsonElement Payload { get; set; }
     }
+    internal enum WebViewPage
+    {
+        ControlCenter,
+        Settings,
+        Rules,
+        About
+    }
+
+    internal static class WebViewPageNames
+    {
+        public static bool TryParse(string value, out WebViewPage page)
+        {
+            switch (value)
+            {
+                case "controlCenter":
+                    page = WebViewPage.ControlCenter;
+                    return true;
+                case "settings":
+                    page = WebViewPage.Settings;
+                    return true;
+                case "rules":
+                    page = WebViewPage.Rules;
+                    return true;
+                case "about":
+                    page = WebViewPage.About;
+                    return true;
+                default:
+                    page = default(WebViewPage);
+                    return false;
+            }
+        }
+
+        public static string ToWireName(WebViewPage page)
+        {
+            switch (page)
+            {
+                case WebViewPage.ControlCenter:
+                    return "controlCenter";
+                case WebViewPage.Settings:
+                    return "settings";
+                case WebViewPage.Rules:
+                    return "rules";
+                case WebViewPage.About:
+                    return "about";
+                default:
+                    throw new System.ArgumentOutOfRangeException("page");
+            }
+        }
+    }
+
+    internal sealed class WebViewNavigationIntent
+    {
+        public WebViewNavigationIntent(WebViewPage page)
+        {
+            Page = page;
+        }
+
+        public WebViewPage Page { get; private set; }
+    }
 }

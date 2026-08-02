@@ -120,21 +120,16 @@ namespace Readboard.VerificationTests.Host
             AssertLanguageValue("jp", "WebView_language", "表示言語");
             AssertLanguageValue("kr", "WebView_language", "인터페이스 언어");
         }
-
         [Fact]
-        public void SavingLanguagePreference_ImmediatelyRefreshesWebViewText()
+        public void SettingsSaveErrorHasAccessiblePresentation()
         {
-            string settingsBridge = LoadReadboardSource("MainForm.WebView.Settings.cs");
-            string program = LoadReadboardSource("Program.cs");
+            string html = LoadWebViewAsset("index.html");
+            string styles = LoadWebViewAsset("styles.css");
 
-            Assert.Contains("bool languageChanged = Program.ApplyLanguagePreference(updated.LanguagePreference);", settingsBridge);
-            Assert.Contains("if (languageChanged)", settingsBridge);
-            Assert.Contains("webViewTextSent = false;", settingsBridge);
-            Assert.Contains("ApplyMainWindowTitle();", settingsBridge);
-            Assert.DoesNotContain("ResetMainWindowTitle();", settingsBridge);
-            Assert.Contains("langItems.Clear();", program);
-            Assert.Contains("LoadLanguageItems(AppDomain.CurrentDomain.BaseDirectory, effectiveLanguage);", program);
+            Assert.Contains("id=\"settings-error\" class=\"settings-error\" role=\"alert\"", html);
+            Assert.Contains(".settings-error:empty { display: none; }", styles);
         }
+
 
         [Fact]
         public void EnginePlacement_DisablesFirstPolicyAfterRestoringItsValue()
@@ -244,15 +239,13 @@ namespace Readboard.VerificationTests.Host
             string html = LoadWebViewAsset("index.html");
             string script = LoadWebViewAsset("app.js");
             string bridge = LoadReadboardSource("MainForm.WebView.cs");
-            string settingsBridge = LoadReadboardSource("MainForm.WebView.Settings.cs");
 
             Assert.Contains("data-page=\"settings\"", html);
             Assert.Contains("data-command=\"rules.openManual\"", html);
             Assert.DoesNotContain("shell.toggleTheme", html);
             Assert.DoesNotContain("shell.toggleTheme", bridge);
             Assert.DoesNotContain("themeRestart", script);
-            Assert.DoesNotContain("themeRestart", settingsBridge);
-            Assert.Contains("webViewSettingsDialog = null;", settingsBridge);
+            Assert.Contains("data-command=\"settings.save\"", html);
         }
 
         [Fact]

@@ -137,7 +137,8 @@ namespace Readboard.VerificationTests.Architecture
                     "language",
                     "diagnostics",
                     "dirty",
-                    "errors");
+                    "errors",
+                    "saveError");
                 AssertPropertyNames(
                     payload.GetProperty("update"),
                     "open",
@@ -169,6 +170,31 @@ namespace Readboard.VerificationTests.Architecture
                     "message",
                     "confirmLabel",
                     "cancelLabel");
+            }
+        }
+        [Fact]
+        public void SettingsSaveError_RemainsInAuthoritativeSnapshot()
+        {
+            SettingsDraftState draft = SettingsDraftState.FromConfig(
+                AppConfig.CreateDefault("220430", "TEST"));
+            draft.SaveError = SettingsDraftSemanticMessage.Create(SettingsDraftMessageKeys.SaveFailed);
+            ReadBoardUiState state = new ReadBoardUiState
+            {
+                Settings = MainForm.WebViewSettingsStateProjector.Project(
+                    draft,
+                    delegate(string key) { return "Failed to save settings"; },
+                    delegate(string key) { return "Failed to save settings"; })
+            };
+
+            using (JsonDocument document = JsonDocument.Parse(MainForm.SerializeWebViewState(state)))
+            {
+                Assert.Equal(
+                    "Failed to save settings",
+                    document.RootElement
+                        .GetProperty("payload")
+                        .GetProperty("settings")
+                        .GetProperty("saveError")
+                        .GetString());
             }
         }
 

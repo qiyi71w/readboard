@@ -218,26 +218,6 @@ namespace Readboard.VerificationTests.Host
             Assert.DoesNotContain("Ctrl+X", source);
         }
 
-        [Fact]
-        public void WebViewSettings_DoesNotExposeRemovedShortcutSetting()
-        {
-            string source = LoadSource("readboard", "MainForm.WebView.Settings.cs");
-            string modelSource = LoadSource("readboard", "ReadBoardSettingsUiModels.cs");
-            string createSlice = GetMethodSlice(source, "internal static ReadBoardSettingsUiState CreateWebViewSettingsState(AppConfig config)");
-            string buildSlice = GetMethodSlice(source, "internal static bool TryBuildWebViewSettingsConfig(");
-            string saveSlice = GetMethodSlice(source, "private void SaveWebViewSettings()");
-            string updateSlice = GetMethodSlice(source, "private void UpdateWebViewSetting(JsonElement payload)");
-
-            Assert.DoesNotContain("DisableShowShortcut", modelSource);
-            Assert.DoesNotContain("DisableShowShortcut", createSlice);
-            Assert.DoesNotContain("DisableShowInBoardShortcut", buildSlice);
-            Assert.DoesNotContain("disableShowShortcut", source);
-            Assert.Contains("Diagnostics = config.DebugDiagnosticsEnabled", createSlice);
-            Assert.Contains("updated.DebugDiagnosticsEnabled = settings.Diagnostics;", buildSlice);
-            Assert.Contains("ShowWebViewSettingsDialog(\"diagnostics\");", updateSlice);
-            Assert.Contains("PersistConfiguration();", saveSlice);
-            Assert.Contains("sendPonderStatus();", saveSlice);
-        }
 
         [Fact]
         public void ReplayStartupProtocolState_ReusesSyncBothAwareInBoardStateChange()

@@ -93,7 +93,8 @@
       language: "host",
       diagnostics: false,
       dirty: false,
-      errors: {}
+      errors: {},
+      saveError: null
     },
     logs: [],
     update: null,
@@ -152,13 +153,26 @@
   }
 
   function applyTheme(value) {
-    themePreference = normalizeTheme(value);
-    const resolvedTheme = themePreference === "system"
+    const nextPreference = normalizeTheme(value);
+    const resolvedTheme = nextPreference === "system"
       ? (systemThemeQuery.matches ? "dark" : "light")
-      : themePreference;
+      : nextPreference;
+    if (themePreference === nextPreference
+      && document.documentElement.dataset.theme === resolvedTheme
+      && document.documentElement.style.colorScheme === resolvedTheme) return;
+    themePreference = nextPreference;
     document.documentElement.dataset.theme = resolvedTheme;
     document.documentElement.style.colorScheme = resolvedTheme;
   }
+  function applyDiagnostics(value) {
+    const input = document.querySelector('[data-setting="diagnostics"]');
+    if (input && input.checked !== Boolean(value)) input.checked = Boolean(value);
+  }
+
+  window.readboardRuntimeEffects = {
+    applyTheme,
+    applyDiagnostics
+  };
 
   systemThemeQuery.addEventListener("change", () => {
     if (themePreference === "system") applyTheme(themePreference);
@@ -344,7 +358,6 @@
   function cssValue(value) {
     return String(value).replace(/["\\]/g, "\\$&");
   }
-
   function renderSettings() {
     const settings = state.settings || {};
     $$('[data-setting]').forEach(input => {
@@ -354,7 +367,7 @@
       const error = input.closest("label")?.querySelector(".field-error");
       if (error) {
         const message = settings.errors?.[input.dataset.setting] || "";
-        error.textContent = localizedSettingsError(message);
+        error.textContent = message;
         if (!error.id) error.id = `${input.dataset.setting}-error`;
         input.toggleAttribute("aria-invalid", Boolean(message));
         if (message) input.setAttribute("aria-describedby", error.id);
@@ -363,15 +376,7 @@
     });
     setChecked(`input[name="theme"][value="${cssValue(settings.theme || "system")}"]`, true);
     text("settings-dirty", settings.dirty ? t("WebView_unsavedChanges", "有尚未保存的更改") : t("WebView_noUnsavedChanges", "当前没有未保存的更改"));
-  }
-
-  function localizedSettingsError(value) {
-    if (value === "请输入整数") return t("SettingsForm_mustBeInteger", "请输入整数");
-    const minimum = /^\u8bf7\u8f93\u5165\u4e0d\u5c0f\u4e8e (\d+) \u7684\u6574\u6570$/.exec(value);
-    if (minimum) return t("WebView_integerAtLeast", "请输入不小于 {0} 的整数").replace("{0}", minimum[1]);
-    const range = /^\u8bf7\u8f93\u5165 (\d+)–(\d+) \u4e4b\u95f4\u7684\u6574\u6570$/.exec(value);
-    if (range) return t("WebView_integerRange", "请输入 {0}–{1} 之间的整数").replace("{0}", range[1]).replace("{1}", range[2]);
-    return value || "";
+    text("settings-error", settings.saveError || "");
   }
 
   function renderLogs() {
@@ -605,7 +610,13 @@
   });
 
   function acceptMessage(message) {
-    if (!message || message.type !== "state" || !message.payload || typeof message.payload !== "object") return;
+    if (!message || !message.payload || typeof message.payload !== "object") return;
+    if (message.type === "runtimeEffect") {
+      if (message.payload.name === "applyTheme") applyTheme(message.payload.value);
+      else if (message.payload.name === "applyDiagnostics") applyDiagnostics(message.payload.value);
+      return;
+    }
+    if (message.type !== "state") return;
     const currentText = state.text;
     state = merge(initialState, message.payload);
     if (!message.payload.text) state.text = currentText;

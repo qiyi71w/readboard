@@ -3246,6 +3246,8 @@ namespace readboard
 
         private void btnSettings_Click(object sender, EventArgs e)
         {
+            if (webViewSettingsJourney != null)
+                webViewSettingsJourney.Navigate(new WebViewNavigationIntent(WebViewPage.Settings));
             webViewState.Page = "settings";
             GetWebViewSettingsState();
             PostWebViewState();

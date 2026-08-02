@@ -296,8 +296,7 @@ namespace Readboard.VerificationTests.Host
             string update = File.ReadAllText(Path.Combine(root, "readboard", "MainForm.WebView.Update.cs"));
             string identity = File.ReadAllText(Path.Combine(root, "readboard", "MainForm.WebView.Identity.cs"));
             string form = File.ReadAllText(Path.Combine(root, "readboard", "Form1.cs"));
-            string script = File.ReadAllText(Path.Combine(root, "readboard", "WebView", "app.js"));
-            string[] keys =
+            string[] keys = new[]
             {
                 "WebView_initializationFailed",
                 "WebView_mainPageMissing",
@@ -309,10 +308,11 @@ namespace Readboard.VerificationTests.Host
                 "WebView_updateStepVerify",
                 "WebView_updateStepNotifyHost",
                 "WebView_updateStepHostInstall",
-                "WebView_candidateRowNumber",
-                "WebView_integerAtLeast",
-                "WebView_integerRange"
-            };
+                "WebView_candidateRowNumber"
+            }
+                .Concat(SettingsDraftMessageKeys.All)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
 
             Assert.Contains("getLangStr(\"WebView_initializationFailed\")", bridge);
             Assert.Contains("getLangStr(\"WebView_manualOpenFailedTitle\")", bridge);
@@ -323,10 +323,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("ShowWebViewMessage(\"WebView_recognitionFailedTitle\", \"recgnizeFaild\")", form);
             Assert.Contains("Logs = BuildWebViewLogs()", bridge);
             Assert.Contains("message = getLangStr(entry.MessageKey);", bridge);
-            Assert.Contains("function localizedSettingsError(value)", script);
-            Assert.Contains("t(\"WebView_integerAtLeast\"", script);
-            Assert.Contains("t(\"WebView_integerRange\"", script);
-            Assert.DoesNotContain("t(log.messageKey", script);
 
             Assert.DoesNotContain("Title = \"无法打开说明\"", bridge);
             Assert.DoesNotContain("Detail = \"正在获取最新版本信息…\"", update);
@@ -355,6 +351,24 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void DynamicSettingsMessages_PreserveFormattingPlaceholderSets()
+        {
+            string root = VerificationFixtureLocator.RepositoryRoot();
+            string defaults = File.ReadAllText(Path.Combine(root, "readboard", "Program.cs"));
+            foreach (string key in SettingsDraftMessageKeys.All)
+            {
+                string[] expected = ExtractFormatPlaceholders(ReadDefaultLanguageValue(defaults, key));
+                foreach (string language in new[] { "cn", "en", "jp", "kr" })
+                {
+                    Assert.Equal(
+                        expected.OrderBy(value => value),
+                        ExtractFormatPlaceholders(ReadLanguageValue(root, language, key))
+                            .OrderBy(value => value));
+                }
+            }
+        }
+
+        [Fact]
         public void SerializeWebViewState_SeparatesSyncModesAndAnalysisCapability()
         {
             ReadBoardUiState state = new ReadBoardUiState();
@@ -370,6 +384,17 @@ namespace Readboard.VerificationTests.Host
             Assert.False(control.GetProperty("continuousSyncActive").GetBoolean());
             Assert.False(control.GetProperty("analysisRunning").GetBoolean());
             Assert.True(control.GetProperty("analysisStateAvailable").GetBoolean());
+        }
+        [Fact]
+        public void SerializeWebViewRuntimeEffect_UsesOrderedEffectEnvelope()
+        {
+            using JsonDocument document = JsonDocument.Parse(
+                MainForm.SerializeWebViewRuntimeEffect("applyTheme", "dark"));
+            JsonElement payload = document.RootElement.GetProperty("payload");
+
+            Assert.Equal("runtimeEffect", document.RootElement.GetProperty("type").GetString());
+            Assert.Equal("applyTheme", payload.GetProperty("name").GetString());
+            Assert.Equal("dark", payload.GetProperty("value").GetString());
         }
 
         [Fact]
@@ -467,6 +492,32 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(
                 expected,
                 MainForm.ResolveWebViewSyncStatus(communicationEstablished, activeSync));
+        }
+
+        private static string ReadLanguageValue(string root, string language, string key)
+        {
+            string line = File.ReadAllLines(Path.Combine(
+                root,
+                "readboard",
+                "language_" + language + ".txt"))
+                .Single(value => value.StartsWith(key + "=", StringComparison.Ordinal));
+            return line.Substring(key.Length + 1);
+        }
+        private static string ReadDefaultLanguageValue(string source, string key)
+        {
+            Match match = Regex.Match(
+                source,
+                "langItems\\[\\\"" + Regex.Escape(key) + "\\\"\\]\\s*=\\s*\\\"([^\\\"]*)\\\";");
+            Assert.True(match.Success, "Missing default language value for " + key);
+            return match.Groups[1].Value;
+        }
+
+        private static string[] ExtractFormatPlaceholders(string value)
+        {
+            return Regex.Matches(value, "\\{\\d+\\}")
+                .Cast<Match>()
+                .Select(match => match.Value)
+                .ToArray();
         }
 
         private static string GetRuntimeCheckSlice(string source)

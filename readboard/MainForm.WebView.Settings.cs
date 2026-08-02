@@ -1,21 +1,22 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace readboard
 {
     public partial class MainForm
     {
-        private ReadBoardSettingsUiState webViewSettingsDraft;
+        private WebViewSettingsJourney webViewSettingsJourney;
         private ReadBoardDialogUiState webViewSettingsDialog;
 
         internal ReadBoardSettingsUiState GetWebViewSettingsState()
         {
-            if (webViewSettingsDraft == null)
-                OpenWebViewSettingsDraft();
-            return webViewSettingsDraft;
+            SettingsDraftState draft = EnsureWebViewSettingsDraft().Snapshot;
+            return CreateWebViewSettingsState(draft);
         }
 
         internal ReadBoardDialogUiState GetWebViewSettingsDialogState()
@@ -23,13 +24,7 @@ namespace readboard
             return webViewSettingsDialog;
         }
 
-        internal void OpenWebViewSettingsDraft()
-        {
-            webViewSettingsDraft = CreateWebViewSettingsState(Program.CurrentConfig);
-            webViewSettingsDialog = null;
-        }
-
-        internal bool HandleWebViewSettingsCommand(ReadBoardUiCommand command)
+        private bool HandleWebViewSettingsCommand(ReadBoardUiCommand command)
         {
             if (command == null)
                 return false;
@@ -37,14 +32,21 @@ namespace readboard
             switch (command.Type)
             {
                 case "settings.update":
-                    UpdateWebViewSetting(command.Payload);
-                    return true;
+                {
+                    SettingsDraftOperationResult result = UpdateWebViewSetting(command.Payload);
+                    return result == null || result.ShouldPublishSnapshot;
+                }
                 case "settings.save":
-                    SaveWebViewSettings();
-                    return true;
+                {
+                    SettingsDraftOperationResult result = SaveWebViewSettings();
+                    return result == null || result.ShouldPublishSnapshot;
+                }
                 case "settings.cancel":
-                    OpenWebViewSettingsDraft();
-                    return true;
+                {
+                    SettingsDraftOperationResult result = EnsureWebViewSettingsDraft().Cancel();
+                    webViewSettingsDialog = null;
+                    return result == null || result.ShouldPublishSnapshot;
+                }
                 case "settings.resetDefaults":
                     ShowWebViewSettingsDialog("resetDefaults");
                     return true;
@@ -86,79 +88,226 @@ namespace readboard
             }
         }
 
-        internal static ReadBoardSettingsUiState CreateWebViewSettingsState(AppConfig config)
+        private ReadBoardSettingsUiState CreateWebViewSettingsState(SettingsDraftState draft)
         {
-            if (config == null)
-                throw new ArgumentNullException("config");
-            return new ReadBoardSettingsUiState
-            {
-                AutoMinimize = config.AutoMinimize,
-                BackgroundAnalysis = config.PlayPonder,
-                Magnifier = config.UseMagnifier,
-                EnhancedCapture = config.UseEnhanceScreen,
-                PlacementValidation = config.VerifyMove,
-                SyncInterval = config.SyncIntervalMs.ToString(),
-                GrayOffset = config.GrayOffset.ToString(),
-                BlackOffset = config.BlackOffset.ToString(),
-                BlackPercent = config.BlackPercent.ToString(),
-                WhiteOffset = config.WhiteOffset.ToString(),
-                WhitePercent = config.WhitePercent.ToString(),
-                Theme = ResolveWebViewTheme(config.ColorMode),
-                Language = AppConfig.NormalizeLanguagePreference(config.LanguagePreference),
-                Diagnostics = config.DebugDiagnosticsEnabled,
-                Dirty = false
-            };
+            return WebViewSettingsStateProjector.Project(
+                draft,
+                getLangStr,
+                Program.GetDefaultLanguageText);
         }
 
-        internal static bool TryBuildWebViewSettingsConfig(
-            AppConfig current,
-            ReadBoardSettingsUiState settings,
-            out AppConfig updated)
+
+        internal static string FormatSettingsMessage(
+            string localizedTemplate,
+            string defaultTemplate,
+            string key,
+            IReadOnlyList<object> arguments,
+            string diagnosticDetail)
         {
-            if (current == null)
-                throw new ArgumentNullException("current");
-            if (settings == null)
-                throw new ArgumentNullException("settings");
+            string template = string.IsNullOrEmpty(localizedTemplate)
+                ? defaultTemplate
+                : localizedTemplate;
+            if (!string.IsNullOrEmpty(defaultTemplate)
+                && !HasSameFormatPlaceholders(template, defaultTemplate))
+                template = defaultTemplate;
+            if (string.IsNullOrEmpty(template))
+                template = key;
 
-            updated = current.Clone();
-            settings.Errors = new Dictionary<string, string>();
-            int syncInterval;
-            int grayOffset;
-            int blackOffset;
-            int blackPercent;
-            int whiteOffset;
-            int whitePercent;
-            ReadInteger(settings.SyncInterval, "syncInterval", settings.Errors, out syncInterval);
-            ReadInteger(settings.GrayOffset, "grayOffset", settings.Errors, out grayOffset);
-            ReadInteger(settings.BlackOffset, "blackOffset", settings.Errors, out blackOffset);
-            ReadInteger(settings.BlackPercent, "blackPercent", settings.Errors, out blackPercent);
-            ReadInteger(settings.WhiteOffset, "whiteOffset", settings.Errors, out whiteOffset);
-            ReadInteger(settings.WhitePercent, "whitePercent", settings.Errors, out whitePercent);
-            if (!settings.Errors.ContainsKey("syncInterval") && syncInterval < 20)
-                settings.Errors["syncInterval"] = "请输入不小于 20 的整数";
-            AddRangeError(grayOffset, 0, 255, "grayOffset", settings.Errors);
-            AddRangeError(blackOffset, 0, 255, "blackOffset", settings.Errors);
-            AddRangeError(blackPercent, 0, 100, "blackPercent", settings.Errors);
-            AddRangeError(whiteOffset, 0, 255, "whiteOffset", settings.Errors);
-            AddRangeError(whitePercent, 0, 100, "whitePercent", settings.Errors);
-            if (settings.Errors.Count != 0)
+            object[] values = new object[arguments == null ? 0 : arguments.Count];
+            for (int index = 0; index < values.Length; index++)
+                values[index] = arguments[index];
+            string localized;
+            try
+            {
+                localized = string.Format(CultureInfo.CurrentCulture, template, values);
+            }
+            catch (FormatException)
+            {
+                localized = template;
+                if (!string.IsNullOrEmpty(defaultTemplate)
+                    && !string.Equals(template, defaultTemplate, StringComparison.Ordinal))
+                {
+                    try
+                    {
+                        localized = string.Format(
+                            CultureInfo.CurrentCulture,
+                            defaultTemplate,
+                            values);
+                    }
+                    catch (FormatException)
+                    {
+                        localized = defaultTemplate;
+                    }
+                }
+            }
+
+            return string.IsNullOrWhiteSpace(diagnosticDetail)
+                ? localized
+                : localized + ": " + diagnosticDetail;
+        }
+
+        private static bool HasSameFormatPlaceholders(string value, string expected)
+        {
+            Dictionary<string, int> valueCounts = CountFormatPlaceholders(value);
+            Dictionary<string, int> expectedCounts = CountFormatPlaceholders(expected);
+            if (valueCounts.Count != expectedCounts.Count)
                 return false;
-
-            updated.SyncIntervalMs = syncInterval;
-            updated.GrayOffset = grayOffset;
-            updated.BlackOffset = blackOffset;
-            updated.BlackPercent = blackPercent;
-            updated.WhiteOffset = whiteOffset;
-            updated.WhitePercent = whitePercent;
-            updated.AutoMinimize = settings.AutoMinimize;
-            updated.PlayPonder = settings.BackgroundAnalysis;
-            updated.UseMagnifier = settings.Magnifier;
-            updated.UseEnhanceScreen = settings.EnhancedCapture;
-            updated.VerifyMove = settings.PlacementValidation;
-            updated.DebugDiagnosticsEnabled = settings.Diagnostics;
-            updated.ColorMode = ResolveColorMode(settings.Theme);
-            updated.LanguagePreference = AppConfig.NormalizeLanguagePreference(settings.Language);
+            foreach (KeyValuePair<string, int> entry in valueCounts)
+            {
+                int expectedCount;
+                if (!expectedCounts.TryGetValue(entry.Key, out expectedCount)
+                    || expectedCount != entry.Value)
+                    return false;
+            }
             return true;
+        }
+
+        private static Dictionary<string, int> CountFormatPlaceholders(string value)
+        {
+            Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            MatchCollection matches = Regex.Matches(value ?? string.Empty, "\\{\\d+\\}");
+            foreach (Match match in matches)
+            {
+                int count;
+                counts.TryGetValue(match.Value, out count);
+                counts[match.Value] = count + 1;
+            }
+            return counts;
+        }
+        private SettingsDraftRuntime EnsureWebViewSettingsDraft()
+        {
+            if (webViewSettingsJourney == null)
+            {
+                WebViewPage initialPage;
+                if (!WebViewPageNames.TryParse(webViewState.Page, out initialPage))
+                    initialPage = WebViewPage.ControlCenter;
+
+                SettingsDraftRuntime draft = new SettingsDraftRuntime(
+                    BuildCurrentAppConfig(),
+                    delegate
+                    {
+                        AppConfig current = Program.CurrentConfig;
+                        return AppConfig.CreateDefault(current.ProtocolVersion, current.MachineKey);
+                    },
+                    new MainFormSettingsDraftPersistence(
+                        BuildCurrentAppConfig,
+                        delegate(AppConfig candidate) { Program.ConfigStore.Save(candidate); },
+                        delegate(AppConfig candidate)
+                        {
+                            Program.CurrentContext.Config = candidate;
+                            Program.CurrentContext.HasConfigFile = true;
+                        },
+                        controlCenterRuntime.MarkPersistenceSucceeded),
+                    new MainFormSettingsDraftRuntimeEffects(
+                        delegate(string preference) { Program.ApplyLanguagePreference(preference); },
+                        delegate { webViewTextSent = false; },
+                        ApplyMainWindowTitle,
+                        PostWebViewRuntimeEffect,
+                        delegate(bool enabled)
+                        {
+                            resetBtnKeepSyncName();
+                            sessionCoordinator.SendPonderStatus(enabled);
+                        },
+                        delegate(bool enabled)
+                        {
+                            PostWebViewRuntimeEffect("applyDiagnostics", enabled);
+                        }));
+                webViewSettingsJourney = new WebViewSettingsJourney(draft, initialPage);
+            }
+            return webViewSettingsJourney.Draft;
+        }
+        internal sealed class WebViewSettingsJourney
+        {
+            private readonly SettingsDraftRuntime draft;
+
+            public WebViewSettingsJourney(SettingsDraftRuntime draft, WebViewPage page)
+            {
+                this.draft = draft ?? throw new ArgumentNullException("draft");
+                Page = page;
+            }
+
+            public SettingsDraftRuntime Draft
+            {
+                get { return draft; }
+            }
+
+            public WebViewPage Page { get; private set; }
+
+            public bool Navigate(WebViewNavigationIntent intent)
+            {
+                if (intent == null || Page == intent.Page)
+                    return false;
+                Page = intent.Page;
+                return true;
+            }
+        }
+        internal static class WebViewSettingsStateProjector
+        {
+            public static ReadBoardSettingsUiState Project(
+                SettingsDraftState draft,
+                Func<string, string> getLocalizedText,
+                Func<string, string> getDefaultText)
+            {
+                if (draft == null)
+                    throw new ArgumentNullException("draft");
+                if (getLocalizedText == null)
+                    throw new ArgumentNullException("getLocalizedText");
+                if (getDefaultText == null)
+                    throw new ArgumentNullException("getDefaultText");
+
+                return new ReadBoardSettingsUiState
+                {
+                    AutoMinimize = draft.AutoMinimize,
+                    BackgroundAnalysis = draft.BackgroundAnalysis,
+                    Magnifier = draft.Magnifier,
+                    EnhancedCapture = draft.EnhancedCapture,
+                    PlacementValidation = draft.PlacementValidation,
+                    SyncInterval = draft.SyncInterval,
+                    GrayOffset = draft.GrayOffset,
+                    BlackOffset = draft.BlackOffset,
+                    BlackPercent = draft.BlackPercent,
+                    WhiteOffset = draft.WhiteOffset,
+                    WhitePercent = draft.WhitePercent,
+                    Theme = draft.Theme,
+                    Language = draft.Language,
+                    Diagnostics = draft.Diagnostics,
+                    Dirty = draft.Dirty,
+                    Errors = ResolveSettingsErrors(draft.Errors, getLocalizedText, getDefaultText),
+                    SaveError = ResolveSettingsMessage(draft.SaveError, getLocalizedText, getDefaultText)
+                };
+            }
+
+            private static IDictionary<string, string> ResolveSettingsErrors(
+                IDictionary<string, SettingsDraftSemanticMessage> errors,
+                Func<string, string> getLocalizedText,
+                Func<string, string> getDefaultText)
+            {
+                IDictionary<string, string> resolved = new Dictionary<string, string>();
+                foreach (KeyValuePair<string, SettingsDraftSemanticMessage> error in errors)
+                {
+                    resolved[error.Key] = ResolveSettingsMessage(
+                        error.Value,
+                        getLocalizedText,
+                        getDefaultText);
+                }
+                return resolved;
+            }
+
+            private static string ResolveSettingsMessage(
+                SettingsDraftSemanticMessage message,
+                Func<string, string> getLocalizedText,
+                Func<string, string> getDefaultText)
+            {
+                if (message == null)
+                    return null;
+
+                return MainForm.FormatSettingsMessage(
+                    getLocalizedText(message.Key),
+                    getDefaultText(message.Key),
+                    message.Key,
+                    message.Arguments,
+                    message.DiagnosticDetail);
+            }
         }
 
         private static bool IsValidWebViewSettingUpdate(JsonElement payload)
@@ -194,7 +343,7 @@ namespace readboard
                 && AppConfig.IsSupportedLanguagePreference(value.GetString());
         }
 
-        private void UpdateWebViewSetting(JsonElement payload)
+        private SettingsDraftOperationResult UpdateWebViewSetting(JsonElement payload)
         {
             ReadBoardSettingsUiState settings = GetWebViewSettingsState();
             string key = payload.GetProperty("key").GetString();
@@ -202,49 +351,56 @@ namespace readboard
             if (key == "diagnostics" && value.GetBoolean() && !settings.Diagnostics)
             {
                 ShowWebViewSettingsDialog("diagnostics");
-                return;
+                return null;
             }
 
-            switch (key)
-            {
-                case "autoMinimize": settings.AutoMinimize = value.GetBoolean(); break;
-                case "backgroundAnalysis": settings.BackgroundAnalysis = value.GetBoolean(); break;
-                case "magnifier": settings.Magnifier = value.GetBoolean(); break;
-                case "enhancedCapture": settings.EnhancedCapture = value.GetBoolean(); break;
-                case "placementValidation": settings.PlacementValidation = value.GetBoolean(); break;
-                case "diagnostics": settings.Diagnostics = value.GetBoolean(); break;
-                case "syncInterval": settings.SyncInterval = value.GetString(); break;
-                case "grayOffset": settings.GrayOffset = value.GetString(); break;
-                case "blackOffset": settings.BlackOffset = value.GetString(); break;
-                case "blackPercent": settings.BlackPercent = value.GetString(); break;
-                case "whiteOffset": settings.WhiteOffset = value.GetString(); break;
-                case "whitePercent": settings.WhitePercent = value.GetString(); break;
-                case "theme": settings.Theme = value.GetString(); break;
-                case "language": settings.Language = value.GetString(); break;
-            }
-            settings.Errors.Remove(key);
-            settings.Dirty = true;
+            return EnsureWebViewSettingsDraft().Update(
+                CreateSettingsDraftUpdate(key, value));
         }
 
-        private void SaveWebViewSettings()
+        private static SettingsDraftUpdate CreateSettingsDraftUpdate(string key, JsonElement value)
         {
-            AppConfig updated;
-            ReadBoardSettingsUiState settings = GetWebViewSettingsState();
-            if (!TryBuildWebViewSettingsConfig(Program.CurrentConfig, settings, out updated))
-                return;
-
-            Program.CurrentContext.Config = updated;
-            PersistConfiguration();
-            bool languageChanged = Program.ApplyLanguagePreference(updated.LanguagePreference);
-            if (languageChanged)
+            switch (key)
             {
-                webViewTextSent = false;
-                ApplyMainWindowTitle();
+                case "autoMinimize":
+                    return SettingsDraftUpdate.Boolean(SettingsDraftField.AutoMinimize, value.GetBoolean());
+                case "backgroundAnalysis":
+                    return SettingsDraftUpdate.Boolean(SettingsDraftField.BackgroundAnalysis, value.GetBoolean());
+                case "magnifier":
+                    return SettingsDraftUpdate.Boolean(SettingsDraftField.Magnifier, value.GetBoolean());
+                case "enhancedCapture":
+                    return SettingsDraftUpdate.Boolean(SettingsDraftField.EnhancedCapture, value.GetBoolean());
+                case "placementValidation":
+                    return SettingsDraftUpdate.Boolean(SettingsDraftField.PlacementValidation, value.GetBoolean());
+                case "diagnostics":
+                    return SettingsDraftUpdate.Boolean(SettingsDraftField.Diagnostics, value.GetBoolean());
+                case "syncInterval":
+                    return SettingsDraftUpdate.Text(SettingsDraftField.SyncInterval, value.GetString());
+                case "grayOffset":
+                    return SettingsDraftUpdate.Text(SettingsDraftField.GrayOffset, value.GetString());
+                case "blackOffset":
+                    return SettingsDraftUpdate.Text(SettingsDraftField.BlackOffset, value.GetString());
+                case "blackPercent":
+                    return SettingsDraftUpdate.Text(SettingsDraftField.BlackPercent, value.GetString());
+                case "whiteOffset":
+                    return SettingsDraftUpdate.Text(SettingsDraftField.WhiteOffset, value.GetString());
+                case "whitePercent":
+                    return SettingsDraftUpdate.Text(SettingsDraftField.WhitePercent, value.GetString());
+                case "theme":
+                    return SettingsDraftUpdate.Text(SettingsDraftField.Theme, value.GetString());
+                case "language":
+                    return SettingsDraftUpdate.Text(SettingsDraftField.Language, value.GetString());
+                default:
+                    throw new ArgumentOutOfRangeException("key");
             }
-            resetBtnKeepSyncName();
-            sendPonderStatus();
-            webViewSettingsDraft = CreateWebViewSettingsState(Program.CurrentConfig);
-            webViewSettingsDialog = null;
+        }
+
+        private SettingsDraftOperationResult SaveWebViewSettings()
+        {
+            SettingsDraftOperationResult result = EnsureWebViewSettingsDraft().Save();
+            if (result.Outcome == SettingsDraftOperationOutcome.Saved)
+                webViewSettingsDialog = null;
+            return result;
         }
 
         private void ShowWebViewSettingsDialog(string kind)
@@ -257,18 +413,10 @@ namespace readboard
             string kind = webViewSettingsDialog == null ? null : webViewSettingsDialog.Kind;
             webViewSettingsDialog = null;
             if (kind == "diagnostics")
-            {
-                ReadBoardSettingsUiState settings = GetWebViewSettingsState();
-                settings.Diagnostics = true;
-                settings.Dirty = true;
-            }
+                EnsureWebViewSettingsDraft().Update(
+                    SettingsDraftUpdate.Boolean(SettingsDraftField.Diagnostics, true));
             else if (kind == "resetDefaults")
-            {
-                AppConfig current = Program.CurrentConfig;
-                webViewSettingsDraft = CreateWebViewSettingsState(
-                    AppConfig.CreateDefault(current.ProtocolVersion, current.MachineKey));
-                webViewSettingsDraft.Dirty = true;
-            }
+                EnsureWebViewSettingsDraft().Reset();
         }
 
         private void DisableWebViewShowInBoardHint()
@@ -289,25 +437,102 @@ namespace readboard
             Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
         }
 
-        private static void ReadInteger(
-            string value,
-            string key,
-            IDictionary<string, string> errors,
-            out int parsed)
+        internal sealed class MainFormSettingsDraftPersistence : ISettingsDraftPersistence
         {
-            if (!int.TryParse(value, out parsed))
-                errors[key] = "请输入整数";
+            private readonly Func<AppConfig> getLatestActiveConfig;
+            private readonly Action<AppConfig> persist;
+            private readonly Action<AppConfig> replaceActiveConfig;
+            private readonly Action markPersistenceSucceeded;
+
+            public MainFormSettingsDraftPersistence(
+                Func<AppConfig> getLatestActiveConfig,
+                Action<AppConfig> persist,
+                Action<AppConfig> replaceActiveConfig,
+                Action markPersistenceSucceeded)
+            {
+                this.getLatestActiveConfig = getLatestActiveConfig ?? throw new ArgumentNullException("getLatestActiveConfig");
+                this.persist = persist ?? throw new ArgumentNullException("persist");
+                this.replaceActiveConfig = replaceActiveConfig ?? throw new ArgumentNullException("replaceActiveConfig");
+                this.markPersistenceSucceeded = markPersistenceSucceeded ?? throw new ArgumentNullException("markPersistenceSucceeded");
+            }
+
+            public AppConfig GetLatestActiveConfig()
+            {
+                return getLatestActiveConfig();
+            }
+
+            public void Persist(AppConfig candidate)
+            {
+                persist(candidate);
+            }
+
+            public void ReplaceActiveConfig(AppConfig candidate)
+            {
+                replaceActiveConfig(candidate.Clone());
+                markPersistenceSucceeded();
+            }
+        }
+        private void PostWebViewRuntimeEffect(string functionName, object value)
+        {
+            if (webView == null || webView.CoreWebView2 == null)
+                throw new InvalidOperationException("WebView runtime is not ready.");
+
+            webView.CoreWebView2.PostWebMessageAsJson(
+                SerializeWebViewRuntimeEffect(functionName, value));
         }
 
-        private static void AddRangeError(
-            int value,
-            int minimum,
-            int maximum,
-            string key,
-            IDictionary<string, string> errors)
+        internal sealed class MainFormSettingsDraftRuntimeEffects : ISettingsDraftRuntimeEffects
         {
-            if (!errors.ContainsKey(key) && (value < minimum || value > maximum))
-                errors[key] = "请输入 " + minimum + "–" + maximum + " 之间的整数";
+            private readonly Action<string> applyLanguagePreference;
+            private readonly Action invalidateWebViewText;
+            private readonly Action applyMainWindowTitle;
+            private readonly Action<string, object> postRuntimeEffect;
+            private readonly Action<bool> applyBackgroundAnalysis;
+            private readonly Action<bool> applyDiagnostics;
+
+            public MainFormSettingsDraftRuntimeEffects(
+                Action<string> applyLanguagePreference,
+                Action invalidateWebViewText,
+                Action applyMainWindowTitle,
+                Action<string, object> postRuntimeEffect,
+                Action<bool> applyBackgroundAnalysis,
+                Action<bool> applyDiagnostics)
+            {
+                this.applyLanguagePreference = applyLanguagePreference ?? throw new ArgumentNullException("applyLanguagePreference");
+                this.invalidateWebViewText = invalidateWebViewText ?? throw new ArgumentNullException("invalidateWebViewText");
+                this.applyMainWindowTitle = applyMainWindowTitle ?? throw new ArgumentNullException("applyMainWindowTitle");
+                this.postRuntimeEffect = postRuntimeEffect ?? throw new ArgumentNullException("postRuntimeEffect");
+                this.applyBackgroundAnalysis = applyBackgroundAnalysis ?? throw new ArgumentNullException("applyBackgroundAnalysis");
+                this.applyDiagnostics = applyDiagnostics ?? throw new ArgumentNullException("applyDiagnostics");
+            }
+
+            public void ApplyLanguagePreference(string preference)
+            {
+                invalidateWebViewText();
+                try
+                {
+                    applyLanguagePreference(preference);
+                }
+                finally
+                {
+                    applyMainWindowTitle();
+                }
+            }
+
+            public void ApplyTheme(int colorMode)
+            {
+                postRuntimeEffect("applyTheme", ResolveWebViewTheme(colorMode));
+            }
+
+            public void ApplyBackgroundAnalysis(bool enabled)
+            {
+                applyBackgroundAnalysis(enabled);
+            }
+
+            public void ApplyDiagnostics(bool enabled)
+            {
+                applyDiagnostics(enabled);
+            }
         }
 
         private static string ResolveWebViewTheme(int colorMode)
@@ -315,13 +540,6 @@ namespace readboard
             if (colorMode == AppConfig.ColorModeDark)
                 return "dark";
             return colorMode == AppConfig.ColorModeLight ? "light" : "system";
-        }
-
-        private static int ResolveColorMode(string theme)
-        {
-            if (theme == "dark")
-                return AppConfig.ColorModeDark;
-            return theme == "light" ? AppConfig.ColorModeLight : AppConfig.ColorModeSystem;
         }
     }
 }

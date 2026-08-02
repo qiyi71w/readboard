@@ -135,6 +135,7 @@
           <label class="diagnostics"><span><b data-i18n="WebView_debugDiagnostics">调试诊断</b><small data-i18n="WebView_debugDiagnosticsDescription">可能生成较大的诊断文件</small></span><input type="checkbox" data-setting="diagnostics"></label>
           <button type="button" data-command="settings.openDiagnostics"><span data-i18n="SettingsForm_btnOpenDebugDiagnostics">打开诊断目录</span></button>
         </div><div class="appearance-language"><span><b data-i18n="WebView_language">界面语言</b><small data-i18n="WebView_languageDescription">保存后立即应用</small></span><select id="settings-language" data-setting="language"><option value="host" data-i18n="WebView_followHostLanguage">跟随 LizzieYzy-Next</option><option value="cn">简体中文</option><option value="en">English</option><option value="jp">日本語</option><option value="kr">한국어</option></select></div></fieldset>
+        <span id="settings-error" class="settings-error" role="alert" aria-live="polite"></span>
         <div class="settings-actions card"><button class="danger-outline" type="button" data-command="settings.resetDefaults"><span data-i18n="SettingsForm_btnReset">恢复默认</span></button><span id="settings-dirty" data-i18n="WebView_noUnsavedChanges">当前没有未保存的更改</span><div><button type="button" data-command="settings.cancel"><span data-i18n="SettingsForm_btnCancel">取消</span></button><button class="primary" type="button" data-command="settings.save"><span data-i18n="WebView_saveSettings">保存设置</span></button></div></div>
       </section>
 
