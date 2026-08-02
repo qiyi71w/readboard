@@ -41,6 +41,7 @@ namespace readboard
         private readonly ISyncSessionCoordinator sessionCoordinator;
         private readonly ILegacySelectionCalibrationService selectionCalibrationService;
         private readonly ControlCenterRuntime controlCenterRuntime;
+        private readonly FoxIdentitySelection foxIdentitySelection;
         private readonly UiThreadInvoker uiThreadInvoker;
         private readonly SerialBackgroundWorkQueue placeRequestQueue;
         private HostedUpdateJourney hostedUpdateJourney;
@@ -64,7 +65,6 @@ namespace readboard
         private IntPtr lastFoxAutoPlayColorDetectionWindowHandle = IntPtr.Zero;
         private string lastFoxAutoPlayColorDetectionContextSignature = string.Empty;
         private string lastFoxAutoPlayColorDetectionNicknameSignature = string.Empty;
-        private string currentFoxAutoPlayNicknameSignature = string.Empty;
         private DateTime lastFoxAutoPlayColorDetectionTimestampUtc = DateTime.MinValue;
         private const int FoxAutoPlayColorDetectionCacheMs = 1000;
 
@@ -1675,14 +1675,9 @@ namespace readboard
 
         private string ResolveCurrentFoxAutoPlayNicknameSignature()
         {
-            string runtimeSignature = controlCenterRuntime == null
+            return foxIdentitySelection == null
                 ? string.Empty
-                : controlCenterRuntime.CurrentSessionState.FoxAutoPlayNicknameSignature;
-            if (!string.IsNullOrWhiteSpace(runtimeSignature))
-                return runtimeSignature;
-            if (!string.IsNullOrWhiteSpace(currentFoxAutoPlayNicknameSignature))
-                return currentFoxAutoPlayNicknameSignature;
-            return Program.CurrentContext.Config.FoxAutoPlayNicknameSignature;
+                : foxIdentitySelection.EffectiveIdentitySignature;
         }
 
         private void UpdateAutoPlayColorStatus(AutoPlayColorResolution resolution)
@@ -1729,19 +1724,20 @@ namespace readboard
             lblAutoPlayColorStatus.Text = text;
         }
 
-        private void ClearSavedFoxAutoPlayIdentity()
+        private FoxIdentitySelectionResult ClearSavedFoxAutoPlayIdentity()
         {
-            AppConfig updatedConfig = Program.CurrentConfig.Clone();
-            updatedConfig.FoxAutoPlayNickname = string.Empty;
-            updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;
-            Program.SaveAppConfig(updatedConfig);
-            if (string.IsNullOrWhiteSpace(currentFoxAutoPlayNicknameSignature))
+            FoxIdentitySelectionResult result = foxIdentitySelection.ClearSaved();
+            if (result.Accepted
+                && result.PersistedIdentityChanged
+                && string.IsNullOrWhiteSpace(foxIdentitySelection.CurrentProcessIdentitySignature))
             {
+                ClearFoxAutoPlayColorDetectionState();
                 controlCenterRuntime.UpdateAutoPlayObservation(
-                    string.Empty,
+                    foxIdentitySelection.EffectiveIdentitySignature,
                     ResolveFoxWindowContext(),
                     null);
             }
+            return result;
         }
 
         private IntPtr ResolveFoxAutoPlayIdentityBoardHandle()
@@ -2519,6 +2515,7 @@ namespace readboard
             this.launchOptions = launchOptions;
             this.sessionCoordinator = sessionCoordinator;
             this.selectionCalibrationService = selectionCalibrationService;
+            this.foxIdentitySelection = new FoxIdentitySelection(new AppConfigFoxIdentityPersistence());
             this.uiThreadInvoker = new UiThreadInvoker(this);
             this.placeRequestQueue = new SerialBackgroundWorkQueue("ReadboardPlaceRequestQueue");
             this.hostedUpdateJourney = new HostedUpdateJourney(
@@ -2540,7 +2537,7 @@ namespace readboard
                     Program.SaveAppConfig),
                 new MainFormControlCenterActionAdapter(this));
             this.controlCenterRuntime.UpdateAutoPlayObservation(
-                Program.CurrentConfig.FoxAutoPlayNicknameSignature,
+                foxIdentitySelection.EffectiveIdentitySignature,
                 FoxWindowContext.Unknown(),
                 null);
             using (System.Drawing.Bitmap bitmap = new Bitmap(1, 1))
