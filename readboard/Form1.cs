@@ -1603,7 +1603,7 @@ namespace readboard
                 ? ResolveDetectedFoxAutoPlayColor(foxWindowContext)
                 : null;
             controlCenterRuntime.UpdateAutoPlayObservation(
-                ResolveCurrentFoxAutoPlayNicknameSignature(),
+                foxIdentitySelection.EffectiveIdentitySignature,
                 foxWindowContext,
                 detected);
             AutoPlayColorResolution resolution = controlCenterRuntime.Snapshot.AutoPlayColorResolution;
@@ -1613,7 +1613,7 @@ namespace readboard
 
         private AutoPlayColorResolution ResolveDetectedFoxAutoPlayColor(FoxWindowContext foxWindowContext)
         {
-            string nicknameSignature = ResolveCurrentFoxAutoPlayNicknameSignature();
+            string nicknameSignature = foxIdentitySelection.EffectiveIdentitySignature;
             if (!IsFoxSyncType(CurrentSyncType)
                 || hwnd == IntPtr.Zero
                 || string.IsNullOrWhiteSpace(nicknameSignature))
@@ -1673,12 +1673,6 @@ namespace readboard
             return value.HasValue ? value.Value.ToString() : string.Empty;
         }
 
-        private string ResolveCurrentFoxAutoPlayNicknameSignature()
-        {
-            return foxIdentitySelection == null
-                ? string.Empty
-                : foxIdentitySelection.EffectiveIdentitySignature;
-        }
 
         private void UpdateAutoPlayColorStatus(AutoPlayColorResolution resolution)
         {
@@ -3350,7 +3344,7 @@ namespace readboard
                 ProjectControlCenterState();
                 return;
             }
-            if (string.IsNullOrWhiteSpace(ResolveCurrentFoxAutoPlayNicknameSignature()))
+            if (string.IsNullOrWhiteSpace(foxIdentitySelection.EffectiveIdentitySignature))
             {
                 OpenWebViewIdentity(true);
                 PostWebViewState();

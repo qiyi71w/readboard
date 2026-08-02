@@ -109,7 +109,6 @@ namespace readboard
         public string SelectedCandidateId { get; private set; }
         public string SavedCandidateId { get; private set; }
         public bool HasSavedIdentity { get { return !string.IsNullOrWhiteSpace(SavedIdentitySignature); } }
-        public bool HasCurrentProcessIdentity { get { return !string.IsNullOrWhiteSpace(CurrentProcessIdentitySignature); } }
         public string CurrentProcessIdentitySignature { get; private set; }
         public string SavedIdentitySignature { get; private set; }
         public string EffectiveIdentitySignature

@@ -841,7 +841,7 @@ namespace readboard
             {
                 if (controlCenterIntent.Kind == ControlCenterIntentKind.SetAutoPlayColor
                     && controlCenterIntent.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
-                    && string.IsNullOrWhiteSpace(ResolveCurrentFoxAutoPlayNicknameSignature()))
+                    && string.IsNullOrWhiteSpace(foxIdentitySelection.EffectiveIdentitySignature))
                 {
                     OpenWebViewIdentity(true);
                     return true;
