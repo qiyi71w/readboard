@@ -50,7 +50,7 @@ namespace Readboard.VerificationTests.Host
         private static string LoadSource(params string[] segments)
         {
             string path = Path.Combine(VerificationFixtureLocator.RepositoryRoot(), Path.Combine(segments));
-            return File.ReadAllText(path);
+            return File.ReadAllText(path).Replace("\r\n", "\n");
         }
 
         private static string GetMethodSlice(string source, string methodSignature)
