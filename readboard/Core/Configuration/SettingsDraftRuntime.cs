@@ -107,33 +107,6 @@ namespace readboard
         }
     }
 
-    internal sealed class SettingsDraftSemanticMessage
-    {
-        public SettingsDraftSemanticMessage(
-            string key,
-            IEnumerable<object> arguments,
-            string diagnosticDetail = null)
-        {
-            if (string.IsNullOrWhiteSpace(key))
-                throw new ArgumentException("A semantic message key is required.", "key");
-
-            Key = key;
-            Arguments = new List<object>(arguments ?? Array.Empty<object>()).AsReadOnly();
-            DiagnosticDetail = diagnosticDetail;
-        }
-
-        public string Key { get; private set; }
-        public IReadOnlyList<object> Arguments { get; private set; }
-        public string DiagnosticDetail { get; private set; }
-
-        public static SettingsDraftSemanticMessage Create(
-            string key,
-            string diagnosticDetail = null,
-            params object[] arguments)
-        {
-            return new SettingsDraftSemanticMessage(key, arguments, diagnosticDetail);
-        }
-    }
 
     internal sealed class SettingsDraftState
     {
@@ -152,9 +125,9 @@ namespace readboard
         public string Language { get; set; }
         public bool Diagnostics { get; set; }
         public bool Dirty { get; set; }
-        public IDictionary<string, SettingsDraftSemanticMessage> Errors { get; set; } =
-            new Dictionary<string, SettingsDraftSemanticMessage>();
-        public SettingsDraftSemanticMessage SaveError { get; set; }
+        public IDictionary<string, SemanticMessage> Errors { get; set; } =
+            new Dictionary<string, SemanticMessage>();
+        public SemanticMessage SaveError { get; set; }
 
         public static SettingsDraftState FromConfig(AppConfig config)
         {
@@ -200,7 +173,7 @@ namespace readboard
                 Language = Language,
                 Diagnostics = Diagnostics,
                 Dirty = Dirty,
-                Errors = new Dictionary<string, SettingsDraftSemanticMessage>(Errors),
+                Errors = new Dictionary<string, SemanticMessage>(Errors),
                 SaveError = SaveError
             };
         }
@@ -302,7 +275,7 @@ namespace readboard
                 throw new ArgumentNullException("latest");
 
             candidate = latest.Clone();
-            Errors = new Dictionary<string, SettingsDraftSemanticMessage>();
+            Errors = new Dictionary<string, SemanticMessage>();
             SaveError = null;
 
             int syncInterval;
@@ -318,9 +291,8 @@ namespace readboard
             ReadInteger(WhiteOffset, "whiteOffset", out whiteOffset);
             ReadInteger(WhitePercent, "whitePercent", out whitePercent);
             if (!Errors.ContainsKey("syncInterval") && syncInterval < 20)
-                Errors["syncInterval"] = SettingsDraftSemanticMessage.Create(
+                Errors["syncInterval"] = SemanticMessage.Create(
                     SettingsDraftMessageKeys.IntegerAtLeast,
-                    null,
                     20);
             AddRangeError(grayOffset, 0, 255, "grayOffset");
             AddRangeError(blackOffset, 0, 255, "blackOffset");
@@ -328,9 +300,9 @@ namespace readboard
             AddRangeError(whiteOffset, 0, 255, "whiteOffset");
             AddRangeError(whitePercent, 0, 100, "whitePercent");
             if (!IsSupportedTheme(Theme))
-                Errors["theme"] = SettingsDraftSemanticMessage.Create(SettingsDraftMessageKeys.InvalidChoice);
+                Errors["theme"] = SemanticMessage.Create(SettingsDraftMessageKeys.InvalidChoice);
             if (!AppConfig.IsSupportedLanguagePreference(Language))
-                Errors["language"] = SettingsDraftSemanticMessage.Create(SettingsDraftMessageKeys.InvalidChoice);
+                Errors["language"] = SemanticMessage.Create(SettingsDraftMessageKeys.InvalidChoice);
             if (Errors.Count != 0)
                 return false;
 
@@ -354,15 +326,14 @@ namespace readboard
         private void ReadInteger(string value, string key, out int parsed)
         {
             if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed))
-                Errors[key] = SettingsDraftSemanticMessage.Create(SettingsDraftMessageKeys.MustBeInteger);
+                Errors[key] = SemanticMessage.Create(SettingsDraftMessageKeys.MustBeInteger);
         }
 
         private void AddRangeError(int value, int minimum, int maximum, string key)
         {
             if (!Errors.ContainsKey(key) && (value < minimum || value > maximum))
-                Errors[key] = SettingsDraftSemanticMessage.Create(
+                Errors[key] = SemanticMessage.Create(
                     SettingsDraftMessageKeys.IntegerRange,
-                    null,
                     minimum,
                     maximum);
         }
@@ -591,14 +562,14 @@ namespace readboard
                 }
                 catch (DurableConfigurationException exception)
                 {
-                    draft.SaveError = SettingsDraftSemanticMessage.Create(
+                    draft.SaveError = SemanticMessage.CreateWithDiagnostic(
                         SettingsDraftMessageKeys.DurableSaveFailed,
                         exception.Message);
                     return CreateResult(SettingsDraftOperationOutcome.DurablePersistenceFailed, exception);
                 }
                 catch (Exception exception)
                 {
-                    draft.SaveError = SettingsDraftSemanticMessage.Create(
+                    draft.SaveError = SemanticMessage.CreateWithDiagnostic(
                         SettingsDraftMessageKeys.SaveFailed,
                         exception.Message);
                     return CreateResult(SettingsDraftOperationOutcome.PersistenceFailed, exception);
@@ -614,7 +585,7 @@ namespace readboard
             draft = activeSettings.Clone();
             if (effectResult.Failure != null)
             {
-                draft.SaveError = SettingsDraftSemanticMessage.Create(
+                draft.SaveError = SemanticMessage.CreateWithDiagnostic(
                     SettingsDraftMessageKeys.EffectFailed,
                     effectResult.Failure.Message);
                 return CreateResult(SettingsDraftOperationOutcome.EffectsFailed, effectResult.Failure);

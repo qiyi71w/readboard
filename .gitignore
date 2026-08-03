@@ -24,3 +24,7 @@ msbuild.log
 msbuild.out
 nul
 release-runs/
+
+test-results/
+playwright-report/
+/node_modules/

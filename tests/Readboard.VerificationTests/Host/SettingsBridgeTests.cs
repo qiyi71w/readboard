@@ -249,38 +249,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(new object[] { 0, 255 }, result.State.Errors["grayOffset"].Arguments);
             Assert.Empty(persistence.Events);
         }
-        [Fact]
-        public void MalformedLocalizedMessageFallsBackToDefaultTemplate()
-        {
-            Assert.Equal(
-                "请输入不小于 20 的整数",
-                MainForm.FormatSettingsMessage(
-                    "请输入整数 {0",
-                    "请输入不小于 {0} 的整数",
-                    "WebView_integerAtLeast",
-                    new object[] { 20 },
-                    null));
-            Assert.Equal(
-                "请输入不小于 20 的整数",
-                MainForm.FormatSettingsMessage(
-                    "请输入整数",
-                    "请输入不小于 {0} 的整数",
-                    "WebView_integerAtLeast",
-                    new object[] { 20 },
-                    null));
-        }
-        [Fact]
-        public void ReorderedLocalizedPlaceholdersRemainValid()
-        {
-            Assert.Equal(
-                "请输入 255–0 之间的整数",
-                MainForm.FormatSettingsMessage(
-                    "请输入 {1}–{0} 之间的整数",
-                    "请输入 {0}–{1} 之间的整数",
-                    "WebView_integerRange",
-                    new object[] { 0, 255 },
-                    null));
-        }
 
         [Fact]
         public void PersistenceFailureRetainsDraftAndCanRetry()
@@ -488,7 +456,7 @@ namespace Readboard.VerificationTests.Host
         {
             AppConfig active = AppConfig.CreateDefault("220430", "TEST");
             SettingsDraftState draft = SettingsDraftState.FromConfig(active);
-            draft.SaveError = SettingsDraftSemanticMessage.Create(
+            draft.SaveError = SemanticMessage.CreateWithDiagnostic(
                 SettingsDraftMessageKeys.SaveFailed,
                 "disk full");
 

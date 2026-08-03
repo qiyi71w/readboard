@@ -21,7 +21,66 @@ namespace readboard
 
         internal ReadBoardDialogUiState GetWebViewSettingsDialogState()
         {
-            return webViewSettingsDialog;
+            return ResolveWebViewDialogState(
+                webViewSettingsDialog,
+                getLangStr,
+                Program.GetDefaultLanguageText);
+        }
+
+        internal static ReadBoardDialogUiState ResolveWebViewDialogState(
+            ReadBoardDialogUiState state,
+            Func<string, string> getLocalizedText,
+            Func<string, string> getDefaultText)
+        {
+            if (state == null)
+                return null;
+            return new ReadBoardDialogUiState
+            {
+                Open = state.Open,
+                Kind = state.Kind,
+                Title = ResolveWebViewDialogText(
+                    state.TitleMessage,
+                    state.Title,
+                    getLocalizedText,
+                    getDefaultText),
+                Heading = state.Heading,
+                Message = ResolveWebViewDialogText(
+                    state.MessageMessage,
+                    state.Message,
+                    getLocalizedText,
+                    getDefaultText),
+                Detail = ResolveWebViewDialogText(
+                    state.DetailMessage,
+                    state.Detail,
+                    getLocalizedText,
+                    getDefaultText),
+                ConfirmLabel = ResolveWebViewDialogText(
+                    state.ConfirmLabelMessage,
+                    state.ConfirmLabel,
+                    getLocalizedText,
+                    getDefaultText),
+                CancelLabel = ResolveWebViewDialogText(
+                    state.CancelLabelMessage,
+                    state.CancelLabel,
+                    getLocalizedText,
+                    getDefaultText),
+                DontShowAgainLabel = ResolveWebViewDialogText(
+                    state.DontShowAgainLabelMessage,
+                    state.DontShowAgainLabel,
+                    getLocalizedText,
+                    getDefaultText)
+            };
+        }
+
+        private static string ResolveWebViewDialogText(
+            SemanticMessage message,
+            string fallback,
+            Func<string, string> getLocalizedText,
+            Func<string, string> getDefaultText)
+        {
+            return message == null
+                ? fallback
+                : SemanticMessageResolver.Resolve(message, getLocalizedText, getDefaultText);
         }
 
         private bool HandleWebViewSettingsCommand(ReadBoardUiCommand command)
@@ -97,83 +156,7 @@ namespace readboard
         }
 
 
-        internal static string FormatSettingsMessage(
-            string localizedTemplate,
-            string defaultTemplate,
-            string key,
-            IReadOnlyList<object> arguments,
-            string diagnosticDetail)
-        {
-            string template = string.IsNullOrEmpty(localizedTemplate)
-                ? defaultTemplate
-                : localizedTemplate;
-            if (!string.IsNullOrEmpty(defaultTemplate)
-                && !HasSameFormatPlaceholders(template, defaultTemplate))
-                template = defaultTemplate;
-            if (string.IsNullOrEmpty(template))
-                template = key;
 
-            object[] values = new object[arguments == null ? 0 : arguments.Count];
-            for (int index = 0; index < values.Length; index++)
-                values[index] = arguments[index];
-            string localized;
-            try
-            {
-                localized = string.Format(CultureInfo.CurrentCulture, template, values);
-            }
-            catch (FormatException)
-            {
-                localized = template;
-                if (!string.IsNullOrEmpty(defaultTemplate)
-                    && !string.Equals(template, defaultTemplate, StringComparison.Ordinal))
-                {
-                    try
-                    {
-                        localized = string.Format(
-                            CultureInfo.CurrentCulture,
-                            defaultTemplate,
-                            values);
-                    }
-                    catch (FormatException)
-                    {
-                        localized = defaultTemplate;
-                    }
-                }
-            }
-
-            return string.IsNullOrWhiteSpace(diagnosticDetail)
-                ? localized
-                : localized + ": " + diagnosticDetail;
-        }
-
-        private static bool HasSameFormatPlaceholders(string value, string expected)
-        {
-            Dictionary<string, int> valueCounts = CountFormatPlaceholders(value);
-            Dictionary<string, int> expectedCounts = CountFormatPlaceholders(expected);
-            if (valueCounts.Count != expectedCounts.Count)
-                return false;
-            foreach (KeyValuePair<string, int> entry in valueCounts)
-            {
-                int expectedCount;
-                if (!expectedCounts.TryGetValue(entry.Key, out expectedCount)
-                    || expectedCount != entry.Value)
-                    return false;
-            }
-            return true;
-        }
-
-        private static Dictionary<string, int> CountFormatPlaceholders(string value)
-        {
-            Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
-            MatchCollection matches = Regex.Matches(value ?? string.Empty, "\\{\\d+\\}");
-            foreach (Match match in matches)
-            {
-                int count;
-                counts.TryGetValue(match.Value, out count);
-                counts[match.Value] = count + 1;
-            }
-            return counts;
-        }
         private SettingsDraftRuntime EnsureWebViewSettingsDraft()
         {
             if (webViewSettingsJourney == null)
@@ -272,18 +255,24 @@ namespace readboard
                     Language = draft.Language,
                     Diagnostics = draft.Diagnostics,
                     Dirty = draft.Dirty,
+                    DirtyStatus = ResolveSettingsMessage(
+                        SemanticMessage.Create(draft.Dirty
+                            ? "WebView_unsavedChanges"
+                            : "WebView_noUnsavedChanges"),
+                        getLocalizedText,
+                        getDefaultText),
                     Errors = ResolveSettingsErrors(draft.Errors, getLocalizedText, getDefaultText),
                     SaveError = ResolveSettingsMessage(draft.SaveError, getLocalizedText, getDefaultText)
                 };
             }
 
             private static IDictionary<string, string> ResolveSettingsErrors(
-                IDictionary<string, SettingsDraftSemanticMessage> errors,
+                IDictionary<string, SemanticMessage> errors,
                 Func<string, string> getLocalizedText,
                 Func<string, string> getDefaultText)
             {
                 IDictionary<string, string> resolved = new Dictionary<string, string>();
-                foreach (KeyValuePair<string, SettingsDraftSemanticMessage> error in errors)
+                foreach (KeyValuePair<string, SemanticMessage> error in errors)
                 {
                     resolved[error.Key] = ResolveSettingsMessage(
                         error.Value,
@@ -294,19 +283,17 @@ namespace readboard
             }
 
             private static string ResolveSettingsMessage(
-                SettingsDraftSemanticMessage message,
+                SemanticMessage message,
                 Func<string, string> getLocalizedText,
                 Func<string, string> getDefaultText)
             {
                 if (message == null)
                     return null;
 
-                return MainForm.FormatSettingsMessage(
-                    getLocalizedText(message.Key),
-                    getDefaultText(message.Key),
-                    message.Key,
-                    message.Arguments,
-                    message.DiagnosticDetail);
+                return SemanticMessageResolver.Resolve(
+                    message,
+                    getLocalizedText,
+                    getDefaultText);
             }
         }
 
@@ -405,7 +392,40 @@ namespace readboard
 
         private void ShowWebViewSettingsDialog(string kind)
         {
-            webViewSettingsDialog = new ReadBoardDialogUiState { Open = true, Kind = kind };
+            webViewSettingsDialog = CreateWebViewDialog(kind);
+        }
+
+        private static ReadBoardDialogUiState CreateWebViewDialog(string kind)
+        {
+            ReadBoardDialogUiState dialog = new ReadBoardDialogUiState
+            {
+                Open = true,
+                Kind = kind
+            };
+            switch (kind)
+            {
+                case "resetDefaults":
+                    dialog.TitleMessage = SemanticMessage.Create("SettingsForm_btnReset");
+                    dialog.MessageMessage = SemanticMessage.Create("WebView_resetDefaultsDescription");
+                    dialog.ConfirmLabelMessage = SemanticMessage.Create("WebView_resetDefaults");
+                    dialog.CancelLabelMessage = SemanticMessage.Create("SettingsForm_btnCancel");
+                    return dialog;
+                case "diagnostics":
+                    dialog.TitleMessage = SemanticMessage.Create("WebView_enableDiagnostics");
+                    dialog.MessageMessage = SemanticMessage.Create("WebView_diagnosticsDescription");
+                    dialog.ConfirmLabelMessage = SemanticMessage.Create("WebView_continueEnable");
+                    dialog.CancelLabelMessage = SemanticMessage.Create("SettingsForm_btnCancel");
+                    return dialog;
+                case "showInBoardHint":
+                    dialog.TitleMessage = SemanticMessage.Create("TipsForm_title");
+                    dialog.MessageMessage = SemanticMessage.Create("WebView_showInBoardHintForeground");
+                    dialog.DetailMessage = SemanticMessage.Create("WebView_showInBoardHintRestore");
+                    dialog.ConfirmLabelMessage = SemanticMessage.Create("TipsForm_btnConfirm");
+                    dialog.DontShowAgainLabelMessage = SemanticMessage.Create("TipsForm_btnNotAskAgain");
+                    return dialog;
+                default:
+                    throw new ArgumentOutOfRangeException("kind");
+            }
         }
 
         private void ConfirmWebViewSettingsDialog()

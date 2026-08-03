@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Text.Json;
+using readboard;
 using Xunit;
 
 namespace Readboard.VerificationTests.Host
@@ -59,16 +61,32 @@ namespace Readboard.VerificationTests.Host
         public void ShowInBoardHint_UsesLegacyCopyWithoutShortcutAndOnlyExpectedActions()
         {
             string styles = LoadWebViewAsset("styles.css");
-            string script = LoadWebViewAsset("app.js");
+            string html = LoadWebViewAsset("index.html");
 
+            Assert.Contains("id=\"modal-layer\"", html);
+            Assert.Contains("role=\"dialog\" aria-modal=\"true\"", html);
             Assert.Contains(".modal.show-in-board-hint { grid-template-rows: 44px auto 52px; }", styles);
             Assert.Contains(".modal.show-in-board-hint .modal-body { min-height: 0; padding: 12px 16px; overflow: hidden; }", styles);
-            Assert.Contains("min(520px, calc(100vw - 48px))", script);
-            Assert.Contains("openModal(\"dialog show-in-board-hint\", t(\"TipsForm_title\", \"提示\")", script);
-            Assert.Contains("t(\"WebView_showInBoardHintForeground\", \"[前台]方式同步时不支持此功能。选点显示在原棋盘上后，原棋盘将无法落子。\")", script);
-            Assert.Contains("t(\"WebView_showInBoardHintRestore\", \"可通过勾选“双向同步”选项恢复落子功能。\")", script);
-            Assert.DoesNotContain("Ctrl+X", script);
-            Assert.Contains("button(\"dialog.dontShowAgain\", t(\"TipsForm_btnNotAskAgain\", \"不再提示\")) + button(\"dialog.confirm\",", script);
+
+            ReadBoardDialogUiState dialog = new ReadBoardDialogUiState
+            {
+                Open = true,
+                Kind = "showInBoardHint",
+                TitleMessage = SemanticMessage.Create("TipsForm_title"),
+                MessageMessage = SemanticMessage.Create("WebView_showInBoardHintForeground"),
+                DetailMessage = SemanticMessage.Create("WebView_showInBoardHintRestore"),
+                ConfirmLabelMessage = SemanticMessage.Create("TipsForm_btnConfirm"),
+                DontShowAgainLabelMessage = SemanticMessage.Create("TipsForm_btnNotAskAgain")
+            };
+            ReadBoardDialogUiState projected = MainForm.ResolveWebViewDialogState(
+                dialog,
+                delegate(string key) { return key + " localized"; },
+                delegate(string key) { return key + " default"; });
+            Assert.Equal("TipsForm_title localized", projected.Title);
+            Assert.Equal("WebView_showInBoardHintForeground localized", projected.Message);
+            Assert.Equal("WebView_showInBoardHintRestore localized", projected.Detail);
+            Assert.Equal("TipsForm_btnConfirm localized", projected.ConfirmLabel);
+            Assert.Equal("TipsForm_btnNotAskAgain localized", projected.DontShowAgainLabel);
 
             foreach (string language in new[] { "cn", "en", "jp", "kr" })
             {
@@ -172,13 +190,27 @@ namespace Readboard.VerificationTests.Host
             string root = VerificationFixtureLocator.RepositoryRoot();
             string html = LoadWebViewAsset("index.html");
             string styles = LoadWebViewAsset("styles.css");
-            string script = LoadWebViewAsset("app.js");
 
             Assert.Contains("id=\"preferences-status\"", html);
             Assert.Contains("role=\"status\"", html);
-            Assert.Contains("control.preferencesSaved !== false", script);
-            Assert.Contains("control.persistenceError || preferencesStatus.textContent", script);
             Assert.Contains(".top-status #preferences-status.not-saved", styles);
+
+            ReadBoardUiState state = new ReadBoardUiState
+            {
+                ControlCenter = new ReadBoardControlCenterState
+                {
+                    PreferencesSaved = false,
+                    PreferencesStatus = "偏好已生效，但尚未保存",
+                    PersistenceError = "disk full"
+                }
+            };
+            using (JsonDocument document = JsonDocument.Parse(MainForm.SerializeWebViewState(state)))
+            {
+                JsonElement control = document.RootElement.GetProperty("payload").GetProperty("controlCenter");
+                Assert.False(control.GetProperty("preferencesSaved").GetBoolean());
+                Assert.Equal("偏好已生效，但尚未保存", control.GetProperty("preferencesStatus").GetString());
+                Assert.Equal("disk full", control.GetProperty("persistenceError").GetString());
+            }
 
             foreach (string language in new[] { "cn", "en", "jp", "kr" })
             {
@@ -195,23 +227,52 @@ namespace Readboard.VerificationTests.Host
         public void HostStatus_DistinguishesCompatibleModeFromConfirmedCommunication()
         {
             string html = LoadWebViewAsset("index.html");
-            string script = LoadWebViewAsset("app.js");
-
-            Assert.Contains("宿主模式已启动", html);
-            Assert.Contains("LizzieYzy-Next 棋盘同步工具", html);
-            Assert.Contains("shell.connected ? t(\"WebView_hostConnected\", \"宿主通信正常\") : t(\"WebView_hostModeStarted\", \"宿主模式已启动\")", script);
+            Assert.Contains("id=\"host-state\"", html);
+            Assert.Contains("id=\"context-platform\"", html);
             Assert.DoesNotContain("当前通过 LizzieYzy-Next 启动", html);
+
+            ReadBoardUiState state = new ReadBoardUiState
+            {
+                Shell = new ReadBoardShellState
+                {
+                    HostStatus = "宿主模式已启动",
+                    Connected = false
+                }
+            };
+            using (JsonDocument document = JsonDocument.Parse(MainForm.SerializeWebViewState(state)))
+            {
+                JsonElement shell = document.RootElement.GetProperty("payload").GetProperty("shell");
+                Assert.Equal("宿主模式已启动", shell.GetProperty("hostStatus").GetString());
+                Assert.False(shell.GetProperty("connected").GetBoolean());
+            }
         }
 
         [Fact]
         public void SyncAndAnalysisActions_RenderIndependentHostState()
         {
-            string script = LoadWebViewAsset("app.js");
+            string html = LoadWebViewAsset("index.html");
+            Assert.Contains("id=\"quick-label\"", html);
+            Assert.Contains("id=\"continuous-label\"", html);
+            Assert.Contains("id=\"analysis-label\"", html);
 
-            Assert.Contains("control.quickSyncActive ? t(\"WebView_stopQuickSync\", \"停止快速同步\") : t(\"WebView_quickSync\", \"快速同步\")", script);
-            Assert.Contains("control.continuousSyncActive ? t(\"WebView_stopContinuousSync\", \"停止持续同步\") : t(\"WebView_continuousSync\", \"持续同步\")", script);
-            Assert.Contains("control.analysisRunning ? t(\"WebView_pauseAnalysis\", \"暂停分析\") : t(\"WebView_resumeAnalysis\", \"继续分析\")", script);
-            Assert.Contains("!control.analysisToggleEnabled", script);
+            ReadBoardUiState state = new ReadBoardUiState
+            {
+                ControlCenter = new ReadBoardControlCenterState
+                {
+                    QuickSyncLabel = "快速同步",
+                    ContinuousSyncLabel = "持续同步 (200ms)",
+                    AnalysisLabel = "暂停分析",
+                    AnalysisToggleEnabled = true
+                }
+            };
+            using (JsonDocument document = JsonDocument.Parse(MainForm.SerializeWebViewState(state)))
+            {
+                JsonElement control = document.RootElement.GetProperty("payload").GetProperty("controlCenter");
+                Assert.Equal("快速同步", control.GetProperty("quickSyncLabel").GetString());
+                Assert.Equal("持续同步 (200ms)", control.GetProperty("continuousSyncLabel").GetString());
+                Assert.Equal("暂停分析", control.GetProperty("analysisLabel").GetString());
+                Assert.True(control.GetProperty("analysisToggleEnabled").GetBoolean());
+            }
         }
 
         [Fact]

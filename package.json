@@ -1,0 +1,10 @@
+{
+  "name": "readboard-webview-tests",
+  "private": true,
+  "scripts": {
+    "test:webview": "playwright install chromium && playwright test tests/WebView/app-rendering.spec.js --reporter=line"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
+  }
+}

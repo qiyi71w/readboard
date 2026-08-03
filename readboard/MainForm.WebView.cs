@@ -78,10 +78,10 @@ namespace readboard
                     {
                         Caption = getLangStr("WebViewRuntime_caption"),
                         Heading = getLangStr("WebViewRuntime_heading"),
-                        Text = string.Format(
-                            CultureInfo.CurrentCulture,
-                            getLangStr("WebViewRuntime_message"),
-                            AppReleaseVersion.GetCurrentVersion()),
+                        Text = Program.ResolveSemanticMessage(
+                            SemanticMessage.CreateWithDiagnostic(
+                                "WebViewRuntime_message",
+                                AppReleaseVersion.GetCurrentVersion())),
                         Icon = TaskDialogIcon.Error,
                         AllowCancel = false,
                         DefaultButton = retry
@@ -210,10 +210,10 @@ namespace readboard
             {
                 MessageBox.Show(
                     this,
-                    string.Format(
-                        CultureInfo.CurrentCulture,
-                        getLangStr("WebView_initializationFailed"),
-                        ex.Message),
+                    Program.ResolveSemanticMessage(
+                        SemanticMessage.CreateWithDiagnostic(
+                            "WebView_initializationFailed",
+                            ex.Message)),
                     getLangStr("WebViewRuntime_caption"),
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
@@ -814,8 +814,8 @@ namespace readboard
                 webViewSettingsDialog = new ReadBoardDialogUiState
                 {
                     Open = true,
-                    Title = getLangStr("WebView_manualOpenFailedTitle"),
-                    Message = getLangStr("noHelpFile")
+                    TitleMessage = SemanticMessage.Create("WebView_manualOpenFailedTitle"),
+                    MessageMessage = SemanticMessage.Create("noHelpFile")
                 };
             }
         }
@@ -825,12 +825,12 @@ namespace readboard
             webViewSettingsDialog = new ReadBoardDialogUiState
             {
                 Open = true,
-                Title = getLangStr(titleKey),
-                Message = getLangStr(messageKey)
+                TitleMessage = SemanticMessage.Create(titleKey),
+                MessageMessage = SemanticMessage.Create(messageKey)
             };
             AddWebViewSemanticLog(
                 "WARN",
-                new ControlCenterSemanticMessage(messageKey, null, "WARN"));
+                SemanticMessage.CreateLog("WARN", messageKey));
             PostWebViewState();
         }
 
@@ -976,16 +976,32 @@ namespace readboard
                     Version = "v" + AppReleaseVersion.GetCurrentVersion(),
                     Theme = ResolveWebViewTheme(Program.CurrentConfig.ColorMode),
                     Connected = controlCenter.HostConnected,
-                    SyncStatus = ResolveWebViewSyncStatus(
-                        controlCenter.HostConnected,
-                        controlCenter.QuickSyncActive || controlCenter.ContinuousSyncActive),
+                    SyncStatus = ResolveWebViewMessage(
+                        ResolveWebViewSyncStatusKey(
+                            controlCenter.HostConnected,
+                            controlCenter.QuickSyncActive || controlCenter.ContinuousSyncActive)),
+                    HostStatus = ResolveWebViewMessage(
+                        controlCenter.HostConnected
+                            ? "WebView_hostConnected"
+                            : "WebView_hostModeStarted"),
+                    TargetStatus = ResolveWebViewMessage(ResolveWebViewTargetStatusKey(targetWindowValid)),
+                    BoardStatus = ResolveWebViewMessage(
+                        controlCenter.BoardRegionRecognized
+                            ? "WebView_boardRecognized"
+                            : "WebView_waitBoardRecognition"),
+                    PlacementStatus = ResolveWebViewMessage(
+                        controlCenter.PlacementRegionResolved
+                            ? "WebView_placementResolved"
+                            : "WebView_placementUnavailable"),
                     LastSync = controlCenter.LastSync ?? "--:--:--",
                     StoneCount = controlCenter.StoneCount,
                     Duration = controlCenter.Duration ?? "--",
                     TargetWindowValid = targetWindowValid,
                     BoardRegionRecognized = controlCenter.BoardRegionRecognized,
                     PlacementRegionResolved = controlCenter.PlacementRegionResolved,
-                    Maximized = WindowState == FormWindowState.Maximized
+                    Maximized = WindowState == FormWindowState.Maximized,
+                    MaximizeLabel = ResolveWebViewMessage(
+                        WindowState == FormWindowState.Maximized ? "WebView_restore" : "WebView_maximize")
                 },
                 ControlCenter = BuildControlCenterState(targetWindowValid == true),
                 Settings = GetWebViewSettingsState(),
@@ -998,21 +1014,42 @@ namespace readboard
 
         private List<ReadBoardUiLogEntry> BuildWebViewLogs()
         {
+            return ResolveWebViewLogs(
+                webViewLogs,
+                getLangStr,
+                Program.GetDefaultLanguageText);
+        }
+
+        internal static List<ReadBoardUiLogEntry> ResolveWebViewLogs(
+            IEnumerable<ReadBoardUiLogEntry> entries,
+            Func<string, string> getLocalizedText,
+            Func<string, string> getDefaultText)
+        {
             List<ReadBoardUiLogEntry> logs = new List<ReadBoardUiLogEntry>();
-            foreach (ReadBoardUiLogEntry entry in webViewLogs)
+            foreach (ReadBoardUiLogEntry entry in entries)
             {
                 string message = entry.Message;
                 if (!string.IsNullOrWhiteSpace(entry.MessageKey))
-                    message = getLangStr(entry.MessageKey);
-                if (!string.IsNullOrWhiteSpace(entry.DiagnosticDetail))
+                {
+                    message = SemanticMessageResolver.Resolve(
+                        new SemanticMessage(entry.MessageKey, entry.Arguments, entry.DiagnosticDetail),
+                        getLocalizedText,
+                        getDefaultText);
+                }
+                else if (!string.IsNullOrWhiteSpace(entry.DiagnosticDetail))
+                {
                     message = string.IsNullOrWhiteSpace(message)
                         ? entry.DiagnosticDetail
                         : message + ": " + entry.DiagnosticDetail;
+                }
                 logs.Add(new ReadBoardUiLogEntry
                 {
                     Time = entry.Time,
                     Level = entry.Level,
-                    Message = message
+                    Message = message,
+                    MessageKey = entry.MessageKey,
+                    DiagnosticDetail = entry.DiagnosticDetail,
+                    Arguments = entry.Arguments
                 });
             }
             return logs;
@@ -1023,8 +1060,8 @@ namespace readboard
             var text = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (DictionaryEntry entry in Program.langItems)
             {
-                if (entry.Key is string key && entry.Value is string value)
-                    text[key] = value;
+                if (entry.Key is string key)
+                    text[key] = Program.ResolveLanguageText(key);
             }
             return text;
         }
@@ -1047,13 +1084,17 @@ namespace readboard
                 moves = foxWindowContext.ResolveDisplayedMoveNumber();
             }
 
+            string platformToken = ControlCenterPreferences.ToPlatformToken(controlCenter.Platform);
+            bool foxAutoPlay = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto;
             return new ReadBoardControlCenterState
             {
-                Platform = ControlCenterPreferences.ToPlatformToken(controlCenter.Platform),
+                Platform = platformToken,
+                PlatformLabel = ResolveWebViewMessage(ResolveWebViewPlatformKey(controlCenter.Platform)),
                 Room = room,
                 Moves = moves.HasValue ? moves.Value.ToString() : "--",
-                NextTurn = ResolveWebViewNextTurn(controlCenter.TitleTurn),
+                NextTurn = ResolveWebViewNextTurnText(controlCenter.TitleTurn),
                 TitleBound = targetWindowValid,
+                BindingStatus = ResolveWebViewMessage(targetWindowValid ? "WebView_bound" : "WebView_notBound"),
                 BoardSize = ControlCenterPreferences.ToBoardSizeToken(controlCenter.BoardSizeKind),
                 BoardWidth = controlCenter.BoardWidth,
                 BoardHeight = controlCenter.BoardHeight,
@@ -1072,17 +1113,28 @@ namespace readboard
                 PlacementEnabled = controlCenter.MoveModeEnabled,
                 AiTimeEnabled = controlCenter.AiTimeEnabled,
                 PlayoutsEnabled = controlCenter.PlayoutsEnabled,
-                AutoPlayColorStatus = controlCenter.AutoPlayColorStatus.ToString(),
+                AutoPlayColorStatus = foxAutoPlay
+                    ? ResolveWebViewMessage(ResolveAutoPlayColorStatusKey(controlCenter.AutoPlayColorStatus))
+                    : string.Empty,
                 PlayColorKnown = controlCenter.AutoPlayColorResolution != null
                     && controlCenter.AutoPlayColorResolution.IsKnown,
                 ShowOnBoard = controlCenter.ShowOnBoard,
                 QuickSyncActive = controlCenter.QuickSyncActive,
                 ContinuousSyncActive = controlCenter.ContinuousSyncActive,
+                QuickSyncLabel = ResolveWebViewMessage(
+                    controlCenter.QuickSyncActive ? "WebView_stopQuickSync" : "WebView_quickSync"),
+                ContinuousSyncLabel = ResolveWebViewMessage(
+                    controlCenter.ContinuousSyncActive
+                        ? "WebView_stopContinuousSyncLabel"
+                        : "WebView_continuousSyncLabel",
+                    Program.timeinterval),
                 QuickSyncEnabled = controlCenter.QuickSyncEnabled,
                 ContinuousSyncEnabled = controlCenter.ContinuousSyncEnabled,
                 OneTimeSyncEnabled = controlCenter.OneTimeSyncEnabled,
                 SyncInterval = Program.timeinterval,
                 AnalysisRunning = controlCenter.AnalysisRunning,
+                AnalysisLabel = ResolveWebViewMessage(
+                    controlCenter.AnalysisRunning ? "WebView_pauseAnalysis" : "WebView_resumeAnalysis"),
                 AnalysisStateAvailable = controlCenter.AnalysisStateAvailable,
                 AnalysisToggleEnabled = controlCenter.AnalysisToggleEnabled,
                 SwapOrderEnabled = controlCenter.SwapOrderEnabled,
@@ -1098,28 +1150,78 @@ namespace readboard
                 CustomBoardSizeEnabled = controlCenter.CustomBoardSizeEnabled,
                 CustomBoardDimensionsEnabled = controlCenter.CustomBoardDimensionsEnabled,
                 PreferencesSaved = controlCenter.PreferencesSaved,
+                PreferencesStatus = ResolveWebViewMessage(
+                    controlCenter.PreferencesSaved
+                        ? "WebView_preferencesSaved"
+                        : "WebView_preferencesNotSaved"),
                 PersistenceError = controlCenter.PersistenceError,
                 IdentityEnabled = controlCenter.IdentityEnabled,
                 ShowOnBoardEnabled = controlCenter.ShowOnBoardEnabled
             };
         }
 
-        internal static string ResolveWebViewSyncStatus(
+        private static string ResolveWebViewMessage(string key, params object[] arguments)
+        {
+            return Program.ResolveSemanticMessage(SemanticMessage.Create(key, arguments));
+        }
+
+        internal static string ResolveWebViewSyncStatusKey(
             bool communicationEstablished,
             bool activeSync)
         {
             if (activeSync)
-                return "同步中";
-            return communicationEstablished ? "就绪" : "宿主模式已启动";
+                return "WebView_syncing";
+            return communicationEstablished ? "WebView_ready" : "WebView_hostModeStarted";
         }
 
-        private static string ResolveWebViewNextTurn(MainWindowTitleTurn titleTurn)
+        private static string ResolveWebViewNextTurnText(MainWindowTitleTurn titleTurn)
         {
             if (titleTurn == MainWindowTitleTurn.Black)
-                return "黑";
+                return ResolveWebViewMessage("WebView_black");
             if (titleTurn == MainWindowTitleTurn.White)
-                return "白";
+                return ResolveWebViewMessage("WebView_white");
             return "--";
+        }
+
+        private static string ResolveWebViewTargetStatusKey(bool? targetWindowValid)
+        {
+            return targetWindowValid == true
+                ? "WebView_targetValid"
+                : targetWindowValid == false ? "WebView_targetInvalid" : "WebView_waitTarget";
+        }
+
+        private static string ResolveWebViewPlatformKey(SyncMode platform)
+        {
+            switch (ControlCenterPreferences.ToPlatformToken(platform))
+            {
+                case "fox": return "MainForm_rdoFox";
+                case "foxBackground": return "MainForm_rdoFoxBack";
+                case "yike": return "MainForm_rdoYike";
+                case "yicheng": return "MainForm_rdoTygem";
+                case "sina": return "MainForm_rdoSina";
+                case "otherBackground": return "MainForm_rdoBack";
+                case "otherForeground": return "MainForm_rdoFore";
+                default: return "WebView_notSelected";
+            }
+        }
+
+        private static string ResolveAutoPlayColorStatusKey(AutoPlayColorStatus status)
+        {
+            switch (status)
+            {
+                case AutoPlayColorStatus.Unconfigured:
+                    return "MainForm_autoPlayColorStatusUnconfigured";
+                case AutoPlayColorStatus.RecognizedBlack:
+                    return "MainForm_autoPlayColorStatusBlack";
+                case AutoPlayColorStatus.RecognizedWhite:
+                    return "MainForm_autoPlayColorStatusWhite";
+                case AutoPlayColorStatus.UnsupportedPlatform:
+                    return "MainForm_autoPlayColorStatusUnsupported";
+                case AutoPlayColorStatus.Spectating:
+                    return "MainForm_autoPlayColorStatusSpectating";
+                default:
+                    return "MainForm_autoPlayColorStatusWaiting";
+            }
         }
 
         private static string FormatWebViewDuration(TimeSpan duration)
@@ -1162,7 +1264,7 @@ namespace readboard
 
         private void AddWebViewSemanticLog(
             string level,
-            ControlCenterSemanticMessage message)
+            SemanticMessage message)
         {
             if (message == null)
                 return;
@@ -1172,8 +1274,9 @@ namespace readboard
             webViewLogs.Enqueue(new ReadBoardUiLogEntry
             {
                 Time = DateTime.Now.ToString("HH:mm:ss"),
-                Level = level,
+                Level = message.Level ?? level,
                 MessageKey = message.Key,
+                Arguments = message.Arguments,
                 DiagnosticDetail = message.DiagnosticDetail
             });
         }

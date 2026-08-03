@@ -2495,7 +2495,7 @@ namespace readboard
 
         private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)
         {
-            btnKeepSync.Text = getLangStr("keepSync") + "(" + Program.timename + "ms)";
+            btnKeepSync.Text = ResolveWebViewMessage("WebView_continuousSyncLabel", Program.timeinterval);
             if (!SyncToolbarTextResolver.ShouldRestoreIdleUiAfterKeepSyncStop(continuousSyncActive))
             {
                 ApplyMainWindowTitle();
@@ -2622,7 +2622,7 @@ namespace readboard
             this.btnCircleRow1.Text = getLangStr("MainForm_btnCircleRow1");
             this.btnTogglePonder.Text = getLangStr("MainForm_btnTogglePonder");
             this.chkShowInBoard.Text = getLangStr("MainForm_chkShowInBoard");
-            this.btnKeepSync.Text = getLangStr("MainForm_btnKeepSync");
+            this.btnKeepSync.Text = ResolveWebViewMessage("WebView_continuousSyncLabel", Program.timeinterval);
             this.btnOneTimeSync.Text = getLangStr("MainForm_btnOneTimeSync");
             this.btnExchange.Text = getLangStr("MainForm_btnExchange");
             this.btnForceRebuild.Text = getLangStr("MainForm_btnForceRebuild");
@@ -2635,15 +2635,7 @@ namespace readboard
 
         private String getLangStr(String itemName)
         {
-            String result  = "";
-            try {
-                result = Program.langItems[itemName].ToString();
-            }
-            catch (Exception e)
-            {
-                SendError(e.ToString());              
-            }
-            return result;
+            return Program.ResolveLanguageText(itemName);
         }
 
         private void btnCheckUpdate_Click(object sender, EventArgs e)
@@ -2698,7 +2690,7 @@ namespace readboard
             mouseHook.MouseMove += mh_MouseMoveEvent;
             mouseHook.MouseClick += mh_MouseMoveEvent2;
             mouseHook.Enabled = false;
-            this.btnKeepSync.Text = getLangStr("keepSync") + "(" + Program.timename + "ms)";
+            this.btnKeepSync.Text = ResolveWebViewMessage("WebView_continuousSyncLabel", Program.timeinterval);
         }
 
         //[DllImport("user32.dll")]
@@ -2855,7 +2847,7 @@ namespace readboard
         public void resetBtnKeepSyncName()
         {
             if (!sessionCoordinator.StartedSync)
-                this.btnKeepSync.Text = getLangStr("keepSync") + "("+ Program.timename + "ms)";
+                this.btnKeepSync.Text = ResolveWebViewMessage("WebView_continuousSyncLabel", Program.timeinterval);
         }
 
         [DllImport("user32.dll", EntryPoint = "FindWindow", SetLastError = true)]

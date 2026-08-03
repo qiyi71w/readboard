@@ -71,6 +71,23 @@ namespace Readboard.VerificationTests.Host
             Assert.Empty(second.SemanticMessages);
             Assert.False(second.ShouldPublishSnapshot);
         }
+        [Fact]
+        public void SemanticLogFingerprintIncludesTypedArguments()
+        {
+            ControlCenterRuntime runtime = CreateRuntime();
+            ControlCenterSessionObservation first = new ControlCenterSessionObservation(0)
+                .WithSemanticLog("SYNC", "WebView_candidateRowNumber", null, 1);
+            ControlCenterSessionObservation second = new ControlCenterSessionObservation(0)
+                .WithSemanticLog("SYNC", "WebView_candidateRowNumber", null, 2);
+
+            Assert.Equal(ControlCenterSessionObservationApplyOutcome.Applied, runtime.ApplyObservation(first).Outcome);
+            ControlCenterSessionObservationApplyResult result = runtime.ApplyObservation(second);
+
+            Assert.Equal(ControlCenterSessionObservationApplyOutcome.Applied, result.Outcome);
+            Assert.Single(result.SemanticMessages);
+            Assert.Equal(2, result.SemanticMessages[0].Arguments[0]);
+        }
+
 
         [Fact]
         public void ObservationFingerprint_DoesNotCollideWhenStringFieldsContainDelimiters()

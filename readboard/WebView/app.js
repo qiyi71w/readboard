@@ -18,6 +18,10 @@
       theme: "system",
       connected: false,
       syncStatus: "",
+      hostStatus: "",
+      targetStatus: "",
+      boardStatus: "",
+      placementStatus: "",
       lastSync: "--:--:--",
       stoneCount: 0,
       duration: "--",
@@ -49,6 +53,8 @@
       aiTimeEnabled: false,
       playoutsEnabled: false,
       autoPlayColorStatus: "",
+      platformLabel: "",
+      bindingStatus: "",
       playColorKnown: false,
       showOnBoard: false,
       quickSyncActive: false,
@@ -62,17 +68,21 @@
       analysisToggleEnabled: false,
       swapOrderEnabled: true,
       forceRebuildEnabled: true,
+      quickSyncLabel: "",
+      continuousSyncLabel: "",
       clearBoardEnabled: true,
       boardSelectionInsideEnabled: true,
       boardSelectionRectangleEnabled: false,
       boardSelectionLine1Enabled: false,
       configurationEnabled: true,
       twoWaySyncEnabled: true,
+      analysisLabel: "",
       autoPlayToggleEnabled: true,
       autoPlayControlsEnabled: false,
       customBoardSizeEnabled: false,
       customBoardDimensionsEnabled: false,
       preferencesSaved: true,
+      preferencesStatus: "",
       persistenceError: null,
       identityEnabled: true,
       showOnBoardEnabled: true
@@ -93,6 +103,7 @@
       language: "host",
       diagnostics: false,
       dirty: false,
+      dirtyStatus: "",
       errors: {},
       saveError: null
     },
@@ -103,7 +114,6 @@
   };
 
   let state = structuredClone(initialState);
-  if (preview) state.logs = [{ time: "--:--:--", level: "INFO", message: t("WebView_previewWaiting", "本地预览模式，等待宿主状态") }];
   let activeModal = null;
   let modalOpener = null;
   let resizeFrame = 0;
@@ -252,28 +262,23 @@
     const shell = state.shell || {};
     const version = shell.version || "v3.1.0";
     ["title-version", "version", "about-version", "project-version"].forEach(id => text(id, version));
-    const syncStatus = shell.syncStatus === "同步中" ? t("WebView_syncing", "同步中")
-      : shell.syncStatus === "就绪" ? t("WebView_ready", "就绪")
-        : shell.syncStatus === "宿主模式已启动" ? t("WebView_hostModeStarted", "宿主模式已启动") : shell.syncStatus;
-    text("sync-status", syncStatus || (shell.connected ? t("WebView_ready", "就绪") : t("WebView_hostModeStarted", "宿主模式已启动")));
+    text("sync-status", shell.syncStatus || "");
     text("last-sync", shell.lastSync || "--:--:--");
     text("stone-count", shell.stoneCount ?? 0);
     text("duration", shell.duration || "--");
-    text("host-state", shell.connected ? t("WebView_hostConnected", "宿主通信正常") : t("WebView_hostModeStarted", "宿主模式已启动"));
+    text("host-state", shell.hostStatus || "");
     const maximizeButton = $('[data-command="window.maximize"]');
     if (maximizeButton) {
-      maximizeButton.setAttribute("aria-label", shell.maximized ? t("WebView_restore", "还原") : t("WebView_maximize", "最大化"));
+      maximizeButton.setAttribute("aria-label", shell.maximizeLabel || "");
       const icon = $(".icon", maximizeButton);
       if (icon) icon.innerHTML = shell.maximized ? "&#xE923;" : "&#xE922;";
     }
     $("#sync-status")?.classList.toggle("good", Boolean(shell.connected));
     $("#sync-dot").className = `dot${shell.connected ? " good" : ""}`;
     $("#host-dot").className = `dot${shell.connected ? " good" : ""}`;
-    setStatus("target", shell.targetWindowValid === true
-      ? t("WebView_targetValid", "目标窗口有效")
-      : shell.targetWindowValid === false ? t("WebView_targetInvalid", "目标窗口已失效，请重新选择") : t("WebView_waitTarget", "等待选择目标窗口"), shell.targetWindowValid);
-    setStatus("board", shell.boardRegionRecognized ? t("WebView_boardRecognized", "棋盘区域已识别") : t("WebView_waitBoardRecognition", "等待首次棋盘识别"), shell.boardRegionRecognized);
-    setStatus("placement", shell.placementRegionResolved ? t("WebView_placementResolved", "落子区域已解析") : t("WebView_placementUnavailable", "落子区域暂不可用"), shell.placementRegionResolved);
+    setStatus("target", shell.targetStatus || "", shell.targetWindowValid);
+    setStatus("board", shell.boardStatus || "", shell.boardRegionRecognized);
+    setStatus("placement", shell.placementStatus || "", shell.placementRegionResolved);
   }
 
   function setStatus(prefix, label, value) {
@@ -284,11 +289,11 @@
 
   function renderControlCenter() {
     const control = state.controlCenter || {};
-    text("context-platform", control.platformLabel || platformLabel(control.platform));
+    text("context-platform", control.platformLabel || "");
     dynamicText("context-room", control.room || "--");
     text("context-moves", control.moves ?? "--");
-    text("context-turn", control.nextTurn === "黑" ? t("WebView_black", "黑") : control.nextTurn === "白" ? t("WebView_white", "白") : control.nextTurn || "--");
-    text("context-binding", control.titleBound ? t("WebView_bound", "已绑定") : t("WebView_notBound", "未绑定"));
+    text("context-turn", control.nextTurn || "--");
+    text("context-binding", control.bindingStatus || "");
     const bindingDot = $("#binding-dot");
     if (bindingDot) bindingDot.className = `dot${control.titleBound ? " good" : ""}`;
     setChecked(`input[name="platform"][value="${cssValue(control.platform || "fox")}"]`, true);
@@ -307,9 +312,7 @@
     if (preferencesStatus) {
       const saved = control.preferencesSaved !== false;
       preferencesStatus.className = `preference-status${saved ? "" : " not-saved"}`;
-      preferencesStatus.textContent = saved
-        ? t("WebView_preferencesSaved", "偏好已保存")
-        : t("WebView_preferencesNotSaved", "当前选择已生效，但尚未保存");
+      preferencesStatus.textContent = control.preferencesStatus || "";
       preferencesStatus.title = saved ? "" : (control.persistenceError || preferencesStatus.textContent);
     }
     setDisabled('input[name="platform"], input[name="boardSize"]', !control.configurationEnabled);
@@ -325,9 +328,9 @@
     setDisabled("#first-policy", !control.firstPolicyEnabled);
     setDisabled('[data-command="identity.open"]', !control.identityEnabled);
     setDisabled("#show-on-board", !control.showOnBoardEnabled);
-    text("quick-label", control.quickSyncActive ? t("WebView_stopQuickSync", "停止快速同步") : t("WebView_quickSync", "快速同步"));
-    text("continuous-label", `${control.continuousSyncActive ? t("WebView_stopContinuousSync", "停止持续同步") : t("WebView_continuousSync", "持续同步")} (${control.syncInterval ?? 200}ms)`);
-    text("analysis-label", control.analysisRunning ? t("WebView_pauseAnalysis", "暂停分析") : t("WebView_resumeAnalysis", "继续分析"));
+    text("quick-label", control.quickSyncLabel || "");
+    text("continuous-label", control.continuousSyncLabel || "");
+    text("analysis-label", control.analysisLabel || "");
     setDisabled('[data-command="sync.quick"]', !control.quickSyncEnabled);
     setDisabled('[data-command="sync.continuous"]', !control.continuousSyncEnabled);
     setDisabled('[data-command="sync.once"]', !control.oneTimeSyncEnabled);
@@ -351,9 +354,6 @@
     $("[data-command='sync.toggleAnalysis']")?.setAttribute("aria-pressed", String(Boolean(control.analysisRunning)));
   }
 
-  function platformLabel(value) {
-    return ({ fox: t("MainForm_rdoFox", "野狐"), foxBackground: t("MainForm_rdoFoxBack", "野狐(后台落子)"), yike: t("MainForm_rdoYike", "弈客"), yicheng: t("MainForm_rdoTygem", "弈城"), sina: t("MainForm_rdoSina", "新浪"), otherBackground: t("MainForm_rdoBack", "其他(后台)"), otherForeground: t("MainForm_rdoFore", "其他(前台)") })[value] || t("WebView_notSelected", "未选择");
-  }
 
   function cssValue(value) {
     return String(value).replace(/["\\]/g, "\\$&");
@@ -375,7 +375,7 @@
       }
     });
     setChecked(`input[name="theme"][value="${cssValue(settings.theme || "system")}"]`, true);
-    text("settings-dirty", settings.dirty ? t("WebView_unsavedChanges", "有尚未保存的更改") : t("WebView_noUnsavedChanges", "当前没有未保存的更改"));
+    text("settings-dirty", settings.dirtyStatus || "");
     text("settings-error", settings.saveError || "");
   }
 
@@ -392,16 +392,13 @@
       tag.className = `log-tag ${level.toLowerCase()}`;
       tag.textContent = level;
       const message = document.createElement("span");
-      message.textContent = localizedLogMessage(log);
+      message.textContent = log && log.message ? log.message : "";
       row.append(time, tag, message);
       return row;
     }));
     list.scrollTop = list.scrollHeight;
   }
 
-  function localizedLogMessage(log) {
-    return log && log.message ? log.message : "";
-  }
 
   function renderModal() {
     if (state.update?.open) return renderUpdate(state.update);
@@ -438,45 +435,45 @@
   function renderUpdate(update) {
     const mode = update.status || "checking";
     let body;
-    let actions = button("update.close", t("Update_close", "关闭"));
+    let actions = button("update.close", update.closeLabel || "");
     if (mode === "checking") {
-      body = message("&#xE895;", t("WebView_updateChecking", "正在检查可用更新"), t("WebView_updateConnecting", "正在连接 GitHub Release，请稍候。"), '<div class="progress indeterminate"><i></i></div>');
+      body = message("&#xE895;", update.title || "", update.detail || "", '<div class="progress indeterminate"><i></i></div>');
     } else if (mode === "latest") {
-      body = message("&#xE73E;", update.title || t("WebView_updateLatest", "当前已是最新版本"), escapeHtml(update.detail || `ReadBoard ${update.currentVersion || state.shell.version || ""}`), `<p>${escapeHtml(update.completedAt || update.message || t("WebView_updateJustChecked", "刚刚完成检查"))}</p>`);
-      actions = button("update.close", t("WebView_done", "完成"), "primary");
+      body = message("&#xE73E;", update.title || "", update.detail || "", `<p>${escapeHtml(update.message || "")}</p>`);
+      actions = button("update.close", update.doneLabel || "", "primary");
     } else if (mode === "available" || mode === "manual") {
-      body = `<div class="update-details"><span>${escapeHtml(t("Update_currentVersion", "当前版本"))}</span><b>${escapeHtml(update.currentVersion || "--")}</b><span>${escapeHtml(t("Update_latestVersion", "最新版本"))}</span><b>${escapeHtml(update.latestVersion || "--")}</b><span>${escapeHtml(t("Update_releaseDate", "发布日期"))}</span><b>${escapeHtml(update.releaseDate || "--")}</b>${mode === "manual" ? `<div class="update-warning"><b>${escapeHtml(t("WebView_hostedInstallUnsupported", "当前宿主不支持托管安装"))}</b><p>${escapeHtml(update.detail || t("WebView_manualDownload", "可打开 Release 页面手动下载更新。"))}</p></div>` : ""}<span>${escapeHtml(t("Update_releaseNotes", "更新说明"))}</span><div class="release-notes">${escapeHtml(update.releaseNotes || t("Update_releaseNotesUnavailable", "暂无更新说明"))}</div></div>`;
-      actions += button(mode === "manual" ? "update.openDownload" : "update.install", mode === "manual" ? t("Update_download", "去下载") : t("Update_downloadAndInstall", "下载并安装"), "primary");
+      body = `<div class="update-details"><span>${escapeHtml(update.currentVersionLabel || "")}</span><b>${escapeHtml(update.currentVersion || "--")}</b><span>${escapeHtml(update.latestVersionLabel || "")}</span><b>${escapeHtml(update.latestVersion || "--")}</b><span>${escapeHtml(update.releaseDateLabel || "")}</span><b>${escapeHtml(update.releaseDate || "--")}</b>${mode === "manual" ? `<div class="update-warning"><b>${escapeHtml(update.title || "")}</b><p>${escapeHtml(update.message || update.detail || "")}</p></div>` : ""}<span>${escapeHtml(update.releaseNotesLabel || "")}</span><div class="release-notes">${escapeHtml(update.releaseNotes || "")}</div></div>`;
+      actions += button(mode === "manual" ? "update.openDownload" : "update.install", mode === "manual" ? update.downloadLabel || "" : update.downloadAndInstallLabel || "", "primary");
     } else if (mode === "notice") {
-      body = message("&#xE946;", update.title || t("WebView_updateChannelNotice", "更新通道提示"), escapeHtml(update.detail || t("WebView_noUpdateAvailable", "当前没有可安装的更新。")));
-      actions = button("update.close", t("WebView_done", "完成"), "primary");
+      body = message("&#xE946;", update.title || "", update.detail || "");
+      actions = button("update.close", update.doneLabel || "", "primary");
     } else if (mode === "check-failed") {
-      body = message("&#xE783;", update.title || t("Update_checkFailed", "检查更新失败"), escapeHtml(update.detail || t("WebView_tryAgainLater", "请稍后重试。")));
-      actions = button("update.close", t("Update_close", "关闭"), "primary");
+      body = message("&#xE783;", update.title || "", update.detail || "");
+      actions = button("update.close", update.closeLabel || "");
     } else if (mode === "processing") {
-      body = `<h3>${escapeHtml(update.title || t("WebView_preparingUpdate", "正在准备更新包"))}</h3><p>${escapeHtml(update.detail || t("WebView_pleaseWait", "请稍候…"))}</p>${progress(update.progress)}<div class="steps">${steps(update.steps)}</div>`;
-      actions = `<button type="button" disabled>${escapeHtml(t("WebView_processing", "处理中…"))}</button>`;
+      body = `<h3>${escapeHtml(update.title || "")}</h3><p>${escapeHtml(update.detail || "")}</p>${progress(update.progress)}<div class="steps">${steps(update.steps)}</div>`;
+      actions = `<button type="button" disabled>${escapeHtml(update.processingLabel || "")}</button>`;
     } else {
-      body = `<div class="dialog-copy"><h3>${escapeHtml(update.title || t("WebView_installIncomplete", "安装未完成"))}</h3><p>${escapeHtml(update.message || t("WebView_updateIncomplete", "更新未完成，已切换为手动下载。"))}</p><div class="update-warning"><b>${escapeHtml(update.errorTitle || t("WebView_operationFailed", "操作失败"))}</b><p>${escapeHtml(update.error || t("WebView_retryOrDownload", "可稍后重试或手动下载。"))}</p></div></div>`;
-      actions += button("update.openDownload", t("Update_download", "去下载"), "primary");
+      body = `<div class="dialog-copy"><h3>${escapeHtml(update.title || "")}</h3><p>${escapeHtml(update.message || "")}</p><div class="update-warning"><b>${escapeHtml(update.errorTitle || "")}</b><p>${escapeHtml(update.error || "")}</p></div></div>`;
+      actions += button("update.openDownload", update.downloadLabel || "", "primary");
     }
-    openModal("update", t("MainForm_btnCheckUpdate", "检查更新"), body, actions, "min(660px, calc(100vw - 48px))");
+    openModal("update", update.dialogTitle || "", body, actions, "min(660px, calc(100vw - 48px))");
   }
 
   function renderIdentity(identity) {
     const candidates = Array.isArray(identity.candidates) ? identity.candidates : [];
     const selected = identity.selectedId;
     const body = candidates.length
-      ? `<p class="identity-intro">${escapeHtml(t("FoxAutoPlayIdentityDialog_lblPrompt", "请选择你在野狐当前房间里的玩家行。"))}</p><b>${escapeHtml(t("FoxAutoPlayIdentityDialog_lblDetectedNicknames", "可选玩家行"))}</b><div class="candidate-list">${candidates.map(candidate => candidateHtml(candidate, selected, identity.savedId)).join("")}</div>${selected ? `<p class="identity-intro">${escapeHtml(t("WebView_selectedIdentity", "已选择"))} ${escapeHtml(candidates.find(item => item.id === selected)?.label || "")}</p>` : ""}`
-      : `<p class="identity-intro">${escapeHtml(t("FoxAutoPlayIdentityDialog_lblPrompt", "请选择你在野狐当前房间里的玩家行。"))}</p><b>${escapeHtml(t("FoxAutoPlayIdentityDialog_lblDetectedNicknames", "可选玩家行"))}</b><div class="empty-state"><div><i class="icon">&#xE738;</i><h3>${escapeHtml(t("FoxAutoPlayIdentityDialog_noDetectedNicknames", "暂未识别到可选玩家行"))}</h3><p>${escapeHtml(t("WebView_identityWindowHint", "请确认野狐棋局窗口可见，然后重新打开身份选择。"))}</p></div></div>`;
-    const actions = identity.hasSavedIdentity ? button("identity.clearSaved", t("FoxAutoPlayIdentityDialog_btnClearSavedIdentity", "清除保存"), "danger-outline left") : "";
-    openModal("identity", t("WebView_selectIdentity", "选择野狐身份"), body, actions + button("identity.close", t("FoxAutoPlayIdentityDialog_btnCancel", "取消")) + button("identity.useOnce", t("FoxAutoPlayIdentityDialog_btnUseOnce", "本次使用"), "", !selected) + button("identity.saveAndUse", t("FoxAutoPlayIdentityDialog_btnSaveAndUse", "保存并使用"), "primary", !selected), "min(780px, calc(100vw - 48px))");
+      ? `<p class="identity-intro">${escapeHtml(identity.prompt || "")}</p><b>${escapeHtml(identity.detectedNicknamesLabel || "")}</b><div class="candidate-list">${candidates.map(candidate => candidateHtml(candidate, selected, identity.savedId, identity.savedLabel)).join("")}</div>${selected ? `<p class="identity-intro">${escapeHtml(identity.selectedLabel || "")} ${escapeHtml(candidates.find(item => item.id === selected)?.label || "")}</p>` : ""}`
+      : `<p class="identity-intro">${escapeHtml(identity.prompt || "")}</p><b>${escapeHtml(identity.detectedNicknamesLabel || "")}</b><div class="empty-state"><div><i class="icon">&#xE738;</i><h3>${escapeHtml(identity.emptyTitle || "")}</h3><p>${escapeHtml(identity.windowHint || "")}</p></div></div>`;
+    const actions = identity.hasSavedIdentity ? button("identity.clearSaved", identity.clearSavedLabel || "", "danger-outline left") : "";
+    openModal("identity", identity.dialogTitle || "", body, actions + button("identity.close", identity.cancelLabel || "") + button("identity.useOnce", identity.useOnceLabel || "", "", !selected) + button("identity.saveAndUse", identity.saveAndUseLabel || "", "primary", !selected), "min(780px, calc(100vw - 48px))");
   }
 
-  function candidateHtml(candidate, selectedId, savedId) {
+  function candidateHtml(candidate, selectedId, savedId, savedLabel) {
     const selected = candidate.id === selectedId;
     const previewUrl = safeImageUrl(candidate.previewUrl);
-    return `<label class="candidate${selected ? " selected" : ""}"><input type="radio" name="candidate" value="${escapeAttr(candidate.id)}"${selected ? " checked" : ""}><b>${escapeHtml(candidate.label || t("WebView_unnamedCandidate", "未命名候选"))}</b>${candidate.id === savedId ? `<span class="saved-pill">${escapeHtml(t("WebView_saved", "已保存"))}</span>` : ""}${previewUrl ? `<img src="${escapeAttr(previewUrl)}" alt="${escapeAttr((candidate.label || t("WebView_candidateRow", "候选玩家行")) + t("WebView_screenshot", "截图"))}">` : ""}</label>`;
+    return `<label class="candidate${selected ? " selected" : ""}"><input type="radio" name="candidate" value="${escapeAttr(candidate.id)}"${selected ? " checked" : ""}><b>${escapeHtml(candidate.label || "")}</b>${candidate.id === savedId ? `<span class="saved-pill">${escapeHtml(savedLabel || "")}</span>` : ""}${previewUrl ? `<img src="${escapeAttr(previewUrl)}" alt="${escapeAttr(candidate.previewAlt || "")}">` : ""}</label>`;
   }
 
   function safeImageUrl(value) {
@@ -485,19 +482,21 @@
   }
 
   function renderDialog(dialog) {
-    const content = {
-      resetDefaults: [t("SettingsForm_btnReset", "恢复默认设置"), t("WebView_resetDefaultsDescription", "将当前设置草稿恢复为默认值。此操作不会立即写入配置，仍需点击保存设置。"), t("WebView_resetDefaults", "恢复默认")],
-      diagnostics: [t("WebView_enableDiagnostics", "开启调试诊断"), t("WebView_diagnosticsDescription", "调试诊断可能产生较大的文件。确认后仅修改当前设置草稿，保存设置后生效。"), t("WebView_continueEnable", "继续开启")],
-      showInBoardHint: [t("MainForm_chkShowInBoard", "原棋盘上显示选点"), t("WebView_showInBoardHintForeground", "[前台]方式同步时不支持此功能。选点显示在原棋盘上后，原棋盘将无法落子。"), t("TipsForm_btnConfirm", "确定")]
-    }[dialog.kind] || [dialog.title || t("TipsForm_title", "提示"), dialog.message || "", t("TipsForm_btnConfirm", "确定")];
-    let actions = button("dialog.cancel", dialog.cancelLabel || t("SettingsForm_btnCancel", "取消"));
+    const title = dialog.title || "";
+    const message = dialog.message || "";
+    const detail = dialog.detail || "";
+    const confirmLabel = dialog.confirmLabel || "";
+    const cancelLabel = dialog.cancelLabel || "";
+    const dontShowAgainLabel = dialog.dontShowAgainLabel || "";
+    const detailHtml = detail ? `<p>${escapeHtml(detail)}</p>` : "";
+    let actions = button("dialog.cancel", cancelLabel);
     if (dialog.kind === "showInBoardHint") {
-      actions = button("dialog.dontShowAgain", t("TipsForm_btnNotAskAgain", "不再提示")) + button("dialog.confirm", dialog.confirmLabel || content[2], "primary");
-      openModal("dialog show-in-board-hint", t("TipsForm_title", "提示"), `<div class="dialog-copy"><p>${escapeHtml(dialog.message || content[1])}</p><p>${escapeHtml(t("WebView_showInBoardHintRestore", "可通过勾选“双向同步”选项恢复落子功能。"))}</p></div>`, actions, "min(520px, calc(100vw - 48px))");
+      actions = button("dialog.dontShowAgain", dontShowAgainLabel) + button("dialog.confirm", confirmLabel, "primary");
+      openModal("dialog show-in-board-hint", title, `<div class="dialog-copy"><p>${escapeHtml(message)}</p>${detailHtml}</div>`, actions, "min(520px, calc(100vw - 48px))");
       return;
     }
-    actions += button("dialog.confirm", dialog.confirmLabel || content[2], "primary");
-    openModal("dialog", content[0], `<div class="dialog-copy"><h3>${escapeHtml(dialog.heading || content[0])}</h3><p>${escapeHtml(dialog.message || content[1])}</p></div>`, actions, "min(580px, calc(100vw - 48px))");
+    actions += button("dialog.confirm", confirmLabel, "primary");
+    openModal("dialog", title, `<div class="dialog-copy"><h3>${escapeHtml(dialog.heading || title)}</h3><p>${escapeHtml(message)}</p>${detailHtml}</div>`, actions, "min(580px, calc(100vw - 48px))");
   }
 
   function message(icon, title, detail, extra = "") {

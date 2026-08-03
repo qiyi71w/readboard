@@ -291,7 +291,7 @@ namespace readboard
                     SendNotInBoardCommand();
                     return;
                 case ControlCenterSessionEffectKind.ShowOnBoardHint:
-                    webViewSettingsDialog = new ReadBoardDialogUiState { Open = true, Kind = "showInBoardHint" };
+                    webViewSettingsDialog = CreateWebViewDialog("showInBoardHint");
                     return;
                 case ControlCenterSessionEffectKind.ResendSyncSessionState:
                     ResendSyncSessionState();
@@ -350,7 +350,7 @@ namespace readboard
             ProjectControlCenterState();
             for (int i = 0; i < result.SemanticMessages.Count; i++)
             {
-                ControlCenterSemanticMessage message = result.SemanticMessages[i];
+                SemanticMessage message = result.SemanticMessages[i];
                 AddWebViewSemanticLog(message.Level, message);
             }
             if (result.ShouldPublishSnapshot)

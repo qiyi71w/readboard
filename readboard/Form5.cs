@@ -35,16 +35,7 @@ namespace readboard
 
         private String getLangStr(String itemName)
         {
-            String result = "";
-            try
-            {
-                result = Program.CurrentContext.LanguageItems[itemName].ToString();
-            }
-            catch (Exception e)
-            {
-                GetHost().SendError(e.ToString());
-            }
-            return result;
+            return Program.ResolveLanguageText(itemName);
         }
 
         public void setPic(int x, int y)

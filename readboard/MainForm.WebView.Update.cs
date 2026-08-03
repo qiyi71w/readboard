@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading.Tasks;
@@ -29,7 +30,219 @@ namespace readboard
 
         internal ReadBoardUpdateUiState GetWebViewUpdateState()
         {
-            return webViewUpdateState;
+            return ResolveWebViewUpdateState(
+                webViewUpdateState,
+                getLangStr,
+                Program.GetDefaultLanguageText);
+        }
+
+        internal static ReadBoardUpdateUiState ResolveWebViewUpdateState(
+            ReadBoardUpdateUiState state,
+            Func<string, string> getLocalizedText,
+            Func<string, string> getDefaultText)
+        {
+            if (state == null)
+                return null;
+
+            SemanticMessage dialogTitleMessage = state.DialogTitleMessage
+                ?? SemanticMessage.Create("MainForm_btnCheckUpdate");
+            SemanticMessage closeLabelMessage = state.CloseLabelMessage
+                ?? SemanticMessage.Create("Update_close");
+            SemanticMessage doneLabelMessage = state.DoneLabelMessage
+                ?? SemanticMessage.Create("WebView_done");
+            SemanticMessage currentVersionLabelMessage = state.CurrentVersionLabelMessage
+                ?? SemanticMessage.Create("Update_currentVersion");
+            SemanticMessage latestVersionLabelMessage = state.LatestVersionLabelMessage
+                ?? SemanticMessage.Create("Update_latestVersion");
+            SemanticMessage releaseDateLabelMessage = state.ReleaseDateLabelMessage
+                ?? SemanticMessage.Create("Update_releaseDate");
+            SemanticMessage releaseNotesLabelMessage = state.ReleaseNotesLabelMessage
+                ?? SemanticMessage.Create("Update_releaseNotes");
+            SemanticMessage downloadLabelMessage = state.DownloadLabelMessage
+                ?? SemanticMessage.Create("Update_download");
+            SemanticMessage downloadAndInstallLabelMessage = state.DownloadAndInstallLabelMessage
+                ?? SemanticMessage.Create("Update_downloadAndInstall");
+            SemanticMessage processingLabelMessage = state.ProcessingLabelMessage
+                ?? SemanticMessage.Create("WebView_processing");
+
+            List<ReadBoardUpdateStepUiState> steps = null;
+            if (state.Steps != null)
+            {
+                steps = new List<ReadBoardUpdateStepUiState>();
+                foreach (ReadBoardUpdateStepUiState step in state.Steps)
+                {
+                    steps.Add(new ReadBoardUpdateStepUiState
+                    {
+                        LabelMessage = step.LabelMessage,
+                        Label = ResolveWebViewUpdateText(
+                            step.LabelMessage,
+                            step.Label,
+                            null,
+                            getLocalizedText,
+                            getDefaultText),
+                        Status = step.Status
+                    });
+                }
+            }
+
+            return new ReadBoardUpdateUiState
+            {
+                Open = state.Open,
+                Status = state.Status,
+                CurrentVersion = state.CurrentVersion,
+                LatestVersion = state.LatestVersion,
+                ReleaseDate = ResolveWebViewUpdateText(
+                    state.ReleaseDateMessage,
+                    state.ReleaseDate,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                ReleaseDateMessage = state.ReleaseDateMessage,
+                ReleaseNotes = ResolveWebViewUpdateText(
+                    state.ReleaseNotesMessage,
+                    state.ReleaseNotes,
+                    state.ReleaseNotesMessages,
+                    getLocalizedText,
+                    getDefaultText),
+                ReleaseNotesMessage = state.ReleaseNotesMessage,
+                Title = ResolveWebViewUpdateText(
+                    state.TitleMessage,
+                    state.Title,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                TitleMessage = state.TitleMessage,
+                DialogTitle = ResolveWebViewUpdateText(
+                    dialogTitleMessage,
+                    state.DialogTitle,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                DialogTitleMessage = dialogTitleMessage,
+                CloseLabel = ResolveWebViewUpdateText(
+                    closeLabelMessage,
+                    state.CloseLabel,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                CloseLabelMessage = closeLabelMessage,
+                DoneLabel = ResolveWebViewUpdateText(
+                    doneLabelMessage,
+                    state.DoneLabel,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                DoneLabelMessage = doneLabelMessage,
+                CurrentVersionLabel = ResolveWebViewUpdateText(
+                    currentVersionLabelMessage,
+                    state.CurrentVersionLabel,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                CurrentVersionLabelMessage = currentVersionLabelMessage,
+                LatestVersionLabel = ResolveWebViewUpdateText(
+                    latestVersionLabelMessage,
+                    state.LatestVersionLabel,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                LatestVersionLabelMessage = latestVersionLabelMessage,
+                ReleaseDateLabel = ResolveWebViewUpdateText(
+                    releaseDateLabelMessage,
+                    state.ReleaseDateLabel,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                ReleaseDateLabelMessage = releaseDateLabelMessage,
+                ReleaseNotesLabel = ResolveWebViewUpdateText(
+                    releaseNotesLabelMessage,
+                    state.ReleaseNotesLabel,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                ReleaseNotesLabelMessage = releaseNotesLabelMessage,
+                DownloadLabel = ResolveWebViewUpdateText(
+                    downloadLabelMessage,
+                    state.DownloadLabel,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                DownloadLabelMessage = downloadLabelMessage,
+                DownloadAndInstallLabel = ResolveWebViewUpdateText(
+                    downloadAndInstallLabelMessage,
+                    state.DownloadAndInstallLabel,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                DownloadAndInstallLabelMessage = downloadAndInstallLabelMessage,
+                ProcessingLabel = ResolveWebViewUpdateText(
+                    processingLabelMessage,
+                    state.ProcessingLabel,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                ProcessingLabelMessage = processingLabelMessage,
+                Detail = ResolveWebViewUpdateText(
+                    state.DetailMessage,
+                    state.Detail,
+                    state.DetailMessages,
+                    getLocalizedText,
+                    getDefaultText),
+                DetailMessage = state.DetailMessage,
+                DetailMessages = state.DetailMessages,
+                Message = ResolveWebViewUpdateText(
+                    state.MessageMessage,
+                    state.Message,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                MessageMessage = state.MessageMessage,
+                ErrorTitle = ResolveWebViewUpdateText(
+                    state.ErrorTitleMessage,
+                    state.ErrorTitle,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                ErrorTitleMessage = state.ErrorTitleMessage,
+                Error = ResolveWebViewUpdateText(
+                    state.ErrorMessage,
+                    state.Error,
+                    null,
+                    getLocalizedText,
+                    getDefaultText),
+                ErrorMessage = state.ErrorMessage,
+                ReleaseNotesMessages = state.ReleaseNotesMessages,
+                Progress = state.Progress,
+                Steps = steps
+            };
+        }
+
+        private static string ResolveWebViewUpdateText(
+            SemanticMessage message,
+            string fallback,
+            IReadOnlyList<SemanticMessage> appendedMessages,
+            Func<string, string> getLocalizedText,
+            Func<string, string> getDefaultText)
+        {
+            string result = message == null
+                ? fallback
+                : SemanticMessageResolver.Resolve(message, getLocalizedText, getDefaultText);
+            if (appendedMessages == null)
+                return result;
+
+            foreach (SemanticMessage appendedMessage in appendedMessages)
+            {
+                string appended = SemanticMessageResolver.Resolve(
+                    appendedMessage,
+                    getLocalizedText,
+                    getDefaultText);
+                if (string.IsNullOrWhiteSpace(appended))
+                    continue;
+                result = string.IsNullOrWhiteSpace(result)
+                    ? appended
+                    : result + Environment.NewLine + Environment.NewLine + appended;
+            }
+            return result;
         }
 
         internal async Task CheckForWebViewUpdateAsync()
@@ -49,8 +262,8 @@ namespace readboard
                 Open = true,
                 Status = "checking",
                 CurrentVersion = AppReleaseVersion.GetCurrentVersion(),
-                Title = getLangStr("MainForm_btnCheckUpdate_Checking"),
-                Detail = getLangStr("WebView_updateFetching")
+                TitleMessage = SemanticMessage.Create("MainForm_btnCheckUpdate_Checking"),
+                DetailMessage = SemanticMessage.Create("WebView_updateFetching")
             };
             PostWebViewState();
 
@@ -72,8 +285,12 @@ namespace readboard
                     return;
                 Trace.TraceError(exception.ToString());
                 webViewUpdateState = CreateWebViewUpdateCheckFailedState(
-                    getLangStr("Update_checkFailed"),
-                    NormalizeWebViewUpdateText(exception.Message, getLangStr("Update_unknownError")));
+                    SemanticMessage.Create("Update_checkFailed"),
+                    SemanticMessage.CreateWithDiagnostic(
+                        "Update_unknownError",
+                        string.IsNullOrWhiteSpace(exception.Message)
+                            ? null
+                            : exception.Message.Trim()));
                 PostWebViewState();
             }
         }
@@ -133,8 +350,7 @@ namespace readboard
             {
                 Trace.TraceError(exception.ToString());
                 ActivateWebViewManualDownloadFallback(
-                    getLangStr("Update_openDownloadFailed"),
-                    string.Empty);
+                    SemanticMessage.Create("Update_openDownloadFailed"));
             }
         }
 
@@ -286,7 +502,10 @@ namespace readboard
             {
                 case UpdateCheckStatus.UpdateAvailable:
                     bool hostedInstallAvailable = CanOfferWebViewHostedInstallForCurrentProcess(result);
-                    string channelNotice = BuildWebViewChannelNotice(result);
+                    List<SemanticMessage> channelMessages = BuildWebViewChannelMessages(result);
+                    string releaseNotes = string.IsNullOrWhiteSpace(result.ReleaseNotes)
+                        ? null
+                        : result.ReleaseNotes.Trim();
                     webViewUpdateState = new ReadBoardUpdateUiState
                     {
                         Open = true,
@@ -295,49 +514,64 @@ namespace readboard
                         LatestVersion = result.LatestVersion,
                         ReleaseDate = result.PublishedAt.HasValue
                             ? result.PublishedAt.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
-                            : getLangStr("Update_notProvided"),
-                        ReleaseNotes = NormalizeWebViewUpdateText(
-                            result.ReleaseNotes,
-                            getLangStr("Update_releaseNotesUnavailable")) + channelNotice,
-                        Detail = channelNotice.Trim()
+                            : null,
+                        ReleaseDateMessage = result.PublishedAt.HasValue
+                            ? null
+                            : SemanticMessage.Create("Update_notProvided"),
+                        ReleaseNotes = releaseNotes,
+                        ReleaseNotesMessage = releaseNotes == null
+                            ? SemanticMessage.Create("Update_releaseNotesUnavailable")
+                            : null,
+                        ReleaseNotesMessages = channelMessages,
+                        TitleMessage = hostedInstallAvailable
+                            ? null
+                            : SemanticMessage.Create("WebView_hostedInstallUnsupported"),
+                        DetailMessages = channelMessages,
+                        MessageMessage = hostedInstallAvailable
+                            ? null
+                            : SemanticMessage.Create("WebView_manualDownload")
                     };
                     break;
                 case UpdateCheckStatus.UpToDate:
-                    string upToDateMessage = string.Equals(
+                    string upToDateKey = string.Equals(
                         result.ChannelStatus,
                         "retired",
                         StringComparison.Ordinal)
-                        ? getLangStr("Update_upToDateRetired")
-                        : getLangStr("Update_upToDate");
+                        ? "Update_upToDateRetired"
+                        : "Update_upToDate";
+                    SemanticMessage upToDateMessage = SemanticMessage.Create(upToDateKey);
                     webViewUpdateState = new ReadBoardUpdateUiState
                     {
                         Open = true,
                         Status = "latest",
                         CurrentVersion = result.CurrentVersion,
                         LatestVersion = result.LatestVersion,
-                        Title = upToDateMessage,
-                        Detail = AppendWebViewIncompatibleVersionNotice(result, upToDateMessage),
+                        TitleMessage = upToDateMessage,
+                        DetailMessage = upToDateMessage,
+                        DetailMessages = BuildWebViewChannelMessages(result),
                         Message = DateTime.Now.ToString("HH:mm", CultureInfo.CurrentCulture)
                     };
                     break;
                 case UpdateCheckStatus.OutsideChannel:
                     webViewUpdateState = CreateWebViewUpdateNoticeState(
                         result,
-                        getLangStr("Update_outsideChannel"),
-                        BuildWebViewChannelNotice(result).Trim());
+                        SemanticMessage.Create("Update_outsideChannel"),
+                        BuildWebViewChannelMessages(result));
                     break;
                 case UpdateCheckStatus.NoMatchingChannel:
                     webViewUpdateState = CreateWebViewUpdateNoticeState(
                         result,
-                        getLangStr("Update_noMatchingChannel"),
-                        AppendWebViewIncompatibleVersionNotice(result, string.Empty));
+                        SemanticMessage.Create("Update_noMatchingChannel"),
+                        BuildWebViewChannelMessages(result));
                     break;
                 case UpdateCheckStatus.Failed:
                     webViewUpdateState = CreateWebViewUpdateCheckFailedState(
-                        getLangStr("Update_checkFailed"),
-                        NormalizeWebViewUpdateText(
-                            result.ErrorMessage,
-                            getLangStr("Update_unknownError")));
+                        SemanticMessage.Create("Update_checkFailed"),
+                        SemanticMessage.CreateWithDiagnostic(
+                            "Update_unknownError",
+                            string.IsNullOrWhiteSpace(result.ErrorMessage)
+                                ? null
+                                : result.ErrorMessage.Trim()));
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(result.Status));
@@ -348,8 +582,8 @@ namespace readboard
 
         private ReadBoardUpdateUiState CreateWebViewUpdateNoticeState(
             UpdateCheckResult result,
-            string title,
-            string detail)
+            SemanticMessage titleMessage,
+            IReadOnlyList<SemanticMessage> detailMessages)
         {
             return new ReadBoardUpdateUiState
             {
@@ -357,110 +591,88 @@ namespace readboard
                 Status = "notice",
                 CurrentVersion = result.CurrentVersion,
                 LatestVersion = result.LatestVersion,
-                Title = title,
-                Detail = string.IsNullOrWhiteSpace(detail) ? title : detail
+                TitleMessage = titleMessage,
+                DetailMessages = detailMessages
             };
         }
 
         private ReadBoardUpdateUiState CreateWebViewUpdateCheckFailedState(
-            string title,
-            string detail)
+            SemanticMessage titleMessage,
+            SemanticMessage detailMessage)
         {
             return new ReadBoardUpdateUiState
             {
                 Open = true,
                 Status = "check-failed",
                 CurrentVersion = AppReleaseVersion.GetCurrentVersion(),
-                Title = title,
-                Detail = detail
+                TitleMessage = titleMessage,
+                DetailMessage = detailMessage
             };
         }
 
-        private string BuildWebViewChannelNotice(UpdateCheckResult result)
+        private static List<SemanticMessage> BuildWebViewChannelMessages(UpdateCheckResult result)
         {
-            string notice = string.Empty;
+            List<SemanticMessage> messages = new List<SemanticMessage>();
             if (string.Equals(result.ChannelStatus, "retired", StringComparison.Ordinal))
             {
-                notice = string.Format(
-                    CultureInfo.CurrentCulture,
-                    getLangStr("Update_retiredFinalVersion"),
-                    result.LatestVersion);
+                messages.Add(SemanticMessage.CreateWithDiagnostic(
+                    "Update_retiredFinalVersion",
+                    result.LatestVersion));
             }
 
-            notice = AppendWebViewIncompatibleVersionNotice(result, notice);
-            return string.IsNullOrWhiteSpace(notice)
-                ? string.Empty
-                : Environment.NewLine + Environment.NewLine + notice;
-        }
-
-        private string AppendWebViewIncompatibleVersionNotice(
-            UpdateCheckResult result,
-            string message)
-        {
-            if (string.IsNullOrWhiteSpace(result.IncompatibleNewerVersion) ||
-                string.IsNullOrWhiteSpace(result.IncompatibleMinimumWindowsVersion))
+            if (!string.IsNullOrWhiteSpace(result.IncompatibleNewerVersion)
+                && !string.IsNullOrWhiteSpace(result.IncompatibleMinimumWindowsVersion))
             {
-                return message;
+                messages.Add(SemanticMessage.CreateWithDiagnostic(
+                    "Update_newerVersionRequiresWindows",
+                    result.IncompatibleNewerVersion
+                        + "; Windows "
+                        + result.IncompatibleMinimumWindowsVersion));
             }
-
-            string incompatibleMessage = string.Format(
-                CultureInfo.CurrentCulture,
-                getLangStr("Update_newerVersionRequiresWindows"),
-                result.IncompatibleNewerVersion,
-                result.IncompatibleMinimumWindowsVersion);
-            return string.IsNullOrWhiteSpace(message)
-                ? incompatibleMessage
-                : message + Environment.NewLine + incompatibleMessage;
+            return messages;
         }
 
         private void SetWebViewUpdateProcessing(
-            HostedUpdateSemanticMessage message,
+            SemanticMessage message,
             int activeStep)
         {
-            string detail = ResolveHostedUpdateSemanticMessage(message);
             webViewUpdateState = new ReadBoardUpdateUiState
             {
                 Open = true,
                 Status = "processing",
                 CurrentVersion = webViewUpdateResult == null ? null : webViewUpdateResult.CurrentVersion,
                 LatestVersion = webViewUpdateResult == null ? null : webViewUpdateResult.LatestVersion,
-                Title = detail,
-                Detail = detail,
+                TitleMessage = message,
+                DetailMessage = message,
                 Steps = new[]
                 {
-                    CreateWebViewUpdateStep(getLangStr("WebView_updateStepDownload"), activeStep, 0),
-                    CreateWebViewUpdateStep(getLangStr("WebView_updateStepVerify"), activeStep, 1),
-                    CreateWebViewUpdateStep(getLangStr("WebView_updateStepNotifyHost"), activeStep, 2),
-                    CreateWebViewUpdateStep(getLangStr("WebView_updateStepHostInstall"), activeStep, 3)
+                    CreateWebViewUpdateStep(SemanticMessage.Create("WebView_updateStepDownload"), activeStep, 0),
+                    CreateWebViewUpdateStep(SemanticMessage.Create("WebView_updateStepVerify"), activeStep, 1),
+                    CreateWebViewUpdateStep(SemanticMessage.Create("WebView_updateStepNotifyHost"), activeStep, 2),
+                    CreateWebViewUpdateStep(SemanticMessage.Create("WebView_updateStepHostInstall"), activeStep, 3)
                 }
             };
             PostWebViewState();
         }
 
         private static ReadBoardUpdateStepUiState CreateWebViewUpdateStep(
-            string label,
+            SemanticMessage labelMessage,
             int activeStep,
             int step)
         {
             return new ReadBoardUpdateStepUiState
             {
-                Label = label,
+                LabelMessage = labelMessage,
                 Status = step < activeStep ? "done" : step == activeStep ? "active" : string.Empty
             };
         }
 
-        private void ActivateWebViewManualDownloadFallback(HostedUpdateSemanticMessage message)
+        private void ActivateWebViewManualDownloadFallback(SemanticMessage message)
         {
             if (message == null)
                 throw new ArgumentNullException(nameof(message));
 
-            ActivateWebViewManualDownloadFallback(
-                getLangStr(message.Key),
-                message.DiagnosticDetail);
-        }
-
-        private void ActivateWebViewManualDownloadFallback(string headline, string detail)
-        {
+            SemanticMessage headline = new SemanticMessage(message.Key, message.Arguments);
             webViewHostedInstallFallbackActive = true;
             webViewHostedUpdateHostInstalling = false;
             webViewUpdateState = new ReadBoardUpdateUiState
@@ -469,23 +681,12 @@ namespace readboard
                 Status = "failed",
                 CurrentVersion = webViewUpdateResult == null ? AppReleaseVersion.GetCurrentVersion() : webViewUpdateResult.CurrentVersion,
                 LatestVersion = webViewUpdateResult == null ? null : webViewUpdateResult.LatestVersion,
-                Title = headline,
-                Message = getLangStr("Update_manualDownloadFallback"),
-                ErrorTitle = headline,
-                Error = detail
+                TitleMessage = headline,
+                MessageMessage = SemanticMessage.Create("Update_manualDownloadFallback"),
+                ErrorTitleMessage = headline,
+                ErrorMessage = message
             };
             PostWebViewState();
-        }
-
-        private string ResolveHostedUpdateSemanticMessage(HostedUpdateSemanticMessage message)
-        {
-            if (message == null)
-                return string.Empty;
-
-            string localized = getLangStr(message.Key);
-            return string.IsNullOrWhiteSpace(message.DiagnosticDetail)
-                ? localized
-                : localized + ": " + message.DiagnosticDetail;
         }
 
         private bool CanOfferWebViewHostedInstallForCurrentProcess(UpdateCheckResult result)
@@ -509,10 +710,6 @@ namespace readboard
             };
         }
 
-        private static string NormalizeWebViewUpdateText(string value, string fallback)
-        {
-            return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-        }
 
     }
 }

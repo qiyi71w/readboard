@@ -27,6 +27,15 @@ dotnet build readboard.sln -c Debug
 dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --no-build
 ```
 
+WebView DOM rendering test（WSL/Node.js 20+）：
+
+```bash
+npm ci
+npm run test:webview
+```
+
+脚本会自动准备 Chromium，并验证 snapshot 动态文本、语言切换日志、校验错误和 accessibility 文本。
+
 只跑一组测试：
 
 ```powershell

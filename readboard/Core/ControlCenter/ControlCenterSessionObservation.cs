@@ -6,27 +6,6 @@ using System.Text;
 
 namespace readboard
 {
-    internal sealed class ControlCenterSemanticMessage
-    {
-        public ControlCenterSemanticMessage(
-            string key,
-            string diagnosticDetail = null,
-            string level = "INFO")
-        {
-            if (string.IsNullOrWhiteSpace(key))
-                throw new ArgumentException("Semantic message key is required.", "key");
-            if (string.IsNullOrWhiteSpace(level))
-                throw new ArgumentException("Semantic message level is required.", "level");
-
-            Key = key;
-            DiagnosticDetail = diagnosticDetail;
-            Level = level;
-        }
-
-        public string Key { get; private set; }
-        public string DiagnosticDetail { get; private set; }
-        public string Level { get; private set; }
-    }
 
     internal enum ControlCenterSessionObservationApplyOutcome
     {
@@ -68,7 +47,7 @@ namespace readboard
         private readonly string duration;
         private readonly MainWindowTitleTurn titleTurn;
         private readonly bool hostConnected;
-        private readonly ReadOnlyCollection<ControlCenterSemanticMessage> semanticMessages;
+        private readonly ReadOnlyCollection<SemanticMessage> semanticMessages;
 
         public ControlCenterSessionObservation(long generation)
             : this(
@@ -88,7 +67,7 @@ namespace readboard
                 null,
                 MainWindowTitleTurn.None,
                 false,
-                new List<ControlCenterSemanticMessage>())
+                new List<SemanticMessage>())
         {
             if (generation < 0)
                 throw new ArgumentOutOfRangeException("generation");
@@ -111,7 +90,7 @@ namespace readboard
             string duration,
             MainWindowTitleTurn titleTurn,
             bool hostConnected,
-            IList<ControlCenterSemanticMessage> semanticMessages)
+            IList<SemanticMessage> semanticMessages)
         {
             if (generation < 0)
                 throw new ArgumentOutOfRangeException("generation");
@@ -134,8 +113,8 @@ namespace readboard
             this.duration = duration;
             this.titleTurn = titleTurn;
             this.hostConnected = hostConnected;
-            this.semanticMessages = new ReadOnlyCollection<ControlCenterSemanticMessage>(
-                new List<ControlCenterSemanticMessage>(semanticMessages));
+            this.semanticMessages = new ReadOnlyCollection<SemanticMessage>(
+                new List<SemanticMessage>(semanticMessages));
         }
 
         public long Generation { get; private set; }
@@ -260,7 +239,7 @@ namespace readboard
             get { return hostConnected; }
         }
 
-        public IReadOnlyList<ControlCenterSemanticMessage> SemanticMessages
+        public IReadOnlyList<SemanticMessage> SemanticMessages
         {
             get { return semanticMessages; }
         }
@@ -318,7 +297,8 @@ namespace readboard
         public ControlCenterSessionObservation WithSemanticLog(
             string level,
             string key,
-            string diagnosticDetail = null)
+            string diagnosticDetail = null,
+            params object[] arguments)
         {
             if (string.IsNullOrWhiteSpace(level))
                 throw new ArgumentException("Log level is required.", "level");
@@ -338,7 +318,7 @@ namespace readboard
                 null,
                 MainWindowTitleTurn.None,
                 false,
-                new[] { new ControlCenterSemanticMessage(key, diagnosticDetail, level) });
+                new[] { SemanticMessage.CreateLogWithDiagnostic(level, key, diagnosticDetail, arguments) });
         }
 
         public ControlCenterSessionObservation ClearRuntimeFrame()
@@ -388,6 +368,16 @@ namespace readboard
                     AppendFingerprintField(builder, semanticMessages[i].Level);
                     AppendFingerprintField(builder, semanticMessages[i].Key);
                     AppendFingerprintField(builder, semanticMessages[i].DiagnosticDetail);
+                    for (int argumentIndex = 0;
+                        argumentIndex < semanticMessages[i].Arguments.Count;
+                        argumentIndex++)
+                    {
+                        AppendFingerprintField(
+                            builder,
+                            Convert.ToString(
+                                semanticMessages[i].Arguments[argumentIndex],
+                                CultureInfo.InvariantCulture));
+                    }
                 }
                 return builder.ToString();
             }
@@ -422,7 +412,7 @@ namespace readboard
             string duration,
             MainWindowTitleTurn titleTurn,
             bool hostConnected,
-            IList<ControlCenterSemanticMessage> messages)
+            IList<SemanticMessage> messages)
         {
             UpdateMask nextMask = updateMask | additionalMask;
             bool setTarget = (additionalMask & UpdateMask.TargetWindowValid) != 0;
@@ -449,7 +439,7 @@ namespace readboard
             string nextDuration = setRecent || !HasRecentSync ? duration : this.duration;
             MainWindowTitleTurn nextTitleTurn = setTitle || !HasTitleTurn ? titleTurn : this.titleTurn;
             bool nextHostConnected = setHost || !HasHostConnected ? hostConnected : this.hostConnected;
-            List<ControlCenterSemanticMessage> nextMessages = new List<ControlCenterSemanticMessage>(semanticMessages);
+            List<SemanticMessage> nextMessages = new List<SemanticMessage>(semanticMessages);
             if (messages != null)
                 nextMessages.AddRange(messages);
 
@@ -526,16 +516,16 @@ namespace readboard
         public ControlCenterSessionObservationApplyResult(
             ControlCenterSessionObservationApplyOutcome outcome,
             ControlCenterRuntimeSnapshot snapshot,
-            IReadOnlyList<ControlCenterSemanticMessage> semanticMessages)
+            IReadOnlyList<SemanticMessage> semanticMessages)
         {
             Outcome = outcome;
             Snapshot = snapshot;
-            SemanticMessages = semanticMessages ?? new List<ControlCenterSemanticMessage>();
+            SemanticMessages = semanticMessages ?? new List<SemanticMessage>();
         }
 
         public ControlCenterSessionObservationApplyOutcome Outcome { get; private set; }
         public ControlCenterRuntimeSnapshot Snapshot { get; private set; }
-        public IReadOnlyList<ControlCenterSemanticMessage> SemanticMessages { get; private set; }
+        public IReadOnlyList<SemanticMessage> SemanticMessages { get; private set; }
         public bool ShouldPublishSnapshot
         {
             get { return Outcome == ControlCenterSessionObservationApplyOutcome.Applied; }

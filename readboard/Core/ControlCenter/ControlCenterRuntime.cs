@@ -814,7 +814,7 @@ namespace readboard
                     return new ControlCenterSessionObservationApplyResult(
                         ControlCenterSessionObservationApplyOutcome.Stale,
                         BuildSnapshot(),
-                        new List<ControlCenterSemanticMessage>());
+                        new List<SemanticMessage>());
 
                 if (observation.Generation > sessionObservationGeneration)
                     sessionObservationGeneration = observation.Generation;
@@ -828,7 +828,7 @@ namespace readboard
                     return new ControlCenterSessionObservationApplyResult(
                         ControlCenterSessionObservationApplyOutcome.NoOp,
                         BuildSnapshot(),
-                        new List<ControlCenterSemanticMessage>());
+                        new List<SemanticMessage>());
                 }
 
                 bool changed = false;
@@ -922,7 +922,7 @@ namespace readboard
                     return new ControlCenterSessionObservationApplyResult(
                         ControlCenterSessionObservationApplyOutcome.NoOp,
                         BuildSnapshot(),
-                        new List<ControlCenterSemanticMessage>());
+                        new List<SemanticMessage>());
 
                 lastAppliedObservationFingerprint = observation.Fingerprint;
                 return new ControlCenterSessionObservationApplyResult(

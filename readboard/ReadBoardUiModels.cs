@@ -25,6 +25,10 @@ namespace readboard
         public string Theme { get; set; } = "system";
         public bool Connected { get; set; }
         public string SyncStatus { get; set; }
+        public string HostStatus { get; set; }
+        public string TargetStatus { get; set; }
+        public string BoardStatus { get; set; }
+        public string PlacementStatus { get; set; }
         public string LastSync { get; set; }
         public int StoneCount { get; set; }
         public string Duration { get; set; }
@@ -32,15 +36,18 @@ namespace readboard
         public bool BoardRegionRecognized { get; set; }
         public bool PlacementRegionResolved { get; set; }
         public bool Maximized { get; set; }
+        public string MaximizeLabel { get; set; }
     }
 
     internal sealed class ReadBoardControlCenterState
     {
         public string Platform { get; set; }
+        public string PlatformLabel { get; set; }
         public string Room { get; set; }
         public string Moves { get; set; }
         public string NextTurn { get; set; }
         public bool TitleBound { get; set; }
+        public string BindingStatus { get; set; }
         public string BoardSize { get; set; }
         public int BoardWidth { get; set; }
         public int BoardHeight { get; set; }
@@ -62,11 +69,14 @@ namespace readboard
         public bool ShowOnBoard { get; set; }
         public bool QuickSyncActive { get; set; }
         public bool ContinuousSyncActive { get; set; }
+        public string QuickSyncLabel { get; set; }
+        public string ContinuousSyncLabel { get; set; }
         public bool QuickSyncEnabled { get; set; }
         public bool ContinuousSyncEnabled { get; set; }
         public bool OneTimeSyncEnabled { get; set; }
         public int SyncInterval { get; set; }
         public bool AnalysisRunning { get; set; }
+        public string AnalysisLabel { get; set; }
         public bool AnalysisStateAvailable { get; set; }
         public bool AnalysisToggleEnabled { get; set; }
         public bool SwapOrderEnabled { get; set; }
@@ -82,6 +92,7 @@ namespace readboard
         public bool CustomBoardSizeEnabled { get; set; }
         public bool CustomBoardDimensionsEnabled { get; set; }
         public bool PreferencesSaved { get; set; }
+        public string PreferencesStatus { get; set; }
         public string PersistenceError { get; set; }
         public bool IdentityEnabled { get; set; }
         public bool ShowOnBoardEnabled { get; set; }
@@ -94,6 +105,8 @@ namespace readboard
         public string Message { get; set; }
         public string MessageKey { get; set; }
         public string DiagnosticDetail { get; set; }
+        [JsonIgnore]
+        public IReadOnlyList<object> Arguments { get; set; }
     }
 
     internal sealed class ReadBoardUiCommand

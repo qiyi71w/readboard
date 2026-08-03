@@ -333,6 +333,26 @@ namespace readboard
                 return null;
             return defaultLangItems[key] as string;
         }
+        internal static string ResolveLanguageText(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                return key;
+
+            string localized = null;
+            if (runtimeContext != null && runtimeContext.LanguageItems != null)
+                localized = runtimeContext.LanguageItems[key] as string;
+            return SemanticMessageResolver.ResolveText(
+                key,
+                localized,
+                GetDefaultLanguageText(key));
+        }
+        internal static string ResolveSemanticMessage(SemanticMessage message)
+        {
+            return SemanticMessageResolver.Resolve(
+                message,
+                ResolveLanguageText,
+                GetDefaultLanguageText);
+        }
 
         private static bool TryStartSession(IWin32Window owner)
         {
@@ -367,20 +387,122 @@ namespace readboard
 
         private static void AddDefaultLangItems()
         {
+            langItems["WebView_navControlCenter"] = "控制中心";
+            langItems["WebView_windowControls"] = "窗口控制";
+            langItems["WebView_minimize"] = "最小化";
+            langItems["WebView_maximize"] = "最大化";
+            langItems["WebView_mainNavigation"] = "主导航";
+            langItems["WebView_rules"] = "规则说明";
+            langItems["WebView_about"] = "关于";
+            langItems["WebView_quickActions"] = "快速操作";
+            langItems["WebView_status"] = "状态：";
+            langItems["WebView_lastSync"] = "最后同步：";
+            langItems["WebView_stoneCount"] = "棋子数：";
+            langItems["WebView_duration"] = "耗时：";
+            langItems["WebView_version"] = "版本：";
+            langItems["WebView_platform"] = "平台：";
+            langItems["WebView_moves"] = "手数：";
+            langItems["WebView_nextTurn"] = "下一手：";
+            langItems["WebView_title"] = "标题：";
+            langItems["WebView_boardWidth"] = "棋盘宽度";
+            langItems["WebView_boardHeight"] = "棋盘高度";
+            langItems["WebView_syncSettings"] = "同步设置";
+            langItems["WebView_stoneColor"] = "执子颜色";
+            langItems["WebView_engineConditions"] = "引擎条件";
+            langItems["WebView_seconds"] = "秒";
+            langItems["WebView_boardSelection"] = "棋盘选择方式";
+            langItems["WebView_logOutput"] = "日志输出";
+            langItems["WebView_settingsDescription"] = "设置修改会先保留为草稿，保存后统一应用。";
+            langItems["WebView_generalBehavior"] = "常规行为";
+            langItems["WebView_autoMinimize"] = "同步后自动最小化";
+            langItems["WebView_autoMinimizeDescription"] = "完成单次同步后最小化主窗口";
+            langItems["WebView_backgroundAnalysis"] = "后台分析";
+            langItems["WebView_backgroundAnalysisDescription"] = "双向同步时允许引擎在对手回合继续分析";
+            langItems["WebView_magnifierDescription"] = "选择棋盘区域时显示局部放大";
+            langItems["WebView_enhancedCaptureDescription"] = "尝试捕获桌面之外的窗口内容";
+            langItems["WebView_placementValidation"] = "落子验证";
+            langItems["WebView_placementValidationDescription"] = "落子后检查目标位置是否成功";
+            langItems["WebView_recognitionParameters"] = "识别参数";
+            langItems["WebView_syncInterval"] = "同步间隔";
+            langItems["WebView_grayOffset"] = "灰度偏差";
+            langItems["WebView_blackOffset"] = "黑棋颜色偏差";
+            langItems["WebView_blackPercent"] = "黑棋识别百分比";
+            langItems["WebView_whiteOffset"] = "白棋颜色偏差";
+            langItems["WebView_whitePercent"] = "白棋识别百分比";
+            langItems["WebView_appearanceDiagnostics"] = "外观与诊断";
+            langItems["WebView_debugDiagnostics"] = "调试诊断";
+            langItems["WebView_debugDiagnosticsDescription"] = "保存截图和识别过程以便排查问题";
+            langItems["WebView_saveSettings"] = "保存设置";
+            langItems["WebView_rulesDescription"] = "了解贴目模拟方式和当前同步限制。";
+            langItems["WebView_komiRuleLimits"] = "贴目与规则限制";
+            langItems["WebView_captureCountWarning"] = "ReadBoard 无法从目标客户端获取提子数。";
+            langItems["WebView_japaneseScoringWarning"] = "直接使用日本规则数目可能导致结果不准确。";
+            langItems["WebView_komiSimulationIntro"] = "需要模拟日本规则贴 6.5 目时，可在 KataGo 中使用以下组合：";
+            langItems["WebView_areaScoring"] = "数子规则";
+            langItems["WebView_komiSeven"] = "贴目 7.0";
+            langItems["WebView_lastMoveCompensation"] = "收后方贴还 0.5 目";
+            langItems["WebView_fullManual"] = "完整说明";
+            langItems["WebView_fullManualDescription"] = "查看随程序发布的完整 RTF 使用说明。";
+            langItems["WebView_openFullManual"] = "打开完整说明";
+            langItems["WebView_aboutDescription"] = "查看版本、宿主关系和项目入口。";
+            langItems["WebView_productSubtitle"] = "LizzieYzy-Next 棋盘同步工具";
+            langItems["WebView_productDescription"] = "捕获第三方围棋客户端的棋盘，识别棋子，并将局面同步到宿主。";
+            langItems["WebView_hostTool"] = "宿主工具";
+            langItems["WebView_projectInfo"] = "项目信息";
+            langItems["WebView_currentVersion"] = "当前版本";
+            langItems["WebView_hostProject"] = "宿主项目";
+            langItems["WebView_platformRuntime"] = "支持系统";
+            langItems["WebView_projectRepository"] = "项目仓库";
+            langItems["WebView_projectUpdates"] = "项目与更新";
+            langItems["WebView_projectUpdatesDescription"] = "从项目仓库查看源码，或检查当前维护通道的新版本。";
+            langItems["WebView_openRepository"] = "打开项目仓库";
+            langItems["WebView_previewWaiting"] = "本地预览模式，等待宿主状态";
+            langItems["WebView_restore"] = "还原";
+            langItems["WebView_continuousSync"] = "持续同步";
+            langItems["WebView_updateChecking"] = "正在检查可用更新";
+            langItems["WebView_updateConnecting"] = "正在连接 GitHub Release，请稍候。";
+            langItems["WebView_updateLatest"] = "当前已是最新版本";
+            langItems["WebView_updateJustChecked"] = "刚刚完成检查";
+            langItems["WebView_done"] = "完成";
+            langItems["WebView_updateChannelNotice"] = "更新通道提示";
+            langItems["WebView_noUpdateAvailable"] = "当前没有可安装的更新。";
+            langItems["WebView_tryAgainLater"] = "请稍后重试。";
+            langItems["WebView_preparingUpdate"] = "正在准备更新包";
+            langItems["WebView_pleaseWait"] = "请稍候…";
+            langItems["WebView_processing"] = "处理中…";
+            langItems["WebView_installIncomplete"] = "安装未完成";
+            langItems["WebView_updateIncomplete"] = "更新未完成，已切换为手动下载。";
+            langItems["WebView_operationFailed"] = "操作失败";
+            langItems["WebView_retryOrDownload"] = "可稍后重试或手动下载。";
+            langItems["WebView_selectedIdentity"] = "已选择：";
+            langItems["WebView_identityWindowHint"] = "请确认野狐棋局窗口可见，然后重新打开身份选择。";
+            langItems["WebView_selectIdentity"] = "选择野狐身份";
+            langItems["WebView_unnamedCandidate"] = "未命名候选";
+            langItems["WebView_saved"] = "已保存";
+            langItems["WebView_candidateRow"] = "候选玩家行";
+            langItems["WebView_screenshot"] = "截图";
+            langItems["SettingsForm_chkDisableShowInBoardShortcut"] = "关闭显示选点快捷键";
             langItems["connectLizzieFailed"] = "棋盘同步工具与Lizzie连接失败";
             langItems["WebViewRuntime_caption"] = "ReadBoard 无法启动";
             langItems["WebViewRuntime_heading"] = "缺少 Microsoft Edge WebView2 Runtime";
-            langItems["WebViewRuntime_message"] = "ReadBoard {0} 使用系统共享的 Evergreen Runtime。请先安装 Runtime，然后重试。";
+            langItems["WebViewRuntime_message"] = "ReadBoard 使用系统共享的 Evergreen Runtime。请先安装 Runtime，然后重试。";
             langItems["WebViewRuntime_openDownload"] = "打开官方下载页面";
             langItems["WebViewRuntime_retry"] = "重试";
             langItems["WebViewRuntime_exit"] = "退出";
             langItems["WebViewRuntime_openDownloadFailed"] = "无法打开 WebView2 Runtime 官方下载页面。";
-            langItems["WebView_initializationFailed"] = "WebView2 初始化失败：{0}";
+            langItems["WebView_initializationFailed"] = "WebView2 初始化失败";
             langItems["WebView_mainPageMissing"] = "找不到 WebView 主页面。";
             langItems["WebView_manualOpenFailedTitle"] = "无法打开说明";
+            langItems["WebView_resetDefaultsDescription"] = "将当前设置草稿恢复为默认值。此操作不会立即写入配置，仍需点击保存设置。";
+            langItems["WebView_resetDefaults"] = "恢复默认";
+            langItems["WebView_enableDiagnostics"] = "开启调试诊断";
+            langItems["WebView_diagnosticsDescription"] = "调试诊断可能产生较大的文件。确认后仅修改当前设置草稿，保存设置后生效。";
+            langItems["WebView_continueEnable"] = "继续开启";
             langItems["WebView_syncFailedTitle"] = "无法同步";
             langItems["WebView_recognitionFailedTitle"] = "识别失败";
             langItems["WebView_updateFetching"] = "正在获取最新版本信息…";
+            langItems["WebView_hostedInstallUnsupported"] = "当前宿主不支持托管安装";
+            langItems["WebView_manualDownload"] = "可打开 Release 页面手动下载更新。";
             langItems["WebView_updateStepDownload"] = "下载更新包";
             langItems["WebView_updateStepVerify"] = "校验更新包";
             langItems["WebView_updateStepNotifyHost"] = "通知宿主";
@@ -388,6 +510,8 @@ namespace readboard
             langItems["WebView_candidateRowNumber"] = "玩家行 {0}";
             langItems["WebView_integerAtLeast"] = "请输入不小于 {0} 的整数";
             langItems["WebView_integerRange"] = "请输入 {0}–{1} 之间的整数";
+            langItems["WebView_continuousSyncLabel"] = "持续同步 ({0}ms)";
+            langItems["WebView_stopContinuousSyncLabel"] = "停止持续同步 ({0}ms)";
             langItems["WebView_settingsSaveFailed"] = "保存设置失败";
             langItems["SettingsForm_invalidChoice"] = "设置值无效";
             langItems["WebView_settingsDurableSaveFailed"] = "保存设置失败，配置状态需要诊断";
@@ -402,6 +526,28 @@ namespace readboard
             langItems["WebView_moveMode"] = "落子方式";
             langItems["WebView_hostConnected"] = "宿主通信正常";
             langItems["WebView_hostReadyLog"] = "宿主模式已启动，ReadBoard 就绪";
+            langItems["WebView_hostModeStarted"] = "宿主模式已启动";
+            langItems["WebView_ready"] = "就绪";
+            langItems["WebView_syncing"] = "同步中";
+            langItems["WebView_notSelected"] = "未选择";
+            langItems["WebView_targetValid"] = "目标窗口有效";
+            langItems["WebView_targetInvalid"] = "目标窗口已失效，请重新选择";
+            langItems["WebView_waitTarget"] = "等待选择目标窗口";
+            langItems["WebView_boardRecognized"] = "棋盘区域已识别";
+            langItems["WebView_waitBoardRecognition"] = "等待首次棋盘识别";
+            langItems["WebView_placementResolved"] = "落子区域已解析";
+            langItems["WebView_placementUnavailable"] = "落子区域暂不可用";
+            langItems["WebView_bound"] = "已绑定";
+            langItems["WebView_notBound"] = "未绑定";
+            langItems["WebView_black"] = "黑";
+            langItems["WebView_white"] = "白";
+            langItems["WebView_quickSync"] = "快速同步";
+            langItems["WebView_stopQuickSync"] = "停止快速同步";
+            langItems["WebView_stopContinuousSync"] = "停止持续同步";
+            langItems["WebView_pauseAnalysis"] = "暂停分析";
+            langItems["WebView_resumeAnalysis"] = "继续分析";
+            langItems["WebView_unsavedChanges"] = "有尚未保存的更改";
+            langItems["WebView_noUnsavedChanges"] = "当前没有未保存的更改";
             langItems["WebView_continuousSyncStarted"] = "开始持续同步";
             langItems["WebView_continuousSyncStopped"] = "持续同步已停止";
             langItems["WebView_quickSyncStarted"] = "开始快速同步";
@@ -456,11 +602,11 @@ namespace readboard
             langItems["MainForm_btnCircleRow1"] = "框选1路线";
             langItems["MainForm_btnTogglePonder"] = "分析/停止";
             langItems["MainForm_chkShowInBoard"] = "原棋盘上显示选点";
-            langItems["MainForm_btnKeepSync"] = "持续同步(200ms)";
             langItems["MainForm_btnOneTimeSync"] = "单次同步";
             langItems["MainForm_btnExchange"] = "交换顺序";
             langItems["MainForm_btnForceRebuild"] = "强制重建";
             langItems["MainForm_btnClearBoard"] = "清空棋盘";
+            langItems["MainForm_btnKeepSync"] = "持续同步";
             langItems["MainForm_title"] = "棋盘同步工具";
             langItems["MainForm_titleTagFox"] = "野狐";
             langItems["MainForm_titleTagYike"] = "弈客";
@@ -478,11 +624,11 @@ namespace readboard
             langItems["MainForm_themeOptimized"] = "新版主题";
             langItems["MainForm_themeClassic"] = "默认主题";
             langItems["Update_upToDate"] = "已是最新版本";
-            langItems["Update_retiredFinalVersion"] = "此通道已停止维护；v{0} 是最终维护版本。";
+            langItems["Update_retiredFinalVersion"] = "此通道已停止维护；最终维护版本";
             langItems["Update_upToDateRetired"] = "已是此系统通道的最终维护版本。";
             langItems["Update_outsideChannel"] = "当前版本高于此系统通道的已晋升版本；不会自动降级。";
             langItems["Update_noMatchingChannel"] = "当前 Windows 版本没有可用的维护通道。";
-            langItems["Update_newerVersionRequiresWindows"] = "主线 v{0} 需要 Windows {1} 或更高版本，当前系统不能安装。";
+            langItems["Update_newerVersionRequiresWindows"] = "当前系统无法安装此主线版本";
             langItems["Update_checkFailed"] = "检查更新失败";
             langItems["Update_unknownError"] = "未知错误";
             langItems["Update_dialogTitle"] = "发现新版本";
@@ -571,16 +717,16 @@ namespace readboard
                 while ((line = reader.ReadLine()) != null)
                 {
                     string[] parts = line.Split('=');
-                    if (parts.Length == 2)
-                        langItems[parts[0]] = parts[1];
+                    if (parts.Length != 2)
+                        continue;
+                    langItems[parts[0]] = parts[1];
                 }
             }
         }
 
         private static string GetLangText(string key)
         {
-            object value = langItems[key];
-            return value == null ? key : value.ToString();
+            return ResolveLanguageText(key);
         }
 
         private static MainForm GetUsableMainForm(MainForm candidate)

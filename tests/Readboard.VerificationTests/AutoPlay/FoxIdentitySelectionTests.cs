@@ -378,7 +378,7 @@ namespace Readboard.VerificationTests.AutoPlay
 
         private static FoxIdentityCandidate Candidate(string id, string signature)
         {
-            return new FoxIdentityCandidate(id, id, signature, null);
+            return new FoxIdentityCandidate(id, SemanticMessage.Create("WebView_candidateRowNumber", id), signature, null);
         }
 
         private sealed class RecordingPersistence : IFoxIdentityPersistence

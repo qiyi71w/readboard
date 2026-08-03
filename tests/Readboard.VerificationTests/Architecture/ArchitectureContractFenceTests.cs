@@ -62,20 +62,27 @@ namespace Readboard.VerificationTests.Architecture
                     "theme",
                     "connected",
                     "syncStatus",
+                    "hostStatus",
+                    "targetStatus",
+                    "boardStatus",
+                    "placementStatus",
                     "lastSync",
                     "stoneCount",
                     "duration",
                     "targetWindowValid",
                     "boardRegionRecognized",
                     "placementRegionResolved",
-                    "maximized");
+                    "maximized",
+                    "maximizeLabel");
                 AssertPropertyNames(
                     payload.GetProperty("controlCenter"),
                     "platform",
+                    "platformLabel",
                     "room",
                     "moves",
                     "nextTurn",
                     "titleBound",
+                    "bindingStatus",
                     "boardSize",
                     "boardWidth",
                     "boardHeight",
@@ -102,11 +109,14 @@ namespace Readboard.VerificationTests.Architecture
                     "oneTimeSyncEnabled",
                     "syncInterval",
                     "analysisRunning",
+                    "analysisLabel",
                     "analysisStateAvailable",
                     "analysisToggleEnabled",
                     "swapOrderEnabled",
                     "forceRebuildEnabled",
                     "clearBoardEnabled",
+                    "quickSyncLabel",
+                    "continuousSyncLabel",
                     "boardSelectionInsideEnabled",
                     "boardSelectionRectangleEnabled",
                     "boardSelectionLine1Enabled",
@@ -117,6 +127,7 @@ namespace Readboard.VerificationTests.Architecture
                     "customBoardSizeEnabled",
                     "customBoardDimensionsEnabled",
                     "preferencesSaved",
+                    "preferencesStatus",
                     "persistenceError",
                     "identityEnabled",
                     "showOnBoardEnabled");
@@ -137,6 +148,7 @@ namespace Readboard.VerificationTests.Architecture
                     "language",
                     "diagnostics",
                     "dirty",
+                    "dirtyStatus",
                     "errors",
                     "saveError");
                 AssertPropertyNames(
@@ -148,6 +160,16 @@ namespace Readboard.VerificationTests.Architecture
                     "releaseDate",
                     "releaseNotes",
                     "title",
+                    "dialogTitle",
+                    "closeLabel",
+                    "doneLabel",
+                    "currentVersionLabel",
+                    "latestVersionLabel",
+                    "releaseDateLabel",
+                    "releaseNotesLabel",
+                    "downloadLabel",
+                    "downloadAndInstallLabel",
+                    "processingLabel",
                     "detail",
                     "message",
                     "errorTitle",
@@ -160,6 +182,20 @@ namespace Readboard.VerificationTests.Architecture
                     "selectedId",
                     "savedId",
                     "hasSavedIdentity",
+                    "dialogTitle",
+                    "prompt",
+                    "detectedNicknamesLabel",
+                    "selectedLabel",
+                    "emptyTitle",
+                    "windowHint",
+                    "clearSavedLabel",
+                    "cancelLabel",
+                    "useOnceLabel",
+                    "saveAndUseLabel",
+                    "unnamedCandidateLabel",
+                    "savedLabel",
+                    "candidateRowLabel",
+                    "screenshotLabel",
                     "candidates");
                 AssertPropertyNames(
                     payload.GetProperty("dialog"),
@@ -168,8 +204,10 @@ namespace Readboard.VerificationTests.Architecture
                     "title",
                     "heading",
                     "message",
+                    "detail",
                     "confirmLabel",
-                    "cancelLabel");
+                    "cancelLabel",
+                    "dontShowAgainLabel");
             }
         }
         [Fact]
@@ -177,7 +215,7 @@ namespace Readboard.VerificationTests.Architecture
         {
             SettingsDraftState draft = SettingsDraftState.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            draft.SaveError = SettingsDraftSemanticMessage.Create(SettingsDraftMessageKeys.SaveFailed);
+            draft.SaveError = SemanticMessage.Create(SettingsDraftMessageKeys.SaveFailed);
             ReadBoardUiState state = new ReadBoardUiState
             {
                 Settings = MainForm.WebViewSettingsStateProjector.Project(

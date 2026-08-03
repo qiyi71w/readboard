@@ -50,24 +50,24 @@ namespace readboard
     {
         public FoxIdentityCandidate(
             string id,
-            string label,
+            SemanticMessage labelMessage,
             string signature,
             string previewUrl)
         {
             Id = id ?? string.Empty;
-            Label = label ?? string.Empty;
+            LabelMessage = labelMessage ?? throw new ArgumentNullException("labelMessage");
             Signature = signature ?? string.Empty;
             PreviewUrl = previewUrl;
         }
 
         public string Id { get; private set; }
-        public string Label { get; private set; }
+        public SemanticMessage LabelMessage { get; private set; }
         public string Signature { get; private set; }
         public string PreviewUrl { get; private set; }
 
         public FoxIdentityCandidate Clone()
         {
-            return new FoxIdentityCandidate(Id, Label, Signature, PreviewUrl);
+            return new FoxIdentityCandidate(Id, LabelMessage, Signature, PreviewUrl);
         }
     }
 

@@ -56,28 +56,13 @@ namespace readboard
         Rejected
     }
 
-    internal sealed class HostedUpdateSemanticMessage
-    {
-        public HostedUpdateSemanticMessage(string key, string diagnosticDetail = null)
-        {
-            if (string.IsNullOrWhiteSpace(key))
-                throw new ArgumentException("Semantic message key is required.", nameof(key));
-
-            Key = key;
-            DiagnosticDetail = diagnosticDetail;
-        }
-
-        public string Key { get; }
-
-        public string DiagnosticDetail { get; }
-    }
 
     internal sealed class HostedUpdateObservation
     {
         public HostedUpdateObservation(
             int generation,
             HostedUpdateStage stage,
-            HostedUpdateSemanticMessage message,
+            SemanticMessage message,
             string packagePath = null)
         {
             Generation = generation;
@@ -90,7 +75,7 @@ namespace readboard
 
         public HostedUpdateStage Stage { get; }
 
-        public HostedUpdateSemanticMessage Message { get; }
+        public SemanticMessage Message { get; }
 
         public string PackagePath { get; }
     }
@@ -176,7 +161,7 @@ namespace readboard
         private bool hostOutcomeSettled;
         private bool pendingHostInstalling;
         private HostedUpdateStage? pendingHostOutcomeStage;
-        private HostedUpdateSemanticMessage pendingHostOutcome;
+        private SemanticMessage pendingHostOutcome;
         private bool responseTimeoutArmed;
         private bool disposed;
 
@@ -269,10 +254,9 @@ namespace readboard
             {
                 Emit(
                     HostedUpdateStage.Rejected,
-                    new HostedUpdateSemanticMessage(
-                        handoffAlreadySent
-                            ? "Update_handoffAlreadySent"
-                            : "Update_operationAlreadyRunning"),
+                    SemanticMessage.Create(handoffAlreadySent
+                        ? "Update_handoffAlreadySent"
+                        : "Update_operationAlreadyRunning"),
                     null,
                     operationGeneration);
                 return Task.FromResult(false);
@@ -280,7 +264,7 @@ namespace readboard
 
             Emit(
                 HostedUpdateStage.Downloading,
-                new HostedUpdateSemanticMessage("Update_downloadingPackage"),
+                SemanticMessage.Create("Update_downloadingPackage"),
                 null,
                 operationGeneration);
             return RunAsync(request, operationGeneration, cancellationSource);
@@ -308,7 +292,7 @@ namespace readboard
             // The late completion owns cleanup so ZIP verification can release its file handle first.
             Emit(
                 HostedUpdateStage.Cancelled,
-                new HostedUpdateSemanticMessage("Update_cancelled"),
+                SemanticMessage.Create("Update_cancelled"),
                 null,
                 cancellationGeneration);
             return true;
@@ -332,7 +316,7 @@ namespace readboard
 
                 observation = CreateHostObservation(
                     HostedUpdateStage.HostInstalling,
-                    new HostedUpdateSemanticMessage("Update_hostInstalling"));
+                    SemanticMessage.Create("Update_hostInstalling"));
             }
 
             Emit(observation);
@@ -343,14 +327,14 @@ namespace readboard
         {
             return SetHostOutcome(
                 HostedUpdateStage.HostCancelled,
-                new HostedUpdateSemanticMessage("Update_hostCancelled"));
+                SemanticMessage.Create("Update_hostCancelled"));
         }
 
         public bool MarkHostFailed(string detail)
         {
             return SetHostOutcome(
                 HostedUpdateStage.HostFailed,
-                new HostedUpdateSemanticMessage(
+                SemanticMessage.CreateWithDiagnostic(
                     "Update_hostFailed",
                     SanitizeDiagnosticDetail(detail)));
         }
@@ -359,7 +343,7 @@ namespace readboard
         {
             return SetHostOutcome(
                 HostedUpdateStage.HostTimedOut,
-                new HostedUpdateSemanticMessage("Update_hostTimedOut"),
+                SemanticMessage.Create("Update_hostTimedOut"),
                 true);
         }
 
@@ -413,7 +397,7 @@ namespace readboard
 
                 Emit(
                     HostedUpdateStage.Verifying,
-                    new HostedUpdateSemanticMessage("Update_verifyingPackage"),
+                    SemanticMessage.Create("Update_verifyingPackage"),
                     packagePath,
                     operationGeneration);
                 verifier.Verify(request, packagePath, cancellationToken);
@@ -425,7 +409,7 @@ namespace readboard
 
                 Emit(
                     HostedUpdateStage.NotifyingHost,
-                    new HostedUpdateSemanticMessage("Update_notifyingHost"),
+                    SemanticMessage.Create("Update_notifyingHost"),
                     packagePath,
                     operationGeneration);
                 handoffAttempted = true;
@@ -455,7 +439,7 @@ namespace readboard
                 {
                     Emit(
                         HostedUpdateStage.WaitingForHostInstall,
-                        new HostedUpdateSemanticMessage("Update_waitingForHostInstall"),
+                        SemanticMessage.Create("Update_waitingForHostInstall"),
                         packagePath,
                         operationGeneration);
                 }
@@ -592,7 +576,7 @@ namespace readboard
 
         private bool SetHostOutcome(
             HostedUpdateStage stage,
-            HostedUpdateSemanticMessage message,
+            SemanticMessage message,
             bool rejectIfInstalling = false)
         {
             HostedUpdateObservation observation = null;
@@ -634,7 +618,7 @@ namespace readboard
 
         private HostedUpdateObservation CreateHostObservation(
             HostedUpdateStage stage,
-            HostedUpdateSemanticMessage message)
+            SemanticMessage message)
         {
             return new HostedUpdateObservation(generation, stage, message);
         }
@@ -645,7 +629,7 @@ namespace readboard
             {
                 bool emitInstalling;
                 HostedUpdateStage? outcomeStage;
-                HostedUpdateSemanticMessage outcome;
+                SemanticMessage outcome;
                 lock (stateSyncRoot)
                 {
                     emitInstalling = pendingHostInstalling;
@@ -672,7 +656,7 @@ namespace readboard
                 if (emitInstalling)
                     Emit(CreateHostObservation(
                         HostedUpdateStage.HostInstalling,
-                        new HostedUpdateSemanticMessage("Update_hostInstalling")));
+                        SemanticMessage.Create("Update_hostInstalling")));
                 if (outcome != null && outcomeStage.HasValue)
                     Emit(CreateHostObservation(
                         outcomeStage.Value,
@@ -721,7 +705,7 @@ namespace readboard
                 return;
             Emit(
                 HostedUpdateStage.Failed,
-                new HostedUpdateSemanticMessage(messageKey, diagnosticDetail),
+                SemanticMessage.CreateWithDiagnostic(messageKey, diagnosticDetail),
                 null,
                 operationGeneration);
             cancellationSource.Dispose();
@@ -749,7 +733,7 @@ namespace readboard
 
         private void Emit(
             HostedUpdateStage stage,
-            HostedUpdateSemanticMessage message,
+            SemanticMessage message,
             string packagePath,
             int observationGeneration)
         {
