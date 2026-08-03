@@ -81,6 +81,7 @@ namespace readboard
         private bool isApplyingMainFormLayout = false;
         private bool isShuttingDown = false;
         private bool closeRequestedBeforeHandle = false;
+        private bool webViewWindowBoundsAppliedAfterHandle = false;
         private bool isInitializingProtocolState = true;
         private bool hostedUpdateSupported = false;
         private bool hostedUpdatePackageV2Supported = false;
@@ -2995,6 +2996,15 @@ namespace readboard
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
+            if (!isShuttingDown
+                && !IsDisposed
+                && !Disposing
+                && webView != null
+                && !webViewWindowBoundsAppliedAfterHandle)
+            {
+                ApplySavedWebViewWindowBounds();
+                webViewWindowBoundsAppliedAfterHandle = true;
+            }
             if (!isShuttingDown && !IsDisposed && !Disposing && webView == null)
                 ApplyMainFormUi();
             FlushPendingProtocolCommands();
