@@ -87,9 +87,11 @@ namespace readboard
         private bool suppressAutoPlayColorModeEvents = false;
         private bool suppressAutoPlayMoveModeEvents = false;
         private bool suppressControlCenterProjectionEvents = false;
-        private bool suppressWebViewStatePublication = false;
-        private int suppressedWebViewStatePublicationScopeDepth;
-        private bool suppressedWebViewStatePublicationPending;
+        private readonly WebViewStatePublisher webViewStatePublisher;
+        private readonly WebViewWindowCommandRuntime webViewWindowCommandRuntime;
+        private readonly WebViewUpdateCheckJourney webViewUpdateCheckJourney;
+        private readonly MainFormShutdownCoordinator shutdownCoordinator;
+        private readonly YikeContextRuntime yikeContextRuntime;
         private AutoPlayColorMode lastManualAutoPlayColorMode = AutoPlayColorMode.ManualBlack;
         private static readonly System.Drawing.Size MainFormDefaultSize = new System.Drawing.Size(852, 374);
 
@@ -1277,7 +1279,8 @@ namespace readboard
                 return;
             ControlCenterApplyResult result = ApplyControlCenterIntent(
                 ControlCenterIntent.SetPlatform((SyncMode)syncType));
-            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+            if (result.ShouldPublishSnapshot)
+                PostWebViewState();
         }
 
         private void setManualSelectionMode(int syncType)
@@ -1288,7 +1291,8 @@ namespace readboard
                 return;
             ControlCenterApplyResult result = ApplyControlCenterIntent(
                 ControlCenterIntent.SetPlatform((SyncMode)syncType));
-            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+            if (result.ShouldPublishSnapshot)
+                PostWebViewState();
         }
 
         private void ApplySyncModeControlState()
@@ -2216,7 +2220,7 @@ namespace readboard
                 .WithTitleTurn(MainWindowTitleTurn.None);
             InvokeUiHostAction(delegate
             {
-                RunWithSuppressedWebViewStatePublication(delegate
+                RunWithBatchedWebViewStatePublication(delegate
                 {
                     ControlCenterSessionObservationApplyResult result =
                         ApplyControlCenterSessionObservation(observation);
@@ -2263,7 +2267,7 @@ namespace readboard
                 observation = observation.WithSemanticLog("SYNC", "WebView_continuousSyncStarted");
             InvokeUiHostAction(delegate
             {
-                RunWithSuppressedWebViewStatePublication(delegate
+                RunWithBatchedWebViewStatePublication(delegate
                 {
                     ControlCenterSessionObservationApplyResult result =
                         ApplyControlCenterSessionObservation(observation);
@@ -2285,7 +2289,7 @@ namespace readboard
                 observation = observation.WithSemanticLog("SYNC", "WebView_continuousSyncStopped");
             InvokeUiHostAction(delegate
             {
-                RunWithSuppressedWebViewStatePublication(
+                RunWithBatchedWebViewStatePublication(
                     delegate
                     {
                         ControlCenterSessionObservationApplyResult result =
@@ -2305,7 +2309,7 @@ namespace readboard
                 .WithSemanticLog("SYNC", "WebView_quickSyncStarted");
             InvokeUiHostAction(delegate
             {
-                RunWithSuppressedWebViewStatePublication(delegate
+                RunWithBatchedWebViewStatePublication(delegate
                 {
                     ControlCenterSessionObservationApplyResult result =
                         ApplyControlCenterSessionObservation(observation);
@@ -2324,7 +2328,7 @@ namespace readboard
                 .WithSemanticLog("SYNC", "WebView_quickSyncStopped");
             InvokeUiHostAction(delegate
             {
-                RunWithSuppressedWebViewStatePublication(delegate
+                RunWithBatchedWebViewStatePublication(delegate
                 {
                     ControlCenterSessionObservationApplyResult result =
                         ApplyControlCenterSessionObservation(observation);
@@ -2342,7 +2346,7 @@ namespace readboard
                 .WithTitleTurn(MainWindowTitleTurn.None);
             InvokeUiHostAction(delegate
             {
-                RunWithSuppressedWebViewStatePublication(delegate
+                RunWithBatchedWebViewStatePublication(delegate
                 {
                     ControlCenterSessionObservationApplyResult result =
                         ApplyControlCenterSessionObservation(observation);
@@ -2419,7 +2423,7 @@ namespace readboard
                         FormatWebViewDuration(duration));
             InvokeUiHostAction(delegate
             {
-                RunWithSuppressedWebViewStatePublication(delegate
+                RunWithBatchedWebViewStatePublication(delegate
                 {
                     ControlCenterSessionObservationApplyResult result =
                         ApplyControlCenterSessionObservation(observation);
@@ -2555,6 +2559,15 @@ namespace readboard
             this.sessionCoordinator = sessionCoordinator;
             this.selectionCalibrationService = selectionCalibrationService;
             this.foxIdentitySelection = new FoxIdentitySelection(new AppConfigFoxIdentityPersistence());
+            this.webViewStatePublisher = new WebViewStatePublisher(PostWebViewStateCore);
+            this.webViewWindowCommandRuntime = new WebViewWindowCommandRuntime(
+                new MainFormWebViewWindowAdapter(this));
+            this.webViewUpdateCheckJourney = new WebViewUpdateCheckJourney(
+                OnWebViewUpdateCheckObservation);
+            this.shutdownCoordinator = new MainFormShutdownCoordinator(
+                new MainFormShutdownActions(this));
+            this.yikeContextRuntime = new YikeContextRuntime(
+                new MainFormYikeContextAdapter(this));
             this.uiThreadInvoker = new UiThreadInvoker(this);
             this.placeRequestQueue = new SerialBackgroundWorkQueue("ReadboardPlaceRequestQueue");
             this.hostedUpdateJourney = new HostedUpdateJourney(
@@ -2941,29 +2954,42 @@ namespace readboard
                     return;
 
                 isShuttingDown = true;
-                RunShutdownStep(shutdownExceptions, delegate { placeRequestQueue.Stop(); });
-                RunShutdownStep(shutdownExceptions, delegate { ClearPendingProtocolCommands(); });
             }
-            ResetMainWindowTitle();
-            if (persistConfiguration)
-                RunShutdownStep(shutdownExceptions, delegate { PersistConfiguration(); });
-            RunShutdownStep(shutdownExceptions, delegate { DisposeInputHooks(); });
-            RunShutdownStep(shutdownExceptions, delegate { SendShutdownProtocol(); });
-            RunShutdownStep(shutdownExceptions, delegate { Program.DisposeBitmap(); });
-            RunShutdownStep(shutdownExceptions, delegate { sessionCoordinator.Stop(); });
-            RunShutdownStep(shutdownExceptions, delegate { DisposeWebViewUpdateBridge(); });
-            RunShutdownStep(shutdownExceptions, delegate
-            {
-                if (!IsHandleCreated)
-                {
-                    closeRequestedBeforeHandle = true;
-                    return;
-                }
-                if (IsDisposed || Disposing)
-                    return;
-                BeginInvoke((Action)Close);
-            });
+            shutdownCoordinator.Execute(persistConfiguration, shutdownExceptions.Add);
             ThrowShutdownExceptions(shutdownExceptions);
+        }
+
+        private void RequestCloseAfterShutdown()
+        {
+            if (!IsHandleCreated)
+            {
+                closeRequestedBeforeHandle = true;
+                return;
+            }
+            if (IsDisposed || Disposing)
+                return;
+            BeginInvoke((Action)Close);
+        }
+
+        private sealed class MainFormShutdownActions : IMainFormShutdownActions
+        {
+            private readonly MainForm owner;
+
+            public MainFormShutdownActions(MainForm owner)
+            {
+                this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            }
+
+            public void StopPlaceRequestQueue() { owner.placeRequestQueue.Stop(); }
+            public void ClearPendingProtocolCommands() { owner.ClearPendingProtocolCommands(); }
+            public void ResetTitle() { owner.ResetMainWindowTitle(); }
+            public void PersistConfiguration() { owner.PersistConfiguration(); }
+            public void DisposeInputHooks() { owner.DisposeInputHooks(); }
+            public void SendShutdownProtocol() { owner.SendShutdownProtocol(); }
+            public void DisposeBitmap() { Program.DisposeBitmap(); }
+            public void StopCoordinator() { owner.sessionCoordinator.Stop(); }
+            public void DisposeWebViewUpdateBridge() { owner.DisposeWebViewUpdateBridge(); }
+            public void RequestClose() { owner.RequestCloseAfterShutdown(); }
         }
 
         protected override void OnHandleCreated(EventArgs e)
@@ -3001,17 +3027,7 @@ namespace readboard
             mouseHook = null;
         }
 
-        private static void RunShutdownStep(List<Exception> shutdownExceptions, Action shutdownStep)
-        {
-            try
-            {
-                shutdownStep();
-            }
-            catch (Exception ex)
-            {
-                shutdownExceptions.Add(ex);
-            }
-        }
+
 
         private static void ThrowShutdownExceptions(List<Exception> shutdownExceptions)
         {
@@ -3040,7 +3056,8 @@ namespace readboard
             {
                 ControlCenterApplyResult result = ApplyControlCenterIntent(
                     ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Preset19));
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
             }
         }
 
@@ -3054,7 +3071,8 @@ namespace readboard
             {
                 ControlCenterApplyResult result = ApplyControlCenterIntent(
                     ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Preset13));
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
             }
         }
 
@@ -3068,7 +3086,8 @@ namespace readboard
             {
                 ControlCenterApplyResult result = ApplyControlCenterIntent(
                     ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Preset9));
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
             }
         }
 
@@ -3084,7 +3103,8 @@ namespace readboard
             if (result.Outcome == ControlCenterApplyOutcome.Rejected)
                 ProjectControlCenterState();
             else
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
         }
         [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetForegroundWindow", CharSet = System.Runtime.InteropServices.CharSet.Auto, ExactSpelling = true)]
         public static extern IntPtr GetF();
@@ -3192,7 +3212,8 @@ namespace readboard
             if (result.Outcome == ControlCenterApplyOutcome.Rejected)
                 ProjectControlCenterState();
             else
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
         }
 
         private void button7_Click_1(object sender, EventArgs e)
@@ -3210,7 +3231,8 @@ namespace readboard
             if (result.Outcome == ControlCenterApplyOutcome.Rejected)
                 ProjectControlCenterState();
             else
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
         }
 
         private void textBox3_TextChanged(object sender, EventArgs e)
@@ -3223,7 +3245,8 @@ namespace readboard
             if (result.Outcome == ControlCenterApplyOutcome.Rejected)
                 ProjectControlCenterState();
             else
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
         }
 
         private void checkBox1_CheckedChanged_1(object sender, EventArgs e)
@@ -3234,7 +3257,8 @@ namespace readboard
                 return;
             ControlCenterApplyResult result = ApplyControlCenterIntent(
                 ControlCenterIntent.SetTwoWaySync(chkBothSync.Checked));
-            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+            if (result.ShouldPublishSnapshot)
+                PostWebViewState();
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -3269,15 +3293,14 @@ namespace readboard
             if (result.Outcome == ControlCenterApplyOutcome.Rejected)
                 ProjectControlCenterState();
             else
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
         }
 
         private void btnSettings_Click(object sender, EventArgs e)
         {
-            if (webViewSettingsJourney != null)
-                webViewSettingsJourney.Navigate(new WebViewNavigationIntent(WebViewPage.Settings));
-            webViewState.Page = "settings";
-            GetWebViewSettingsState();
+            if (!NavigateWebViewPage(WebViewPage.Settings))
+                return;
             PostWebViewState();
         }
 
@@ -3291,7 +3314,8 @@ namespace readboard
             {
                 ControlCenterApplyResult result = ApplyControlCenterIntent(
                     ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Custom));
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
             }
         }
 
@@ -3309,7 +3333,8 @@ namespace readboard
                 return;
             ControlCenterApplyResult result = ApplyControlCenterIntent(
                 ControlCenterIntent.SetCustomBoardWidth(parsed));
-            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+            if (result.ShouldPublishSnapshot)
+                PostWebViewState();
         }
 
         private void parseHeight(object sender, EventArgs e)
@@ -3324,7 +3349,8 @@ namespace readboard
                 return;
             ControlCenterApplyResult result = ApplyControlCenterIntent(
                 ControlCenterIntent.SetCustomBoardHeight(parsed));
-            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+            if (result.ShouldPublishSnapshot)
+                PostWebViewState();
         }
 
         private void tb_KeyPressWidth(object sender, KeyPressEventArgs e)
@@ -3354,7 +3380,8 @@ namespace readboard
             if (result.Outcome == ControlCenterApplyOutcome.Rejected)
                 ProjectControlCenterState();
             else
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
         }
 
         private void radioWhite_CheckedChanged(object sender, EventArgs e)
@@ -3366,7 +3393,8 @@ namespace readboard
             if (result.Outcome == ControlCenterApplyOutcome.Rejected)
                 ProjectControlCenterState();
             else
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
         }
 
         private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)
@@ -3392,7 +3420,8 @@ namespace readboard
             if (result.Outcome == ControlCenterApplyOutcome.Rejected)
                 ProjectControlCenterState();
             else
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
         }
 
         private void radioAutoPlayMoveFirst_CheckedChanged(object sender, EventArgs e)
@@ -3406,7 +3435,8 @@ namespace readboard
             if (result.Outcome == ControlCenterApplyOutcome.Rejected)
                 ProjectControlCenterState();
             else
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
         }
 
         private void radioAutoPlayMoveGma_CheckedChanged(object sender, EventArgs e)
@@ -3420,7 +3450,8 @@ namespace readboard
             if (result.Outcome == ControlCenterApplyOutcome.Rejected)
                 ProjectControlCenterState();
             else
-                ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
         }
 
         private void btnFoxAutoPlayIdentity_Click(object sender, EventArgs e)
@@ -3446,7 +3477,8 @@ namespace readboard
                 return;
             ControlCenterApplyResult result = ApplyControlCenterIntent(
                 ControlCenterIntent.SetShowOnBoard(chkShowInBoard.Checked));
-            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+            if (result.ShouldPublishSnapshot)
+                PostWebViewState();
         }
 
         private void button9_Click(object sender, EventArgs e)

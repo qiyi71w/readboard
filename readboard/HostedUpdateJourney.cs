@@ -413,7 +413,11 @@ namespace readboard
                     packagePath,
                     operationGeneration);
                 handoffAttempted = true;
-                if (!TrySendReady(request, packagePath, operationGeneration, cancellationSource))
+                if (!TrySendReady(
+                    request,
+                    packagePath,
+                    operationGeneration,
+                    cancellationSource))
                 {
                     if (IsCurrent(operationGeneration, cancellationSource))
                     {

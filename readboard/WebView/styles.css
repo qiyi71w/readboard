@@ -78,6 +78,9 @@
   --control-center-group-padding: clamp(3px, calc(2.75vh - 15.7px), 8px);
   font-size: 14px;
 }
+.awaiting-state .app-shell {
+  visibility: hidden;
+}
 
 :root[data-theme="dark"] {
   color-scheme: dark;

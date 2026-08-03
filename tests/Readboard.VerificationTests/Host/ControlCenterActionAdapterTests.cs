@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using readboard;
 using Xunit;
 
@@ -263,30 +264,18 @@ namespace Readboard.VerificationTests.Host
             ControlCenterRuntime noOpRuntime = CreateRuntime(noOpAdapter);
             ControlCenterActionApplyResult noOp = noOpRuntime.ApplyAction(
                 ControlCenterActionIntent.QuickSync());
-            int noOpPublications = 0;
             Assert.Equal(ControlCenterActionApplyOutcome.NoOp, noOp.Outcome);
-            Assert.False(ControlCenterSnapshotPublisher.PublishIfNeeded(
-                noOp,
-                delegate { noOpPublications++; }));
-            Assert.Equal(0, noOpPublications);
+            Assert.False(noOp.ShouldPublishSnapshot);
 
             InMemoryControlCenterActionAdapter acceptedAdapter = new InMemoryControlCenterActionAdapter();
             ControlCenterRuntime acceptedRuntime = CreateRuntime(acceptedAdapter);
             ControlCenterActionApplyResult accepted = acceptedRuntime.ApplyAction(
                 ControlCenterActionIntent.QuickSync());
-            int acceptedPublications = 0;
-            Assert.True(ControlCenterSnapshotPublisher.PublishIfNeeded(
-                accepted,
-                delegate { acceptedPublications++; }));
-            Assert.Equal(1, acceptedPublications);
+            Assert.True(accepted.ShouldPublishSnapshot);
 
             ControlCenterActionApplyResult rejected = acceptedRuntime.ApplyAction(
                 ControlCenterActionIntent.ToggleAnalysis());
-            int rejectedPublications = 0;
-            Assert.True(ControlCenterSnapshotPublisher.PublishIfNeeded(
-                rejected,
-                delegate { rejectedPublications++; }));
-            Assert.Equal(1, rejectedPublications);
+            Assert.True(rejected.ShouldPublishSnapshot);
         }
 
         [Fact]
@@ -331,13 +320,9 @@ namespace Readboard.VerificationTests.Host
             ControlCenterActionApplyResult result = CreateRuntime(
                 adapter,
                 sessionState).ApplyAction(intent);
-            int publicationCount = 0;
 
             Assert.Equal(ControlCenterActionApplyOutcome.Rejected, result.Outcome);
-            Assert.True(ControlCenterSnapshotPublisher.PublishIfNeeded(
-                result,
-                delegate { publicationCount++; }));
-            Assert.Equal(1, publicationCount);
+            Assert.True(result.ShouldPublishSnapshot);
             Assert.Single(adapter.Effects);
         }
 
@@ -352,13 +337,9 @@ namespace Readboard.VerificationTests.Host
             ControlCenterActionApplyResult result = CreateRuntime(
                 adapter,
                 sessionState).ApplyAction(intent);
-            int publicationCount = 0;
 
             Assert.Equal(ControlCenterActionApplyOutcome.NoOp, result.Outcome);
-            Assert.False(ControlCenterSnapshotPublisher.PublishIfNeeded(
-                result,
-                delegate { publicationCount++; }));
-            Assert.Equal(0, publicationCount);
+            Assert.False(result.ShouldPublishSnapshot);
             Assert.Single(adapter.Effects);
         }
 
@@ -377,6 +358,34 @@ namespace Readboard.VerificationTests.Host
                 new RecordingPersistence(),
                 actionAdapter);
         }
+
+        private sealed class InMemoryControlCenterActionAdapter : IControlCenterActionAdapter
+        {
+            private readonly Queue<ControlCenterActionExecutionOutcome> queuedOutcomes =
+                new Queue<ControlCenterActionExecutionOutcome>();
+
+            public IList<ControlCenterActionEffect> Effects { get; } =
+                new List<ControlCenterActionEffect>();
+
+            public ControlCenterActionExecutionOutcome DefaultOutcome { get; set; } =
+                ControlCenterActionExecutionOutcome.Applied;
+
+            public void EnqueueOutcome(ControlCenterActionExecutionOutcome outcome)
+            {
+                queuedOutcomes.Enqueue(outcome);
+            }
+
+            public ControlCenterActionExecutionOutcome Execute(ControlCenterActionEffect effect)
+            {
+                if (effect == null)
+                    throw new ArgumentNullException("effect");
+                Effects.Add(effect);
+                return queuedOutcomes.Count == 0
+                    ? DefaultOutcome
+                    : queuedOutcomes.Dequeue();
+            }
+        }
+
 
         private sealed class RecordingSessionAdapter : IControlCenterSessionAdapter
         {

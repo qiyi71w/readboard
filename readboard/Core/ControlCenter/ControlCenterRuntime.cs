@@ -627,38 +627,6 @@ namespace readboard
         }
     }
 
-    internal static class ControlCenterSnapshotPublisher
-    {
-        public static bool PublishIfNeeded(
-            ControlCenterApplyResult result,
-            Action publishSnapshot)
-        {
-            if (result == null)
-                throw new ArgumentNullException("result");
-            if (!result.ShouldPublishSnapshot)
-                return false;
-            if (publishSnapshot == null)
-                throw new ArgumentNullException("publishSnapshot");
-
-            publishSnapshot();
-            return true;
-        }
-
-        public static bool PublishIfNeeded(
-            ControlCenterActionApplyResult result,
-            Action publishSnapshot)
-        {
-            if (result == null)
-                throw new ArgumentNullException("result");
-            if (!result.ShouldPublishSnapshot)
-                return false;
-            if (publishSnapshot == null)
-                throw new ArgumentNullException("publishSnapshot");
-
-            publishSnapshot();
-            return true;
-        }
-    }
 
     internal interface IControlCenterSessionAdapter
     {
@@ -713,27 +681,14 @@ namespace readboard
         public ControlCenterRuntime(
             ControlCenterPreferences initialPreferences,
             IControlCenterSessionAdapter sessionAdapter,
-            IControlCenterPreferencePersistence persistence)
+            IControlCenterPreferencePersistence persistence,
+            IControlCenterActionAdapter actionAdapter)
             : this(
                 initialPreferences,
                 new ControlCenterSessionState(),
                 sessionAdapter,
                 persistence,
-                new RejectingControlCenterActionAdapter())
-        {
-        }
-
-        public ControlCenterRuntime(
-            ControlCenterPreferences initialPreferences,
-            ControlCenterSessionState initialSessionState,
-            IControlCenterSessionAdapter sessionAdapter,
-            IControlCenterPreferencePersistence persistence)
-            : this(
-                initialPreferences,
-                initialSessionState,
-                sessionAdapter,
-                persistence,
-                new RejectingControlCenterActionAdapter())
+                actionAdapter)
         {
         }
 

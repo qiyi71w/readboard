@@ -17,7 +17,6 @@ namespace readboard
         private bool webViewUpdateInitialized;
         private bool webViewHostedInstallFallbackActive;
         private bool webViewHostedUpdateHostInstalling;
-        private int webViewUpdateOperationId;
         private int webViewHostedUpdateGeneration;
 
         internal void InitializeWebViewUpdateBridge()
@@ -89,6 +88,9 @@ namespace readboard
             {
                 Open = state.Open,
                 Status = state.Status,
+                InstallEnabled = state.InstallEnabled,
+                OpenDownloadEnabled = state.OpenDownloadEnabled,
+                CloseEnabled = state.CloseEnabled,
                 CurrentVersion = state.CurrentVersion,
                 LatestVersion = state.LatestVersion,
                 ReleaseDate = ResolveWebViewUpdateText(
@@ -245,81 +247,107 @@ namespace readboard
             return result;
         }
 
-        internal async Task CheckForWebViewUpdateAsync()
+        private Task CheckForWebViewUpdateAsync()
         {
             if (webViewUpdateState.Open
                 && (webViewUpdateState.Status == "checking"
                     || webViewUpdateState.Status == "processing"))
-                return;
-            int operationId = ++webViewUpdateOperationId;
-            InitializeWebViewUpdateBridge();
-            webViewHostedInstallFallbackActive = false;
-            webViewHostedUpdateHostInstalling = false;
-            webViewUpdateResult = null;
-            webViewManualDownloadUri = GetWebViewManualDownloadUri();
-            webViewUpdateState = new ReadBoardUpdateUiState
-            {
-                Open = true,
-                Status = "checking",
-                CurrentVersion = AppReleaseVersion.GetCurrentVersion(),
-                TitleMessage = SemanticMessage.Create("MainForm_btnCheckUpdate_Checking"),
-                DetailMessage = SemanticMessage.Create("WebView_updateFetching")
-            };
-            PostWebViewState();
+                return Task.CompletedTask;
 
-            try
-            {
-                UpdateCheckResult result = await updateChecker.CheckAsync();
-                if (operationId != webViewUpdateOperationId)
-                    return;
-                if (result == null)
-                    throw new InvalidOperationException("Update check returned no result.");
+            return webViewUpdateCheckJourney.StartAsync(
+                token => updateChecker.CheckAsync(token),
+                CanOfferWebViewHostedInstallForCurrentProcess);
+        }
 
-                webViewUpdateResult = result;
-                webViewManualDownloadUri = ResolveWebViewManualDownloadUri(result);
-                ApplyWebViewUpdateCheckResult(result);
-            }
-            catch (Exception exception)
+        private void OnWebViewUpdateCheckObservation(WebViewUpdateCheckObservation observation)
+        {
+            if (observation == null)
+                throw new ArgumentNullException(nameof(observation));
+
+            switch (observation.Kind)
             {
-                if (operationId != webViewUpdateOperationId)
+                case WebViewUpdateCheckObservationKind.Started:
+                    InitializeWebViewUpdateBridge();
+                    webViewHostedInstallFallbackActive = false;
+                    webViewHostedUpdateHostInstalling = false;
+                    webViewUpdateResult = null;
+                    webViewManualDownloadUri = GetWebViewManualDownloadUri();
+                    webViewUpdateState = new ReadBoardUpdateUiState
+                    {
+                        Open = true,
+                        Status = "checking",
+                        CloseEnabled = true,
+                        CurrentVersion = AppReleaseVersion.GetCurrentVersion(),
+                        TitleMessage = SemanticMessage.Create("MainForm_btnCheckUpdate_Checking"),
+                        DetailMessage = SemanticMessage.Create("WebView_updateFetching")
+                    };
+                    PostWebViewState();
                     return;
-                Trace.TraceError(exception.ToString());
-                webViewUpdateState = CreateWebViewUpdateCheckFailedState(
-                    SemanticMessage.Create("Update_checkFailed"),
-                    SemanticMessage.CreateWithDiagnostic(
-                        "Update_unknownError",
-                        string.IsNullOrWhiteSpace(exception.Message)
-                            ? null
-                            : exception.Message.Trim()));
-                PostWebViewState();
+                case WebViewUpdateCheckObservationKind.Completed:
+                    webViewManualDownloadUri = ResolveWebViewManualDownloadUri(observation.Result);
+                    ApplyWebViewUpdateCheckResult(
+                        observation.Result,
+                        observation.HostedInstallAvailable);
+                    return;
+                case WebViewUpdateCheckObservationKind.Failed:
+                    Trace.TraceError(observation.Exception.ToString());
+                    webViewUpdateState = CreateWebViewUpdateCheckFailedState(
+                        SemanticMessage.Create("Update_checkFailed"),
+                        SemanticMessage.CreateWithDiagnostic(
+                            "Update_unknownError",
+                            string.IsNullOrWhiteSpace(observation.Exception.Message)
+                                ? null
+                                : observation.Exception.Message.Trim()));
+                    PostWebViewState();
+                    return;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(observation.Kind));
             }
         }
 
-        internal void CloseWebViewUpdate()
+        internal bool CloseWebViewUpdate()
         {
+            if (!webViewUpdateState.Open &&
+                string.Equals(webViewUpdateState.Status, "closed", StringComparison.Ordinal))
+                return false;
+
+            bool processing = string.Equals(
+                webViewUpdateState.Status,
+                "processing",
+                StringComparison.Ordinal);
+            if (webViewUpdateState.Open && !webViewUpdateState.CloseEnabled)
+                return true;
+
             if (hostedUpdateJourney != null && hostedUpdateJourney.Cancel())
             {
                 webViewHostedUpdateHostInstalling = false;
-                return;
+                return false;
             }
-
-            if (!webViewUpdateState.Open &&
-                string.Equals(webViewUpdateState.Status, "closed", StringComparison.Ordinal))
-                return;
+            if (processing && hostedUpdateJourney != null)
+                return true;
 
             int journeyGeneration = hostedUpdateJourney == null ? 0 : hostedUpdateJourney.Generation;
             if (journeyGeneration >= webViewHostedUpdateGeneration)
                 webViewHostedUpdateGeneration = journeyGeneration + 1;
-            webViewUpdateOperationId++;
+            webViewUpdateCheckJourney.Cancel();
             webViewHostedUpdateHostInstalling = false;
             webViewUpdateState = CreateClosedWebViewUpdateState();
-            PostWebViewState();
+            return true;
+        }
+        internal static bool ShouldPublishWebViewUpdateOpenDownloadRejection(
+            bool open,
+            bool openDownloadEnabled)
+        {
+            return !open || !openDownloadEnabled;
         }
 
         internal Task InstallWebViewUpdateAsync()
         {
             if (!webViewUpdateState.Open || webViewUpdateState.Status != "available")
+            {
+                PostWebViewState();
                 return Task.CompletedTask;
+            }
             InitializeWebViewUpdateBridge();
             UpdateCheckResult result = webViewUpdateResult;
             if (!CanOfferWebViewHostedInstallForCurrentProcess(result))
@@ -361,6 +389,8 @@ namespace readboard
 
             InvokeUiHostAction(delegate
             {
+                if (isShuttingDown || IsDisposed || Disposing)
+                    return;
                 ApplyHostedUpdateObservation(observation);
             });
         }
@@ -380,7 +410,7 @@ namespace readboard
                     SetWebViewUpdateProcessing(observation.Message, 1);
                     break;
                 case HostedUpdateStage.NotifyingHost:
-                    SetWebViewUpdateProcessing(observation.Message, 2);
+                    SetWebViewUpdateProcessing(observation.Message, 1);
                     break;
                 case HostedUpdateStage.WaitingForHostInstall:
                     if (webViewHostedInstallFallbackActive || webViewHostedUpdateHostInstalling)
@@ -442,8 +472,13 @@ namespace readboard
         internal void DisposeWebViewUpdateBridge()
         {
             if (hostedUpdateJourney != null)
+            {
+                int journeyGeneration = hostedUpdateJourney.Generation;
+                if (journeyGeneration >= webViewHostedUpdateGeneration)
+                    webViewHostedUpdateGeneration = journeyGeneration + 1;
                 hostedUpdateJourney.Dispose();
-            webViewUpdateOperationId++;
+            }
+            webViewUpdateCheckJourney.Cancel();
             webViewHostedUpdateHostInstalling = false;
         }
 
@@ -472,6 +507,16 @@ namespace readboard
         {
             return new Uri(WebViewManualDownloadUrl, UriKind.Absolute);
         }
+        internal static ProcessStartInfo CreateWebViewDownloadStartInfo(Uri uri)
+        {
+            if (uri == null)
+                throw new ArgumentNullException(nameof(uri));
+
+            return new ProcessStartInfo(uri.AbsoluteUri)
+            {
+                UseShellExecute = true
+            };
+        }
 
         internal static Uri ResolveWebViewManualDownloadUri(UpdateCheckResult result)
         {
@@ -485,31 +530,41 @@ namespace readboard
             return GetWebViewManualDownloadUri();
         }
 
-        internal static ProcessStartInfo CreateWebViewDownloadStartInfo(Uri uri)
+        private void ApplyWebViewUpdateCheckResult(
+            UpdateCheckResult result,
+            bool hostedInstallAvailable)
         {
-            if (uri == null)
-                throw new ArgumentNullException(nameof(uri));
-
-            return new ProcessStartInfo(uri.AbsoluteUri)
-            {
-                UseShellExecute = true
-            };
+            if (result == null)
+                throw new ArgumentNullException("result");
+            webViewUpdateResult = result;
+            webViewUpdateState = ResolveWebViewUpdateCheckResultState(
+                result,
+                hostedInstallAvailable);
+            PostWebViewState();
         }
 
-        private void ApplyWebViewUpdateCheckResult(UpdateCheckResult result)
+        internal static ReadBoardUpdateUiState ResolveWebViewUpdateCheckResultState(
+            UpdateCheckResult result,
+            bool hostedInstallAvailable)
         {
+            if (result == null)
+                throw new ArgumentNullException("result");
+
             switch (result.Status)
             {
                 case UpdateCheckStatus.UpdateAvailable:
-                    bool hostedInstallAvailable = CanOfferWebViewHostedInstallForCurrentProcess(result);
+                {
                     List<SemanticMessage> channelMessages = BuildWebViewChannelMessages(result);
                     string releaseNotes = string.IsNullOrWhiteSpace(result.ReleaseNotes)
                         ? null
                         : result.ReleaseNotes.Trim();
-                    webViewUpdateState = new ReadBoardUpdateUiState
+                    return new ReadBoardUpdateUiState
                     {
                         Open = true,
                         Status = hostedInstallAvailable ? "available" : "manual",
+                        InstallEnabled = hostedInstallAvailable,
+                        OpenDownloadEnabled = !hostedInstallAvailable,
+                        CloseEnabled = true,
                         CurrentVersion = result.CurrentVersion,
                         LatestVersion = result.LatestVersion,
                         ReleaseDate = result.PublishedAt.HasValue
@@ -531,8 +586,9 @@ namespace readboard
                             ? null
                             : SemanticMessage.Create("WebView_manualDownload")
                     };
-                    break;
+                }
                 case UpdateCheckStatus.UpToDate:
+                {
                     string upToDateKey = string.Equals(
                         result.ChannelStatus,
                         "retired",
@@ -540,10 +596,11 @@ namespace readboard
                         ? "Update_upToDateRetired"
                         : "Update_upToDate";
                     SemanticMessage upToDateMessage = SemanticMessage.Create(upToDateKey);
-                    webViewUpdateState = new ReadBoardUpdateUiState
+                    return new ReadBoardUpdateUiState
                     {
                         Open = true,
                         Status = "latest",
+                        CloseEnabled = true,
                         CurrentVersion = result.CurrentVersion,
                         LatestVersion = result.LatestVersion,
                         TitleMessage = upToDateMessage,
@@ -551,36 +608,31 @@ namespace readboard
                         DetailMessages = BuildWebViewChannelMessages(result),
                         Message = DateTime.Now.ToString("HH:mm", CultureInfo.CurrentCulture)
                     };
-                    break;
+                }
                 case UpdateCheckStatus.OutsideChannel:
-                    webViewUpdateState = CreateWebViewUpdateNoticeState(
+                    return CreateWebViewUpdateNoticeState(
                         result,
                         SemanticMessage.Create("Update_outsideChannel"),
                         BuildWebViewChannelMessages(result));
-                    break;
                 case UpdateCheckStatus.NoMatchingChannel:
-                    webViewUpdateState = CreateWebViewUpdateNoticeState(
+                    return CreateWebViewUpdateNoticeState(
                         result,
                         SemanticMessage.Create("Update_noMatchingChannel"),
                         BuildWebViewChannelMessages(result));
-                    break;
                 case UpdateCheckStatus.Failed:
-                    webViewUpdateState = CreateWebViewUpdateCheckFailedState(
+                    return CreateWebViewUpdateCheckFailedState(
                         SemanticMessage.Create("Update_checkFailed"),
                         SemanticMessage.CreateWithDiagnostic(
                             "Update_unknownError",
                             string.IsNullOrWhiteSpace(result.ErrorMessage)
                                 ? null
                                 : result.ErrorMessage.Trim()));
-                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(result.Status));
             }
-
-            PostWebViewState();
         }
 
-        private ReadBoardUpdateUiState CreateWebViewUpdateNoticeState(
+        private static ReadBoardUpdateUiState CreateWebViewUpdateNoticeState(
             UpdateCheckResult result,
             SemanticMessage titleMessage,
             IReadOnlyList<SemanticMessage> detailMessages)
@@ -589,6 +641,7 @@ namespace readboard
             {
                 Open = true,
                 Status = "notice",
+                CloseEnabled = true,
                 CurrentVersion = result.CurrentVersion,
                 LatestVersion = result.LatestVersion,
                 TitleMessage = titleMessage,
@@ -596,13 +649,14 @@ namespace readboard
             };
         }
 
-        private ReadBoardUpdateUiState CreateWebViewUpdateCheckFailedState(
+        private static ReadBoardUpdateUiState CreateWebViewUpdateCheckFailedState(
             SemanticMessage titleMessage,
             SemanticMessage detailMessage)
         {
             return new ReadBoardUpdateUiState
             {
                 Open = true,
+                CloseEnabled = true,
                 Status = "check-failed",
                 CurrentVersion = AppReleaseVersion.GetCurrentVersion(),
                 TitleMessage = titleMessage,
@@ -632,6 +686,11 @@ namespace readboard
             return messages;
         }
 
+        internal static bool IsWebViewUpdateProcessingCloseEnabled(int activeStep)
+        {
+            return activeStep < 2;
+        }
+
         private void SetWebViewUpdateProcessing(
             SemanticMessage message,
             int activeStep)
@@ -640,6 +699,7 @@ namespace readboard
             {
                 Open = true,
                 Status = "processing",
+                CloseEnabled = IsWebViewUpdateProcessingCloseEnabled(activeStep),
                 CurrentVersion = webViewUpdateResult == null ? null : webViewUpdateResult.CurrentVersion,
                 LatestVersion = webViewUpdateResult == null ? null : webViewUpdateResult.LatestVersion,
                 TitleMessage = message,
@@ -679,6 +739,8 @@ namespace readboard
             {
                 Open = true,
                 Status = "failed",
+                OpenDownloadEnabled = true,
+                CloseEnabled = true,
                 CurrentVersion = webViewUpdateResult == null ? AppReleaseVersion.GetCurrentVersion() : webViewUpdateResult.CurrentVersion,
                 LatestVersion = webViewUpdateResult == null ? null : webViewUpdateResult.LatestVersion,
                 TitleMessage = headline,

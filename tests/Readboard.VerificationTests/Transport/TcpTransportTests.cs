@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -7,6 +6,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Reflection;
 using System.Threading.Tasks;
+using System.Threading;
 using Xunit;
 using readboard;
 using Readboard.VerificationTests.Support;
@@ -29,15 +29,31 @@ namespace Readboard.VerificationTests.Transport
             };
 
             transport.Start();
-            await server.WaitForClientAsync();
-            await server.WriteLineAsync("place 3 4");
-            Assert.Equal("place 3 4", await received.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+            await VerificationCompletion.WaitAsync(
+                server.WaitForClientAsync(),
+                "TCP client did not connect.");
+            await VerificationCompletion.WaitAsync(
+                server.WriteLineAsync("place 3 4"),
+                "TCP server could not send the inbound line.");
+            Assert.Equal(
+                "place 3 4",
+                await VerificationCompletion.WaitAsync(
+                    received.Task,
+                    "TCP transport did not receive the inbound line."));
 
             transport.Send("ready");
             transport.SendError("boom");
 
-            Assert.Equal("ready", await server.ReadLineAsync());
-            Assert.Equal("error: boom", await server.ReadLineAsync());
+            Assert.Equal(
+                "ready",
+                await VerificationCompletion.WaitAsync(
+                    server.ReadLineAsync(),
+                    "TCP server did not receive the outbound line."));
+            Assert.Equal(
+                "error: boom",
+                await VerificationCompletion.WaitAsync(
+                    server.ReadLineAsync(),
+                    "TCP server did not receive the outbound error."));
             Assert.True(transport.IsConnected);
 
             transport.Stop();
@@ -53,13 +69,7 @@ namespace Readboard.VerificationTests.Transport
             using BlockingBackgroundThreadHarness harness = BlockingBackgroundThreadHarness.Start("TcpTransportReadThread");
             SetPrivateField(transport, "readThread", harness.Thread);
 
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            transport.Stop();
-            stopwatch.Stop();
-
-            Assert.True(
-                stopwatch.Elapsed < TimeSpan.FromMilliseconds(250),
-                "TCP transport shutdown should not wait for the read thread to finish.");
+            AssertTransportStopReturnsWithoutWaiting(transport, harness);
         }
 
         private static void SetPrivateField(object target, string fieldName, object value)
@@ -67,6 +77,52 @@ namespace Readboard.VerificationTests.Transport
             FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(field);
             field.SetValue(target, value);
+        }
+
+        private static void AssertTransportStopReturnsWithoutWaiting(
+            TcpTransport transport,
+            BlockingBackgroundThreadHarness harness)
+        {
+            ManualResetEventSlim stopCompleted = new ManualResetEventSlim(false);
+            Exception stopException = null;
+            Thread stopThread = new Thread(new ThreadStart(delegate
+            {
+                try
+                {
+                    transport.Stop();
+                }
+                catch (Exception ex)
+                {
+                    stopException = ex;
+                }
+                finally
+                {
+                    stopCompleted.Set();
+                }
+            }));
+            stopThread.IsBackground = true;
+            stopThread.Name = "TcpTransportTests.Stop";
+            stopThread.Start();
+
+            try
+            {
+                VerificationCompletion.Wait(
+                    stopCompleted,
+                    "TcpTransport.Stop must return without joining a blocked read thread.");
+                Assert.Null(stopException);
+                Assert.True(harness.Thread.IsAlive);
+            }
+            finally
+            {
+                harness.Release();
+                VerificationCompletion.Wait(
+                    stopCompleted,
+                    "TcpTransport.Stop did not finish after the read thread was released.");
+                VerificationCompletion.Join(
+                    stopThread,
+                    "TcpTransport.Stop worker did not exit.");
+                stopCompleted.Dispose();
+            }
         }
 
         private sealed class LoopbackServer : IDisposable

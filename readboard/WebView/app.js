@@ -5,11 +5,12 @@
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const webview = window.chrome?.webview;
   const preview = !webview;
+  if (!preview) document.body.classList.add("awaiting-state");
   const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
   const baseViewport = Object.freeze({ width: 1100, height: 680 });
   const minimumViewport = Object.freeze({ width: 960, height: 600 });
   const minimumScale = minimumViewport.width / baseViewport.width;
-  const initialState = {
+  const previewState = {
     page: "controlCenter",
     language: "cn",
     text: {},
@@ -113,7 +114,7 @@
     dialog: null
   };
 
-  let state = structuredClone(initialState);
+  let state = preview ? structuredClone(previewState) : null;
   let activeModal = null;
   let modalOpener = null;
   let resizeFrame = 0;
@@ -147,16 +148,6 @@
     resizeFrame = window.requestAnimationFrame(updateViewportLayout);
   }
 
-  function merge(base, patch) {
-    if (!patch || typeof patch !== "object" || Array.isArray(patch)) return patch;
-    const result = { ...(base && typeof base === "object" ? base : {}) };
-    for (const [key, value] of Object.entries(patch)) {
-      result[key] = value && typeof value === "object" && !Array.isArray(value)
-        ? merge(result[key], value)
-        : value;
-    }
-    return result;
-  }
 
   function normalizeTheme(value) {
     return value === "dark" || value === "light" ? value : "system";
@@ -174,15 +165,6 @@
     document.documentElement.dataset.theme = resolvedTheme;
     document.documentElement.style.colorScheme = resolvedTheme;
   }
-  function applyDiagnostics(value) {
-    const input = document.querySelector('[data-setting="diagnostics"]');
-    if (input && input.checked !== Boolean(value)) input.checked = Boolean(value);
-  }
-
-  window.readboardRuntimeEffects = {
-    applyTheme,
-    applyDiagnostics
-  };
 
   systemThemeQuery.addEventListener("change", () => {
     if (themePreference === "system") applyTheme(themePreference);
@@ -200,7 +182,7 @@
   }
 
   function t(key, previewValue = key) {
-    const value = state.text?.[key];
+    const value = state?.text?.[key];
     return typeof value === "string" && value ? value : previewValue;
   }
 
@@ -209,9 +191,9 @@
   }
 
   function localizeStaticPage() {
-    if (!preview && !Object.keys(state.text || {}).length) return;
-    if (localizedText === state.text && localizedLanguage === state.language) return;
-    document.documentElement.lang = htmlLanguage(state.language);
+    if (!preview && !Object.keys(state?.text || {}).length) return;
+    if (localizedText === state?.text && localizedLanguage === state?.language) return;
+    document.documentElement.lang = htmlLanguage(state?.language);
     $$('[data-i18n]').forEach(element => {
       element.textContent = t(element.dataset.i18n, element.textContent);
     });
@@ -219,8 +201,8 @@
       element.setAttribute("aria-label", t(element.dataset.i18nAriaLabel, element.getAttribute("aria-label")));
     });
     document.title = `ReadBoard / ${t("MainForm_title", "棋盘同步工具")}`;
-    localizedText = state.text;
-    localizedLanguage = state.language;
+    localizedText = state?.text;
+    localizedLanguage = state?.language;
   }
 
   function dynamicText(id, value) {
@@ -245,18 +227,33 @@
     $$(selector).forEach(element => { element.disabled = Boolean(value); });
   }
 
-  function showPage(page, notify = false) {
-    const target = ["controlCenter", "settings", "rules", "about"].includes(page) ? page : "controlCenter";
-    $$("[data-page-panel]").forEach(element => element.classList.toggle("active", element.dataset.pagePanel === target));
-    $$(".nav-item").forEach(element => {
-      const active = element.dataset.page === target;
-      element.classList.toggle("active", active);
-      if (active) element.setAttribute("aria-current", "page");
-      else element.removeAttribute("aria-current");
-    });
-    state.page = target;
-    if (notify) send("navigate", { page: target });
+  function normalizePage(page) {
+    return ["controlCenter", "settings", "rules", "about"].includes(page)
+      ? page
+      : "controlCenter";
   }
+
+  function showPage(page) {
+    const target = normalizePage(page);
+    $$('[data-page-panel]').forEach(element => element.classList.toggle('active', element.dataset.pagePanel === target));
+    $$('.nav-item').forEach(element => {
+      const active = element.dataset.page === target;
+      element.classList.toggle('active', active);
+      if (active) element.setAttribute('aria-current', 'page');
+      else element.removeAttribute('aria-current');
+    });
+  }
+
+  function requestPage(page) {
+    const target = normalizePage(page);
+    if (preview) {
+      state.page = target;
+      render();
+      return;
+    }
+    send("navigate", { page: target });
+  }
+
 
   function renderShell() {
     const shell = state.shell || {};
@@ -435,28 +432,27 @@
   function renderUpdate(update) {
     const mode = update.status || "checking";
     let body;
-    let actions = button("update.close", update.closeLabel || "");
+    let actions = update.closeEnabled === false ? "" : button("update.close", update.closeLabel || "");
     if (mode === "checking") {
       body = message("&#xE895;", update.title || "", update.detail || "", '<div class="progress indeterminate"><i></i></div>');
     } else if (mode === "latest") {
       body = message("&#xE73E;", update.title || "", update.detail || "", `<p>${escapeHtml(update.message || "")}</p>`);
-      actions = button("update.close", update.doneLabel || "", "primary");
+      actions = update.closeEnabled === false ? "" : button("update.close", update.doneLabel || "", "primary");
     } else if (mode === "available" || mode === "manual") {
       body = `<div class="update-details"><span>${escapeHtml(update.currentVersionLabel || "")}</span><b>${escapeHtml(update.currentVersion || "--")}</b><span>${escapeHtml(update.latestVersionLabel || "")}</span><b>${escapeHtml(update.latestVersion || "--")}</b><span>${escapeHtml(update.releaseDateLabel || "")}</span><b>${escapeHtml(update.releaseDate || "--")}</b>${mode === "manual" ? `<div class="update-warning"><b>${escapeHtml(update.title || "")}</b><p>${escapeHtml(update.message || update.detail || "")}</p></div>` : ""}<span>${escapeHtml(update.releaseNotesLabel || "")}</span><div class="release-notes">${escapeHtml(update.releaseNotes || "")}</div></div>`;
-      actions += button(mode === "manual" ? "update.openDownload" : "update.install", mode === "manual" ? update.downloadLabel || "" : update.downloadAndInstallLabel || "", "primary");
     } else if (mode === "notice") {
       body = message("&#xE946;", update.title || "", update.detail || "");
-      actions = button("update.close", update.doneLabel || "", "primary");
+      actions = update.closeEnabled === false ? "" : button("update.close", update.doneLabel || "", "primary");
     } else if (mode === "check-failed") {
       body = message("&#xE783;", update.title || "", update.detail || "");
-      actions = button("update.close", update.closeLabel || "");
     } else if (mode === "processing") {
       body = `<h3>${escapeHtml(update.title || "")}</h3><p>${escapeHtml(update.detail || "")}</p>${progress(update.progress)}<div class="steps">${steps(update.steps)}</div>`;
-      actions = `<button type="button" disabled>${escapeHtml(update.processingLabel || "")}</button>`;
+      actions += `<button type="button" disabled>${escapeHtml(update.processingLabel || "")}</button>`;
     } else {
       body = `<div class="dialog-copy"><h3>${escapeHtml(update.title || "")}</h3><p>${escapeHtml(update.message || "")}</p><div class="update-warning"><b>${escapeHtml(update.errorTitle || "")}</b><p>${escapeHtml(update.error || "")}</p></div></div>`;
-      actions += button("update.openDownload", update.downloadLabel || "", "primary");
     }
+    if (update.installEnabled) actions += button("update.install", update.downloadAndInstallLabel || "", "primary");
+    if (update.openDownloadEnabled) actions += button("update.openDownload", update.downloadLabel || "", "primary");
     openModal("update", update.dialogTitle || "", body, actions, "min(660px, calc(100vw - 48px))");
   }
 
@@ -467,7 +463,7 @@
       ? `<p class="identity-intro">${escapeHtml(identity.prompt || "")}</p><b>${escapeHtml(identity.detectedNicknamesLabel || "")}</b><div class="candidate-list">${candidates.map(candidate => candidateHtml(candidate, selected, identity.savedId, identity.savedLabel)).join("")}</div>${selected ? `<p class="identity-intro">${escapeHtml(identity.selectedLabel || "")} ${escapeHtml(candidates.find(item => item.id === selected)?.label || "")}</p>` : ""}`
       : `<p class="identity-intro">${escapeHtml(identity.prompt || "")}</p><b>${escapeHtml(identity.detectedNicknamesLabel || "")}</b><div class="empty-state"><div><i class="icon">&#xE738;</i><h3>${escapeHtml(identity.emptyTitle || "")}</h3><p>${escapeHtml(identity.windowHint || "")}</p></div></div>`;
     const actions = identity.hasSavedIdentity ? button("identity.clearSaved", identity.clearSavedLabel || "", "danger-outline left") : "";
-    openModal("identity", identity.dialogTitle || "", body, actions + button("identity.close", identity.cancelLabel || "") + button("identity.useOnce", identity.useOnceLabel || "", "", !selected) + button("identity.saveAndUse", identity.saveAndUseLabel || "", "primary", !selected), "min(780px, calc(100vw - 48px))");
+    openModal("identity", identity.dialogTitle || "", body, actions + button("identity.close", identity.cancelLabel || "") + button("identity.useOnce", identity.useOnceLabel || "", "", !identity.canUseOnce) + button("identity.saveAndUse", identity.saveAndUseLabel || "", "primary", !identity.canSaveAndUse), "min(780px, calc(100vw - 48px))");
   }
 
   function candidateHtml(candidate, selectedId, savedId, savedLabel) {
@@ -529,6 +525,7 @@
   function escapeAttr(value) { return escapeHtml(value); }
 
   function render() {
+    if (!state) return;
     localizeStaticPage();
     applyTheme(state.shell.theme || "system");
     showPage(state.page);
@@ -552,7 +549,7 @@
   document.addEventListener("click", event => {
     const pageButton = event.target.closest("[data-page]");
     if (pageButton) {
-      showPage(pageButton.dataset.page, true);
+      requestPage(pageButton.dataset.page);
       return;
     }
     const buttonElement = event.target.closest("[data-command]");
@@ -591,6 +588,10 @@
   document.addEventListener("keydown", event => {
     if (!activeModal) return;
     if (event.key === "Escape") {
+      if (activeModal === "update" && state.update?.closeEnabled === false) {
+        event.preventDefault();
+        return;
+      }
       send(modalCloseCommand());
       return;
     }
@@ -609,18 +610,17 @@
   });
 
   function acceptMessage(message) {
-    if (!message || !message.payload || typeof message.payload !== "object") return;
-    if (message.type === "runtimeEffect") {
-      if (message.payload.name === "applyTheme") applyTheme(message.payload.value);
-      else if (message.payload.name === "applyDiagnostics") applyDiagnostics(message.payload.value);
-      return;
-    }
-    if (message.type !== "state") return;
-    const currentText = state.text;
-    state = merge(initialState, message.payload);
-    if (!message.payload.text) state.text = currentText;
+    if (!message || message.type !== "state" || !message.payload
+      || typeof message.payload !== "object") return;
+    const snapshot = message.payload;
+    if (Array.isArray(snapshot)
+      || !["page", "language", "text", "shell", "controlCenter", "settings", "update", "identity", "dialog", "logs"]
+        .every(key => Object.prototype.hasOwnProperty.call(snapshot, key))) return;
+    state = structuredClone(snapshot);
+    document.body.classList.remove("awaiting-state");
     render();
   }
+
 
   webview?.addEventListener("message", event => acceptMessage(event.data));
   window.addEventListener("resize", scheduleViewportLayout, { passive: true });
@@ -638,7 +638,5 @@
     }
   });
 
-  updateViewportLayout();
-  render(true);
-  if (webview) send("navigate", { page: state.page });
+  if (preview) render();
 })();

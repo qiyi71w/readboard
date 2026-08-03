@@ -223,34 +223,21 @@ namespace readboard
 
         private ControlCenterApplyResult ApplyControlCenterIntent(ControlCenterIntent intent)
         {
-            suppressWebViewStatePublication = true;
-            try
-            {
-                return controlCenterRuntime.Apply(intent);
-            }
-            finally
-            {
-                suppressWebViewStatePublication = false;
-            }
+            return webViewStatePublisher.Suppress(
+                delegate { return controlCenterRuntime.Apply(intent); });
         }
 
         private ControlCenterActionApplyResult ApplyControlCenterAction(ControlCenterActionIntent intent)
         {
-            suppressWebViewStatePublication = true;
-            try
-            {
-                return controlCenterRuntime.ApplyAction(intent);
-            }
-            finally
-            {
-                suppressWebViewStatePublication = false;
-            }
+            return webViewStatePublisher.Suppress(
+                delegate { return controlCenterRuntime.ApplyAction(intent); });
         }
 
         private void ApplyNativeControlCenterAction(ControlCenterActionIntent intent)
         {
             ControlCenterActionApplyResult result = ApplyControlCenterAction(intent);
-            ControlCenterSnapshotPublisher.PublishIfNeeded(result, PostWebViewState);
+            if (result.ShouldPublishSnapshot)
+                PostWebViewState();
         }
 
         private void ApplyControlCenterTwoWaySyncEffect()
@@ -303,41 +290,12 @@ namespace readboard
 
         private void ProjectControlCenterState()
         {
-            suppressWebViewStatePublication = true;
-            try
-            {
-                controlCenterRuntime.ProjectCurrentState();
-            }
-            finally
-            {
-                suppressWebViewStatePublication = false;
-            }
+            webViewStatePublisher.Suppress(controlCenterRuntime.ProjectCurrentState);
         }
 
-        private void RunWithSuppressedWebViewStatePublication(Action action)
+        private void RunWithBatchedWebViewStatePublication(Action action)
         {
-            if (action == null)
-                throw new ArgumentNullException("action");
-
-            bool previous = suppressWebViewStatePublication;
-            bool previousPending = suppressedWebViewStatePublicationPending;
-            int previousDepth = suppressedWebViewStatePublicationScopeDepth;
-            suppressWebViewStatePublication = true;
-            suppressedWebViewStatePublicationScopeDepth = previousDepth + 1;
-            suppressedWebViewStatePublicationPending = false;
-            try
-            {
-                action();
-            }
-            finally
-            {
-                bool pending = suppressedWebViewStatePublicationPending;
-                suppressedWebViewStatePublicationScopeDepth = previousDepth;
-                suppressWebViewStatePublication = previous;
-                suppressedWebViewStatePublicationPending = previousPending || pending;
-                if (previousDepth == 0 && !previous && pending)
-                    PostWebViewState();
-            }
+            webViewStatePublisher.Batch(action);
         }
 
         private ControlCenterSessionObservationApplyResult ApplyControlCenterSessionObservation(
@@ -354,13 +312,7 @@ namespace readboard
                 AddWebViewSemanticLog(message.Level, message);
             }
             if (result.ShouldPublishSnapshot)
-            {
-                if (suppressWebViewStatePublication
-                    && suppressedWebViewStatePublicationScopeDepth > 0)
-                    suppressedWebViewStatePublicationPending = true;
-                else if (!suppressWebViewStatePublication)
-                    PostWebViewState();
-            }
+                PostWebViewState();
             return result;
         }
     }

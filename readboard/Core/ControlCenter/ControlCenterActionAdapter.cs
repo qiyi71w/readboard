@@ -191,40 +191,4 @@ namespace readboard
         ControlCenterActionExecutionOutcome Execute(ControlCenterActionEffect effect);
     }
 
-    internal sealed class RejectingControlCenterActionAdapter : IControlCenterActionAdapter
-    {
-        public ControlCenterActionExecutionOutcome Execute(ControlCenterActionEffect effect)
-        {
-            if (effect == null)
-                throw new ArgumentNullException("effect");
-            return ControlCenterActionExecutionOutcome.Rejected;
-        }
-    }
-
-    internal sealed class InMemoryControlCenterActionAdapter : IControlCenterActionAdapter
-    {
-        private readonly Queue<ControlCenterActionExecutionOutcome> queuedOutcomes =
-            new Queue<ControlCenterActionExecutionOutcome>();
-
-        public IList<ControlCenterActionEffect> Effects { get; } =
-            new List<ControlCenterActionEffect>();
-
-        public ControlCenterActionExecutionOutcome DefaultOutcome { get; set; } =
-            ControlCenterActionExecutionOutcome.Applied;
-
-        public void EnqueueOutcome(ControlCenterActionExecutionOutcome outcome)
-        {
-            queuedOutcomes.Enqueue(outcome);
-        }
-
-        public ControlCenterActionExecutionOutcome Execute(ControlCenterActionEffect effect)
-        {
-            if (effect == null)
-                throw new ArgumentNullException("effect");
-            Effects.Add(effect);
-            return queuedOutcomes.Count == 0
-                ? DefaultOutcome
-                : queuedOutcomes.Dequeue();
-        }
-    }
 }

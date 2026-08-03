@@ -65,8 +65,7 @@ namespace readboard
         None = 0,
         Language = 1,
         Theme = 2,
-        BackgroundAnalysis = 4,
-        Diagnostics = 8
+        BackgroundAnalysis = 4
     }
 
     internal sealed class SettingsDraftEffectResult
@@ -409,7 +408,6 @@ namespace readboard
         void ApplyLanguagePreference(string preference);
         void ApplyTheme(int colorMode);
         void ApplyBackgroundAnalysis(bool enabled);
-        void ApplyDiagnostics(bool enabled);
     }
 
     internal sealed class SettingsDraftOperationResult
@@ -607,8 +605,6 @@ namespace readboard
                 changed |= SettingsDraftEffectKind.Theme;
             if (previous.PlayPonder != current.PlayPonder)
                 changed |= SettingsDraftEffectKind.BackgroundAnalysis;
-            if (previous.DebugDiagnosticsEnabled != current.DebugDiagnosticsEnabled)
-                changed |= SettingsDraftEffectKind.Diagnostics;
             return changed;
         }
 
@@ -634,12 +630,6 @@ namespace readboard
                 CaptureEffectFailure(
                     delegate { effects.ApplyBackgroundAnalysis(current.PlayPonder); },
                     SettingsDraftEffectKind.BackgroundAnalysis,
-                    ref pending,
-                    ref firstFailure);
-            if ((mask & SettingsDraftEffectKind.Diagnostics) != SettingsDraftEffectKind.None)
-                CaptureEffectFailure(
-                    delegate { effects.ApplyDiagnostics(current.DebugDiagnosticsEnabled); },
-                    SettingsDraftEffectKind.Diagnostics,
                     ref pending,
                     ref firstFailure);
             return new SettingsDraftEffectResult(pending, firstFailure);

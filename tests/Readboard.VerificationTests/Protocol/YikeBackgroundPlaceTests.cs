@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using Xunit;
 using readboard;
+using Readboard.VerificationTests.Support;
 
 namespace Readboard.VerificationTests.Protocol
 {
@@ -41,13 +42,13 @@ namespace Readboard.VerificationTests.Protocol
             {
                 coordinator.Start();
                 Assert.True(coordinator.TryStartKeepSync());
-                Assert.True(host.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-                Assert.True(transport.WaitForLine("end", TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Wait(host.KeepStarted, "Keep sync did not start.");
+                Assert.True(transport.WaitForLine("end"));
 
                 transport.Emit("yikeGeometry left=100 top=200 width=250 height=250 board=5");
                 transport.Emit("place 1 2");
 
-                Assert.True(transport.WaitForLine("placeComplete", TimeSpan.FromSeconds(1)));
+                Assert.True(transport.WaitForLine("placeComplete"));
             }
             finally
             {
@@ -93,12 +94,12 @@ namespace Readboard.VerificationTests.Protocol
             {
                 coordinator.Start();
                 Assert.True(coordinator.TryStartKeepSync());
-                Assert.True(host.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-                Assert.True(transport.WaitForLine("end", TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Wait(host.KeepStarted, "Keep sync did not start.");
+                Assert.True(transport.WaitForLine("end"));
 
                 transport.Emit("place 1 2");
 
-                Assert.True(transport.WaitForLine("error place failed", TimeSpan.FromSeconds(1)));
+                Assert.True(transport.WaitForLine("error place failed"));
             }
             finally
             {
@@ -150,14 +151,14 @@ namespace Readboard.VerificationTests.Protocol
             {
                 coordinator.Start();
                 Assert.True(coordinator.TryStartKeepSync());
-                Assert.True(host.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-                Assert.True(transport.WaitForLine("end", TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Wait(host.KeepStarted, "Keep sync did not start.");
+                Assert.True(transport.WaitForLine("end"));
 
                 transport.Emit("yikeGeometry left=100 top=200 width=250 height=250 board=5");
                 transport.Emit("yikeGeometry");
                 transport.Emit("place 1 2");
 
-                Assert.True(transport.WaitForLine("error place failed", TimeSpan.FromSeconds(1)));
+                Assert.True(transport.WaitForLine("error place failed"));
             }
             finally
             {
@@ -267,13 +268,13 @@ namespace Readboard.VerificationTests.Protocol
             {
                 coordinator.Start();
                 Assert.True(coordinator.TryStartKeepSync());
-                Assert.True(host.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-                Assert.True(transport.WaitForLine("end", TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Wait(host.KeepStarted, "Keep sync did not start.");
+                Assert.True(transport.WaitForLine("end"));
 
                 transport.Emit("yikeGeometry left=100 top=200 width=250 height=250 board=5");
                 transport.Emit("place 1 2");
 
-                Assert.True(transport.WaitForLine("placeComplete", TimeSpan.FromSeconds(1)));
+                Assert.True(transport.WaitForLine("placeComplete"));
             }
             finally
             {
@@ -321,14 +322,14 @@ namespace Readboard.VerificationTests.Protocol
             {
                 coordinator.Start();
                 Assert.True(coordinator.TryStartKeepSync());
-                Assert.True(host.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-                Assert.True(transport.WaitForLine("end", TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Wait(host.KeepStarted, "Keep sync did not start.");
+                Assert.True(transport.WaitForLine("end"));
 
                 ReplaceRuntimeYikeFrame(coordinator, currentHandle, oldHandle);
                 transport.Emit("yikeGeometry left=100 top=200 width=250 height=250 board=5");
                 transport.Emit("place 1 2");
 
-                Assert.True(transport.WaitForLine("placeComplete", TimeSpan.FromSeconds(1)));
+                Assert.True(transport.WaitForLine("placeComplete"));
             }
             finally
             {
@@ -370,13 +371,13 @@ namespace Readboard.VerificationTests.Protocol
             {
                 coordinator.Start();
                 Assert.True(coordinator.TryStartKeepSync());
-                Assert.True(host.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-                Assert.True(transport.WaitForLine("end", TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Wait(host.KeepStarted, "Keep sync did not start.");
+                Assert.True(transport.WaitForLine("end"));
 
                 transport.Emit("yikeGeometry left=45 top=60 width=656 height=640 board=19 firstX=81 firstY=97 cellX=32 cellY=31");
                 transport.Emit("place 1 2");
 
-                Assert.True(transport.WaitForLine("placeComplete", TimeSpan.FromSeconds(1)));
+                Assert.True(transport.WaitForLine("placeComplete"));
             }
             finally
             {
@@ -418,13 +419,13 @@ namespace Readboard.VerificationTests.Protocol
             {
                 coordinator.Start();
                 Assert.True(coordinator.TryStartKeepSync());
-                Assert.True(host.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Wait(host.KeepStarted, "Keep sync did not start.");
 
                 transport.Emit("yikeGeometry left=45 top=60 width=656 height=640 board=19 firstX=81 firstY=97 cellX=32 cellY=31");
                 transport.Emit("place 1 2");
 
                 Assert.True(
-                    transport.WaitForLine("placeComplete", TimeSpan.FromSeconds(1)),
+                    transport.WaitForLine("placeComplete"),
                     "Expected placeComplete, got lines: " + string.Join(", ", transport.SnapshotSentLines()));
             }
             finally
@@ -816,10 +817,9 @@ namespace Readboard.VerificationTests.Protocol
                 IsConnected = false;
             }
 
-            public bool WaitForLine(string line, TimeSpan timeout)
+            public bool WaitForLine(string line)
             {
-                DateTime deadline = DateTime.UtcNow.Add(timeout);
-                while (DateTime.UtcNow < deadline)
+                while (true)
                 {
                     lock (SentLines)
                     {
@@ -827,12 +827,9 @@ namespace Readboard.VerificationTests.Protocol
                             return true;
                     }
 
-                    lineEvent.Wait(TimeSpan.FromMilliseconds(25));
+                    VerificationCompletion.Wait(lineEvent, "Expected Yike protocol line was not sent.");
                     lineEvent.Reset();
                 }
-
-                lock (SentLines)
-                    return SentLines.Contains(line);
             }
 
             public string[] SnapshotSentLines()

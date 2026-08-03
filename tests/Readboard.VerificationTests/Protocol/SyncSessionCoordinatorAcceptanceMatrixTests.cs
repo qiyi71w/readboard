@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using readboard;
+using Readboard.VerificationTests.Support;
 
 namespace Readboard.VerificationTests.Protocol
 {
@@ -58,7 +59,9 @@ namespace Readboard.VerificationTests.Protocol
             coordinator.HandlePendingMovePlacementResult(true);
             coordinator.ResolvePendingMove(CreateSnapshot(boardWidth, boardHeight, move), boardWidth);
 
-            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(5));
+            bool result = await VerificationCompletion.WaitAsync(
+                waitTask,
+                "Pending move result did not complete.");
 
             Assert.True(result);
             Assert.Equal(
@@ -112,7 +115,9 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal(1, attempt.Y);
             coordinator.HandlePendingMovePlacementResult(false);
 
-            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(5));
+            bool result = await VerificationCompletion.WaitAsync(
+                waitTask,
+                "Unverified pending move result did not complete.");
 
             Assert.False(result);
             Assert.False(coordinator.TryTakePendingMove(out _));
@@ -191,7 +196,9 @@ namespace Readboard.VerificationTests.Protocol
                 coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
             }
 
-            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(5));
+            bool result = await VerificationCompletion.WaitAsync(
+                waitTask,
+                "Verified pending move result did not complete.");
 
             Assert.False(result);
             Assert.False(coordinator.TryTakePendingMove(out _));

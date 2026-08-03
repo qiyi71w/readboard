@@ -8,7 +8,6 @@ namespace readboard
     {
         public string Page { get; set; } = "controlCenter";
         public string Language { get; set; }
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public IDictionary<string, string> Text { get; set; } = new Dictionary<string, string>();
         public ReadBoardShellState Shell { get; set; } = new ReadBoardShellState();
         public ReadBoardControlCenterState ControlCenter { get; set; } = new ReadBoardControlCenterState();

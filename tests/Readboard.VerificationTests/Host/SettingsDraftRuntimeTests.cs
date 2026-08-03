@@ -7,26 +7,16 @@ using Xunit;
 
 namespace Readboard.VerificationTests.Host
 {
-    public sealed class SettingsBridgeTests
+    public sealed class SettingsDraftRuntimeTests
     {
         [Fact]
-        public void DraftSurvivesTypedNavigationIntents()
+        public void DraftRuntimeRemainsIndependentFromTypedNavigationIntents()
         {
             AppConfig active = AppConfig.CreateDefault("220430", "TEST");
             RecordingPersistence persistence = new RecordingPersistence(active);
             SettingsDraftRuntime runtime = CreateRuntime(active, persistence, new RecordingEffects());
-            MainForm.WebViewSettingsJourney journey = new MainForm.WebViewSettingsJourney(
-                runtime,
-                WebViewPage.ControlCenter);
+            SettingsDraftRuntime draft = runtime;
             string[] pages = { "controlCenter", "settings", "rules", "about", "settings" };
-            WebViewPage[] expectedPages =
-            {
-                WebViewPage.ControlCenter,
-                WebViewPage.Settings,
-                WebViewPage.Rules,
-                WebViewPage.About,
-                WebViewPage.Settings
-            };
 
             for (int i = 0; i < pages.Length; i++)
             {
@@ -36,14 +26,11 @@ namespace Readboard.VerificationTests.Host
                     out command));
                 WebViewNavigationIntent intent;
                 Assert.True(MainForm.TryCreateWebViewNavigationIntent(command, out intent));
-                Assert.Equal(expectedPages[i], intent.Page);
-                Assert.Equal(i != 0, journey.Navigate(intent));
-                if (i == 1)
-                    journey.Draft.Update(SettingsDraftUpdate.Text(SettingsDraftField.SyncInterval, "350"));
+                if (intent.Page == WebViewPage.Settings)
+                    draft.Update(SettingsDraftUpdate.Text(SettingsDraftField.SyncInterval, "350"));
             }
 
-            Assert.Equal(WebViewPage.Settings, journey.Page);
-            SettingsDraftState finalSnapshot = journey.Draft.Snapshot;
+            SettingsDraftState finalSnapshot = draft.Snapshot;
             Assert.Equal("350", finalSnapshot.SyncInterval);
             Assert.True(finalSnapshot.Dirty);
             Assert.Equal(200, persistence.Active.SyncIntervalMs);
@@ -178,7 +165,7 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void SaveOverlaysLatestConfigAndPublishesEffectsOnceInOrder()
+        public void SaveOverlaysLatestConfigAndAppliesOwnedEffectsOnceInOrder()
         {
             AppConfig active = AppConfig.CreateDefault("220430", "TEST");
             RecordingPersistence persistence = new RecordingPersistence(active);
@@ -197,7 +184,7 @@ namespace Readboard.VerificationTests.Host
             Assert.True(result.ShouldPublishSnapshot);
 
             Assert.Equal(SettingsDraftOperationOutcome.Saved, result.Outcome);
-            Assert.Equal(new[] { "persist", "replace", "language:kr", "theme:1", "background:false", "diagnostics:true" }, persistence.Events);
+            Assert.Equal(new[] { "persist", "replace", "language:kr", "theme:1", "background:false" }, persistence.Events);
             Assert.Equal(350, persistence.Persisted.SyncIntervalMs);
             Assert.Equal(13, persistence.Active.BoardWidth);
             Assert.True(persistence.Active.SyncBoth);
@@ -323,7 +310,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal("WebView_settingsEffectFailed", result.State.SaveError.Key);
             Assert.Equal("theme failed", result.State.SaveError.DiagnosticDetail);
             Assert.Equal(
-                new[] { "persist", "replace", "language:kr", "theme:1", "background:false", "diagnostics:true" },
+                new[] { "persist", "replace", "language:kr", "theme:1", "background:false" },
                 persistence.Events);
             Assert.Equal("kr", persistence.Active.LanguagePreference);
             Assert.Equal(AppConfig.ColorModeDark, persistence.Active.ColorMode);
@@ -338,7 +325,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(
                 new[]
                 {
-                    "persist", "replace", "language:kr", "theme:1", "background:false", "diagnostics:true",
+                    "persist", "replace", "language:kr", "theme:1", "background:false",
                     "theme:1"
                 },
                 persistence.Events);
@@ -417,10 +404,7 @@ namespace Readboard.VerificationTests.Host
         public void SettingsSaveClearsControlCenterPersistenceError()
         {
             AppConfig active = AppConfig.CreateDefault("220430", "TEST");
-            ControlCenterRuntime controlCenter = new ControlCenterRuntime(
-                ControlCenterPreferences.FromConfig(active),
-                new NoOpControlCenterSessionAdapter(),
-                new NoOpControlCenterPreferencePersistence());
+            ControlCenterRuntime controlCenter = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(active), new NoOpControlCenterSessionAdapter(), new NoOpControlCenterPreferencePersistence(), new RejectingControlCenterActionAdapter());
             controlCenter.MarkPersistenceFailed(new IOException("old failure"));
 
             AppConfig current = active.Clone();
@@ -479,7 +463,7 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void RuntimeEffectsAdapterInvalidatesLanguageBeforeFailureAndPostsEffects()
+        public void RuntimeEffectsAdapterAppliesOnlyOwnedThemeAndBackgroundEffects()
         {
             IList<string> events = new List<string>();
             MainForm.MainFormSettingsDraftRuntimeEffects effects =
@@ -489,29 +473,24 @@ namespace Readboard.VerificationTests.Host
                         events.Add("language:" + preference);
                         throw new IOException("catalog failed");
                     },
-                    delegate { events.Add("invalidate"); },
                     delegate { events.Add("title"); },
-                    delegate(string name, object value) { events.Add(name + ":" + value); },
-                    delegate(bool enabled) { events.Add("background:" + enabled); },
-                    delegate(bool enabled) { events.Add("diagnostics:" + enabled); });
+                    delegate { events.Add("theme"); },
+                    delegate(bool enabled) { events.Add("background:" + enabled); });
 
             Assert.Throws<IOException>(delegate { effects.ApplyLanguagePreference("en"); });
-            Assert.Equal(new[] { "invalidate", "language:en", "title" }, events);
+            Assert.Equal(new[] { "language:en", "title" }, events);
 
             events.Clear();
             effects = new MainForm.MainFormSettingsDraftRuntimeEffects(
                 delegate(string preference) { },
-                delegate { events.Add("invalidate"); },
                 delegate { events.Add("title"); },
-                delegate(string name, object value) { events.Add(name + ":" + value); },
-                delegate(bool enabled) { events.Add("background:" + enabled); },
-                delegate(bool enabled) { events.Add("diagnostics:" + enabled); });
+                delegate { events.Add("theme"); },
+                delegate(bool enabled) { events.Add("background:" + enabled); });
             effects.ApplyTheme(AppConfig.ColorModeDark);
             effects.ApplyBackgroundAnalysis(false);
-            effects.ApplyDiagnostics(true);
 
             Assert.Equal(
-                new[] { "applyTheme:dark", "background:False", "diagnostics:True" },
+                new[] { "theme", "background:False" },
                 events);
         }
 
@@ -627,10 +606,6 @@ namespace Readboard.VerificationTests.Host
                 events.Add("background:" + enabled.ToString().ToLowerInvariant());
             }
 
-            public void ApplyDiagnostics(bool enabled)
-            {
-                events.Add("diagnostics:" + enabled.ToString().ToLowerInvariant());
-            }
         }
     }
 }

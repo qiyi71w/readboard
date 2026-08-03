@@ -4,6 +4,7 @@ using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
+using Readboard.VerificationTests.Support;
 using readboard;
 
 namespace Readboard.VerificationTests.Protocol
@@ -73,7 +74,9 @@ namespace Readboard.VerificationTests.Protocol
             placeRequestThread.Name = "PlaceRequestExecutionResultTests.HandlePlaceRequest";
             placeRequestThread.Start();
 
-            Assert.True(coordinator.WaitForPendingMoveAvailability(TimeSpan.FromSeconds(1)));
+            Assert.True(
+                coordinator.WaitForPendingMoveAvailability(VerificationCompletion.WatchdogTimeout),
+                "Pending move did not become available.");
             Assert.True(coordinator.TryTakePendingMove(out MoveRequest move));
             Assert.NotNull(move);
             Assert.Equal(1, move.X);
@@ -81,8 +84,12 @@ namespace Readboard.VerificationTests.Protocol
 
             coordinator.HandlePendingMovePlacementResult(true);
 
-            object result = await resultCompletion.Task.WaitAsync(TimeSpan.FromSeconds(1));
-            Assert.True(placeRequestThread.Join(TimeSpan.FromSeconds(1)));
+            object result = await VerificationCompletion.WaitAsync(
+                resultCompletion.Task,
+                "Pending move result did not complete.");
+            VerificationCompletion.Join(
+                placeRequestThread,
+                "Place request worker did not exit.");
 
             Assert.NotNull(result);
             Assert.True(ReadBool(result, "ShouldSendResponse"));

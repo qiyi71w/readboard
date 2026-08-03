@@ -102,6 +102,8 @@ namespace Readboard.VerificationTests.Host
             {
                 Open = true,
                 Status = "check-failed",
+                CurrentVersion = "3.0.0",
+                LatestVersion = "3.1.0",
                 TitleMessage = new SemanticMessage("test.title"),
                 DetailMessage = SemanticMessage.CreateWithDiagnostic("test.detail", "socket closed")
             };
@@ -119,6 +121,10 @@ namespace Readboard.VerificationTests.Host
                     return key == "test.title" ? "Update check failed" : "Unknown error";
                 },
                 delegate(string key) { return "Internal default"; });
+            Assert.Equal("3.0.0", cnUpdate.CurrentVersion);
+            Assert.Equal("3.1.0", cnUpdate.LatestVersion);
+            Assert.Equal("3.0.0", enUpdate.CurrentVersion);
+            Assert.Equal("3.1.0", enUpdate.LatestVersion);
 
             Assert.Equal("检查更新失败", cnUpdate.Title);
             Assert.Equal("未知错误: socket closed", cnUpdate.Detail);

@@ -100,6 +100,109 @@ namespace Readboard.VerificationTests.Host
             Assert.False(MainForm.TryParseWebViewCommand(json, out ReadBoardUiCommand command));
             Assert.False(MainForm.TryParseWebViewUpdateIntent(command, out _));
         }
+        [Theory]
+        [InlineData(0, true)]
+        [InlineData(1, true)]
+        [InlineData(2, false)]
+        [InlineData(3, false)]
+        public void HostedProcessing_CloseCapabilityFollowsReadBoardOwnershipStage(
+            int activeStep,
+            bool expected)
+        {
+            Assert.Equal(
+                expected,
+                MainForm.IsWebViewUpdateProcessingCloseEnabled(activeStep));
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        public void OpenDownload_RejectedWhenAuthoritativeStateDisablesIt(
+            bool open,
+            bool openDownloadEnabled)
+        {
+            Assert.True(MainForm.ShouldPublishWebViewUpdateOpenDownloadRejection(
+                open,
+                openDownloadEnabled));
+        }
+
+        [Fact]
+        public void OpenDownload_AcceptedOnlyWhenAuthoritativeStateEnablesIt()
+        {
+            Assert.False(MainForm.ShouldPublishWebViewUpdateOpenDownloadRejection(true, true));
+        }
+
+        [Fact]
+        public void UpdateAvailable_ProjectsHostedAndManualCapabilities()
+        {
+            UpdateCheckResult result = CreateResult();
+            result.Status = UpdateCheckStatus.UpdateAvailable;
+            result.CurrentVersion = "3.0.1";
+            result.LatestVersion = "3.0.2";
+            result.ReleaseNotes = "notes";
+
+            ReadBoardUpdateUiState hosted = MainForm.ResolveWebViewUpdateCheckResultState(result, true);
+            Assert.Equal("available", hosted.Status);
+            Assert.True(hosted.InstallEnabled);
+            Assert.False(hosted.OpenDownloadEnabled);
+            Assert.Null(hosted.TitleMessage);
+            Assert.Null(hosted.MessageMessage);
+            Assert.Equal("notes", hosted.ReleaseNotes);
+
+            ReadBoardUpdateUiState manual = MainForm.ResolveWebViewUpdateCheckResultState(result, false);
+            Assert.Equal("manual", manual.Status);
+            Assert.False(manual.InstallEnabled);
+            Assert.True(manual.OpenDownloadEnabled);
+            Assert.Equal("WebView_hostedInstallUnsupported", manual.TitleMessage.Key);
+            Assert.Equal("WebView_manualDownload", manual.MessageMessage.Key);
+        }
+
+        [Theory]
+        [InlineData(UpdateCheckStatus.UpToDate, "latest", "Update_upToDateRetired")]
+        [InlineData(UpdateCheckStatus.OutsideChannel, "notice", "Update_outsideChannel")]
+        [InlineData(UpdateCheckStatus.NoMatchingChannel, "notice", "Update_noMatchingChannel")]
+        [InlineData(UpdateCheckStatus.Failed, "check-failed", "Update_checkFailed")]
+        public void CheckResultStatuses_ProjectCompleteAuthoritativeState(
+            UpdateCheckStatus status,
+            string expectedStatus,
+            string expectedTitleKey)
+        {
+            UpdateCheckResult result = CreateResult();
+            result.Status = status;
+            result.CurrentVersion = "3.0.1";
+            result.LatestVersion = "3.0.2";
+            result.ChannelStatus = "retired";
+            result.IncompatibleNewerVersion = "3.2.0";
+            result.IncompatibleMinimumWindowsVersion = "10.0.19041";
+            result.ErrorMessage = "checker failed";
+
+            ReadBoardUpdateUiState state = MainForm.ResolveWebViewUpdateCheckResultState(result, false);
+
+            Assert.True(state.Open);
+            Assert.Equal(expectedStatus, state.Status);
+            Assert.True(state.CloseEnabled);
+            if (status != UpdateCheckStatus.Failed)
+            {
+                Assert.Equal("3.0.1", state.CurrentVersion);
+                Assert.Equal("3.0.2", state.LatestVersion);
+            }
+            Assert.Equal(expectedTitleKey, state.TitleMessage.Key);
+            if (status == UpdateCheckStatus.Failed)
+            {
+                Assert.Equal("checker failed", state.DetailMessage.DiagnosticDetail);
+            }
+            else
+            {
+                Assert.Contains(
+                    state.DetailMessages,
+                    message => message.Key == "Update_retiredFinalVersion");
+                Assert.Contains(
+                    state.DetailMessages,
+                    message => message.Key == "Update_newerVersionRequiresWindows");
+            }
+        }
+
 
         private static UpdateCheckResult CreateResult()
         {

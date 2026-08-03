@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using readboard;
 using Xunit;
 
+
 namespace Readboard.VerificationTests.Host
 {
     public sealed class ControlCenterSessionObservationTests
@@ -53,6 +54,33 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(MainWindowTitleTurn.White, result.Snapshot.TitleTurn);
             Assert.True(result.Snapshot.HostConnected);
         }
+        [Fact]
+        public void YikeContextRuntime_ProjectsCopyAndInvokesOwnedEffectsOnce()
+        {
+            ControlCenterRuntime controlCenter = CreateRuntime();
+            var adapter = new RecordingYikeContextAdapter(controlCenter);
+            var runtime = new YikeContextRuntime(adapter);
+            YikeWindowContext source = new YikeWindowContext
+            {
+                RoomToken = "65191829",
+                MoveNumber = 16
+            };
+
+            ControlCenterSessionObservationApplyResult result = runtime.Apply(source);
+
+            source.RoomToken = "mutated";
+            source.MoveNumber = 17;
+            Assert.Equal(ControlCenterSessionObservationApplyOutcome.Applied, result.Outcome);
+            Assert.Equal("65191829", adapter.StoredContext.RoomToken);
+            Assert.Equal(16, adapter.StoredContext.MoveNumber);
+            Assert.Equal("65191829", adapter.CoordinatorContext.RoomToken);
+            Assert.Equal(16, adapter.CoordinatorContext.MoveNumber);
+            Assert.Equal("65191829", controlCenter.Snapshot.YikeWindowContext.RoomToken);
+            Assert.Equal(16, controlCenter.Snapshot.YikeWindowContext.MoveNumber);
+            Assert.Equal(1, adapter.TitleApplyCount);
+            Assert.Equal(1, adapter.PublicationCount);
+        }
+
 
         [Fact]
         public void RepeatedObservation_IsNoOpWithoutSecondPublicationEffect()
@@ -264,10 +292,7 @@ namespace Readboard.VerificationTests.Host
 
         private static ControlCenterRuntime CreateRuntime()
         {
-            return new ControlCenterRuntime(
-                ControlCenterPreferences.FromConfig(AppConfig.CreateDefault("220430", "TEST")),
-                new RecordingSessionAdapter(),
-                new RecordingPersistence());
+            return new ControlCenterRuntime(ControlCenterPreferences.FromConfig(AppConfig.CreateDefault("220430", "TEST")), new RecordingSessionAdapter(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
         }
 
         private sealed class RecordingSessionAdapter : IControlCenterSessionAdapter
@@ -281,11 +306,57 @@ namespace Readboard.VerificationTests.Host
             }
         }
 
+        private sealed class RecordingYikeContextAdapter : IYikeContextAdapter
+        {
+            private readonly ControlCenterRuntime controlCenter;
+
+            public RecordingYikeContextAdapter(ControlCenterRuntime controlCenter)
+            {
+                this.controlCenter = controlCenter;
+            }
+
+            public YikeWindowContext StoredContext { get; private set; }
+            public YikeWindowContext CoordinatorContext { get; private set; }
+            public int TitleApplyCount { get; private set; }
+            public int PublicationCount { get; private set; }
+
+            public long CaptureObservationGeneration()
+            {
+                return controlCenter.CaptureSessionObservationGeneration();
+            }
+
+            public void StoreContext(YikeWindowContext context)
+            {
+                StoredContext = context;
+            }
+
+            public void SetCoordinatorContext(YikeWindowContext context)
+            {
+                CoordinatorContext = context;
+            }
+
+            public void ApplyTitle()
+            {
+                TitleApplyCount++;
+            }
+
+            public ControlCenterSessionObservationApplyResult ApplyObservation(
+                ControlCenterSessionObservation observation)
+            {
+                ControlCenterSessionObservationApplyResult result =
+                    controlCenter.ApplyObservation(observation);
+                if (result.ShouldPublishSnapshot)
+                    PublicationCount++;
+                return result;
+            }
+        }
+
         private sealed class RecordingPersistence : IControlCenterPreferencePersistence
         {
             public void Save(ControlCenterPreferences preferences)
             {
             }
         }
+
     }
 }

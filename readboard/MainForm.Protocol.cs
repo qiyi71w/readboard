@@ -144,15 +144,45 @@ namespace readboard
                 return;
             }
 
-            lastYikeWindowContext = YikeWindowContext.CopyOf(context);
-            if (hwnd != IntPtr.Zero)
-                lastYikeContextWindowHandle = hwnd;
-            sessionCoordinator.SetYikeContext(lastYikeWindowContext);
-            ApplyMainWindowTitle();
-            ApplyControlCenterSessionObservation(
-                new ControlCenterSessionObservation(
-                    controlCenterRuntime.CaptureSessionObservationGeneration())
-                    .WithYikeWindowContext(lastYikeWindowContext));
+            yikeContextRuntime.Apply(context);
+        }
+
+        private sealed class MainFormYikeContextAdapter : IYikeContextAdapter
+        {
+            private readonly MainForm owner;
+
+            public MainFormYikeContextAdapter(MainForm owner)
+            {
+                this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            }
+
+            public long CaptureObservationGeneration()
+            {
+                return owner.controlCenterRuntime.CaptureSessionObservationGeneration();
+            }
+
+            public void StoreContext(YikeWindowContext context)
+            {
+                owner.lastYikeWindowContext = context;
+                if (owner.hwnd != IntPtr.Zero)
+                    owner.lastYikeContextWindowHandle = owner.hwnd;
+            }
+
+            public void SetCoordinatorContext(YikeWindowContext context)
+            {
+                owner.sessionCoordinator.SetYikeContext(context);
+            }
+
+            public void ApplyTitle()
+            {
+                owner.ApplyMainWindowTitle();
+            }
+
+            public ControlCenterSessionObservationApplyResult ApplyObservation(
+                ControlCenterSessionObservation observation)
+            {
+                return owner.ApplyControlCenterSessionObservation(observation);
+            }
         }
 
         void IProtocolCommandHost.HandleYikeGeometry(YikeBoardGeometry geometry)

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -17,23 +19,64 @@ namespace Readboard.VerificationTests.Host
         {
             Uri installerUri = MainForm.GetWebViewRuntimeInstallerUri();
             var startInfo = MainForm.CreateWebViewRuntimeDownloadStartInfo(installerUri);
-            string source = File.ReadAllText(Path.Combine(
-                VerificationFixtureLocator.RepositoryRoot(),
-                "readboard",
-                "MainForm.WebView.cs"));
 
             Assert.Equal(
                 "https://developer.microsoft.com/en-us/microsoft-edge/webview2/",
                 installerUri.AbsoluteUri);
             Assert.Equal(installerUri.AbsoluteUri, startInfo.FileName);
             Assert.True(startInfo.UseShellExecute);
-            Assert.Contains("getLangStr(\"WebViewRuntime_openDownload\")", source);
-            Assert.Contains("getLangStr(\"WebViewRuntime_retry\")", source);
-            Assert.Contains("getLangStr(\"WebViewRuntime_exit\")", source);
-            Assert.Contains("AppReleaseVersion.GetCurrentVersion()", source);
-            Assert.DoesNotContain("ReadBoard v3.1.0", source);
-            Assert.Contains("CoreWebView2Environment.GetAvailableBrowserVersionString();", source);
-            Assert.DoesNotContain("InitializeComponent();", GetRuntimeCheckSlice(source));
+        }
+
+        [Fact]
+        public void MissingRuntimePrompt_RetryAndDownloadActionsReprobeUntilRuntimeAppears()
+        {
+            Queue<MainForm.WebViewRuntimePromptChoice> choices =
+                new Queue<MainForm.WebViewRuntimePromptChoice>(new[]
+                {
+                    MainForm.WebViewRuntimePromptChoice.OpenDownload,
+                    MainForm.WebViewRuntimePromptChoice.Retry,
+                    MainForm.WebViewRuntimePromptChoice.Retry
+                });
+            int probeCount = 0;
+            int openDownloadCount = 0;
+            int exitCount = 0;
+
+            bool available = MainForm.ResolveWebViewRuntimeAvailability(
+                delegate
+                {
+                    probeCount++;
+                    return probeCount == 4;
+                },
+                () => choices.Dequeue(),
+                delegate { openDownloadCount++; },
+                delegate { exitCount++; });
+
+            Assert.True(available);
+            Assert.Equal(4, probeCount);
+            Assert.Equal(1, openDownloadCount);
+            Assert.Equal(0, exitCount);
+            Assert.Empty(choices);
+        }
+
+        [Fact]
+        public void MissingRuntimePrompt_ExitDisposesAndStopsStartup()
+        {
+            int probeCount = 0;
+            int exitCount = 0;
+
+            bool available = MainForm.ResolveWebViewRuntimeAvailability(
+                delegate
+                {
+                    probeCount++;
+                    return false;
+                },
+                () => MainForm.WebViewRuntimePromptChoice.Exit,
+                delegate { },
+                delegate { exitCount++; });
+
+            Assert.False(available);
+            Assert.Equal(1, probeCount);
+            Assert.Equal(1, exitCount);
         }
 
         [Fact]
@@ -150,12 +193,39 @@ namespace Readboard.VerificationTests.Host
         [InlineData("{\"type\":\"about.checkUpdate\",\"payload\":{}}")]
         [InlineData("{\"type\":\"update.install\",\"payload\":{}}")]
         [InlineData("{\"type\":\"identity.select\",\"payload\":{\"candidateId\":\"candidate-1\"}}")]
+
+
         public void TryParseWebViewCommand_AcceptsWhitelistedShape(string json)
         {
             Assert.True(MainForm.TryParseWebViewCommand(json, out ReadBoardUiCommand command));
             Assert.NotNull(command);
         }
+        [Fact]
+        public void WebViewPublication_MapsIdentityNoOpAndCloseState()
+        {
+            FoxIdentitySelection selection = new FoxIdentitySelection(new IdentityPublicationPersistence());
+            selection.Open(
+                new[]
+                {
+                    new FoxIdentityCandidate(
+                        "candidate-1",
+                        SemanticMessage.Create("WebView_candidateRowNumber", 1),
+                        "signature",
+                        null)
+                },
+                false,
+                AutoPlayColorMode.ManualBlack);
 
+            selection.Select("candidate-1");
+            FoxIdentitySelectionResult sameSelection = selection.Select("candidate-1");
+            FoxIdentitySelectionResult rejectedSelection = selection.Select("missing");
+            Assert.False(MainForm.ShouldPublishWebViewIdentityResult(sameSelection));
+            Assert.False(MainForm.IsWebViewUpdateCloseAllowed(true, false));
+            Assert.True(MainForm.IsWebViewUpdateCloseAllowed(true, true));
+            Assert.True(MainForm.IsWebViewUpdateCloseAllowed(false, false));
+            Assert.True(MainForm.ShouldPublishWebViewIdentityResult(rejectedSelection));
+
+        }
         [Theory]
         [InlineData(null)]
         [InlineData("")]
@@ -169,6 +239,9 @@ namespace Readboard.VerificationTests.Host
         [InlineData("{\"type\":\"control.update\",\"payload\":{\"key\":\"board-width\",\"value\":\"26\"}}")]
         [InlineData("{\"type\":\"control.update\",\"payload\":{\"key\":\"platform\",\"value\":\"unknown\"}}")]
         [InlineData("{\"type\":\"shell.toggleTheme\",\"payload\":{}}")]
+        [InlineData("{\"type\":\"window.close\",\"extra\":true}")]
+        [InlineData("{\"Type\":\"window.close\"}")]
+        [InlineData("{\"type\":\"window.close\",\"type\":\"window.close\"}")]
         public void TryParseWebViewCommand_RejectsUnknownOrMalformedShape(string json)
         {
             Assert.False(MainForm.TryParseWebViewCommand(json, out _));
@@ -217,6 +290,55 @@ namespace Readboard.VerificationTests.Host
                 "Control Center",
                 payload.GetProperty("text").GetProperty("WebView_navControlCenter").GetString());
         }
+
+        [Fact]
+        public void SerializeWebViewState_CarriesLocalizationTextOnEverySnapshot()
+        {
+            ReadBoardUiState first = new ReadBoardUiState
+            {
+                Text = new Dictionary<string, string>
+                {
+                    { "WebView_navControlCenter", "Control Center" }
+                }
+            };
+            ReadBoardUiState second = new ReadBoardUiState
+            {
+                Text = new Dictionary<string, string>
+                {
+                    { "WebView_navControlCenter", "控制中心" }
+                }
+            };
+
+            using JsonDocument firstJson = JsonDocument.Parse(MainForm.SerializeWebViewState(first));
+            using JsonDocument secondJson = JsonDocument.Parse(MainForm.SerializeWebViewState(second));
+
+            Assert.True(firstJson.RootElement.GetProperty("payload").TryGetProperty("text", out JsonElement firstText));
+            Assert.True(secondJson.RootElement.GetProperty("payload").TryGetProperty("text", out JsonElement secondText));
+            Assert.Equal("Control Center", firstText.GetProperty("WebView_navControlCenter").GetString());
+            Assert.Equal("控制中心", secondText.GetProperty("WebView_navControlCenter").GetString());
+        }
+        [Fact]
+        public void SerializeWebViewState_CarriesLatestUpdateVersion()
+        {
+            ReadBoardUiState state = new ReadBoardUiState
+            {
+                Update = new ReadBoardUpdateUiState
+                {
+                    Open = true,
+                    Status = "available",
+                    CurrentVersion = "3.0.0",
+                    LatestVersion = "3.1.0"
+                }
+            };
+
+            using JsonDocument json = JsonDocument.Parse(MainForm.SerializeWebViewState(state));
+
+            JsonElement update = json.RootElement
+                .GetProperty("payload")
+                .GetProperty("update");
+            Assert.Equal("3.1.0", update.GetProperty("latestVersion").GetString());
+        }
+
 
         [Fact]
         public void WebViewShell_UsesHostLanguageForStaticNavigation()
@@ -452,17 +574,6 @@ namespace Readboard.VerificationTests.Host
             Assert.True(control.GetProperty("analysisStateAvailable").GetBoolean());
         }
 
-        [Fact]
-        public void SerializeWebViewRuntimeEffect_UsesOrderedEffectEnvelope()
-        {
-            using JsonDocument document = JsonDocument.Parse(
-                MainForm.SerializeWebViewRuntimeEffect("applyTheme", "dark"));
-            JsonElement payload = document.RootElement.GetProperty("payload");
-
-            Assert.Equal("runtimeEffect", document.RootElement.GetProperty("type").GetString());
-            Assert.Equal("applyTheme", payload.GetProperty("name").GetString());
-            Assert.Equal("dark", payload.GetProperty("value").GetString());
-        }
 
 
         [Fact]
@@ -560,6 +671,31 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(
                 expected,
                 MainForm.ResolveWebViewSyncStatusKey(communicationEstablished, activeSync));
+        }
+
+        private static ReadBoardUiCommand ParseWebViewCommand(string json)
+        {
+            ReadBoardUiCommand command;
+            Assert.True(MainForm.TryParseWebViewCommand(json, out command));
+            return command;
+        }
+
+
+
+        private sealed class IdentityPublicationPersistence : IFoxIdentityPersistence
+        {
+            public string LoadSavedIdentitySignature()
+            {
+                return string.Empty;
+            }
+
+            public void SaveIdentitySignature(string signature)
+            {
+            }
+
+            public void ClearSavedIdentity()
+            {
+            }
         }
 
         private sealed class LocalizationSource
@@ -1236,20 +1372,6 @@ namespace Readboard.VerificationTests.Host
                 .Cast<Match>()
                 .Select(match => match.Value)
                 .ToArray();
-        }
-
-        private static string GetRuntimeCheckSlice(string source)
-        {
-            int start = source.IndexOf(
-                "internal bool EnsureWebViewRuntimeAvailable()",
-                StringComparison.Ordinal);
-            Assert.True(start >= 0);
-            int end = source.IndexOf(
-                "private void InitializeWebViewShell()",
-                start,
-                StringComparison.Ordinal);
-            Assert.True(end > start);
-            return source.Substring(start, end - start);
         }
     }
 }

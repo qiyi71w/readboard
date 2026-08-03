@@ -217,18 +217,12 @@ namespace readboard
                         MainForm mainForm = CreateMainForm(options, activeSessionCoordinator);
                         if (!mainForm.EnsureWebViewRuntimeAvailable())
                             return;
-                        if (!TryStartSession(mainForm))
-                            return;
-                        mainForm.DrainStartupProtocolCommands();
-                        if (mainForm.IsShutdownRequested)
-                            return;
-                        mainForm.NotifyProtocolReady();
-                        mainForm.DrainStartupProtocolCommands();
-                        if (mainForm.IsShutdownRequested)
-                            return;
-                        mainForm.ReplayStartupProtocolState();
-                        mainForm.DrainStartupProtocolCommands();
-                        if (mainForm.IsShutdownRequested)
+                        if (!StartupProtocolHandshake.Run(
+                            () => TryStartSession(mainForm),
+                            () => mainForm.IsShutdownRequested,
+                            mainForm.DrainStartupProtocolCommands,
+                            mainForm.NotifyProtocolReady,
+                            mainForm.ReplayStartupProtocolState))
                             return;
                         Application.Run(mainForm);
                     });

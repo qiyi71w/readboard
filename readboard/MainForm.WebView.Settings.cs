@@ -10,7 +10,7 @@ namespace readboard
 {
     public partial class MainForm
     {
-        private WebViewSettingsJourney webViewSettingsJourney;
+        private SettingsDraftRuntime webViewSettingsDraft;
         private ReadBoardDialogUiState webViewSettingsDialog;
 
         internal ReadBoardSettingsUiState GetWebViewSettingsState()
@@ -102,25 +102,27 @@ namespace readboard
                 }
                 case "settings.cancel":
                 {
+                    bool dialogWasOpen = webViewSettingsDialog != null;
                     SettingsDraftOperationResult result = EnsureWebViewSettingsDraft().Cancel();
                     webViewSettingsDialog = null;
-                    return result == null || result.ShouldPublishSnapshot;
+                    return dialogWasOpen || (result != null && result.ShouldPublishSnapshot);
                 }
                 case "settings.resetDefaults":
                     ShowWebViewSettingsDialog("resetDefaults");
                     return true;
                 case "settings.openDiagnostics":
                     OpenWebViewDiagnosticsDirectory();
-                    return true;
+                    return false;
                 case "dialog.confirm":
-                    ConfirmWebViewSettingsDialog();
-                    return true;
+                    return ConfirmWebViewSettingsDialog();
                 case "dialog.cancel":
+                {
+                    bool dialogWasOpen = webViewSettingsDialog != null;
                     webViewSettingsDialog = null;
-                    return true;
+                    return dialogWasOpen;
+                }
                 case "dialog.dontShowAgain":
-                    DisableWebViewShowInBoardHint();
-                    return true;
+                    return DisableWebViewShowInBoardHint();
                 default:
                     return false;
             }
@@ -159,12 +161,8 @@ namespace readboard
 
         private SettingsDraftRuntime EnsureWebViewSettingsDraft()
         {
-            if (webViewSettingsJourney == null)
+            if (webViewSettingsDraft == null)
             {
-                WebViewPage initialPage;
-                if (!WebViewPageNames.TryParse(webViewState.Page, out initialPage))
-                    initialPage = WebViewPage.ControlCenter;
-
                 SettingsDraftRuntime draft = new SettingsDraftRuntime(
                     BuildCurrentAppConfig(),
                     delegate
@@ -183,46 +181,16 @@ namespace readboard
                         controlCenterRuntime.MarkPersistenceSucceeded),
                     new MainFormSettingsDraftRuntimeEffects(
                         delegate(string preference) { Program.ApplyLanguagePreference(preference); },
-                        delegate { webViewTextSent = false; },
                         ApplyMainWindowTitle,
-                        PostWebViewRuntimeEffect,
+                        ApplyMainFormUi,
                         delegate(bool enabled)
                         {
                             resetBtnKeepSyncName();
                             sessionCoordinator.SendPonderStatus(enabled);
-                        },
-                        delegate(bool enabled)
-                        {
-                            PostWebViewRuntimeEffect("applyDiagnostics", enabled);
                         }));
-                webViewSettingsJourney = new WebViewSettingsJourney(draft, initialPage);
+                webViewSettingsDraft = draft;
             }
-            return webViewSettingsJourney.Draft;
-        }
-        internal sealed class WebViewSettingsJourney
-        {
-            private readonly SettingsDraftRuntime draft;
-
-            public WebViewSettingsJourney(SettingsDraftRuntime draft, WebViewPage page)
-            {
-                this.draft = draft ?? throw new ArgumentNullException("draft");
-                Page = page;
-            }
-
-            public SettingsDraftRuntime Draft
-            {
-                get { return draft; }
-            }
-
-            public WebViewPage Page { get; private set; }
-
-            public bool Navigate(WebViewNavigationIntent intent)
-            {
-                if (intent == null || Page == intent.Page)
-                    return false;
-                Page = intent.Page;
-                return true;
-            }
+            return webViewSettingsDraft;
         }
         internal static class WebViewSettingsStateProjector
         {
@@ -428,26 +396,31 @@ namespace readboard
             }
         }
 
-        private void ConfirmWebViewSettingsDialog()
+        private bool ConfirmWebViewSettingsDialog()
         {
-            string kind = webViewSettingsDialog == null ? null : webViewSettingsDialog.Kind;
+            if (webViewSettingsDialog == null)
+                return false;
+
+            string kind = webViewSettingsDialog.Kind;
             webViewSettingsDialog = null;
             if (kind == "diagnostics")
                 EnsureWebViewSettingsDraft().Update(
                     SettingsDraftUpdate.Boolean(SettingsDraftField.Diagnostics, true));
             else if (kind == "resetDefaults")
                 EnsureWebViewSettingsDraft().Reset();
+            return true;
         }
 
-        private void DisableWebViewShowInBoardHint()
+        private bool DisableWebViewShowInBoardHint()
         {
             if (webViewSettingsDialog == null || webViewSettingsDialog.Kind != "showInBoardHint")
-                return;
+                return false;
             AppConfig updated = Program.CurrentConfig.Clone();
             updated.ShowInBoardHint = false;
             Program.CurrentContext.Config = updated;
             PersistConfiguration();
             webViewSettingsDialog = null;
+            return true;
         }
 
         private static void OpenWebViewDiagnosticsDirectory()
@@ -492,43 +465,28 @@ namespace readboard
                 markPersistenceSucceeded();
             }
         }
-        private void PostWebViewRuntimeEffect(string functionName, object value)
-        {
-            if (webView == null || webView.CoreWebView2 == null)
-                throw new InvalidOperationException("WebView runtime is not ready.");
-
-            webView.CoreWebView2.PostWebMessageAsJson(
-                SerializeWebViewRuntimeEffect(functionName, value));
-        }
 
         internal sealed class MainFormSettingsDraftRuntimeEffects : ISettingsDraftRuntimeEffects
         {
             private readonly Action<string> applyLanguagePreference;
-            private readonly Action invalidateWebViewText;
             private readonly Action applyMainWindowTitle;
-            private readonly Action<string, object> postRuntimeEffect;
+            private readonly Action applyTheme;
             private readonly Action<bool> applyBackgroundAnalysis;
-            private readonly Action<bool> applyDiagnostics;
 
             public MainFormSettingsDraftRuntimeEffects(
                 Action<string> applyLanguagePreference,
-                Action invalidateWebViewText,
                 Action applyMainWindowTitle,
-                Action<string, object> postRuntimeEffect,
-                Action<bool> applyBackgroundAnalysis,
-                Action<bool> applyDiagnostics)
+                Action applyTheme,
+                Action<bool> applyBackgroundAnalysis)
             {
                 this.applyLanguagePreference = applyLanguagePreference ?? throw new ArgumentNullException("applyLanguagePreference");
-                this.invalidateWebViewText = invalidateWebViewText ?? throw new ArgumentNullException("invalidateWebViewText");
                 this.applyMainWindowTitle = applyMainWindowTitle ?? throw new ArgumentNullException("applyMainWindowTitle");
-                this.postRuntimeEffect = postRuntimeEffect ?? throw new ArgumentNullException("postRuntimeEffect");
+                this.applyTheme = applyTheme ?? throw new ArgumentNullException("applyTheme");
                 this.applyBackgroundAnalysis = applyBackgroundAnalysis ?? throw new ArgumentNullException("applyBackgroundAnalysis");
-                this.applyDiagnostics = applyDiagnostics ?? throw new ArgumentNullException("applyDiagnostics");
             }
 
             public void ApplyLanguagePreference(string preference)
             {
-                invalidateWebViewText();
                 try
                 {
                     applyLanguagePreference(preference);
@@ -541,7 +499,7 @@ namespace readboard
 
             public void ApplyTheme(int colorMode)
             {
-                postRuntimeEffect("applyTheme", ResolveWebViewTheme(colorMode));
+                applyTheme();
             }
 
             public void ApplyBackgroundAnalysis(bool enabled)
@@ -549,10 +507,6 @@ namespace readboard
                 applyBackgroundAnalysis(enabled);
             }
 
-            public void ApplyDiagnostics(bool enabled)
-            {
-                applyDiagnostics(enabled);
-            }
         }
 
         private static string ResolveWebViewTheme(int colorMode)

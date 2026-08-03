@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Threading;
 using Xunit;
 using readboard;
+using Readboard.VerificationTests.Support;
 
 namespace Readboard.VerificationTests.Protocol
 {
@@ -22,7 +23,7 @@ namespace Readboard.VerificationTests.Protocol
             Assert.True(TryEnqueue(queue, delegate
             {
                 firstStarted.Set();
-                Assert.True(releaseFirst.Wait(TimeSpan.FromSeconds(1)));
+                releaseFirst.Wait();
                 lock (orderLock)
                 {
                     executionOrder.Add(1);
@@ -31,27 +32,18 @@ namespace Readboard.VerificationTests.Protocol
 
             Assert.True(TryEnqueue(queue, delegate
             {
-                secondStarted.Set();
                 lock (orderLock)
                 {
                     executionOrder.Add(2);
                 }
+                secondStarted.Set();
             }));
 
-            Assert.True(firstStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.False(secondStarted.Wait(TimeSpan.FromMilliseconds(150)));
+            VerificationCompletion.Wait(firstStarted, "First work item did not start.");
+            Assert.False(secondStarted.IsSet);
 
             releaseFirst.Set();
-            Assert.True(secondStarted.Wait(TimeSpan.FromSeconds(1)));
-            SpinWait.SpinUntil(
-                delegate
-                {
-                    lock (orderLock)
-                    {
-                        return executionOrder.Count == 2;
-                    }
-                },
-                TimeSpan.FromSeconds(1));
+            VerificationCompletion.Wait(secondStarted, "Second work item did not start after release.");
 
             lock (orderLock)
             {
@@ -73,7 +65,7 @@ namespace Readboard.VerificationTests.Protocol
             Assert.True(TryEnqueue(queue, delegate
             {
                 firstStarted.Set();
-                Assert.True(releaseFirst.Wait(TimeSpan.FromSeconds(1)));
+                releaseFirst.Wait();
                 firstCompleted.Set();
             }));
 
@@ -82,12 +74,12 @@ namespace Readboard.VerificationTests.Protocol
                 secondRan.Set();
             }));
 
-            Assert.True(firstStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(firstStarted, "First work item did not start before stop.");
             Stop(queue);
             releaseFirst.Set();
 
-            Assert.True(firstCompleted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.False(secondRan.Wait(TimeSpan.FromMilliseconds(150)));
+            VerificationCompletion.Wait(firstCompleted, "Running work item did not finish after release.");
+            Assert.False(secondRan.IsSet);
         }
 
         [Fact]
@@ -101,15 +93,15 @@ namespace Readboard.VerificationTests.Protocol
             Assert.True(TryEnqueue(queue, delegate
             {
                 firstStarted.Set();
-                Assert.True(releaseFirst.Wait(TimeSpan.FromSeconds(1)));
+                releaseFirst.Wait();
                 firstCompleted.Set();
             }));
 
-            Assert.True(firstStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(firstStarted, "First work item did not start before stop.");
             Stop(queue);
             releaseFirst.Set();
 
-            Assert.True(firstCompleted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(firstCompleted, "Running work item did not finish after release.");
         }
 
         [Fact]
@@ -128,7 +120,7 @@ namespace Readboard.VerificationTests.Protocol
                 secondRan.Set();
             }));
 
-            Assert.True(secondRan.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(secondRan, "Queued work item did not run.");
             Stop(queue);
         }
 

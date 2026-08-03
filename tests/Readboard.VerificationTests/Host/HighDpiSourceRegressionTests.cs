@@ -1,7 +1,10 @@
 using System;
+using System.Drawing;
 using System.IO;
+using System.Linq;
+using System.Xml.Linq;
 using Xunit;
-
+using readboard;
 namespace Readboard.VerificationTests.Host
 {
     public sealed class HighDpiSourceRegressionTests
@@ -93,6 +96,57 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Contains("DisplayScaling.ResolveWindowScale(", content);
             Assert.Contains("DisplayScaling.GetScaleForWindowBounds(", content);
+        }
+
+        [Fact]
+        public void ResolveClientSizeFromOuterBounds_RemovesNativeFrameWithoutCumulativeGrowth()
+        {
+            Size clientSize = new Size(1100, 600);
+            Size nonClientSize = new Size(16, 39);
+            Size outerSize = new Size(
+                clientSize.Width + nonClientSize.Width,
+                clientSize.Height + nonClientSize.Height);
+
+            Size restoredClientSize = MainForm.ResolveClientSizeFromOuterBounds(outerSize, nonClientSize);
+
+            Assert.Equal(clientSize, restoredClientSize);
+        }
+
+        [Fact]
+        public void Manifest_UsesAsInvokerForHostLaunchedReadboard()
+        {
+            string content = LoadSource("readboard", "Properties", "app.manifest");
+            XDocument manifest = XDocument.Parse(content);
+            XNamespace assemblyNamespace = "urn:schemas-microsoft-com:asm.v1";
+            XNamespace trustNamespace = "urn:schemas-microsoft-com:asm.v2";
+            XNamespace privilegesNamespace = "urn:schemas-microsoft-com:asm.v3";
+
+            XElement assembly = GetRequiredElement(manifest, assemblyNamespace + "assembly");
+            XElement trustInfo = GetRequiredElement(assembly, trustNamespace + "trustInfo");
+            XElement security = GetRequiredElement(trustInfo, trustNamespace + "security");
+            XElement requestedPrivileges = GetRequiredElement(
+                security,
+                privilegesNamespace + "requestedPrivileges");
+            XElement requestedExecutionLevel = GetRequiredSingleElement(
+                requestedPrivileges,
+                privilegesNamespace + "requestedExecutionLevel");
+
+            Assert.Equal("asInvoker", (string)requestedExecutionLevel.Attribute("level"));
+            Assert.Equal("false", (string)requestedExecutionLevel.Attribute("uiAccess"));
+        }
+
+        private static XElement GetRequiredElement(XContainer parent, XName name)
+        {
+            XElement element = parent.Element(name);
+            Assert.NotNull(element);
+            return element;
+        }
+
+        private static XElement GetRequiredSingleElement(XContainer parent, XName name)
+        {
+            XElement[] elements = parent.Elements(name).ToArray();
+            Assert.Single(elements);
+            return elements[0];
         }
 
         private static string LoadSource(params string[] segments)

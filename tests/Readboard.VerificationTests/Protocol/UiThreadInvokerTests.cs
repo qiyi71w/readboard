@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using readboard;
+using Readboard.VerificationTests.Support;
 
 namespace Readboard.VerificationTests
 {
@@ -49,11 +50,15 @@ namespace Readboard.VerificationTests
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
 
-            Assert.True(synchronizer.InvocationQueued.Wait(TimeSpan.FromSeconds(5)));
+            VerificationCompletion.Wait(
+                synchronizer.InvocationQueued,
+                "UI invocation was not queued.");
             Volatile.Write(ref shutdownRequested, 1);
 
-            await Assert.ThrowsAsync<SnapshotCaptureCancelledException>(async () =>
-                await resultTask.WaitAsync(TimeSpan.FromSeconds(5)));
+            await Assert.ThrowsAsync<SnapshotCaptureCancelledException>(() =>
+                VerificationCompletion.WaitAsync(
+                    resultTask,
+                    "Cancelled UI invocation did not complete."));
             Assert.Equal(1, synchronizer.BeginInvokeCallCount);
             Assert.Equal(0, synchronizer.InvokeCallCount);
         }

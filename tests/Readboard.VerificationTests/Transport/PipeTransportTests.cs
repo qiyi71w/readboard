@@ -1,7 +1,7 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Threading;
 using Xunit;
 using readboard;
 using Readboard.VerificationTests.Support;
@@ -52,13 +52,7 @@ namespace Readboard.VerificationTests.Transport
             using BlockingBackgroundThreadHarness harness = BlockingBackgroundThreadHarness.Start("PipeTransportReadThread");
             SetPrivateField(transport, "readThread", harness.Thread);
 
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            transport.Stop();
-            stopwatch.Stop();
-
-            Assert.True(
-                stopwatch.Elapsed < TimeSpan.FromMilliseconds(250),
-                "Pipe transport shutdown should not wait for the read thread to finish.");
+            AssertTransportStopReturnsWithoutWaiting(transport, harness);
         }
 
         private static void InvokeRaiseMessageReceived(PipeTransport transport, string line)
@@ -73,6 +67,52 @@ namespace Readboard.VerificationTests.Transport
             FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(field);
             field.SetValue(target, value);
+        }
+
+        private static void AssertTransportStopReturnsWithoutWaiting(
+            PipeTransport transport,
+            BlockingBackgroundThreadHarness harness)
+        {
+            ManualResetEventSlim stopCompleted = new ManualResetEventSlim(false);
+            Exception stopException = null;
+            Thread stopThread = new Thread(new ThreadStart(delegate
+            {
+                try
+                {
+                    transport.Stop();
+                }
+                catch (Exception ex)
+                {
+                    stopException = ex;
+                }
+                finally
+                {
+                    stopCompleted.Set();
+                }
+            }));
+            stopThread.IsBackground = true;
+            stopThread.Name = "PipeTransportTests.Stop";
+            stopThread.Start();
+
+            try
+            {
+                VerificationCompletion.Wait(
+                    stopCompleted,
+                    "PipeTransport.Stop must return without joining a blocked read thread.");
+                Assert.Null(stopException);
+                Assert.True(harness.Thread.IsAlive);
+            }
+            finally
+            {
+                harness.Release();
+                VerificationCompletion.Wait(
+                    stopCompleted,
+                    "PipeTransport.Stop did not finish after the read thread was released.");
+                VerificationCompletion.Join(
+                    stopThread,
+                    "PipeTransport.Stop worker did not exit.");
+                stopCompleted.Dispose();
+            }
         }
 
         private sealed class ConsoleRedirect : IDisposable

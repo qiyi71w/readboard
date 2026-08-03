@@ -280,7 +280,6 @@ namespace Readboard.VerificationTests.Host
         {
             string styles = LoadWebViewAsset("styles.css");
             string script = LoadWebViewAsset("app.js");
-            string bridge = LoadReadboardSource("MainForm.WebView.cs");
 
             Assert.Contains(":root[data-theme=\"dark\"] {", styles);
             Assert.Contains("--window-background: #1e1e1e;", styles);
@@ -291,7 +290,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("const systemThemeQuery = window.matchMedia(\"(prefers-color-scheme: dark)\");", script);
             Assert.Contains("applyTheme(state.shell.theme || \"system\");", script);
             Assert.Contains("systemThemeQuery.addEventListener(\"change\"", script);
-            Assert.Contains("Theme = ResolveWebViewTheme(Program.CurrentConfig.ColorMode),", bridge);
         }
 
         [Fact]
@@ -299,12 +297,10 @@ namespace Readboard.VerificationTests.Host
         {
             string html = LoadWebViewAsset("index.html");
             string script = LoadWebViewAsset("app.js");
-            string bridge = LoadReadboardSource("MainForm.WebView.cs");
 
             Assert.Contains("data-page=\"settings\"", html);
             Assert.Contains("data-command=\"rules.openManual\"", html);
             Assert.DoesNotContain("shell.toggleTheme", html);
-            Assert.DoesNotContain("shell.toggleTheme", bridge);
             Assert.DoesNotContain("themeRestart", script);
             Assert.Contains("data-command=\"settings.save\"", html);
         }
@@ -406,14 +402,6 @@ namespace Readboard.VerificationTests.Host
             return File.ReadAllText(path);
         }
 
-        private static string LoadReadboardSource(string fileName)
-        {
-            string path = Path.Combine(
-                VerificationFixtureLocator.RepositoryRoot(),
-                "readboard",
-                fileName);
-            return File.ReadAllText(path);
-        }
 
         private static void AssertLanguageValue(string language, string key, string expected)
         {

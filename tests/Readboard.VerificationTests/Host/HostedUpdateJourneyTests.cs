@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using readboard;
 using Xunit;
+using Readboard.VerificationTests.Support;
 
 namespace Readboard.VerificationTests.Host
 {
@@ -30,6 +31,9 @@ namespace Readboard.VerificationTests.Host
                 observations.Add);
 
             Task run = journey.StartAsync(Request);
+            await VerificationCompletion.WaitAsync(
+                downloader.DownloadStarted,
+                "Hosted update downloader did not start.");
 
             Assert.Equal(HostedUpdateStage.Downloading, observations[0].Stage);
             int downloadGeneration = observations[0].Generation;
@@ -145,6 +149,36 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(Request.VersionTag, host.ReadyMessages[0].VersionTag);
             Assert.Equal("candidate.zip", host.ReadyMessages[0].PackagePath);
             Assert.True(journey.HandoffSent);
+        }
+
+        [Fact]
+        public async Task CancelBeforeReadySend_DoesNotConsumeHandoffAllowance()
+        {
+            var downloader = new ControlledDownloader { ImmediateResult = "candidate.zip" };
+            var verifier = new RecordingVerifier();
+            var host = new RecordingHost();
+            var observations = new List<HostedUpdateObservation>();
+            HostedUpdateJourney journey = null;
+            bool cancelResult = false;
+            journey = new HostedUpdateJourney(
+                downloader,
+                verifier,
+                host.SendReady,
+                new ManualTimeoutScheduler(),
+                delegate(HostedUpdateObservation observation)
+                {
+                    observations.Add(observation);
+                    if (observation.Stage == HostedUpdateStage.NotifyingHost)
+                        cancelResult = journey.Cancel();
+                });
+
+            Assert.False(await journey.StartAsync(Request));
+            Assert.True(cancelResult);
+            Assert.False(journey.HandoffSent);
+            Assert.Empty(host.ReadyMessages);
+            Assert.Contains(
+                observations,
+                observation => observation.Stage == HostedUpdateStage.Cancelled);
         }
 
         [Fact]
@@ -585,12 +619,19 @@ namespace Readboard.VerificationTests.Host
         {
             private readonly TaskCompletionSource<string> completion =
                 new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly TaskCompletionSource<bool> started =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             public string ImmediateResult { get; set; }
 
             public int DownloadCallCount { get; private set; }
 
             public CancellationToken CancellationToken { get; private set; }
+
+            public Task DownloadStarted
+            {
+                get { return started.Task; }
+            }
 
             public HostedUpdateRequest CleanedRequest { get; private set; }
 
@@ -600,6 +641,7 @@ namespace Readboard.VerificationTests.Host
             {
                 DownloadCallCount++;
                 CancellationToken = cancellationToken;
+                started.TrySetResult(true);
                 if (ImmediateResult != null)
                     return Task.FromResult(ImmediateResult);
                 return completion.Task;

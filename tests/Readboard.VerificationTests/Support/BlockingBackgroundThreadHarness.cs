@@ -15,8 +15,7 @@ namespace Readboard.VerificationTests.Support
             workerThread.IsBackground = true;
             workerThread.Name = name;
             workerThread.Start();
-            if (!startedEvent.Wait(TimeSpan.FromSeconds(1)))
-                throw new InvalidOperationException("Blocking test thread did not start.");
+            VerificationCompletion.Wait(startedEvent, "Blocking worker did not start.");
         }
 
         public Thread Thread
@@ -38,7 +37,7 @@ namespace Readboard.VerificationTests.Support
         {
             Release();
             if (workerThread.IsAlive)
-                workerThread.Join(TimeSpan.FromSeconds(1));
+                VerificationCompletion.Join(workerThread, "Blocking worker did not exit after release.");
             startedEvent.Dispose();
             releaseEvent.Dispose();
         }

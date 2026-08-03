@@ -20,13 +20,14 @@ namespace readboard
             "https://developer.microsoft.com/en-us/microsoft-edge/webview2/";
         private static readonly JsonSerializerOptions WebViewJsonOptions = new JsonSerializerOptions
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow
         };
 
         private readonly ReadBoardUiState webViewState = new ReadBoardUiState();
         private readonly Queue<ReadBoardUiLogEntry> webViewLogs = new Queue<ReadBoardUiLogEntry>();
-        private bool webViewTextSent;
         private WebView2 webView;
+        private bool suppressWebViewResizePublication;
         private bool hostCommunicationEstablished;
 
         private const int WmNcHitTest = 0x0084;
@@ -59,66 +60,117 @@ namespace readboard
             return style | WsThickFrame | WsMinimizeBox | WsMaximizeBox;
         }
 
+        internal enum WebViewRuntimePromptChoice
+        {
+            OpenDownload,
+            Retry,
+            Exit
+        }
+
         internal bool EnsureWebViewRuntimeAvailable()
         {
-            while (true)
-            {
-                try
+            return ResolveWebViewRuntimeAvailability(
+                delegate
                 {
-                    CoreWebView2Environment.GetAvailableBrowserVersionString();
-                    return true;
-                }
-                catch (WebView2RuntimeNotFoundException)
-                {
-                    var openDownloadPage = new TaskDialogButton(
-                        getLangStr("WebViewRuntime_openDownload"));
-                    var retry = new TaskDialogButton(getLangStr("WebViewRuntime_retry"));
-                    var exit = new TaskDialogButton(getLangStr("WebViewRuntime_exit"));
-                    var page = new TaskDialogPage
+                    try
                     {
-                        Caption = getLangStr("WebViewRuntime_caption"),
-                        Heading = getLangStr("WebViewRuntime_heading"),
-                        Text = Program.ResolveSemanticMessage(
-                            SemanticMessage.CreateWithDiagnostic(
-                                "WebViewRuntime_message",
-                                AppReleaseVersion.GetCurrentVersion())),
-                        Icon = TaskDialogIcon.Error,
-                        AllowCancel = false,
-                        DefaultButton = retry
-                    };
-                    page.Buttons.Add(openDownloadPage);
-                    page.Buttons.Add(retry);
-                    page.Buttons.Add(exit);
-
-                    TaskDialogButton selected = TaskDialog.ShowDialog(this, page);
-                    if (ReferenceEquals(selected, retry))
-                        continue;
-                    if (ReferenceEquals(selected, openDownloadPage))
-                    {
-                        try
-                        {
-                            using (Process process = Process.Start(
-                                CreateWebViewRuntimeDownloadStartInfo(
-                                    GetWebViewRuntimeInstallerUri())))
-                            {
-                            }
-                        }
-                        catch (Exception exception)
-                        {
-                            Trace.TraceError(exception.ToString());
-                            MessageBox.Show(
-                                this,
-                                getLangStr("WebViewRuntime_openDownloadFailed"),
-                                getLangStr("WebViewRuntime_caption"),
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Error);
-                        }
-                        continue;
+                        CoreWebView2Environment.GetAvailableBrowserVersionString();
+                        return true;
                     }
+                    catch (WebView2RuntimeNotFoundException)
+                    {
+                        return false;
+                    }
+                },
+                ShowMissingWebViewRuntimePrompt,
+                OpenWebViewRuntimeDownload,
+                Dispose);
+        }
 
-                    Dispose();
-                    return false;
+        internal static bool ResolveWebViewRuntimeAvailability(
+            Func<bool> isAvailable,
+            Func<WebViewRuntimePromptChoice> chooseAction,
+            Action openDownload,
+            Action exit)
+        {
+            if (isAvailable == null)
+                throw new ArgumentNullException(nameof(isAvailable));
+            if (chooseAction == null)
+                throw new ArgumentNullException(nameof(chooseAction));
+            if (openDownload == null)
+                throw new ArgumentNullException(nameof(openDownload));
+            if (exit == null)
+                throw new ArgumentNullException(nameof(exit));
+
+            while (!isAvailable())
+            {
+                switch (chooseAction())
+                {
+                    case WebViewRuntimePromptChoice.OpenDownload:
+                        openDownload();
+                        break;
+                    case WebViewRuntimePromptChoice.Retry:
+                        break;
+                    case WebViewRuntimePromptChoice.Exit:
+                        exit();
+                        return false;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(chooseAction));
                 }
+            }
+
+            return true;
+        }
+
+        private WebViewRuntimePromptChoice ShowMissingWebViewRuntimePrompt()
+        {
+            var openDownloadPage = new TaskDialogButton(
+                getLangStr("WebViewRuntime_openDownload"));
+            var retry = new TaskDialogButton(getLangStr("WebViewRuntime_retry"));
+            var exit = new TaskDialogButton(getLangStr("WebViewRuntime_exit"));
+            var page = new TaskDialogPage
+            {
+                Caption = getLangStr("WebViewRuntime_caption"),
+                Heading = getLangStr("WebViewRuntime_heading"),
+                Text = Program.ResolveSemanticMessage(
+                    SemanticMessage.CreateWithDiagnostic(
+                        "WebViewRuntime_message",
+                        AppReleaseVersion.GetCurrentVersion())),
+                Icon = TaskDialogIcon.Error,
+                AllowCancel = false,
+                DefaultButton = retry
+            };
+            page.Buttons.Add(openDownloadPage);
+            page.Buttons.Add(retry);
+            page.Buttons.Add(exit);
+
+            TaskDialogButton selected = TaskDialog.ShowDialog(this, page);
+            if (ReferenceEquals(selected, openDownloadPage))
+                return WebViewRuntimePromptChoice.OpenDownload;
+            if (ReferenceEquals(selected, retry))
+                return WebViewRuntimePromptChoice.Retry;
+            return WebViewRuntimePromptChoice.Exit;
+        }
+
+        private void OpenWebViewRuntimeDownload()
+        {
+            try
+            {
+                using (Process process = Process.Start(
+                    CreateWebViewRuntimeDownloadStartInfo(
+                        GetWebViewRuntimeInstallerUri())))
+                {
+                }
+            }
+            catch (Exception exception)
+            {
+                Trace.TraceError(exception.ToString());
+                MessageBox.Show(
+                    this,
+                    getLangStr("WebViewRuntime_openDownloadFailed"),
+                    getLangStr("WebViewRuntime_caption"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
         }
 
@@ -223,7 +275,6 @@ namespace readboard
 
         private void ConfigureWebView()
         {
-            webViewTextSent = false;
             string webRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebView");
             string entryPoint = Path.Combine(webRoot, "index.html");
             if (!File.Exists(entryPoint))
@@ -280,45 +331,39 @@ namespace readboard
         private void CoreWebView2_WebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             ReadBoardUiCommand command;
-            if (!TryParseWebViewCommand(e.WebMessageAsJson, out command))
-                return;
-
-            ReadBoardUpdateIntent updateIntent;
-            bool updateCommand = TryParseWebViewUpdateIntent(command, out updateIntent);
-
-            if (updateCommand)
-            {
-                HandleWebViewUpdateIntent(updateIntent);
-            }
-            else
-            {
-                bool publish = DispatchNonUpdateWebViewCommand(command);
-                if (publish)
-                    PostWebViewState();
-                return;
-            }
+            if (TryParseWebViewCommand(e.WebMessageAsJson, out command))
+                DispatchWebViewCommand(command);
         }
+
+        internal bool DispatchWebViewCommand(ReadBoardUiCommand command)
+        {
+            if (command == null)
+                return false;
+
+            return webViewStatePublisher.Dispatch(delegate
+            {
+                ReadBoardUpdateIntent updateIntent;
+                return TryParseWebViewUpdateIntent(command, out updateIntent)
+                    ? DispatchWebViewUpdateIntent(updateIntent)
+                    : DispatchNonUpdateWebViewCommand(command);
+            });
+        }
+
+
 
         private bool DispatchNonUpdateWebViewCommand(ReadBoardUiCommand command)
         {
+            WebViewWindowIntent windowIntent;
+            if (WebViewWindowCommandRuntime.TryCreateIntent(command, out windowIntent))
+                return webViewWindowCommandRuntime.Apply(windowIntent);
+
             switch (command.Type)
             {
-                case "window.minimize":
-                    WindowState = FormWindowState.Minimized;
-                    break;
-                case "window.maximize":
-                    WindowState = WindowState == FormWindowState.Maximized
-                        ? FormWindowState.Normal
-                        : FormWindowState.Maximized;
-                    break;
-                case "window.close":
-                    Close();
-                    break;
                 case "navigate":
                 {
                     WebViewNavigationIntent navigationIntent;
                     if (!TryCreateWebViewNavigationIntent(command, out navigationIntent))
-                        return true;
+                        return false;
                     return HandleNavigate(navigationIntent);
                 }
                 case "control.update":
@@ -333,38 +378,57 @@ namespace readboard
                 case "board.select":
                     return HandleControlCenterAction(command);
                 case "rules.openManual":
-                    OpenWebViewManual();
-                    break;
+                    return OpenWebViewManual();
                 case "about.openRepository":
                     OpenExternalUri(ReadBoardRepositoryUrl);
-                    break;
+                    return false;
                 default:
-                    if (HandleWebViewIdentityCommand(command))
-                        return true;
+                    if (IsValidWebViewIdentityCommand(command))
+                        return HandleWebViewIdentityCommand(command);
                     return HandleWebViewSettingsCommand(command);
             }
-            return true;
         }
 
-        private void HandleWebViewUpdateIntent(ReadBoardUpdateIntent intent)
+        private bool DispatchWebViewUpdateIntent(ReadBoardUpdateIntent intent)
         {
             switch (intent)
             {
                 case ReadBoardUpdateIntent.Check:
+                    if (webViewUpdateState.Open
+                        && (webViewUpdateState.Status == "checking"
+                            || webViewUpdateState.Status == "processing"))
+                        return false;
                     _ = CheckForWebViewUpdateAsync();
-                    break;
+                    return false;
                 case ReadBoardUpdateIntent.Close:
-                    CloseWebViewUpdate();
-                    break;
+                    return CloseWebViewUpdate();
                 case ReadBoardUpdateIntent.Install:
+                    if (ShouldPublishWebViewUpdateInstallRejection(
+                        webViewUpdateState.Open,
+                        webViewUpdateState.Status))
+                        return true;
                     _ = InstallWebViewUpdateAsync();
-                    break;
+                    return false;
                 case ReadBoardUpdateIntent.OpenDownload:
+                    if (ShouldPublishWebViewUpdateOpenDownloadRejection(
+                        webViewUpdateState.Open,
+                        webViewUpdateState.OpenDownloadEnabled))
+                        return true;
                     OpenWebViewUpdateDownload();
-                    break;
+                    return false;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(intent));
             }
+        }
+        internal static bool ShouldPublishWebViewUpdateInstallRejection(
+            bool open,
+            string status)
+        {
+            return !open || status != "available";
+        }
+        internal static bool IsWebViewUpdateCloseAllowed(bool open, bool closeEnabled)
+        {
+            return !open || closeEnabled;
         }
 
         internal static bool TryParseWebViewUpdateIntent(
@@ -401,13 +465,47 @@ namespace readboard
                 return false;
             try
             {
-                command = JsonSerializer.Deserialize<ReadBoardUiCommand>(json, WebViewJsonOptions);
-                return IsValidWebViewCommand(command);
+                using (JsonDocument document = JsonDocument.Parse(json))
+                {
+                    if (!IsStrictWebViewCommandRoot(document.RootElement))
+                        return false;
+                    command = document.RootElement.Deserialize<ReadBoardUiCommand>(WebViewJsonOptions);
+                    return IsValidWebViewCommand(command);
+                }
             }
             catch (JsonException)
             {
                 return false;
             }
+        }
+
+        private static bool IsStrictWebViewCommandRoot(JsonElement root)
+        {
+            if (root.ValueKind != JsonValueKind.Object)
+                return false;
+
+            bool typeSeen = false;
+            bool payloadSeen = false;
+            foreach (JsonProperty property in root.EnumerateObject())
+            {
+                if (property.Name == "type")
+                {
+                    if (typeSeen)
+                        return false;
+                    typeSeen = true;
+                }
+                else if (property.Name == "payload")
+                {
+                    if (payloadSeen)
+                        return false;
+                    payloadSeen = true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            return typeSeen;
         }
 
         internal static bool TryCreateWebViewNavigationIntent(
@@ -769,19 +867,6 @@ namespace readboard
         {
             return JsonSerializer.Serialize(new { type = "state", payload = state }, WebViewJsonOptions);
         }
-        internal static string SerializeWebViewRuntimeEffect(string name, object value)
-        {
-            if (string.IsNullOrWhiteSpace(name))
-                throw new ArgumentException("Runtime effect name is required.", "name");
-
-            return JsonSerializer.Serialize(
-                new
-                {
-                    type = "runtimeEffect",
-                    payload = new { name = name, value = value }
-                },
-                WebViewJsonOptions);
-        }
 
         private static bool HasEmptyPayload(JsonElement payload)
         {
@@ -794,20 +879,24 @@ namespace readboard
         {
             if (intent == null)
                 return false;
+            return NavigateWebViewPage(intent.Page);
+        }
 
-            EnsureWebViewSettingsDraft();
-            if (!webViewSettingsJourney.Navigate(intent))
+        private bool NavigateWebViewPage(WebViewPage page)
+        {
+            string pageName = WebViewPageNames.ToWireName(page);
+            if (webViewState.Page == pageName)
                 return false;
-
-            webViewState.Page = WebViewPageNames.ToWireName(webViewSettingsJourney.Page);
+            webViewState.Page = pageName;
             return true;
         }
 
-        private void OpenWebViewManual()
+        private bool OpenWebViewManual()
         {
             try
             {
                 Process.Start(new ProcessStartInfo(getLangStr("helpFile")) { UseShellExecute = true });
+                return false;
             }
             catch (Exception)
             {
@@ -817,6 +906,7 @@ namespace readboard
                     TitleMessage = SemanticMessage.Create("WebView_manualOpenFailedTitle"),
                     MessageMessage = SemanticMessage.Create("noHelpFile")
                 };
+                return true;
             }
         }
 
@@ -882,8 +972,76 @@ namespace readboard
 
         private void MainFormWebView_Resize(object sender, EventArgs e)
         {
-            webViewState.Shell.Maximized = WindowState == FormWindowState.Maximized;
+            bool maximized = WindowState == FormWindowState.Maximized;
+            if (webViewState.Shell.Maximized == maximized)
+                return;
+            webViewState.Shell.Maximized = maximized;
+            if (suppressWebViewResizePublication)
+                return;
             PostWebViewState();
+        }
+
+        private void ApplyWebViewWindowState(WebViewWindowState windowState)
+        {
+            FormWindowState formWindowState;
+            switch (windowState)
+            {
+                case WebViewWindowState.Normal:
+                    formWindowState = FormWindowState.Normal;
+                    break;
+                case WebViewWindowState.Minimized:
+                    formWindowState = FormWindowState.Minimized;
+                    break;
+                case WebViewWindowState.Maximized:
+                    formWindowState = FormWindowState.Maximized;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(windowState));
+            }
+
+            bool previous = suppressWebViewResizePublication;
+            suppressWebViewResizePublication = true;
+            try
+            {
+                WindowState = formWindowState;
+                webViewState.Shell.Maximized = formWindowState == FormWindowState.Maximized;
+            }
+            finally
+            {
+                suppressWebViewResizePublication = previous;
+            }
+        }
+
+        private sealed class MainFormWebViewWindowAdapter : IWebViewWindowAdapter
+        {
+            private readonly MainForm owner;
+
+            public MainFormWebViewWindowAdapter(MainForm owner)
+            {
+                this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            }
+
+            public WebViewWindowState State
+            {
+                get
+                {
+                    if (owner.WindowState == FormWindowState.Maximized)
+                        return WebViewWindowState.Maximized;
+                    if (owner.WindowState == FormWindowState.Minimized)
+                        return WebViewWindowState.Minimized;
+                    return WebViewWindowState.Normal;
+                }
+            }
+
+            public void SetState(WebViewWindowState state)
+            {
+                owner.ApplyWebViewWindowState(state);
+            }
+
+            public void Close()
+            {
+                owner.Close();
+            }
         }
 
         protected override void WndProc(ref Message m)
@@ -953,13 +1111,15 @@ namespace readboard
 
         private void PostWebViewState()
         {
-            if (suppressWebViewStatePublication
-                || webView == null
-                || webView.CoreWebView2 == null)
+            webViewStatePublisher.Request();
+        }
+
+        private void PostWebViewStateCore()
+        {
+            if (webView == null || webView.CoreWebView2 == null)
                 return;
 
             webView.CoreWebView2.PostWebMessageAsJson(SerializeWebViewState(BuildWebViewState()));
-            webViewTextSent = true;
         }
 
         private ReadBoardUiState BuildWebViewState()
@@ -970,7 +1130,7 @@ namespace readboard
             {
                 Page = webViewState.Page,
                 Language = Program.language,
-                Text = webViewTextSent ? null : BuildWebViewText(),
+                Text = BuildWebViewText(),
                 Shell = new ReadBoardShellState
                 {
                     Version = "v" + AppReleaseVersion.GetCurrentVersion(),

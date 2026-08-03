@@ -9,6 +9,8 @@ namespace readboard
         public string SelectedId { get; set; }
         public string SavedId { get; set; }
         public bool HasSavedIdentity { get; set; }
+        public bool CanUseOnce { get; set; }
+        public bool CanSaveAndUse { get; set; }
         public string DialogTitle { get; set; }
         [JsonIgnore]
         public SemanticMessage DialogTitleMessage { get; set; }
