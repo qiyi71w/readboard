@@ -300,6 +300,14 @@
     setChecked("#two-way", control.twoWaySync);
     setChecked("#auto-play", control.autoPlay);
     setChecked(`input[name="color"][value="${cssValue(control.color || "auto")}"]`, true);
+    const autoPlayColorStatus = $("#auto-play-color-status");
+    if (autoPlayColorStatus) {
+      const showAutoPlayColorStatus = (control.platform === "fox" || control.platform === "foxBackground") && control.color === "auto";
+      autoPlayColorStatus.hidden = !showAutoPlayColorStatus;
+      autoPlayColorStatus.textContent = showAutoPlayColorStatus ? (control.autoPlayColorStatus || "") : "";
+      autoPlayColorStatus.dataset.known = String(Boolean(control.playColorKnown));
+      autoPlayColorStatus.title = autoPlayColorStatus.textContent;
+    }
     setChecked(`input[name="placement"][value="${cssValue(control.placement || "direct")}"]`, true);
     setValue("#ai-time", control.aiTime ?? 2);
     setValue("#playouts", control.playouts ?? "");

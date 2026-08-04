@@ -35,6 +35,21 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains(".color-row button { width: 90px; height: var(--control-center-control-height); min-height: var(--control-center-control-height); }", styles);
             Assert.Contains(".color-row .segments label { display: flex; flex: 1; min-width: 0; min-height: var(--control-center-control-height); align-items: center; justify-content: center; padding: 6px 10px; font-size: 14px; }", styles);
         }
+        [Fact]
+        public void AutoPlayColorStatus_IsBoundToFoxAutoColorMode()
+        {
+            string html = LoadWebViewAsset("index.html");
+            string styles = LoadWebViewAsset("styles.css");
+            string script = LoadWebViewAsset("app.js");
+
+            const string autoPlayControl = "<div class=\"auto-play-option\"><label><input id=\"auto-play\" type=\"checkbox\"><span data-i18n=\"MainForm_chkAutoPlay\">自动落子</span></label><span id=\"auto-play-color-status\" class=\"auto-play-color-status\" role=\"status\" aria-live=\"polite\" hidden></span></div>";
+            Assert.Contains(autoPlayControl, html);
+            Assert.DoesNotContain("<label class=\"auto-play-option\">", html);
+            Assert.Contains(".auto-play-color-status", styles);
+            Assert.Contains("const showAutoPlayColorStatus = (control.platform === \"fox\" || control.platform === \"foxBackground\") && control.color === \"auto\";", script);
+            Assert.Contains("autoPlayColorStatus.hidden = !showAutoPlayColorStatus;", script);
+            Assert.Contains("autoPlayColorStatus.textContent = showAutoPlayColorStatus ? (control.autoPlayColorStatus || \"\") : \"\";", script);
+        }
 
         [Fact]
         public void ControlCenter_UsesCappedHeightResponsiveVerticalRhythm()

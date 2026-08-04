@@ -241,7 +241,12 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .sync-card h3 { margin: 0; font-size: 14px; font-weight: 500; white-space: nowrap; }
 .sync-options { display: grid; min-width: 0; grid-template-rows: auto repeat(3, var(--control-center-control-height)); gap: var(--control-center-inner-gap); padding-right: 16px; border-right: 1px solid var(--line); }
 .sync-toggle-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.sync-toggle-row label { display: flex; min-width: 0; min-height: var(--control-center-control-height); align-items: center; white-space: nowrap; }
+.sync-toggle-row > label, .sync-toggle-row > .auto-play-option { display: flex; min-width: 0; min-height: var(--control-center-control-height); align-items: center; white-space: nowrap; }
+.auto-play-option { gap: 7px; }
+.auto-play-option > label { display: flex; flex: 0 0 auto; min-width: 0; align-items: center; }
+.auto-play-color-status { min-width: 0; overflow: hidden; color: var(--secondary-text); font-size: 12px; font-weight: 500; text-overflow: ellipsis; }
+.auto-play-color-status[data-known="true"] { color: var(--success-text); }
+.auto-play-color-status[data-known="false"] { color: var(--warning-text); }
 .color-row { display: grid; grid-template-columns: 62px minmax(0, 1fr) 90px; gap: 8px; min-width: 0; min-height: var(--control-center-control-height); align-items: center; white-space: nowrap; }
 .color-row > b { font-size: 14px; }
 .color-row button { width: 90px; height: var(--control-center-control-height); min-height: var(--control-center-control-height); }

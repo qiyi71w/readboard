@@ -88,7 +88,7 @@
             <h3 data-i18n="WebView_syncSettings">同步设置</h3>
             <div class="sync-toggle-row">
               <label><input id="two-way" type="checkbox"><span data-i18n="MainForm_chkBothSync">双向同步</span></label>
-              <label><input id="auto-play" type="checkbox"><span data-i18n="MainForm_chkAutoPlay">自动落子</span></label>
+              <div class="auto-play-option"><label><input id="auto-play" type="checkbox"><span data-i18n="MainForm_chkAutoPlay">自动落子</span></label><span id="auto-play-color-status" class="auto-play-color-status" role="status" aria-live="polite" hidden></span></div>
             </div>
             <div class="color-row"><b data-i18n="WebView_stoneColor">执子颜色</b><div class="segments color-segments" role="radiogroup" aria-label="执子颜色" data-i18n-aria-label="WebView_stoneColor"><label><input type="radio" name="color" value="black"><span data-i18n="MainForm_radioBlack">执黑</span></label><label><input type="radio" name="color" value="white"><span data-i18n="MainForm_radioWhite">执白</span></label><label><input type="radio" name="color" value="auto"><span data-i18n="MainForm_radioAutoPlayColor">自动</span></label></div><button type="button" data-command="identity.open"><span data-i18n="MainForm_btnFoxAutoPlayIdentity">身份</span></button></div>
             <div class="placement-row"><b data-i18n="WebView_moveMode">落子方式</b><div class="segments" role="radiogroup" aria-label="落子方式" data-i18n-aria-label="WebView_moveMode"><label><input type="radio" name="placement" value="direct"><span data-i18n="MainForm_radioAutoPlayMoveFirst">一选落子</span></label><label><input type="radio" name="placement" value="engine"><span data-i18n="MainForm_radioAutoPlayMoveGma">引擎决策落子</span></label></div></div>
