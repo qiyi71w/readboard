@@ -1372,7 +1372,7 @@ namespace readboard
         private void SendPlayCommandIfSelected()
         {
             ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
-            if (!controlCenter.TwoWaySync || !controlCenter.AutoPlayEnabled)
+            if (!controlCenter.CanSendAutoPlayCommand(sessionCoordinator.KeepSync))
                 return;
             FoxWindowContext foxWindowContext = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
                 ? ResolveFoxWindowContext()

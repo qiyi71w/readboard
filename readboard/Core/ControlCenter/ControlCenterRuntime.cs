@@ -508,6 +508,11 @@ namespace readboard
         public bool IdentityEnabled { get; set; }
         public bool PreferencesSaved { get; set; }
         public string PersistenceError { get; set; }
+
+        public bool CanSendAutoPlayCommand(bool keepSync)
+        {
+            return keepSync && TwoWaySync && AutoPlayEnabled;
+        }
     }
 
     internal sealed class ControlCenterApplyResult

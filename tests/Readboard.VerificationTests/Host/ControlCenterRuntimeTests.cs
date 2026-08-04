@@ -856,6 +856,34 @@ namespace Readboard.VerificationTests.Host
             Assert.Single(persistence.Saved);
         }
 
+        [Theory]
+        [InlineData(false, false, false)]
+        [InlineData(false, false, true)]
+        [InlineData(false, true, false)]
+        [InlineData(false, true, true)]
+        [InlineData(true, false, false)]
+        [InlineData(true, false, true)]
+        [InlineData(true, true, false)]
+        [InlineData(true, true, true)]
+        public void Snapshot_CanSendAutoPlayCommandRequiresKeepSyncTwoWayAndAutoPlay(
+            bool keepSync,
+            bool twoWaySync,
+            bool autoPlayEnabled)
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = twoWaySync;
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(config),
+                new ControlCenterSessionState { AutoPlayEnabled = autoPlayEnabled },
+                new RecordingSessionAdapter(),
+                new RecordingPersistence(),
+                new RejectingControlCenterActionAdapter());
+
+            Assert.Equal(
+                keepSync && twoWaySync && autoPlayEnabled,
+                runtime.Snapshot.CanSendAutoPlayCommand(keepSync));
+        }
+
         [Fact]
         public void TwoWaySyncEffectPlan_PreservesProtocolOrderAndForegroundFoxCondition()
         {
