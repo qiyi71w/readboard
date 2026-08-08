@@ -1,76 +1,123 @@
-name: "Bug 报告"
-description: 报告 readboard 的错误或异常行为
+name: "🐛 Bug Report / 错误报告"
+description: "Report a reproducible problem in readboard / 报告 readboard 中可复现的问题"
+title: "[Bug] "
 labels:
   - bug
 body:
   - type: markdown
     attributes:
       value: |
-        提交前请先搜索已有 Issue，确认没有重复问题。
+        Thanks for taking the time to report a problem. Please search existing issues before submitting a new one.
 
-  - type: input
-    id: version
+        感谢你反馈问题。提交前请先搜索已有 Issue，避免重复报告。
+
+        > readboard is currently maintained for LizzieYzy-Next. Compatibility with the original LizzieYzy is not guaranteed.
+        >
+        > readboard 当前围绕 LizzieYzy-Next 维护，不保证兼容原版 LizzieYzy。
+
+  - id: readboard-version
+    type: input
     attributes:
-      label: readboard 版本
-      description: 请填写 Release 版本号或 commit。
-      placeholder: "例如 v1.0.0"
+      label: "readboard Version / readboard 版本"
+      description: "The version where the problem occurs / 出现问题的 readboard 版本"
+      placeholder: "e.g. v1.2.3 or commit SHA / 例如 v1.2.3 或 commit SHA"
     validations:
       required: true
 
-  - type: input
-    id: os
+  - id: host-version
+    type: input
     attributes:
-      label: Windows 版本
-      placeholder: "例如 Windows 11 24H2"
+      label: "LizzieYzy-Next Version / LizzieYzy-Next 版本"
+      description: "The host version used to launch readboard / 启动 readboard 的宿主版本"
+      placeholder: "e.g. release version or commit SHA / 例如发布版本或 commit SHA"
     validations:
       required: true
 
-  - type: input
-    id: lizzie_version
+  - id: windows-version
+    type: input
     attributes:
-      label: LizzieYzy-Next 版本
-      description: 如果未使用 LizzieYzy-Next，请填写使用的宿主程序。
-      placeholder: "例如 commit hash / Release version"
+      label: "Windows Version / Windows 版本"
+      description: "Include edition and build number when possible / 尽量包含系统版本与 Build 号"
+      placeholder: "e.g. Windows 11 24H2 (26100.x)"
+    validations:
+      required: true
+
+  - id: client
+    type: input
+    attributes:
+      label: "Go Client / 围棋客户端"
+      description: "The external Go client involved, if applicable / 如果相关，请填写外部围棋客户端及版本"
+      placeholder: "e.g. YeHu / 野狐围棋"
     validations:
       required: false
 
-  - type: textarea
-    id: steps
+  - id: area
+    type: dropdown
     attributes:
-      label: 复现步骤
-      description: 请提供可以稳定复现问题的步骤。
+      label: "Affected Area / 问题模块"
+      description: "Select all areas related to the problem / 选择所有相关模块"
+      multiple: true
+      options:
+        - "Startup & host integration / 启动与宿主集成"
+        - "Screen capture / 棋盘截图"
+        - "Stone recognition / 棋子识别"
+        - "Board sync & communication / 棋盘同步与通信"
+        - "Simulated move / 模拟落子"
+        - "UI & settings / 界面与设置"
+        - "Packaging & update / 打包与更新"
+        - "Other / 其他"
+    validations:
+      required: true
+
+  - id: steps
+    type: textarea
+    attributes:
+      label: "Steps to Reproduce / 复现步骤"
+      description: "Provide the smallest reliable sequence that reproduces the problem / 请提供能够稳定复现问题的最简步骤"
       placeholder: |
-        1. 打开...
-        2. 点击...
-        3. 看到...
+        1. Start LizzieYzy-Next... / 启动 LizzieYzy-Next...
+        2. Open... / 打开...
+        3. Do... / 执行...
+        4. Observe... / 观察到...
     validations:
       required: true
 
-  - type: textarea
-    id: expected
+  - id: expected
+    type: textarea
     attributes:
-      label: 期望行为
+      label: "Expected Behavior / 期望行为"
+      placeholder: "What did you expect to happen? / 你期望发生什么？"
     validations:
       required: true
 
-  - type: textarea
-    id: actual
+  - id: actual
+    type: textarea
     attributes:
-      label: 实际行为
+      label: "Actual Behavior / 实际行为"
+      placeholder: "What happened instead? Include exact error messages if available. / 实际发生了什么？如有报错请尽量完整粘贴。"
     validations:
       required: true
 
-  - type: textarea
-    id: logs
+  - id: logs
+    type: textarea
     attributes:
-      label: 日志或截图
-      description: 请粘贴错误日志或上传截图。
+      label: "Logs & Screenshots / 日志与截图"
+      description: "Paste logs or drag screenshots/files here. Please remove sensitive information first. / 可粘贴日志或拖入截图、文件，请先移除敏感信息。"
     validations:
       required: false
 
-  - type: textarea
-    id: additional
+  - id: additional-context
+    type: textarea
     attributes:
-      label: 其他信息
+      label: "Additional Context / 补充信息"
+      description: "Anything else that may help reproduce or diagnose the issue / 其他可能有助于复现或定位问题的信息"
     validations:
       required: false
+
+  - id: existing-issues
+    type: checkboxes
+    attributes:
+      label: "Checklist / 提交前检查"
+      options:
+        - label: "I searched existing issues and did not find the same problem. / 我已搜索已有 Issue，没有发现相同问题。"
+          required: true
