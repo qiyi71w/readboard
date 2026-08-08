@@ -1,46 +1,44 @@
-name: "Compatibility / Integration 兼容性问题"
-description: 报告与客户端或宿主程序的兼容问题
+name: "🔗 Compatibility Issue / 兼容性问题"
+description: "Report integration or compatibility problems / 报告集成或兼容性问题"
+title: "[Compatibility] "
 labels:
   - bug
 body:
-  - type: input
-    id: readboard
+  - id: environment
+    type: textarea
     attributes:
-      label: readboard 版本
-      placeholder: "例如 v1.0.0"
-    validations:
-      required: true
-
-  - type: input
-    id: host
-    attributes:
-      label: 宿主程序及版本
-      description: 例如 LizzieYzy-Next。
-    validations:
-      required: true
-
-  - type: textarea
-    id: environment
-    attributes:
-      label: 环境信息
+      label: "Environment / 环境信息"
       placeholder: |
+        readboard version:
+        LizzieYzy-Next version:
+        Windows version:
+        Go client:
+        / 
+        readboard 版本:
+        LizzieYzy-Next 版本:
         Windows 版本:
-        .NET Runtime:
-        客户端:
+        围棋客户端:
     validations:
       required: true
 
-  - type: textarea
-    id: problem
+  - id: problem
+    type: textarea
     attributes:
-      label: 问题描述
-      placeholder: 请描述通信、识别、落子或启动方面的问题。
+      label: "Compatibility Problem / 兼容问题描述"
+      placeholder: "Describe the integration issue / 描述集成问题"
     validations:
       required: true
 
-  - type: textarea
-    id: logs
+  - id: expected
+    type: textarea
     attributes:
-      label: 日志或截图
+      label: "Expected Behavior / 期望行为"
+    validations:
+      required: true
+
+  - id: logs
+    type: textarea
+    attributes:
+      label: "Logs / 日志"
     validations:
       required: false
