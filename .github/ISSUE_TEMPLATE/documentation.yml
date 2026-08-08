@@ -1,19 +1,20 @@
-name: "Documentation 文档改进"
-description: 报告文档问题或提出改进建议
+name: "📚 Documentation / 文档问题"
+description: "Report missing or incorrect documentation / 报告文档缺失或错误"
+title: "[Docs] "
 labels:
   - documentation
 body:
-  - type: textarea
-    id: issue
+  - id: issue
+    type: textarea
     attributes:
-      label: 文档问题
-      placeholder: 请说明错误、不清晰或缺失的内容。
+      label: "Documentation Issue / 文档问题"
+      placeholder: "What should be improved? / 哪些地方需要改进？"
     validations:
       required: true
 
-  - type: textarea
-    id: suggestion
+  - id: suggestion
+    type: textarea
     attributes:
-      label: 改进建议
+      label: "Suggested Improvement / 改进建议"
     validations:
       required: false
