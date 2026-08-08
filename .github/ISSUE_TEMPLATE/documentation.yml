@@ -1,0 +1,19 @@
+name: "Documentation 文档改进"
+description: 报告文档问题或提出改进建议
+labels:
+  - documentation
+body:
+  - type: textarea
+    id: issue
+    attributes:
+      label: 文档问题
+      placeholder: 请说明错误、不清晰或缺失的内容。
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: 改进建议
+    validations:
+      required: false
