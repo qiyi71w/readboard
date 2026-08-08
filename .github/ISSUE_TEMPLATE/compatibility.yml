@@ -1,0 +1,44 @@
+name: "🔗 Compatibility Issue / 兼容性问题"
+description: "Report integration or compatibility problems / 报告集成或兼容性问题"
+title: "[Compatibility] "
+labels:
+  - bug
+body:
+  - id: environment
+    type: textarea
+    attributes:
+      label: "Environment / 环境信息"
+      placeholder: |
+        readboard version:
+        LizzieYzy-Next version:
+        Windows version:
+        Go client:
+        / 
+        readboard 版本:
+        LizzieYzy-Next 版本:
+        Windows 版本:
+        围棋客户端:
+    validations:
+      required: true
+
+  - id: problem
+    type: textarea
+    attributes:
+      label: "Compatibility Problem / 兼容问题描述"
+      placeholder: "Describe the integration issue / 描述集成问题"
+    validations:
+      required: true
+
+  - id: expected
+    type: textarea
+    attributes:
+      label: "Expected Behavior / 期望行为"
+    validations:
+      required: true
+
+  - id: logs
+    type: textarea
+    attributes:
+      label: "Logs / 日志"
+    validations:
+      required: false

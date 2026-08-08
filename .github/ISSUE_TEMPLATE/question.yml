@@ -1,0 +1,35 @@
+name: "❓ Question / 使用问题"
+description: "Ask for help with usage or configuration / 咨询使用或配置问题"
+title: "[Question] "
+labels:
+  - question
+body:
+  - id: question
+    type: textarea
+    attributes:
+      label: "Question / 问题"
+      placeholder: "Describe your question clearly. / 请清晰描述你的问题。"
+    validations:
+      required: true
+
+  - id: environment
+    type: textarea
+    attributes:
+      label: "Environment / 环境信息"
+      placeholder: |
+        readboard version:
+        LizzieYzy-Next version:
+        Windows version:
+        / 
+        readboard 版本:
+        LizzieYzy-Next 版本:
+        Windows 版本:
+    validations:
+      required: false
+
+  - id: tried
+    type: textarea
+    attributes:
+      label: "What Have You Tried? / 已尝试的方法"
+    validations:
+      required: false
