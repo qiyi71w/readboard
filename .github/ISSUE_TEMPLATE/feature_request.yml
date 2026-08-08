@@ -1,0 +1,36 @@
+name: "Feature Request 功能建议"
+description: 提议新的功能或改进
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 功能描述
+      placeholder: 请描述希望增加的功能。
+    validations:
+      required: true
+
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景
+      description: 这个功能解决什么问题？
+      placeholder: 请描述实际使用场景。
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 期望方案
+      placeholder: 如果有设计方案，请说明。
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 补充信息
+    validations:
+      required: false
