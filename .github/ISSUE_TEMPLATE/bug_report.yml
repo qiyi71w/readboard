@@ -1,0 +1,76 @@
+name: "Bug 报告"
+description: 报告 readboard 的错误或异常行为
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先搜索已有 Issue，确认没有重复问题。
+
+  - type: input
+    id: version
+    attributes:
+      label: readboard 版本
+      description: 请填写 Release 版本号或 commit。
+      placeholder: "例如 v1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Windows 版本
+      placeholder: "例如 Windows 11 24H2"
+    validations:
+      required: true
+
+  - type: input
+    id: lizzie_version
+    attributes:
+      label: LizzieYzy-Next 版本
+      description: 如果未使用 LizzieYzy-Next，请填写使用的宿主程序。
+      placeholder: "例如 commit hash / Release version"
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请提供可以稳定复现问题的步骤。
+      placeholder: |
+        1. 打开...
+        2. 点击...
+        3. 看到...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图
+      description: 请粘贴错误日志或上传截图。
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 其他信息
+    validations:
+      required: false
