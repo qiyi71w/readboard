@@ -171,6 +171,7 @@ namespace Readboard.VerificationTests.Protocol
 
             object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, new IntPtr(5151));
             SetProperty(snapshot, "PlayColor", "black");
+            SetProperty(snapshot, "AutoPlayColorMode", AutoPlayColorMode.FoxAuto);
             FoxRoomAuthorizationSequenceHostRecorder hostRecorder = new FoxRoomAuthorizationSequenceHostRecorder(
                 snapshot,
                 coordinator,
@@ -180,7 +181,10 @@ namespace Readboard.VerificationTests.Protocol
             object runtime = Activator.CreateInstance(runtimeType);
             SetProperty(runtime, "Host", host);
             SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
-            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=fox")));
+            ScriptedBlockingRecognitionService recognitionService = new ScriptedBlockingRecognitionService(
+                CreateResult("re=fox"),
+                2);
+            SetProperty(runtime, "RecognitionService", recognitionService);
             SetProperty(runtime, "PlacementService", new PassivePlacementService());
             SetProperty(runtime, "OverlayService", new PassiveOverlayService());
             SetProperty(runtime, "WindowDescriptorFactory", CreateProxy(
@@ -193,15 +197,21 @@ namespace Readboard.VerificationTests.Protocol
             try
             {
                 VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
-                VerificationCompletion.Wait(hostRecorder.ThirdSnapshotCaptured, "Third snapshot was not captured.");
+                VerificationCompletion.Wait(
+                    recognitionService.BlockedRecognizeStarted,
+                    "Current-room recognition did not block as expected.");
+                Assert.Equal(1, transport.CountLines("stopAutoPlay"));
+                recognitionService.Release();
             }
             finally
             {
+                recognitionService.Release();
                 Invoke(coordinator, "StopSyncSession");
             }
 
             VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
             Assert.Equal(1, transport.CountLines("play>black>0 0 0"));
+            Assert.Equal(1, transport.CountLines("stopAutoPlay"));
         }
 
         [Theory]
@@ -1540,6 +1550,112 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public void TryStartKeepSync_CaptureCancellationRevokesExistingAutoPlayAuthorization()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SendPlay(
+                "black",
+                AutoPlayColorMode.FoxAuto,
+                "0",
+                "0",
+                "0");
+            AttachCaptureCancellingRuntime(coordinator);
+
+            Assert.False((bool)Invoke(coordinator, "TryStartKeepSync"));
+
+            Assert.Equal(
+                new[] { "play>black>0 0 0", "stopAutoPlay" },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void TryStartContinuousSync_CaptureCancellationRevokesExistingAutoPlayAuthorization()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SendPlay(
+                "black",
+                AutoPlayColorMode.FoxAuto,
+                "0",
+                "0",
+                "0");
+            AttachCaptureCancellingRuntime(coordinator);
+
+            Assert.True((bool)Invoke(coordinator, "TryStartContinuousSync"));
+            try
+            {
+                Assert.True(transport.WaitForLine("stopAutoPlay"));
+            }
+            finally
+            {
+                Invoke(coordinator, "StopSyncSession");
+            }
+
+            Assert.Equal(1, transport.CountLines("stopAutoPlay"));
+        }
+
+        [Fact]
+        public void TryStartKeepSync_CaptureCancellationPreservesManualAutoPlayAuthorization()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SendPlay(
+                "black",
+                AutoPlayColorMode.ManualBlack,
+                "0",
+                "0",
+                "0");
+            AttachCaptureCancellingRuntime(coordinator);
+
+            Assert.False((bool)Invoke(coordinator, "TryStartKeepSync"));
+
+            Assert.Equal(
+                new[] { "play>black>0 0 0" },
+                transport.SentLines);
+        }
+
+        [Theory]
+        [InlineData((int)AutoPlayColorMode.ManualBlack, 0)]
+        [InlineData((int)AutoPlayColorMode.ManualWhite, 0)]
+        [InlineData((int)AutoPlayColorMode.FoxAuto, 1)]
+        public void TryRunOneTimeSync_FoxRecognitionFailureOnlyRevokesFoxAutoAuthorization(
+            int authorizedColorModeValue,
+            int expectedStopCount)
+        {
+            AutoPlayColorMode authorizedColorMode = (AutoPlayColorMode)authorizedColorModeValue;
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncPlatform("fox");
+            coordinator.SendPlay("black", authorizedColorMode, "0", "0", "0");
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            Type descriptorInterfaceType = RequireType(assembly, "readboard.IWindowDescriptorFactory");
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, new IntPtr(5151));
+            SetProperty(snapshot, "PlayColor", "black");
+            SetProperty(snapshot, "AutoPlayColorMode", AutoPlayColorMode.FoxAuto);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", CreateProxy(
+                hostInterfaceType,
+                new HostRecorder(snapshot).HandleCall));
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(
+                (BoardRecognitionResult)null));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            SetProperty(runtime, "WindowDescriptorFactory", CreateProxy(
+                descriptorInterfaceType,
+                new DescriptorFactoryRecorder().HandleCall));
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            Assert.False((bool)Invoke(coordinator, "TryRunOneTimeSync"));
+
+            Assert.Equal(expectedStopCount, transport.CountLines("stopAutoPlay"));
+        }
+
+        [Fact]
         public void TryRunOneTimeSync_ResetsReplayAndOverlayCachesBeforeEachRun()
         {
             RecordingTransport transport = new RecordingTransport();
@@ -1769,7 +1885,6 @@ namespace Readboard.VerificationTests.Protocol
                 new SyncCoordinatorHostSnapshot { BoardWidth = 19, BoardHeight = 19 },
                 sample,
                 false,
-                0,
                 0);
 
             Assert.Equal(0, host.RuntimeFrameClearedCount);
@@ -1814,6 +1929,26 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(snapshot, "AutoMinimize", false);
             SetProperty(snapshot, "SampleIntervalMs", 5);
             return snapshot;
+        }
+
+        private static void AttachCaptureCancellingRuntime(SyncSessionCoordinator coordinator)
+        {
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            object host = CreateProxy(hostInterfaceType, (method, args) =>
+            {
+                if (method.Name == "CaptureSnapshot")
+                    throw new SnapshotCaptureCancelledException();
+                return GetDefault(method.ReturnType);
+            });
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=foreground")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            Invoke(coordinator, "AttachRuntime", runtime);
         }
 
         private static BoardFrame CreateFrame()
@@ -2265,7 +2400,6 @@ namespace Readboard.VerificationTests.Protocol
 
             public ManualResetEventSlim KeepStarted { get; } = new ManualResetEventSlim(false);
             public ManualResetEventSlim KeepStopped { get; } = new ManualResetEventSlim(false);
-            public ManualResetEventSlim ThirdSnapshotCaptured { get; } = new ManualResetEventSlim(false);
 
             public object HandleCall(MethodInfo method, object[] args)
             {
@@ -2278,8 +2412,6 @@ namespace Readboard.VerificationTests.Protocol
                             contexts.Length - 1);
                         coordinator.SetFoxWindowContext(contexts[contextIndex]);
                         SetProperty(snapshot, "PlayColor", contextIndex == 0 ? "black" : null);
-                        if (snapshotRequest >= 3)
-                            ThirdSnapshotCaptured.Set();
                         return snapshot;
                     case "OnKeepSyncStarted":
                         KeepStarted.Set();

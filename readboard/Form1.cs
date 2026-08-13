@@ -1373,17 +1373,25 @@ namespace readboard
         {
             ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
             if (!controlCenter.CanSendAutoPlayCommand(sessionCoordinator.KeepSync))
+            {
+                if (controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto)
+                    sessionCoordinator.RevokeAutoPlayIfAuthorized();
                 return;
+            }
             FoxWindowContext foxWindowContext = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
                 ? ResolveFoxWindowContext()
                 : FoxWindowContext.Unknown();
             ResolveCurrentAutoPlayColor(foxWindowContext);
             controlCenter = controlCenterRuntime.Snapshot;
             if (!controlCenter.AutoPlayColorResolution.IsKnown)
+            {
+                sessionCoordinator.RevokeAutoPlayIfAuthorized();
                 return;
+            }
 
             sessionCoordinator.SendPlay(
                 controlCenter.PlayColor,
+                controlCenter.AutoPlayColorMode,
                 GetProtocolNumericValue(controlCenter.AiTimeValue),
                 GetProtocolNumericValue(controlCenter.PlayoutsValue),
                 GetProtocolNumericValue(controlCenter.FirstPolicyValue),
@@ -1988,6 +1996,7 @@ namespace readboard
                 UseEnhancedCapture = Program.useEnhanceScreen,
                 FoxMoveNumber = foxMoveNumber,
                 PlayColor = autoPlayColor.PlayColor,
+                AutoPlayColorMode = runtimeSnapshot.AutoPlayColorMode,
                 AiTimeValue = runtimeSnapshot.AiTimeValue,
                 PlayoutsValue = runtimeSnapshot.PlayoutsValue,
                 FirstPolicyValue = runtimeSnapshot.FirstPolicyValue,

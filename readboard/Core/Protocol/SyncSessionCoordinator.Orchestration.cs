@@ -63,12 +63,19 @@ namespace readboard
                 ResetRuntimeSyncCaches(runtime, observationGeneration);
                 int autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
                 SyncCoordinatorHostSnapshot snapshot;
-                if (!TryCaptureSnapshot(runtime, out snapshot))
+                if (!TryCaptureSnapshotOrRevoke(
+                    runtime,
+                    out snapshot,
+                    autoPlayGeneration,
+                    null))
                     return false;
                 runtimeState.SelectedWindowHandle = snapshot.SelectedWindowHandle;
                 runtimeState.ResetProbeState();
                 if (!EnsureSyncSourceSelected(runtime, snapshot, true))
+                {
+                    DispatchAutoPlaySnapshotFailure(snapshot, autoPlayGeneration, null);
                     return false;
+                }
 
                 RecognizedSyncSample sample;
                 if (!TryRecognizeSample(
@@ -79,6 +86,7 @@ namespace readboard
                     null,
                     observationGeneration))
                 {
+                    DispatchAutoPlaySnapshotFailure(snapshot, autoPlayGeneration, null);
                     runtime.Host.ShowRecognitionFailureMessage();
                     return false;
                 }
@@ -88,7 +96,6 @@ namespace readboard
                         snapshot,
                         sample,
                         true,
-                        autoPlayGeneration,
                         observationGeneration),
                     autoPlayGeneration,
                     null,
@@ -108,11 +115,20 @@ namespace readboard
             if (StartedSync || IsContinuousSyncing)
                 return false;
             int lifecycleGeneration = CaptureSyncLifecycleGeneration();
+            int autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
+            Func<bool> isOperationCurrent = delegate
+            {
+                return IsKeepSyncStartCurrent(lifecycleGeneration, false);
+            };
 
             SyncCoordinatorHostSnapshot snapshot;
-            if (!TryCaptureSnapshot(runtime, out snapshot))
+            if (!TryCaptureSnapshotOrRevoke(
+                runtime,
+                out snapshot,
+                autoPlayGeneration,
+                isOperationCurrent))
                 return false;
-            if (!IsKeepSyncStartCurrent(lifecycleGeneration, false))
+            if (!IsOperationCurrent(isOperationCurrent))
                 return false;
             runtimeState.SelectedWindowHandle = snapshot.SelectedWindowHandle;
             return TryStartKeepSyncSession(runtime, snapshot, true, lifecycleGeneration, false);
@@ -129,9 +145,18 @@ namespace readboard
             if (!TryActivateContinuousSyncSession(runtime, lifecycleGeneration, out continuousSyncSessionId))
                 return false;
 
+            int autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
+            Func<bool> isOperationCurrent = delegate
+            {
+                return IsContinuousSyncWorkerCurrent(lifecycleGeneration, continuousSyncSessionId);
+            };
             SyncCoordinatorHostSnapshot snapshot;
-            if (TryCaptureSnapshot(runtime, out snapshot)
-                && IsContinuousSyncWorkerCurrent(lifecycleGeneration, continuousSyncSessionId)
+            if (TryCaptureSnapshotOrRevoke(
+                    runtime,
+                    out snapshot,
+                    autoPlayGeneration,
+                    isOperationCurrent)
+                && IsOperationCurrent(isOperationCurrent)
                 && snapshot.AutoMinimize)
                 runtime.Host.MinimizeWindow();
             return true;
@@ -215,8 +240,14 @@ namespace readboard
             if (request == null)
                 return PlaceRequestExecutionResult.NoResponse;
 
+            SyncSessionRuntimeDependencies runtime = GetRuntimeDependencies();
+            int autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
             SyncCoordinatorHostSnapshot snapshot;
-            if (!TryCaptureSnapshot(GetRuntimeDependencies(), out snapshot))
+            if (!TryCaptureSnapshotOrRevoke(
+                runtime,
+                out snapshot,
+                autoPlayGeneration,
+                null))
                 return PlaceRequestExecutionResult.NoResponse;
             int boardWidth = snapshot.BoardWidth;
             int boardPixelWidth = runtimeState.CurrentBoardPixelWidth;
@@ -305,8 +336,13 @@ namespace readboard
                         continue;
                     }
 
+                    int autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
                     SyncCoordinatorHostSnapshot snapshot;
-                    if (!TryCaptureSnapshot(runtime, out snapshot))
+                    if (!TryCaptureSnapshotOrRevoke(
+                        runtime,
+                        out snapshot,
+                        autoPlayGeneration,
+                        isOperationCurrent))
                         return;
                     if (!IsOperationCurrent(isOperationCurrent))
                         return;
@@ -357,8 +393,18 @@ namespace readboard
             SyncCoordinatorHostSnapshot snapshot)
         {
             int lifecycleGeneration = CaptureSyncLifecycleGeneration();
+            int autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
+            Func<bool> isOperationCurrent = delegate
+            {
+                return IsKeepSyncStartCurrent(lifecycleGeneration, true);
+            };
             IntPtr handle = runtime.WindowLocator.FindWindowHandle(snapshot.SyncMode);
-            if (handle == IntPtr.Zero || !IsKeepSyncStartCurrent(lifecycleGeneration, true))
+            if (handle == IntPtr.Zero)
+            {
+                DispatchAutoPlaySnapshotFailure(snapshot, autoPlayGeneration, isOperationCurrent);
+                return;
+            }
+            if (!IsOperationCurrent(isOperationCurrent))
                 return;
 
             runtimeState.SelectedWindowHandle = handle;
@@ -366,9 +412,13 @@ namespace readboard
                 handle,
                 Volatile.Read(ref activeContinuousObservationGeneration));
             SyncCoordinatorHostSnapshot refreshedSnapshot;
-            if (!TryCaptureSnapshot(runtime, out refreshedSnapshot))
+            if (!TryCaptureSnapshotOrRevoke(
+                runtime,
+                out refreshedSnapshot,
+                autoPlayGeneration,
+                isOperationCurrent))
                 return;
-            if (!IsKeepSyncStartCurrent(lifecycleGeneration, true))
+            if (!IsOperationCurrent(isOperationCurrent))
                 return;
             TryStartKeepSyncSession(runtime, refreshedSnapshot, false, lifecycleGeneration, true);
         }
@@ -393,8 +443,10 @@ namespace readboard
             {
                 return IsSyncLifecycleCurrent(lifecycleGeneration);
             };
-            if (!TrySendForegroundFoxState(snapshot, isOperationCurrent))
+            int autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
+            if (!TrySendForegroundFoxState(snapshot, autoPlayGeneration, isOperationCurrent))
                 return false;
+            autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
             if (!TryPrimeSyncFrame(
                 runtime,
                 snapshot,
@@ -402,6 +454,7 @@ namespace readboard
                 isOperationCurrent,
                 observationGeneration))
             {
+                DispatchAutoPlaySnapshotFailure(snapshot, autoPlayGeneration, isOperationCurrent);
                 if (IsKeepSyncStartCurrent(lifecycleGeneration, requireContinuousSync))
                     HandleKeepSyncStartFailure(runtime, showMessages, observationGeneration);
                 return false;
@@ -484,13 +537,20 @@ namespace readboard
                 {
                     int autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
                     SyncCoordinatorHostSnapshot snapshot;
-                    if (!TryCaptureSnapshot(runtime, out snapshot))
+                    if (!TryCaptureSnapshotOrRevoke(
+                        runtime,
+                        out snapshot,
+                        autoPlayGeneration,
+                        isOperationCurrent))
                         return;
                     if (!IsOperationCurrent(isOperationCurrent))
                         return;
                     runtimeState.SelectedWindowHandle = ResolveSelectedWindowHandle(snapshot);
                     if (!EnsureSyncSourceSelected(runtime, snapshot, false))
+                    {
+                        DispatchAutoPlaySnapshotFailure(snapshot, autoPlayGeneration, isOperationCurrent);
                         return;
+                    }
                     if (!IsOperationCurrent(isOperationCurrent))
                         return;
                     DispatchPendingMove(runtime, snapshot, isOperationCurrent);
@@ -624,7 +684,10 @@ namespace readboard
                 out sample,
                 isOperationCurrent,
                 observationGeneration))
+            {
+                DispatchAutoPlaySnapshotFailure(snapshot, autoPlayGeneration, isOperationCurrent);
                 return false;
+            }
             RecognizedSampleProtocolDispatch dispatch;
             lock (workerLock)
             {
@@ -635,7 +698,6 @@ namespace readboard
                     snapshot,
                     sample,
                     firstSample,
-                    autoPlayGeneration,
                     observationGeneration);
             }
             if (!IsOperationCurrent(isOperationCurrent))
@@ -1035,10 +1097,11 @@ namespace readboard
             SyncCoordinatorHostSnapshot snapshot,
             RecognizedSyncSample sample,
             bool firstSample,
-            int autoPlayGeneration,
             long observationGeneration)
         {
             RecognizedSampleProtocolDispatch dispatch = new RecognizedSampleProtocolDispatch();
+            dispatch.AutoPlaySnapshot = snapshot;
+            dispatch.AllowAutoPlay = sample.Snapshot != null && sample.Snapshot.IsValid;
             if (!firstSample && sample.PreviousArea > 0 && sample.PreviousArea != (runtimeState.CurrentBoardPixelWidth * runtimeState.CurrentBoardPixelHeight))
             {
                 ResetSyncCaches(false);
@@ -1060,8 +1123,6 @@ namespace readboard
                 dispatch.BoardSnapshotBatch = TryBuildOutboundBoardSnapshotBatch(sample.Snapshot);
                 if (dispatch.BoardSnapshotBatch != null)
                     dispatch.SentSnapshot = sample.Snapshot;
-                dispatch.PlayMessage = ReservePlayMessageIfChanged(snapshot, autoPlayGeneration);
-                dispatch.PlayMoveMode = snapshot.AutoPlayMoveMode;
             }
             return dispatch;
         }
@@ -1091,11 +1152,10 @@ namespace readboard
                     outboundBoardSnapshotEmitter.EmitWhileSynchronized(dispatch.BoardSnapshotBatch);
                     boardSnapshotSent = true;
                 }
-                if (dispatch.PlayMessage != null
-                    && IsAutoPlayAuthorizationGenerationCurrent(autoPlayGeneration))
-                    SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
-                        dispatch.PlayMessage,
-                        dispatch.PlayMoveMode);
+                ApplyAutoPlaySnapshotWhileSynchronized(
+                    dispatch.AutoPlaySnapshot,
+                    autoPlayGeneration,
+                    dispatch.AllowAutoPlay);
             });
             if (boardSnapshotSent)
             {
@@ -1489,12 +1549,9 @@ namespace readboard
 
         private bool TrySendForegroundFoxState(
             SyncCoordinatorHostSnapshot snapshot,
+            int autoPlayGeneration,
             Func<bool> isOperationCurrent)
         {
-            bool sendPlay = SyncBoth && !string.IsNullOrWhiteSpace(snapshot.PlayColor);
-            string time = sendPlay ? NormalizeNumericValue(snapshot.AiTimeValue) : null;
-            string playouts = sendPlay ? NormalizeNumericValue(snapshot.PlayoutsValue) : null;
-            string firstPolicy = sendPlay ? NormalizeNumericValue(snapshot.FirstPolicyValue) : null;
             bool sent = false;
             outboundProtocolDispatcher.ExecuteBatch(delegate
             {
@@ -1504,81 +1561,78 @@ namespace readboard
                 outboundProtocolDispatcher.SendMessageWhileSynchronized(
                     protocolAdapter.CreateForegroundFoxInBoardMessage(
                         snapshot.ShowInBoard && snapshot.SupportsForegroundFoxInBoardProtocol));
-                if (sendPlay)
-                {
-                    RememberSentPlayState(
-                        snapshot.PlayColor,
-                        time,
-                        playouts,
-                        firstPolicy,
-                        snapshot.AutoPlayMoveMode);
-                    outboundProtocolDispatcher.SendMessageWhileSynchronized(
-                        protocolAdapter.CreatePlayMessage(
-                            snapshot.PlayColor,
-                            time,
-                            playouts,
-                            firstPolicy,
-                            snapshot.AutoPlayMoveMode));
-                }
+                ApplyAutoPlaySnapshotWhileSynchronized(snapshot, autoPlayGeneration, true);
                 sent = true;
             });
             return sent;
         }
 
-        private ProtocolMessage ReservePlayMessageIfChanged(
-            SyncCoordinatorHostSnapshot snapshot,
-            int autoPlayGeneration)
+        private void DispatchAutoPlayRevocation(
+            int autoPlayGeneration,
+            Func<bool> isOperationCurrent,
+            bool foxAutoOnly)
         {
-            if (!SyncBoth || snapshot == null || string.IsNullOrWhiteSpace(snapshot.PlayColor))
-                return null;
-
-            string color = snapshot.PlayColor;
-            string time = NormalizeNumericValue(snapshot.AiTimeValue);
-            string playouts = NormalizeNumericValue(snapshot.PlayoutsValue);
-            string firstPolicy = NormalizeNumericValue(snapshot.FirstPolicyValue);
-            AutoPlayMoveMode moveMode = AppConfig.NormalizeAutoPlayMoveMode(snapshot.AutoPlayMoveMode);
-            string signature;
-            lock (stateLock)
+            outboundProtocolDispatcher.ExecuteBatch(delegate
             {
-                if (autoPlayGeneration != autoPlayAuthorizationGeneration)
-                    return null;
-                signature = BuildPlayStateSignatureForCurrentContext(color, time, playouts, firstPolicy, moveMode);
-                if (string.Equals(lastSentPlayStateSignature, signature, StringComparison.Ordinal))
-                    return null;
-                lastSentPlayStateSignature = signature;
+                if (!IsOperationCurrent(isOperationCurrent))
+                    return;
+                RevokeAutoPlayAuthorizationWhileSynchronized(
+                    autoPlayGeneration,
+                    false,
+                    foxAutoOnly);
+            });
+        }
+
+        private void DispatchAutoPlaySnapshotFailure(
+            SyncCoordinatorHostSnapshot snapshot,
+            int autoPlayGeneration,
+            Func<bool> isOperationCurrent)
+        {
+            if (snapshot == null
+                || AppConfig.NormalizeAutoPlayColorMode(snapshot.AutoPlayColorMode)
+                    != AutoPlayColorMode.FoxAuto)
+                return;
+            DispatchAutoPlayRevocation(autoPlayGeneration, isOperationCurrent, true);
+        }
+
+        private void ApplyAutoPlaySnapshotWhileSynchronized(
+            SyncCoordinatorHostSnapshot snapshot,
+            int autoPlayGeneration,
+            bool allowPlay)
+        {
+            if (snapshot == null)
+                return;
+            AutoPlayColorMode colorMode = AppConfig.NormalizeAutoPlayColorMode(
+                snapshot.AutoPlayColorMode);
+            if (!SyncBoth
+                || !allowPlay
+                || string.IsNullOrWhiteSpace(snapshot.PlayColor))
+            {
+                if (colorMode == AutoPlayColorMode.FoxAuto)
+                {
+                    RevokeAutoPlayAuthorizationWhileSynchronized(
+                        autoPlayGeneration,
+                        false,
+                        true);
+                }
+                return;
             }
 
-            return protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode);
+            SendPlayAuthorizationWhileSynchronized(
+                snapshot.PlayColor,
+                colorMode,
+                NormalizeNumericValue(snapshot.AiTimeValue),
+                NormalizeNumericValue(snapshot.PlayoutsValue),
+                NormalizeNumericValue(snapshot.FirstPolicyValue),
+                AppConfig.NormalizeAutoPlayMoveMode(snapshot.AutoPlayMoveMode),
+                false,
+                autoPlayGeneration);
         }
 
         private int CaptureAutoPlayAuthorizationGeneration()
         {
             lock (stateLock)
                 return autoPlayAuthorizationGeneration;
-        }
-
-        private bool IsAutoPlayAuthorizationGenerationCurrent(int generation)
-        {
-            lock (stateLock)
-                return generation == autoPlayAuthorizationGeneration;
-        }
-
-        private void RememberSentPlayState(
-            string color,
-            string time,
-            string playouts,
-            string firstPolicy,
-            AutoPlayMoveMode moveMode)
-        {
-            lock (stateLock)
-            {
-                lastSentPlayStateSignature = BuildPlayStateSignatureForCurrentContext(
-                    color,
-                    time,
-                    playouts,
-                    firstPolicy,
-                    moveMode);
-            }
         }
 
         private string BuildPlayStateSignatureForCurrentContext(
@@ -1689,6 +1743,29 @@ namespace readboard
             }
         }
 
+        private bool TryCaptureSnapshotOrRevoke(
+            SyncSessionRuntimeDependencies runtime,
+            out SyncCoordinatorHostSnapshot snapshot,
+            int autoPlayGeneration,
+            Func<bool> isOperationCurrent)
+        {
+            if (TryCaptureSnapshot(runtime, out snapshot))
+            {
+                if (AppConfig.NormalizeAutoPlayColorMode(snapshot.AutoPlayColorMode)
+                        == AutoPlayColorMode.FoxAuto
+                    && string.IsNullOrWhiteSpace(snapshot.PlayColor))
+                {
+                    DispatchAutoPlaySnapshotFailure(
+                        snapshot,
+                        autoPlayGeneration,
+                        isOperationCurrent);
+                }
+                return true;
+            }
+            DispatchAutoPlayRevocation(autoPlayGeneration, isOperationCurrent, true);
+            return false;
+        }
+
         private SyncSessionRuntimeDependencies GetRuntimeDependencies()
         {
             if (runtimeDependencies == null)
@@ -1753,8 +1830,8 @@ namespace readboard
             public ProtocolMessage StartMessage { get; set; }
             public OutboundBoardSnapshotBatch BoardSnapshotBatch { get; set; }
             public BoardSnapshot SentSnapshot { get; set; }
-            public ProtocolMessage PlayMessage { get; set; }
-            public AutoPlayMoveMode PlayMoveMode { get; set; }
+            public SyncCoordinatorHostSnapshot AutoPlaySnapshot { get; set; }
+            public bool AllowAutoPlay { get; set; }
         }
     }
 }

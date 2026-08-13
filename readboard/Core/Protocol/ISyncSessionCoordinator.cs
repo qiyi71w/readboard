@@ -50,6 +50,7 @@ namespace readboard
         void SendStart(int boardWidth, int boardHeight, IntPtr windowHandle, bool includeWindowHandle);
         void SendPlay(
             string color,
+            AutoPlayColorMode colorMode,
             string time,
             string playouts,
             string firstPolicy,
@@ -63,6 +64,7 @@ namespace readboard
         void SendNoPonder();
         void SendResumePonder();
         void SendStopAutoPlay();
+        void RevokeAutoPlayIfAuthorized();
         void SendPass();
         void SendShutdownProtocol();
         void SendLine(string line);

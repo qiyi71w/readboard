@@ -153,7 +153,13 @@ namespace Readboard.VerificationTests
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
 
             coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", 57));
-            coordinator.SendPlay("black", "5", "1000", "0", AutoPlayMoveMode.GenmoveAnalyze);
+            coordinator.SendPlay(
+                "black",
+                AutoPlayColorMode.ManualBlack,
+                "5",
+                "1000",
+                "0",
+                AutoPlayMoveMode.GenmoveAnalyze);
             coordinator.SendBoardSnapshot(CreateSnapshot("payload-1", 57));
 
             Assert.Equal(
@@ -163,6 +169,26 @@ namespace Readboard.VerificationTests
                     "play>black>5 1000 0 gma",
                     "syncPlatform generic", "foxMoveNumber 57", "lastMoveSource none", "re=000", "re=111", "end"
                 },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void RevokeAutoPlayIfAuthorized_SendsStopOnceAfterPlayAuthorization()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.SendPlay(
+                "black",
+                AutoPlayColorMode.FoxAuto,
+                "5",
+                "1000",
+                "0");
+            coordinator.RevokeAutoPlayIfAuthorized();
+            coordinator.RevokeAutoPlayIfAuthorized();
+
+            Assert.Equal(
+                new[] { "play>black>5 1000 0", "stopAutoPlay" },
                 transport.SentLines);
         }
 

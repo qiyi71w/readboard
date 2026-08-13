@@ -31,6 +31,7 @@ namespace readboard
         private LastMoveSource lastSentBoardLastMoveSource;
         private string lastSentWindowContextSignature;
         private string lastSentPlayStateSignature;
+        private AutoPlayColorMode? lastSentAutoPlayColorMode;
         private int autoPlayAuthorizationGeneration;
         private SessionState sessionState;
         private IProtocolCommandHost host;
@@ -535,18 +536,63 @@ namespace readboard
 
         public void SendPlay(
             string color,
+            AutoPlayColorMode colorMode,
             string time,
             string playouts,
             string firstPolicy,
             AutoPlayMoveMode moveMode = AutoPlayMoveMode.FirstCandidate)
         {
-            RememberSentPlayState(color, time, playouts, firstPolicy, moveMode);
             outboundProtocolDispatcher.ExecuteBatch(delegate
             {
-                SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
-                    protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode),
-                    moveMode);
+                SendPlayAuthorizationWhileSynchronized(
+                    color,
+                    colorMode,
+                    time,
+                    playouts,
+                    firstPolicy,
+                    moveMode,
+                    true,
+                    null);
             });
+        }
+
+        private void SendPlayAuthorizationWhileSynchronized(
+            string color,
+            AutoPlayColorMode colorMode,
+            string time,
+            string playouts,
+            string firstPolicy,
+            AutoPlayMoveMode moveMode,
+            bool force,
+            int? expectedGeneration)
+        {
+            string signature;
+            lock (stateLock)
+            {
+                if (expectedGeneration.HasValue
+                    && expectedGeneration.Value != autoPlayAuthorizationGeneration)
+                    return;
+                signature = BuildPlayStateSignatureForCurrentContext(
+                    color,
+                    time,
+                    playouts,
+                    firstPolicy,
+                    moveMode);
+                if (!force
+                    && lastSentAutoPlayColorMode == AppConfig.NormalizeAutoPlayColorMode(colorMode)
+                    && string.Equals(lastSentPlayStateSignature, signature, StringComparison.Ordinal))
+                    return;
+            }
+
+            SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
+                protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode),
+                moveMode);
+            lock (stateLock)
+            {
+                autoPlayAuthorizationGeneration++;
+                lastSentPlayStateSignature = signature;
+                lastSentAutoPlayColorMode = AppConfig.NormalizeAutoPlayColorMode(colorMode);
+            }
         }
 
         private void SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
@@ -607,14 +653,46 @@ namespace readboard
         {
             outboundProtocolDispatcher.ExecuteBatch(delegate
             {
+                RevokeAutoPlayAuthorizationWhileSynchronized(null, true, false);
+            });
+        }
+
+        public void RevokeAutoPlayIfAuthorized()
+        {
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                RevokeAutoPlayAuthorizationWhileSynchronized(null, false, false);
+            });
+        }
+
+        private void RevokeAutoPlayAuthorizationWhileSynchronized(
+            int? expectedGeneration,
+            bool force,
+            bool foxAutoOnly)
+        {
+            bool authorizationWasSent;
+            lock (stateLock)
+            {
+                if (expectedGeneration.HasValue
+                    && expectedGeneration.Value != autoPlayAuthorizationGeneration)
+                    return;
+                if (foxAutoOnly
+                    && lastSentAutoPlayColorMode != AutoPlayColorMode.FoxAuto)
+                    return;
+                authorizationWasSent = lastSentPlayStateSignature != null;
+            }
+
+            if (force || authorizationWasSent)
+            {
                 outboundProtocolDispatcher.SendMessageWhileSynchronized(
                     protocolAdapter.CreateStopAutoPlayMessage());
-                lock (stateLock)
-                {
-                    autoPlayAuthorizationGeneration++;
-                    lastSentPlayStateSignature = null;
-                }
-            });
+            }
+            lock (stateLock)
+            {
+                autoPlayAuthorizationGeneration++;
+                lastSentPlayStateSignature = null;
+                lastSentAutoPlayColorMode = null;
+            }
         }
 
         public void SendPass()

@@ -485,7 +485,13 @@ namespace Readboard.VerificationTests.Architecture
             };
 
             coordinator.SendBoardSnapshot(snapshot);
-            coordinator.SendPlay("black", "5", "1000", "0", AutoPlayMoveMode.GenmoveAnalyze);
+            coordinator.SendPlay(
+                "black",
+                AutoPlayColorMode.ManualBlack,
+                "5",
+                "1000",
+                "0",
+                AutoPlayMoveMode.GenmoveAnalyze);
             int playIndex = transport.SentLines.IndexOf("play>black>5 1000 0 gma");
             coordinator.SendBoardSnapshot(snapshot);
             coordinator.SendBoardSnapshot(snapshot);
