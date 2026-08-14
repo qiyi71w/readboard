@@ -35,7 +35,7 @@ jobs:
         shell: pwsh
         run: |
           $publishDirectory = Join-Path $PWD 'artifacts\readboard-publish'
-          dotnet restore readboard.sln --configfile NuGet.Config
+          dotnet restore readboard.sln --configfile NuGet.Config -r win-x64
           dotnet publish readboard/readboard.csproj -c Release -r win-x64 --self-contained true --no-restore --output $publishDirectory
           Copy-Item -LiteralPath (Join-Path $publishDirectory 'runtimes\win-x64\native\WebView2Loader.dll') -Destination (Join-Path $publishDirectory 'WebView2Loader.dll') -Force
           foreach ($relativePath in @('readboard.exe', 'WebView\index.html', 'WebView2Loader.dll')) {
