@@ -45,6 +45,17 @@ npm run test:webview:host
 
 该测试每次从当前源码 fresh publish `readboard.exe`，为每个场景创建独立应用目录和 WebView2 profile，通过动态 TCP fake host 与 CDP 驱动真实 Evergreen WebView2。它串行、零 retry，验证首个权威快照与生产 shell close 的 shutdown wire、配置、进程和 CDP target 退出；不要在 WSL 的 UNC 工作目录中通过 `npm.cmd` 运行。
 
+CI 将真实 host E2E 分为两个非 required Windows jobs：build job 只 publish 一次 Release artifact；core job 运行首快照、Control Center bridge 和 Settings Save/restart；extended job 在 core 后运行 Cancel、完整 analysis actions 和 shell close。两个 job 均使用 Evergreen WebView2 Runtime、单 worker、零 retry。失败产物位于 GitHub Actions artifact，包含 semantic DOM、截图、console/page errors、TCP wire、进程输出、配置、Runtime 版本和 cleanup 状态。
+
+本地按 job 分组运行（原生 Windows checkout）：
+
+```powershell
+npm run test:webview:host:core
+npm run test:webview:host:extended
+```
+
+CI 已构建 Release artifact 时，可通过 `READBOARD_PUBLISH_DIRECTORY` 指向该目录，避免测试 job 重复 publish；不设置时，host suite 保持本地 fresh publish fallback。
+
 只跑一组测试：
 
 ```powershell
