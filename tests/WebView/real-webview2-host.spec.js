@@ -42,7 +42,7 @@ test("real Release ReadBoard publishes its first authoritative WebView2 snapshot
 });
 
 
-test("real Control Center exchanges version, platform, and resume analysis state with its host", async ({}, testInfo) => {
+test("real Control Center exchanges version and platform state with its host", async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
 
@@ -61,9 +61,15 @@ test("real Control Center exchanges version, platform, and resume analysis state
       const configuration = await readBoard.readConfigurationFiles();
       return JSON.parse(configuration["config.readboard.json"].replace(/^\uFEFF/, "")).SyncMode;
     }).toBe(6);
+  });
+});
 
+test("real Control Center waits for authoritative analysis observations", async ({}, testInfo) => {
+  await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
+    await readBoard.host.waitForExactLine("ready");
     const analysis = readBoard.page.locator('[data-command="sync.toggleAnalysis"]');
     const analysisLabel = readBoard.page.locator("#analysis-label");
+
     await readBoard.host.sendLine("analysisState paused");
     await expect(analysisLabel).toHaveText("Resume Analysis");
     await expect(analysis).toHaveAttribute("aria-pressed", "false");
@@ -77,6 +83,15 @@ test("real Control Center exchanges version, platform, and resume analysis state
     await readBoard.host.sendLine("analysisState running");
     await expect(analysisLabel).toHaveText("Pause Analysis");
     await expect(analysis).toHaveAttribute("aria-pressed", "true");
+
+    await analysis.click();
+    await readBoard.host.waitForExactLine("noponder");
+    await expect(analysisLabel).toHaveText("Pause Analysis");
+    await expect(analysis).toHaveAttribute("aria-pressed", "true");
+
+    await readBoard.host.sendLine("analysisState paused");
+    await expect(analysisLabel).toHaveText("Resume Analysis");
+    await expect(analysis).toHaveAttribute("aria-pressed", "false");
   });
 });
 
