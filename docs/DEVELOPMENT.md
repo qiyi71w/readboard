@@ -36,6 +36,15 @@ npm run test:webview
 
 脚本会自动准备 Chromium，并验证 snapshot 动态文本、语言切换日志、校验错误和 accessibility 文本。
 
+真实 WebView2 宿主 E2E（仅原生 Windows checkout；需 Evergreen WebView2 Runtime、.NET 10 和上述 Node 依赖）：
+
+```powershell
+$env:DOTNET_EXE = "C:\Users\admin\.dotnet\dotnet.exe"
+npm run test:webview:host
+```
+
+该测试每次从当前源码 fresh publish `readboard.exe`，为每个场景创建独立应用目录和 WebView2 profile，通过动态 TCP fake host 与 CDP 驱动真实 Evergreen WebView2。它串行、零 retry，验证首个权威快照与生产 shell close 的 shutdown wire、配置、进程和 CDP target 退出；不要在 WSL 的 UNC 工作目录中通过 `npm.cmd` 运行。
+
 只跑一组测试：
 
 ```powershell
