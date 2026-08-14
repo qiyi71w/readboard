@@ -45,6 +45,7 @@ test("real Control Center exchanges version, platform, and resume analysis state
       .filter(entry => entry.direction === "inbound")
       .map(entry => entry.line)
       .find(line => /^version: \d+$/.test(line)) || null).toMatch(/^version: \d+$/);
+    await expect(readBoard.page.locator("#log-list")).toContainText("Host communication active");
     await expect(readBoard.page.locator("#host-state")).toHaveText("Host communication active");
     await expect(readBoard.page.locator("#log-list")).toContainText("Host mode started; ReadBoard is ready");
 
@@ -66,6 +67,10 @@ test("real Control Center exchanges version, platform, and resume analysis state
     await readBoard.host.waitForExactLine("resumeponder");
     await expect(analysisLabel).toHaveText("Resume Analysis");
     await expect(analysis).toHaveAttribute("aria-pressed", "false");
+
+    await readBoard.host.sendLine("analysisState running");
+    await expect(analysisLabel).toHaveText("Pause Analysis");
+    await expect(analysis).toHaveAttribute("aria-pressed", "true");
   });
 });
 
