@@ -3,7 +3,9 @@
   "private": true,
   "scripts": {
     "test:webview": "playwright install chromium && playwright test tests/WebView/app-rendering.spec.js --reporter=line",
-    "test:webview:host": "playwright test tests/WebView/real-webview2-host.spec.js --reporter=line --workers=1 --retries=0"
+    "test:webview:host": "playwright test tests/WebView/real-webview2-host.spec.js --reporter=line --workers=1 --retries=0",
+    "test:webview:host:core": "playwright test tests/WebView/real-webview2-host.spec.js --grep \"first authoritative|exchanges version|Save persists\" --reporter=line --workers=1 --retries=0",
+    "test:webview:host:extended": "playwright test tests/WebView/real-webview2-host.spec.js --grep \"Cancel|waits for host analysis|shell close\" --reporter=line --workers=1 --retries=0"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1"

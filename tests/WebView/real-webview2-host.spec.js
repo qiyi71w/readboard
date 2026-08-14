@@ -19,7 +19,9 @@ test.beforeAll(async () => {
 }, 300_000);
 
 test.afterAll(async () => {
-  await removeDirectory(publishDirectory);
+  if (!process.env.READBOARD_PUBLISH_DIRECTORY) {
+    await removeDirectory(publishDirectory);
+  }
 });
 
 test("real Release ReadBoard publishes its first authoritative WebView2 snapshot", async ({}, testInfo) => {

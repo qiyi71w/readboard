@@ -168,6 +168,15 @@ async function publishRelease() {
     throw new Error("The real WebView2 host test requires Windows and Evergreen WebView2.");
   }
 
+  const publishedDirectory = process.env.READBOARD_PUBLISH_DIRECTORY;
+  if (publishedDirectory) {
+    const resolvedDirectory = path.resolve(publishedDirectory);
+    await fs.access(path.join(resolvedDirectory, APP_EXECUTABLE));
+    await fs.access(path.join(resolvedDirectory, "WebView", "index.html"));
+    await fs.access(path.join(resolvedDirectory, "WebView2Loader.dll"));
+    return resolvedDirectory;
+  }
+
   const publishDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "readboard-webview2-publish-"));
   const dotnet = process.env.DOTNET_EXE || "dotnet";
   const args = [

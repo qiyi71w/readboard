@@ -1,0 +1,178 @@
+name: WebView2 Host E2E
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "readboard/**"
+      - "tests/WebView/**"
+      - "package.json"
+      - "package-lock.json"
+      - "global.json"
+      - ".github/workflows/webview2-host-e2e.yml"
+  schedule:
+    - cron: "0 */6 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: WebView2 Host E2E Build
+    runs-on: windows-2022
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10.0.104 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.104"
+
+      - name: Restore and publish fresh Release application
+        shell: pwsh
+        run: |
+          $publishDirectory = Join-Path $PWD 'artifacts\readboard-publish'
+          dotnet restore readboard.sln --configfile NuGet.Config
+          dotnet publish readboard/readboard.csproj -c Release -r win-x64 --self-contained true --no-restore --output $publishDirectory
+          Copy-Item -LiteralPath (Join-Path $publishDirectory 'runtimes\win-x64\native\WebView2Loader.dll') -Destination (Join-Path $publishDirectory 'WebView2Loader.dll') -Force
+          foreach ($relativePath in @('readboard.exe', 'WebView\index.html', 'WebView2Loader.dll')) {
+            $path = Join-Path $publishDirectory $relativePath
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Fresh Release publish did not produce $relativePath."
+            }
+          }
+
+      - name: Upload fresh Release application
+        uses: actions/upload-artifact@v4
+        with:
+          name: readboard-webview2-e2e-publish
+          path: artifacts/readboard-publish
+          if-no-files-found: error
+
+  core:
+    name: WebView2 Host E2E Core
+    needs: build
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10.0.104 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.104"
+
+      - name: Download fresh Release application
+        uses: actions/download-artifact@v4
+        with:
+          name: readboard-webview2-e2e-publish
+          path: readboard-publish
+
+      - name: Ensure Evergreen WebView2 Runtime
+        shell: pwsh
+        run: |
+          $clientKey = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $runtimeVersion = (Get-ItemProperty -LiteralPath $clientKey -Name pv -ErrorAction SilentlyContinue).pv
+          if ([string]::IsNullOrWhiteSpace($runtimeVersion)) {
+            $bootstrapper = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebView2Setup.exe'
+            Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $bootstrapper
+            $installer = Start-Process -FilePath $bootstrapper -ArgumentList '/silent', '/install' -Wait -PassThru
+            if ($installer.ExitCode -ne 0) {
+              throw "Evergreen WebView2 bootstrapper failed with exit code $($installer.ExitCode)."
+            }
+            $runtimeVersion = (Get-ItemProperty -LiteralPath $clientKey -Name pv -ErrorAction SilentlyContinue).pv
+          }
+          if ([string]::IsNullOrWhiteSpace($runtimeVersion)) {
+            throw 'Evergreen WebView2 Runtime registration pv is unavailable after preparation.'
+          }
+          "Evergreen WebView2 Runtime pv: $runtimeVersion" | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'webview2-runtime-version.txt')
+
+      - name: Install Node dependencies
+        shell: pwsh
+        run: npm ci
+
+      - name: Run core real WebView2 host E2E
+        shell: pwsh
+        env:
+          READBOARD_PUBLISH_DIRECTORY: ${{ github.workspace }}\readboard-publish
+        run: npm run test:webview:host:core
+
+      - name: Upload core E2E diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webview2-host-e2e-core-diagnostics
+          path: |
+            test-results
+            playwright-report
+            ${{ runner.temp }}\webview2-runtime-version.txt
+          if-no-files-found: warn
+
+  extended:
+    name: WebView2 Host E2E Extended
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    needs:
+      - build
+      - core
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10.0.104 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.104"
+
+      - name: Download fresh Release application
+        uses: actions/download-artifact@v4
+        with:
+          name: readboard-webview2-e2e-publish
+          path: readboard-publish
+
+      - name: Ensure Evergreen WebView2 Runtime
+        shell: pwsh
+        run: |
+          $clientKey = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $runtimeVersion = (Get-ItemProperty -LiteralPath $clientKey -Name pv -ErrorAction SilentlyContinue).pv
+          if ([string]::IsNullOrWhiteSpace($runtimeVersion)) {
+            $bootstrapper = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebView2Setup.exe'
+            Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $bootstrapper
+            $installer = Start-Process -FilePath $bootstrapper -ArgumentList '/silent', '/install' -Wait -PassThru
+            if ($installer.ExitCode -ne 0) {
+              throw "Evergreen WebView2 bootstrapper failed with exit code $($installer.ExitCode)."
+            }
+            $runtimeVersion = (Get-ItemProperty -LiteralPath $clientKey -Name pv -ErrorAction SilentlyContinue).pv
+          }
+          if ([string]::IsNullOrWhiteSpace($runtimeVersion)) {
+            throw 'Evergreen WebView2 Runtime registration pv is unavailable after preparation.'
+          }
+          "Evergreen WebView2 Runtime pv: $runtimeVersion" | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'webview2-runtime-version.txt')
+
+      - name: Install Node dependencies
+        shell: pwsh
+        run: npm ci
+
+      - name: Run extended real WebView2 host E2E
+        shell: pwsh
+        env:
+          READBOARD_PUBLISH_DIRECTORY: ${{ github.workspace }}\readboard-publish
+        run: npm run test:webview:host:extended
+
+      - name: Upload extended E2E diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webview2-host-e2e-extended-diagnostics
+          path: |
+            test-results
+            playwright-report
+            ${{ runner.temp }}\webview2-runtime-version.txt
+          if-no-files-found: warn
