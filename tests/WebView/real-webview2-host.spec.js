@@ -5,6 +5,10 @@ const {
   withRealWebView2Host
 } = require("./real-webview2-host-fixture");
 
+function readPersistedSyncInterval(configuration) {
+  return JSON.parse(configuration["config.readboard.json"].replace(/^\uFEFF/, "")).SyncIntervalMs;
+}
+
 let publishDirectory;
 
 test.describe.configure({ mode: "serial" });
@@ -95,6 +99,63 @@ test("real Control Center waits for host analysis observations after pause", asy
     await expect(analysis).toHaveAttribute("aria-pressed", "false");
   });
 });
+test("real Settings Cancel discards its draft and leaves persisted configuration unchanged", async ({}, testInfo) => {
+  await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
+    await readBoard.host.waitForExactLine("ready");
+    const initialConfiguration = await readBoard.readConfigurationFiles();
+    expect(readPersistedSyncInterval(initialConfiguration)).toBe(200);
+
+    await readBoard.page.locator('.nav-item[data-page="settings"]').click();
+    const syncInterval = readBoard.page.locator('[data-setting="syncInterval"]');
+    await expect(syncInterval).toHaveValue("200");
+    await syncInterval.fill("350");
+    await syncInterval.press("Tab");
+    await expect(readBoard.page.locator("#settings-dirty")).toHaveText("You have unsaved changes");
+
+    await readBoard.page.locator('[data-command="settings.cancel"]').click();
+    await expect(readBoard.page.locator("#settings-dirty")).toHaveText("No unsaved changes");
+    await expect(syncInterval).toHaveValue("200");
+    expect(readPersistedSyncInterval(await readBoard.readConfigurationFiles())).toBe(200);
+    expect(await readBoard.readConfigurationTransactionDirectories()).toEqual([]);
+
+    await readBoard.page.locator('.nav-item[data-page="controlCenter"]').click();
+    await readBoard.page.locator('.nav-item[data-page="settings"]').click();
+    await expect(syncInterval).toHaveValue("200");
+    await expect(readBoard.page.locator("#settings-dirty")).toHaveText("No unsaved changes");
+    await readBoard.quitFromHost();
+    expect(readPersistedSyncInterval(readBoard.postTeardownConfiguration)).toBe(200);
+    expect(await readBoard.readConfigurationTransactionDirectories()).toEqual([]);
+  }, { seedSyncInterval: 200 });
+});
+
+test("real Settings Save persists its draft across a fresh WebView2 profile restart", async ({}, testInfo) => {
+  await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
+    await readBoard.host.waitForExactLine("ready");
+    const firstProfile = readBoard.profileDirectory;
+
+    await readBoard.page.locator('.nav-item[data-page="settings"]').click();
+    const syncInterval = readBoard.page.locator('[data-setting="syncInterval"]');
+    await expect(syncInterval).toHaveValue("200");
+    await syncInterval.fill("350");
+    await syncInterval.press("Tab");
+    await expect(readBoard.page.locator("#settings-dirty")).toHaveText("You have unsaved changes");
+
+    await readBoard.page.locator('[data-command="settings.save"]').click();
+    await expect(readBoard.page.locator("#settings-dirty")).toHaveText("No unsaved changes");
+    expect(readPersistedSyncInterval(await readBoard.readConfigurationFiles())).toBe(350);
+    expect(await readBoard.readConfigurationTransactionDirectories()).toEqual([]);
+
+    await readBoard.restartWithFreshProfile();
+    expect(readBoard.profileDirectory).not.toBe(firstProfile);
+    await readBoard.host.waitForExactLine("ready");
+    await readBoard.page.locator('.nav-item[data-page="settings"]').click();
+    await expect(readBoard.page.locator('[data-setting="syncInterval"]')).toHaveValue("350");
+    await expect(readBoard.page.locator("#settings-dirty")).toHaveText("No unsaved changes");
+    expect(readPersistedSyncInterval(await readBoard.readConfigurationFiles())).toBe(350);
+    expect(await readBoard.readConfigurationTransactionDirectories()).toEqual([]);
+  }, { seedSyncInterval: 200 });
+});
+
 test("production shell close sends ordered shutdown and exits cleanly", async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
