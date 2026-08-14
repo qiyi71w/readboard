@@ -35,6 +35,61 @@ test("real Release ReadBoard publishes its first authoritative WebView2 snapshot
   });
 });
 
+
+test("real Control Center exchanges version, platform, and resume analysis state with its host", async ({}, testInfo) => {
+  await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
+    await readBoard.host.waitForExactLine("ready");
+
+    await readBoard.host.sendLine("version");
+    await expect.poll(() => readBoard.host.transcript
+      .filter(entry => entry.direction === "inbound")
+      .map(entry => entry.line)
+      .find(line => /^version: \d+$/.test(line)) || null).toMatch(/^version: \d+$/);
+    await expect(readBoard.page.locator("#host-state")).toHaveText("Host communication active");
+    await expect(readBoard.page.locator("#log-list")).toContainText("Host mode started; ReadBoard is ready");
+
+    await readBoard.page.locator('input[name="platform"][value="yike"]').check();
+    await expect(readBoard.page.locator("#context-platform")).toHaveText("Yike");
+    await expect.poll(async () => {
+      const configuration = await readBoard.readConfigurationFiles();
+      return JSON.parse(configuration["config.readboard.json"].replace(/^\uFEFF/, "")).SyncMode;
+    }).toBe(6);
+
+    const analysis = readBoard.page.locator('[data-command="sync.toggleAnalysis"]');
+    const analysisLabel = readBoard.page.locator("#analysis-label");
+    await readBoard.host.sendLine("analysisState paused");
+    await expect(analysisLabel).toHaveText("Resume Analysis");
+    await expect(analysis).toHaveAttribute("aria-pressed", "false");
+    await expect(analysis).toBeEnabled();
+
+    await analysis.click();
+    await readBoard.host.waitForExactLine("resumeponder");
+    await expect(analysisLabel).toHaveText("Resume Analysis");
+    await expect(analysis).toHaveAttribute("aria-pressed", "false");
+  });
+});
+
+test("real Control Center waits for host analysis observations after pause", async ({}, testInfo) => {
+  await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
+    await readBoard.host.waitForExactLine("ready");
+    const analysis = readBoard.page.locator('[data-command="sync.toggleAnalysis"]');
+    const analysisLabel = readBoard.page.locator("#analysis-label");
+
+    await readBoard.host.sendLine("analysisState running");
+    await expect(analysisLabel).toHaveText("Pause Analysis");
+    await expect(analysis).toHaveAttribute("aria-pressed", "true");
+    await expect(analysis).toBeEnabled();
+
+    await analysis.click();
+    await readBoard.host.waitForExactLine("noponder");
+    await expect(analysisLabel).toHaveText("Pause Analysis");
+    await expect(analysis).toHaveAttribute("aria-pressed", "true");
+
+    await readBoard.host.sendLine("analysisState paused");
+    await expect(analysisLabel).toHaveText("Resume Analysis");
+    await expect(analysis).toHaveAttribute("aria-pressed", "false");
+  });
+});
 test("production shell close sends ordered shutdown and exits cleanly", async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
