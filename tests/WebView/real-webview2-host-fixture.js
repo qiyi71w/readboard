@@ -20,6 +20,27 @@ const SHUTDOWN_LINES = ["stopsync", "nobothSync", "endsync"];
 function waitForPollingTurn(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
+async function allocateAvailableTcpPort() {
+  const server = net.createServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    if (typeof address !== "object" || !address || !Number.isInteger(address.port) || address.port < 1) {
+      throw new Error(`Failed to allocate a non-zero TCP port: ${JSON.stringify(address)}`);
+    }
+    return address.port;
+  } finally {
+    if (server.listening) {
+      await new Promise((resolve, reject) => {
+        server.close(error => error ? reject(error) : resolve());
+      });
+    }
+  }
+}
+
 
 async function waitForCondition(description, predicate, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
@@ -241,31 +262,6 @@ async function removeDirectory(directory) {
     },
     PROFILE_CLEANUP_TIMEOUT_MS
   );
-}
-async function findNamedFile(directory, fileName) {
-  let entries;
-  try {
-    entries = await fs.readdir(directory, { withFileTypes: true });
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  }
-
-  for (const entry of entries) {
-    const candidate = path.join(directory, entry.name);
-    if (entry.isFile() && entry.name === fileName) {
-      return candidate;
-    }
-    if (entry.isDirectory()) {
-      const nested = await findNamedFile(candidate, fileName);
-      if (nested) {
-        return nested;
-      }
-    }
-  }
-  return null;
 }
 
 
@@ -583,7 +579,10 @@ class RealWebView2HostFixture {
     this.hostPort = await this.host.start();
     this.cdpPort = null;
     this.cdpEndpoint = null;
+    this.cdpPort = await allocateAvailableTcpPort();
+    this.cdpEndpoint = `http://127.0.0.1:${this.cdpPort}`;
     this.pageClosed = false;
+
     this.browser = null;
     this.page = null;
     this.process = new ReadBoardProcess(
@@ -595,13 +594,14 @@ class RealWebView2HostFixture {
         env: {
           ...process.env,
           WEBVIEW2_USER_DATA_FOLDER: this.profileDirectory,
-          WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: "--remote-debugging-port=0"
+          WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${this.cdpPort}`
         }
       }
     ).start();
     await this.host.waitForConnection();
     await this.attachToPage();
   }
+
 
   async restartWithFreshProfile() {
     if (!this.process || !this.process.isRunning())
@@ -633,27 +633,6 @@ class RealWebView2HostFixture {
   }
 
   async attachToPage() {
-    await waitForCondition(
-      "the WebView2 DevToolsActivePort file",
-      async () => {
-        if (!this.process.isRunning()) {
-          throw createStopPollingError(`ReadBoard exited before CDP became available: ${JSON.stringify(this.process.exitResult)}`);
-        }
-        const activePortFile = await findNamedFile(this.profileDirectory, "DevToolsActivePort");
-        if (!activePortFile) {
-          return false;
-        }
-        const [portText] = (await fs.readFile(activePortFile, "utf8")).split(/\r?\n/);
-        const port = Number(portText);
-        if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-          return false;
-        }
-        this.cdpPort = port;
-        this.cdpEndpoint = `http://127.0.0.1:${port}`;
-        return true;
-      },
-      BROWSER_READY_TIMEOUT_MS
-    );
 
     await waitForCondition(
       "the WebView2 CDP endpoint",
@@ -661,14 +640,25 @@ class RealWebView2HostFixture {
         if (!this.process.isRunning()) {
           throw createStopPollingError(`ReadBoard exited before CDP connected: ${JSON.stringify(this.process.exitResult)}`);
         }
-        if (!this.browser) {
-          try {
-            this.browser = await chromium.connectOverCDP(this.cdpEndpoint);
-          } catch {
+        const controller = new AbortController();
+        try {
+          const response = await withTimeout(
+            () => fetch(`${this.cdpEndpoint}/json/version`, { signal: controller.signal }),
+            CDP_OPERATION_TIMEOUT_MS,
+            "the WebView2 CDP endpoint"
+          );
+          if (!response.ok) {
             return false;
           }
+          if (!this.browser) {
+            this.browser = await chromium.connectOverCDP(this.cdpEndpoint);
+          }
+          return true;
+        } catch {
+          return false;
+        } finally {
+          controller.abort();
         }
-        return true;
       },
       BROWSER_READY_TIMEOUT_MS
     );
