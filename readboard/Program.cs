@@ -730,7 +730,12 @@ namespace readboard
             return candidate;
         }
 
-        private static SystemColorMode GetSystemColorMode(int colorMode)
+        internal static void ApplyColorMode(int colorMode)
+        {
+            Application.SetColorMode(GetSystemColorMode(colorMode));
+        }
+
+        internal static SystemColorMode GetSystemColorMode(int colorMode)
         {
             switch (colorMode)
             {

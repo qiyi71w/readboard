@@ -474,7 +474,7 @@ namespace Readboard.VerificationTests.Host
                         throw new IOException("catalog failed");
                     },
                     delegate { events.Add("title"); },
-                    delegate { events.Add("theme"); },
+                    delegate(int colorMode) { events.Add("theme:" + colorMode); },
                     delegate(bool enabled) { events.Add("background:" + enabled); });
 
             Assert.Throws<IOException>(delegate { effects.ApplyLanguagePreference("en"); });
@@ -484,13 +484,13 @@ namespace Readboard.VerificationTests.Host
             effects = new MainForm.MainFormSettingsDraftRuntimeEffects(
                 delegate(string preference) { },
                 delegate { events.Add("title"); },
-                delegate { events.Add("theme"); },
+                delegate(int colorMode) { events.Add("theme:" + colorMode); },
                 delegate(bool enabled) { events.Add("background:" + enabled); });
             effects.ApplyTheme(AppConfig.ColorModeDark);
             effects.ApplyBackgroundAnalysis(false);
 
             Assert.Equal(
-                new[] { "theme", "background:False" },
+                new[] { "theme:" + AppConfig.ColorModeDark, "background:False" },
                 events);
         }
 

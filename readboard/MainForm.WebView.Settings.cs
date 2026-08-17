@@ -182,12 +182,8 @@ namespace readboard
                     new MainFormSettingsDraftRuntimeEffects(
                         delegate(string preference) { Program.ApplyLanguagePreference(preference); },
                         ApplyMainWindowTitle,
-                        ApplyMainFormUi,
-                        delegate(bool enabled)
-                        {
-                            resetBtnKeepSyncName();
-                            sessionCoordinator.SendPonderStatus(enabled);
-                        }));
+                        Program.ApplyColorMode,
+                        sessionCoordinator.SendPonderStatus));
                 webViewSettingsDraft = draft;
             }
             return webViewSettingsDraft;
@@ -482,13 +478,13 @@ namespace readboard
         {
             private readonly Action<string> applyLanguagePreference;
             private readonly Action applyMainWindowTitle;
-            private readonly Action applyTheme;
+            private readonly Action<int> applyTheme;
             private readonly Action<bool> applyBackgroundAnalysis;
 
             public MainFormSettingsDraftRuntimeEffects(
                 Action<string> applyLanguagePreference,
                 Action applyMainWindowTitle,
-                Action applyTheme,
+                Action<int> applyTheme,
                 Action<bool> applyBackgroundAnalysis)
             {
                 this.applyLanguagePreference = applyLanguagePreference ?? throw new ArgumentNullException("applyLanguagePreference");
@@ -511,7 +507,7 @@ namespace readboard
 
             public void ApplyTheme(int colorMode)
             {
-                applyTheme();
+                applyTheme(colorMode);
             }
 
             public void ApplyBackgroundAnalysis(bool enabled)

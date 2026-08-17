@@ -2651,7 +2651,6 @@ namespace readboard
             this.btnForceRebuild.Text = getLangStr("MainForm_btnForceRebuild");
             this.btnClearBoard.Text = getLangStr("MainForm_btnClearBoard");
             ResetMainWindowTitle();
-            ApplyMainFormUi();
             InitializeWebViewShell();
             isInitializingProtocolState = false;
         }
@@ -3014,8 +3013,6 @@ namespace readboard
                 ApplySavedWebViewWindowBounds();
                 webViewWindowBoundsAppliedAfterHandle = true;
             }
-            if (!isShuttingDown && !IsDisposed && !Disposing && webView == null)
-                ApplyMainFormUi();
             FlushPendingProtocolCommands();
             if (!closeRequestedBeforeHandle || IsDisposed)
                 return;
@@ -3028,10 +3025,7 @@ namespace readboard
             if (isShuttingDown || IsDisposed || Disposing)
                 return;
             factor = GetCurrentDpiScale();
-            if (webView == null)
-                ApplyMainFormUi();
-            else
-                UpdateWebViewMinimumSizeForCurrentDpi();
+            UpdateWebViewMinimumSizeForCurrentDpi();
         }
 
         private void DisposeInputHooks()
