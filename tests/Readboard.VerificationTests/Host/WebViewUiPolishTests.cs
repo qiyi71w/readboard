@@ -119,6 +119,23 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void MessageDialog_ProjectsConfirmAndCancelLabels()
+        {
+            ReadBoardDialogUiState dialog = MainForm.CreateWebViewMessageDialog(
+                "WebView_syncFailedTitle",
+                "noSelectedBoardAndFailed");
+            ReadBoardDialogUiState projected = MainForm.ResolveWebViewDialogState(
+                dialog,
+                delegate(string key) { return key + " localized"; },
+                delegate(string key) { return key + " default"; });
+
+            Assert.Equal("WebView_syncFailedTitle localized", projected.Title);
+            Assert.Equal("noSelectedBoardAndFailed localized", projected.Message);
+            Assert.Equal("SettingsForm_btnConfirm localized", projected.ConfirmLabel);
+            Assert.Equal("SettingsForm_btnCancel localized", projected.CancelLabel);
+        }
+
+        [Fact]
         public void SettingsAndAbout_UseCurrentProductContent()
         {
             string html = LoadWebViewAsset("index.html");

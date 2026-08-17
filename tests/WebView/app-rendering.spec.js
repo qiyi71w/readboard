@@ -218,6 +218,29 @@ test("renders dynamic snapshots, language-switched logs, and accessible controls
   await expect(page.locator("#log-list")).not.toContainText("Initial warning");
 });
 
+test("renders generic dialog confirm and cancel labels", async ({ page }) => {
+  await page.goto(baseUrl + "/index.html");
+
+  await page.evaluate(() => {
+    const snapshot = window.readboardPreview.getState();
+    snapshot.update = { open: false };
+    snapshot.identity = { open: false };
+    snapshot.dialog = {
+      open: true,
+      title: "无法同步",
+      heading: "无法同步",
+      message: "未选择棋盘,同步失败",
+      confirmLabel: "确认",
+      cancelLabel: "取消"
+    };
+    window.readboardPreview.setState(snapshot);
+  });
+
+  await expect(page.locator("#modal-title")).toHaveText("无法同步");
+  await expect(page.locator('#modal-actions button[data-command="dialog.cancel"]')).toHaveText("取消");
+  await expect(page.locator('#modal-actions button[data-command="dialog.confirm"]')).toHaveText("确认");
+});
+
 test("hosted shell waits for a complete backend snapshot", async ({ page }) => {
   await page.addInitScript(() => {
     window.__readboardPostedMessages = [];

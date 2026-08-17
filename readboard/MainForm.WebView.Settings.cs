@@ -363,6 +363,18 @@ namespace readboard
             webViewSettingsDialog = CreateWebViewDialog(kind);
         }
 
+        internal static ReadBoardDialogUiState CreateWebViewMessageDialog(string titleKey, string messageKey)
+        {
+            return new ReadBoardDialogUiState
+            {
+                Open = true,
+                TitleMessage = SemanticMessage.Create(titleKey),
+                MessageMessage = SemanticMessage.Create(messageKey),
+                ConfirmLabelMessage = SemanticMessage.Create("SettingsForm_btnConfirm"),
+                CancelLabelMessage = SemanticMessage.Create("SettingsForm_btnCancel")
+            };
+        }
+
         private static ReadBoardDialogUiState CreateWebViewDialog(string kind)
         {
             ReadBoardDialogUiState dialog = new ReadBoardDialogUiState

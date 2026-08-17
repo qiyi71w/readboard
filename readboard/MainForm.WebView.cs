@@ -900,24 +900,16 @@ namespace readboard
             }
             catch (Exception)
             {
-                webViewSettingsDialog = new ReadBoardDialogUiState
-                {
-                    Open = true,
-                    TitleMessage = SemanticMessage.Create("WebView_manualOpenFailedTitle"),
-                    MessageMessage = SemanticMessage.Create("noHelpFile")
-                };
+                webViewSettingsDialog = CreateWebViewMessageDialog(
+                    "WebView_manualOpenFailedTitle",
+                    "noHelpFile");
                 return true;
             }
         }
 
         private void ShowWebViewMessage(string titleKey, string messageKey)
         {
-            webViewSettingsDialog = new ReadBoardDialogUiState
-            {
-                Open = true,
-                TitleMessage = SemanticMessage.Create(titleKey),
-                MessageMessage = SemanticMessage.Create(messageKey)
-            };
+            webViewSettingsDialog = CreateWebViewMessageDialog(titleKey, messageKey);
             AddWebViewSemanticLog(
                 "WARN",
                 SemanticMessage.CreateLog("WARN", messageKey));
