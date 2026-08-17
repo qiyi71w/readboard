@@ -202,8 +202,6 @@ namespace readboard
                 Dock = DockStyle.Fill,
                 DefaultBackgroundColor = Color.FromArgb(243, 246, 250)
             };
-            foreach (Control control in Controls)
-                control.Visible = false;
             Controls.Add(webView);
             webView.BringToFront();
             Shown += InitializeWebViewAsync;
