@@ -85,9 +85,6 @@ namespace readboard
         private bool isInitializingProtocolState = true;
         private bool hostedUpdateSupported = false;
         private bool hostedUpdatePackageV2Supported = false;
-        private bool suppressAutoPlayColorModeEvents = false;
-        private bool suppressAutoPlayMoveModeEvents = false;
-        private bool suppressControlCenterProjectionEvents = false;
         private readonly WebViewStatePublisher webViewStatePublisher;
         private readonly WebViewWindowCommandRuntime webViewWindowCommandRuntime;
         private readonly WebViewUpdateCheckJourney webViewUpdateCheckJourney;
@@ -1272,86 +1269,14 @@ namespace readboard
             }
         }
 
-        private void setNativeBoardMode(int syncType)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (suppressControlCenterProjectionEvents)
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetPlatform((SyncMode)syncType));
-            if (result.ShouldPublishSnapshot)
-                PostWebViewState();
-        }
-
-        private void setManualSelectionMode(int syncType)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (suppressControlCenterProjectionEvents)
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetPlatform((SyncMode)syncType));
-            if (result.ShouldPublishSnapshot)
-                PostWebViewState();
-        }
 
         private void ApplySyncModeControlState()
         {
             if (CurrentSyncType != TYPE_YIKE)
                 ClearYikeContext();
-            ApplyControlCenterNativeEnablement();
-            if (controlCenterRuntime == null || !controlCenterRuntime.Snapshot.AutoPlayEnabled)
-                UpdateAutoPlayColorStatus(null);
             ResetMainWindowTitle();
         }
 
-        private void ApplyControlCenterNativeEnablement()
-        {
-            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime == null
-                ? null
-                : controlCenterRuntime.Snapshot;
-            if (controlCenter == null)
-                return;
-
-            bool configurationEnabled = controlCenter.ConfigurationEnabled;
-            bool customBoardDimensionsEnabled = controlCenter.CustomBoardDimensionsEnabled;
-            bool customBoardSizeEnabled = controlCenter.CustomBoardSizeEnabled;
-            bool twoWaySyncEnabled = controlCenter.TwoWaySyncEnabled;
-            bool showOnBoardEnabled = controlCenter.ShowOnBoardEnabled;
-
-            rdoFox.Enabled = configurationEnabled;
-            rdoFoxBack.Enabled = configurationEnabled;
-            rdoYike.Enabled = configurationEnabled;
-            rdoTygem.Enabled = configurationEnabled;
-            rdoBack.Enabled = configurationEnabled;
-            rdoSina.Enabled = configurationEnabled;
-            rdo19x19.Enabled = configurationEnabled;
-            rdo13x13.Enabled = configurationEnabled;
-            rdo9x9.Enabled = configurationEnabled;
-            rdoOtherBoard.Enabled = customBoardSizeEnabled;
-            rdoFore.Enabled = configurationEnabled;
-            txtBoardWidth.Enabled = customBoardDimensionsEnabled;
-            txtBoardHeight.Enabled = customBoardDimensionsEnabled;
-            chkBothSync.Enabled = twoWaySyncEnabled;
-            chkShowInBoard.Enabled = showOnBoardEnabled;
-            chkAutoPlay.Enabled = controlCenter.AutoPlayToggleEnabled;
-            radioBlack.Enabled = controlCenter.ManualColorEnabled;
-            radioWhite.Enabled = controlCenter.ManualColorEnabled;
-            radioAutoPlayColor.Enabled = controlCenter.FoxAutoColorEnabled;
-            radioAutoPlayMoveFirst.Enabled = controlCenter.MoveModeEnabled;
-            radioAutoPlayMoveGma.Enabled = controlCenter.MoveModeEnabled;
-            btnFoxAutoPlayIdentity.Enabled = controlCenter.IdentityEnabled;
-            textBox1.Enabled = controlCenter.AiTimeEnabled;
-            textBox2.Enabled = controlCenter.PlayoutsEnabled;
-            textBox3.Enabled = controlCenter.FirstPolicyEnabled;
-            btnFastSync.Enabled = controlCenter.QuickSyncEnabled;
-            btnKeepSync.Enabled = controlCenter.ContinuousSyncEnabled;
-            btnOneTimeSync.Enabled = controlCenter.OneTimeSyncEnabled;
-            btnClickBoard.Enabled = controlCenter.BoardSelectionInsideEnabled;
-            btnCircleBoard.Enabled = controlCenter.BoardSelectionRectangleEnabled;
-            btnCircleRow1.Enabled = controlCenter.BoardSelectionLine1Enabled;
-        }
 
         private void SetSyncBoth(bool enabled)
         {
@@ -1568,49 +1493,19 @@ namespace readboard
 
         private void ApplyAutoPlayColorMode(AutoPlayColorMode mode)
         {
-            suppressAutoPlayColorModeEvents = true;
-            try
-            {
-                radioBlack.Checked = mode == AutoPlayColorMode.ManualBlack;
-                radioWhite.Checked = mode == AutoPlayColorMode.ManualWhite;
-                radioAutoPlayColor.Checked = mode == AutoPlayColorMode.FoxAuto;
-                if (mode == AutoPlayColorMode.ManualBlack || mode == AutoPlayColorMode.ManualWhite)
-                    lastManualAutoPlayColorMode = mode;
-            }
-            finally
-            {
-                suppressAutoPlayColorModeEvents = false;
-            }
+            if (mode == AutoPlayColorMode.ManualBlack || mode == AutoPlayColorMode.ManualWhite)
+                lastManualAutoPlayColorMode = mode;
 
             if (mode != AutoPlayColorMode.FoxAuto)
-            {
                 ClearFoxAutoPlayColorDetectionState();
-                UpdateAutoPlayColorStatus(null);
-            }
         }
 
-        private void ApplyAutoPlayMoveMode(AutoPlayMoveMode mode)
-        {
-            suppressAutoPlayMoveModeEvents = true;
-            try
-            {
-                radioAutoPlayMoveFirst.Checked = mode == AutoPlayMoveMode.FirstCandidate;
-                radioAutoPlayMoveGma.Checked = mode == AutoPlayMoveMode.GenmoveAnalyze;
-            }
-            finally
-            {
-                suppressAutoPlayMoveModeEvents = false;
-            }
-        }
 
         private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)
         {
             ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
             if (!controlCenter.AutoPlayEnabled)
-            {
-                UpdateAutoPlayColorStatus(null);
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
-            }
 
             FoxIdentityRecognitionResult recognition = null;
             AutoPlayColorResolution detected = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
@@ -1630,9 +1525,7 @@ namespace readboard
                     foxWindowContext,
                     recognition);
             }
-            AutoPlayColorResolution resolution = controlCenterRuntime.Snapshot.AutoPlayColorResolution;
-            UpdateAutoPlayColorStatus(resolution);
-            return resolution;
+            return controlCenterRuntime.Snapshot.AutoPlayColorResolution;
         }
 
         private AutoPlayColorResolution ResolveDetectedFoxAutoPlayColor(
@@ -1728,49 +1621,6 @@ namespace readboard
         }
 
 
-        private void UpdateAutoPlayColorStatus(AutoPlayColorResolution resolution)
-        {
-            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime == null
-                ? null
-                : controlCenterRuntime.Snapshot;
-            if (controlCenter == null
-                || controlCenter.AutoPlayColorMode != AutoPlayColorMode.FoxAuto
-                || resolution == null)
-            {
-                SetAutoPlayColorStatusText(string.Empty);
-                return;
-            }
-
-            switch (resolution.Status)
-            {
-                case AutoPlayColorStatus.Unconfigured:
-                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusUnconfigured"));
-                    return;
-                case AutoPlayColorStatus.RecognizedBlack:
-                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusBlack"));
-                    return;
-                case AutoPlayColorStatus.RecognizedWhite:
-                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusWhite"));
-                    return;
-                case AutoPlayColorStatus.UnsupportedPlatform:
-                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusUnsupported"));
-                    return;
-                case AutoPlayColorStatus.Spectating:
-                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusSpectating"));
-                    return;
-                default:
-                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusWaiting"));
-                    return;
-            }
-        }
-
-        private void SetAutoPlayColorStatusText(string text)
-        {
-            if (string.Equals(lblAutoPlayColorStatus.Text, text, StringComparison.Ordinal))
-                return;
-
-            lblAutoPlayColorStatus.Text = text;
-        }
 
         private FoxIdentitySelectionResult ClearSavedFoxAutoPlayIdentity()
         {
@@ -2825,16 +2675,6 @@ namespace readboard
 
         }
 
-        private void button3_Click(object sender, EventArgs e)
-        {
-            ApplyNativeControlCenterAction(ControlCenterActionIntent.SelectBoard(
-                ControlCenterBoardSelectionMode.Inside));
-        }
-
-        private void button4_Click(object sender, EventArgs e)
-        {
-            ApplyNativeControlCenterAction(ControlCenterActionIntent.OneTimeSync());
-        }
 
         [DllImport("user32.dll")]
         internal static extern IntPtr WindowFromPoint(Point Point);
@@ -2875,25 +2715,12 @@ namespace readboard
         [DllImport("user32.dll", EntryPoint = "FindWindow", SetLastError = true)]
         public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 
-        private void button5_Click(object sender, EventArgs e)
-        {
-            ApplyNativeControlCenterAction(ControlCenterActionIntent.ContinuousSync());
-        }
 
         private void stopSync()
         {
             sessionCoordinator.StopSyncSession();
         }
 
-        private void button6_Click(object sender, EventArgs e)
-        {
-            ApplyNativeControlCenterAction(ControlCenterActionIntent.ClearBoard());
-        }
-
-        private void btnForceRebuild_Click(object sender, EventArgs e)
-        {
-            ApplyNativeControlCenterAction(ControlCenterActionIntent.ForceRebuild());
-        }
 
         private void ArmForceRebuildAction()
         {
@@ -2905,43 +2732,6 @@ namespace readboard
             }
         }
 
-        private void radioButton1_CheckedChanged(object sender, EventArgs e)
-        {
-            if (this.rdoFox.Checked)
-                setNativeBoardMode(TYPE_FOX);
-        }
-
-        private void radioButton2_CheckedChanged(object sender, EventArgs e)
-        {
-            if (this.rdoTygem.Checked)
-                setNativeBoardMode(TYPE_TYGEM);
-        }
-
-        private void radioButton3_CheckedChanged(object sender, EventArgs e)
-        {
-            if (this.rdoBack.Checked)
-                setManualSelectionMode(TYPE_BACKGROUND);
-        }
-
-        private void radioButton4_CheckedChanged(object sender, EventArgs e)
-        {
-
-            if (this.rdoSina.Checked)
-                setNativeBoardMode(TYPE_SINA);
-
-        }
-
-        private void radioButtonFoxBack_CheckedChanged(object sender, EventArgs e)
-        {
-            if (this.rdoFoxBack.Checked)
-                setNativeBoardMode(TYPE_FOX_BACKGROUND_PLACE);
-        }
-
-        private void radioButtonYike_CheckedChanged(object sender, EventArgs e)
-        {
-            if (this.rdoYike.Checked)
-                setNativeBoardMode(TYPE_YIKE);
-        }
 
         public void saveOtherConfig()
         {
@@ -3059,50 +2849,6 @@ namespace readboard
             shutdown();
         }
 
-        private void radioButton5_CheckedChanged(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (suppressControlCenterProjectionEvents)
-                return;
-            if (this.rdo19x19.Checked)
-            {
-                ControlCenterApplyResult result = ApplyControlCenterIntent(
-                    ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Preset19));
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-            }
-        }
-
-        private void radioButton6_CheckedChanged(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (suppressControlCenterProjectionEvents)
-                return;
-            if (this.rdo13x13.Checked)
-            {
-                ControlCenterApplyResult result = ApplyControlCenterIntent(
-                    ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Preset13));
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-            }
-        }
-
-        private void radioButton7_CheckedChanged(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (suppressControlCenterProjectionEvents)
-                return;
-            if (this.rdo9x9.Checked)
-            {
-                ControlCenterApplyResult result = ApplyControlCenterIntent(
-                    ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Preset9));
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-            }
-        }
 
         public void sendVersion()
         {
@@ -3215,64 +2961,6 @@ namespace readboard
         [DllImport("User32")]
         public extern static void mouse_event(int dwFlags, int dx, int dy, int dwData, IntPtr dwExtraInfo);
 
-        private void textbox1_TextChanged(object sender, EventArgs e)
-        {
-            NormalizeNumericTextBox(textBox1);
-            if (isInitializingProtocolState || suppressControlCenterProjectionEvents)
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetAiTime(textBox1.Text));
-            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
-                ProjectControlCenterState();
-            else
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-        }
-
-        private void button7_Click_1(object sender, EventArgs e)
-        {
-            SendNoPonderCommand();
-        }
-
-        private void textBox2_TextChanged(object sender, EventArgs e)
-        {
-            NormalizeNumericTextBox(textBox2);
-            if (isInitializingProtocolState || suppressControlCenterProjectionEvents)
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetPlayouts(textBox2.Text));
-            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
-                ProjectControlCenterState();
-            else
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-        }
-
-        private void textBox3_TextChanged(object sender, EventArgs e)
-        {
-            NormalizeNumericTextBox(textBox3);
-            if (isInitializingProtocolState || suppressControlCenterProjectionEvents)
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetFirstPolicy(textBox3.Text));
-            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
-                ProjectControlCenterState();
-            else
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-        }
-
-        private void checkBox1_CheckedChanged_1(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (suppressControlCenterProjectionEvents)
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetTwoWaySync(chkBothSync.Checked));
-            if (result.ShouldPublishSnapshot)
-                PostWebViewState();
-        }
 
         private void button1_Click(object sender, EventArgs e)
         {
@@ -3290,25 +2978,6 @@ namespace readboard
             }
         }
 
-        private void rdoqiantai_CheckedChanged(object sender, EventArgs e)
-        {
-            if (this.rdoFore.Checked)
-                setManualSelectionMode(TYPE_FOREGROUND);
-        }
-
-        private void chkAutoPlay_CheckedChanged(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState || suppressControlCenterProjectionEvents)
-                return;
-
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetAutoPlayEnabled(chkAutoPlay.Checked));
-            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
-                ProjectControlCenterState();
-            else
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-        }
 
         private void btnSettings_Click(object sender, EventArgs e)
         {
@@ -3317,54 +2986,6 @@ namespace readboard
             PostWebViewState();
         }
 
-        private void radioButton8_CheckedChanged(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (suppressControlCenterProjectionEvents)
-                return;
-            if (this.rdoOtherBoard.Checked)
-            {
-                ControlCenterApplyResult result = ApplyControlCenterIntent(
-                    ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Custom));
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-            }
-        }
-
-
-
-        private void parseWidth(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (suppressControlCenterProjectionEvents
-                || controlCenterRuntime.CurrentPreferences.BoardSizeKind != ControlCenterBoardSizeKind.Custom)
-                return;
-            int parsed;
-            if (!int.TryParse(txtBoardWidth.Text, out parsed))
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetCustomBoardWidth(parsed));
-            if (result.ShouldPublishSnapshot)
-                PostWebViewState();
-        }
-
-        private void parseHeight(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (suppressControlCenterProjectionEvents
-                || controlCenterRuntime.CurrentPreferences.BoardSizeKind != ControlCenterBoardSizeKind.Custom)
-                return;
-            int parsed;
-            if (!int.TryParse(txtBoardHeight.Text, out parsed))
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetCustomBoardHeight(parsed));
-            if (result.ShouldPublishSnapshot)
-                PostWebViewState();
-        }
 
         private void tb_KeyPressWidth(object sender, KeyPressEventArgs e)
         {
@@ -3384,115 +3005,6 @@ namespace readboard
             txtBoardHeight.BackColor = System.Drawing.SystemColors.Menu;
         }
 
-        private void radioBlack_CheckedChanged(object sender, EventArgs e)
-        {
-            if (suppressAutoPlayColorModeEvents || isInitializingProtocolState || !radioBlack.Checked)
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.ManualBlack));
-            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
-                ProjectControlCenterState();
-            else
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-        }
-
-        private void radioWhite_CheckedChanged(object sender, EventArgs e)
-        {
-            if (suppressAutoPlayColorModeEvents || isInitializingProtocolState || !radioWhite.Checked)
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.ManualWhite));
-            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
-                ProjectControlCenterState();
-            else
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-        }
-
-        private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)
-        {
-            if (suppressAutoPlayColorModeEvents || isInitializingProtocolState || !radioAutoPlayColor.Checked)
-                return;
-            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
-            if (!controlCenter.AutoPlayEnabled
-                || (controlCenter.Platform != SyncMode.Fox
-                    && controlCenter.Platform != SyncMode.FoxBackgroundPlace))
-            {
-                ProjectControlCenterState();
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(foxIdentitySelection.EffectiveIdentitySignature))
-            {
-                OpenWebViewIdentity(true);
-                PostWebViewState();
-                return;
-            }
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.FoxAuto));
-            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
-                ProjectControlCenterState();
-            else
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-        }
-
-        private void radioAutoPlayMoveFirst_CheckedChanged(object sender, EventArgs e)
-        {
-            if (suppressAutoPlayMoveModeEvents
-                || isInitializingProtocolState
-                || !radioAutoPlayMoveFirst.Checked)
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetAutoPlayMoveMode(AutoPlayMoveMode.FirstCandidate));
-            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
-                ProjectControlCenterState();
-            else
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-        }
-
-        private void radioAutoPlayMoveGma_CheckedChanged(object sender, EventArgs e)
-        {
-            if (suppressAutoPlayMoveModeEvents
-                || isInitializingProtocolState
-                || !radioAutoPlayMoveGma.Checked)
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetAutoPlayMoveMode(AutoPlayMoveMode.GenmoveAnalyze));
-            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
-                ProjectControlCenterState();
-            else
-                if (result.ShouldPublishSnapshot)
-                    PostWebViewState();
-        }
-
-        private void btnFoxAutoPlayIdentity_Click(object sender, EventArgs e)
-        {
-            if (!IsFoxSyncType(CurrentSyncType))
-                return;
-
-            OpenWebViewIdentity(false);
-            PostWebViewState();
-        }
-
-
-        private void button8_Click(object sender, EventArgs e)
-        {
-            ApplyNativeControlCenterAction(ControlCenterActionIntent.SwapOrder());
-        }
-
-        private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (suppressControlCenterProjectionEvents)
-                return;
-            ControlCenterApplyResult result = ApplyControlCenterIntent(
-                ControlCenterIntent.SetShowOnBoard(chkShowInBoard.Checked));
-            if (result.ShouldPublishSnapshot)
-                PostWebViewState();
-        }
 
         private void button9_Click(object sender, EventArgs e)
         {
@@ -3518,22 +3030,6 @@ namespace readboard
             //}            
         }
 
-        private void button10_Click(object sender, EventArgs e)
-        {
-            ApplyNativeControlCenterAction(ControlCenterActionIntent.QuickSync());
-        }
-
-        private void Button2_Click(object sender, EventArgs e)
-        {
-            ApplyNativeControlCenterAction(ControlCenterActionIntent.SelectBoard(
-                ControlCenterBoardSelectionMode.Rectangle));
-        }
-
-        private void button11_Click(object sender, EventArgs e)
-        {
-            ApplyNativeControlCenterAction(ControlCenterActionIntent.SelectBoard(
-                ControlCenterBoardSelectionMode.Line1));
-        }
 
         private void ApplyNativeBoardSelection(ControlCenterBoardSelectionMode mode)
         {

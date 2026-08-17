@@ -127,7 +127,6 @@ namespace Readboard.VerificationTests.Host
             string orderSlice = GetMethodSlice(source, "private void ArrangeMainSyncFlowOrder()");
             string columnSlice = GetMethodSlice(source, "private void ArrangeMainSyncAutoStatusColumn(int rowHeight)");
             string columnWidthSlice = GetMethodSlice(source, "private int GetMainSyncAutoStatusColumnWidth()");
-            string statusTextSlice = GetMethodSlice(source, "private void SetAutoPlayColorStatusText(string text)");
             string widthSlice = GetMethodSlice(source, "private int GetLegacyMainSyncRequiredWidth()");
 
             int autoIndex = IndexOfRequired(orderSlice, "flowLayoutPanel1.Controls.SetChildIndex(pnlAutoPlayColorStatus, 2);");
@@ -151,7 +150,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("btnFoxAutoPlayIdentity.Location = new Point(0, Math.Max(0, (columnHeight - btnFoxAutoPlayIdentity.PreferredSize.Height) / 2));", columnSlice);
             Assert.Contains("int autoStatusWidth = GetLayoutOptionPreferredSize(radioAutoPlayColor).Width + ScaleValue(6) + GetMainSyncAutoPlayStatusTextWidth();", columnWidthSlice);
             Assert.Contains("return Math.Max(autoStatusWidth, identityWidth);", columnWidthSlice);
-            Assert.Contains("lblAutoPlayColorStatus.Text = text;", statusTextSlice);
             Assert.Contains("+ GetMainSyncAutoStatusColumnWidth()", widthSlice);
         }
 
@@ -159,14 +157,10 @@ namespace Readboard.VerificationTests.Host
         public void MainForm_AutoPlayStatusTextDoesNotRefreshLayout()
         {
             string source = LoadSource("readboard", "Form1.cs");
-            string statusTextSlice = GetMethodSlice(source, "private void SetAutoPlayColorStatusText(string text)");
             string columnWidthSlice = GetMethodSlice(source, "private int GetMainSyncAutoStatusColumnWidth()");
             string statusWidthSlice = GetMethodSlice(source, "private int GetMainSyncAutoPlayStatusTextWidth()");
 
-            Assert.DoesNotContain("ApplyMainFormUi();", statusTextSlice);
             Assert.DoesNotContain("RefreshMainSyncLayoutFromStatusText", source);
-            Assert.DoesNotContain("ArrangeMainSyncSection", statusTextSlice);
-            Assert.DoesNotContain("ArrangeMainActions", statusTextSlice);
             Assert.DoesNotContain("lblAutoPlayColorStatus.PreferredSize.Width", columnWidthSlice);
             Assert.Contains("GetMainSyncAutoPlayStatusTextWidth()", columnWidthSlice);
             Assert.Contains("MainForm_autoPlayColorStatusUnconfigured", statusWidthSlice);

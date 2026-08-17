@@ -95,31 +95,6 @@ namespace readboard
             return location;
         }
 
-        private void ApplySyncModeSelection()
-        {
-            switch (CurrentSyncType)
-            {
-                case TYPE_FOX:
-                    rdoFox.Checked = true;
-                    return;
-                case TYPE_TYGEM:
-                    rdoTygem.Checked = true;
-                    return;
-                case TYPE_SINA:
-                    rdoSina.Checked = true;
-                    return;
-                case TYPE_FOX_BACKGROUND_PLACE:
-                    rdoFoxBack.Checked = true;
-                    return;
-                case TYPE_FOREGROUND:
-                    rdoFore.Checked = true;
-                    return;
-                case TYPE_YIKE:
-                    rdoYike.Checked = true;
-                    return;
-            }
-            rdoBack.Checked = true;
-        }
 
     }
 }

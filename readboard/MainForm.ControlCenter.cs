@@ -57,49 +57,30 @@ namespace readboard
                 bool firstPolicyChanged = hasAppliedSession
                     && !string.Equals(appliedFirstPolicyValue, sessionState.FirstPolicyValue, StringComparison.Ordinal);
 
-                form.suppressControlCenterProjectionEvents = true;
-                try
+                if (platformChanged)
                 {
-                    if (platformChanged)
-                    {
-                        form.ClearFoxAutoPlayColorDetectionState();
-                        form.ResetWebViewSyncState();
-                    }
-                    if (autoPlayChanged && !sessionState.AutoPlayEnabled)
-                        form.ClearFoxAutoPlayColorDetectionState();
-                    form.ApplyControlCenterBoardSelection(preferences);
-                    if (platformChanged)
-                        form.ApplySyncModeSelection();
-                    if (!hasAppliedPreferences || twoWaySyncChanged)
-                        form.SetSyncBoth(preferences.TwoWaySync);
-                    form.chkBothSync.Checked = preferences.TwoWaySync;
-                    form.chkAutoPlay.Checked = sessionState.AutoPlayEnabled;
-                    form.chkShowInBoard.Checked = preferences.ShowOnBoard;
-                    form.ApplyAutoPlayColorMode(preferences.AutoPlayColorMode);
-                    form.ApplyAutoPlayMoveMode(preferences.AutoPlayMoveMode);
-                    form.textBox1.Text = sessionState.AiTimeValue ?? string.Empty;
-                    form.textBox2.Text = sessionState.PlayoutsValue ?? string.Empty;
-                    form.textBox3.Text = sessionState.FirstPolicyValue ?? string.Empty;
-                    if (platformChanged)
-                        form.ApplySyncModeControlState();
-                    form.ApplyControlCenterNativeEnablement();
-                    hasAppliedPlatform = true;
-                    appliedPlatform = preferences.Platform;
-                    hasAppliedPreferences = true;
-                    appliedTwoWaySync = preferences.TwoWaySync;
-                    appliedShowOnBoard = preferences.ShowOnBoard;
-                    hasAppliedSession = true;
-                    appliedAutoPlayEnabled = sessionState.AutoPlayEnabled;
-                    appliedAutoPlayColorMode = preferences.AutoPlayColorMode;
-                    appliedAutoPlayMoveMode = preferences.AutoPlayMoveMode;
-                    appliedAiTimeValue = sessionState.AiTimeValue;
-                    appliedPlayoutsValue = sessionState.PlayoutsValue;
-                    appliedFirstPolicyValue = sessionState.FirstPolicyValue;
+                    form.ClearFoxAutoPlayColorDetectionState();
+                    form.ResetWebViewSyncState();
                 }
-                finally
-                {
-                    form.suppressControlCenterProjectionEvents = false;
-                }
+                if (autoPlayChanged && !sessionState.AutoPlayEnabled)
+                    form.ClearFoxAutoPlayColorDetectionState();
+                if (!hasAppliedPreferences || twoWaySyncChanged)
+                    form.SetSyncBoth(preferences.TwoWaySync);
+                form.ApplyAutoPlayColorMode(preferences.AutoPlayColorMode);
+                if (platformChanged)
+                    form.ApplySyncModeControlState();
+                hasAppliedPlatform = true;
+                appliedPlatform = preferences.Platform;
+                hasAppliedPreferences = true;
+                appliedTwoWaySync = preferences.TwoWaySync;
+                appliedShowOnBoard = preferences.ShowOnBoard;
+                hasAppliedSession = true;
+                appliedAutoPlayEnabled = sessionState.AutoPlayEnabled;
+                appliedAutoPlayColorMode = preferences.AutoPlayColorMode;
+                appliedAutoPlayMoveMode = preferences.AutoPlayMoveMode;
+                appliedAiTimeValue = sessionState.AiTimeValue;
+                appliedPlayoutsValue = sessionState.PlayoutsValue;
+                appliedFirstPolicyValue = sessionState.FirstPolicyValue;
 
                 form.sessionCoordinator.SetSyncPlatform(MainForm.ResolveSyncPlatform(preferences.Platform));
                 form.ApplyMainWindowTitle();
@@ -187,39 +168,6 @@ namespace readboard
             }
         }
 
-        private void ApplyControlCenterBoardSelection(ControlCenterPreferences preferences)
-        {
-            if (preferences.BoardSizeKind == ControlCenterBoardSizeKind.Custom)
-            {
-                txtBoardWidth.Text = preferences.BoardWidth.ToString();
-                txtBoardHeight.Text = preferences.BoardHeight.ToString();
-            }
-            else
-            {
-                if (preferences.CustomBoardWidth > 0)
-                    txtBoardWidth.Text = preferences.CustomBoardWidth.ToString();
-                if (preferences.CustomBoardHeight > 0)
-                    txtBoardHeight.Text = preferences.CustomBoardHeight.ToString();
-            }
-            switch (preferences.BoardSizeKind)
-            {
-                case ControlCenterBoardSizeKind.Preset19:
-                    rdo19x19.Checked = true;
-                    break;
-                case ControlCenterBoardSizeKind.Preset13:
-                    rdo13x13.Checked = true;
-                    break;
-                case ControlCenterBoardSizeKind.Preset9:
-                    rdo9x9.Checked = true;
-                    break;
-                case ControlCenterBoardSizeKind.Custom:
-                    rdoOtherBoard.Checked = true;
-                    break;
-                default:
-                    rdo19x19.Checked = true;
-                    break;
-            }
-        }
 
         private ControlCenterApplyResult ApplyControlCenterIntent(ControlCenterIntent intent)
         {
@@ -233,12 +181,6 @@ namespace readboard
                 delegate { return controlCenterRuntime.ApplyAction(intent); });
         }
 
-        private void ApplyNativeControlCenterAction(ControlCenterActionIntent intent)
-        {
-            ControlCenterActionApplyResult result = ApplyControlCenterAction(intent);
-            if (result.ShouldPublishSnapshot)
-                PostWebViewState();
-        }
 
         private void ApplyControlCenterTwoWaySyncEffect()
         {

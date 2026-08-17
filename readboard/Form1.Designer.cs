@@ -106,7 +106,6 @@
             this.btnCircleBoard.TabIndex = 1;
             this.btnCircleBoard.Text = "框选棋盘";
             this.btnCircleBoard.UseVisualStyleBackColor = true;
-            this.btnCircleBoard.Click += new System.EventHandler(this.Button2_Click);
             // 
             // btnClickBoard
             // 
@@ -117,7 +116,6 @@
             this.btnClickBoard.TabIndex = 2;
             this.btnClickBoard.Text = "选择棋盘(点击棋盘内部)";
             this.btnClickBoard.UseVisualStyleBackColor = true;
-            this.btnClickBoard.Click += new System.EventHandler(this.button3_Click);
             // 
             // btnOneTimeSync
             // 
@@ -127,7 +125,6 @@
             this.btnOneTimeSync.TabIndex = 3;
             this.btnOneTimeSync.Text = "单次同步";
             this.btnOneTimeSync.UseVisualStyleBackColor = true;
-            this.btnOneTimeSync.Click += new System.EventHandler(this.button4_Click);
             // 
             // btnKeepSync
             // 
@@ -137,7 +134,6 @@
             this.btnKeepSync.TabIndex = 4;
             this.btnKeepSync.Text = "持续同步(200ms)";
             this.btnKeepSync.UseVisualStyleBackColor = true;
-            this.btnKeepSync.Click += new System.EventHandler(this.button5_Click);
             // 
             // btnForceRebuild
             // 
@@ -147,7 +143,6 @@
             this.btnForceRebuild.TabIndex = 40;
             this.btnForceRebuild.Text = "强制重建";
             this.btnForceRebuild.UseVisualStyleBackColor = true;
-            this.btnForceRebuild.Click += new System.EventHandler(this.btnForceRebuild_Click);
             // 
             // btnClearBoard
             // 
@@ -157,7 +152,6 @@
             this.btnClearBoard.TabIndex = 5;
             this.btnClearBoard.Text = "清空棋盘";
             this.btnClearBoard.UseVisualStyleBackColor = true;
-            this.btnClearBoard.Click += new System.EventHandler(this.button6_Click);
             // 
             // groupBox1
             // 
@@ -184,7 +178,6 @@
             this.rdoFoxBack.TabStop = true;
             this.rdoFoxBack.Text = "野狐(后台落子)";
             this.rdoFoxBack.UseVisualStyleBackColor = true;
-            this.rdoFoxBack.CheckedChanged += new System.EventHandler(this.radioButtonFoxBack_CheckedChanged);
             // 
             // rdoYike
             // 
@@ -196,7 +189,6 @@
             this.rdoYike.TabStop = true;
             this.rdoYike.Text = "弈客";
             this.rdoYike.UseVisualStyleBackColor = true;
-            this.rdoYike.CheckedChanged += new System.EventHandler(this.radioButtonYike_CheckedChanged);
             // 
             // rdoFore
             //
@@ -208,7 +200,6 @@
             this.rdoFore.TabStop = true;
             this.rdoFore.Text = "其他(前台)";
             this.rdoFore.UseVisualStyleBackColor = true;
-            this.rdoFore.CheckedChanged += new System.EventHandler(this.rdoqiantai_CheckedChanged);
             //
             // rdoSina
             //
@@ -220,7 +211,6 @@
             this.rdoSina.TabStop = true;
             this.rdoSina.Text = "新浪";
             this.rdoSina.UseVisualStyleBackColor = true;
-            this.rdoSina.CheckedChanged += new System.EventHandler(this.radioButton4_CheckedChanged);
             //
             // rdoBack
             //
@@ -232,7 +222,6 @@
             this.rdoBack.TabStop = true;
             this.rdoBack.Text = "其他(后台)";
             this.rdoBack.UseVisualStyleBackColor = true;
-            this.rdoBack.CheckedChanged += new System.EventHandler(this.radioButton3_CheckedChanged);
             //
             // rdoTygem
             //
@@ -244,7 +233,6 @@
             this.rdoTygem.TabStop = true;
             this.rdoTygem.Text = "弈城";
             this.rdoTygem.UseVisualStyleBackColor = true;
-            this.rdoTygem.CheckedChanged += new System.EventHandler(this.radioButton2_CheckedChanged);
             // 
             // rdoFox
             // 
@@ -256,7 +244,6 @@
             this.rdoFox.TabStop = true;
             this.rdoFox.Text = "野狐";
             this.rdoFox.UseVisualStyleBackColor = true;
-            this.rdoFox.CheckedChanged += new System.EventHandler(this.radioButton1_CheckedChanged);
             // 
             // groupBox2
             // 
@@ -291,7 +278,6 @@
             this.txtBoardHeight.Size = new System.Drawing.Size(21, 21);
             this.txtBoardHeight.TabIndex = 35;
             this.txtBoardHeight.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.tb_KeyPressHeight);
-            this.txtBoardHeight.Leave += new System.EventHandler(this.parseHeight);
             // 
             // txtBoardWidth
             // 
@@ -301,7 +287,6 @@
             this.txtBoardWidth.Size = new System.Drawing.Size(21, 21);
             this.txtBoardWidth.TabIndex = 34;
             this.txtBoardWidth.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.tb_KeyPressWidth);
-            this.txtBoardWidth.Leave += new System.EventHandler(this.parseWidth);
             // 
             // rdoOtherBoard
             // 
@@ -312,7 +297,6 @@
             this.rdoOtherBoard.TabIndex = 33;
             this.rdoOtherBoard.TabStop = true;
             this.rdoOtherBoard.UseVisualStyleBackColor = true;
-            this.rdoOtherBoard.CheckedChanged += new System.EventHandler(this.radioButton8_CheckedChanged);
             // 
             // lblBoardSize
             // 
@@ -333,7 +317,6 @@
             this.rdo9x9.TabStop = true;
             this.rdo9x9.Text = "9*9";
             this.rdo9x9.UseVisualStyleBackColor = true;
-            this.rdo9x9.CheckedChanged += new System.EventHandler(this.radioButton7_CheckedChanged);
             // 
             // rdo13x13
             // 
@@ -345,7 +328,6 @@
             this.rdo13x13.TabStop = true;
             this.rdo13x13.Text = "13*13";
             this.rdo13x13.UseVisualStyleBackColor = true;
-            this.rdo13x13.CheckedChanged += new System.EventHandler(this.radioButton6_CheckedChanged);
             // 
             // rdo19x19
             // 
@@ -357,7 +339,6 @@
             this.rdo19x19.TabStop = true;
             this.rdo19x19.Text = "19*19";
             this.rdo19x19.UseVisualStyleBackColor = true;
-            this.rdo19x19.CheckedChanged += new System.EventHandler(this.radioButton5_CheckedChanged);
             // 
             // radioWhite
             // 
@@ -369,7 +350,6 @@
             this.radioWhite.TabStop = true;
             this.radioWhite.Text = "执白";
             this.radioWhite.UseVisualStyleBackColor = true;
-            this.radioWhite.CheckedChanged += new System.EventHandler(this.radioWhite_CheckedChanged);
             //
             // radioAutoPlayColor
             //
@@ -381,7 +361,6 @@
             this.radioAutoPlayColor.TabStop = true;
             this.radioAutoPlayColor.Text = "自动";
             this.radioAutoPlayColor.UseVisualStyleBackColor = true;
-            this.radioAutoPlayColor.CheckedChanged += new System.EventHandler(this.radioAutoPlayColor_CheckedChanged);
             //
             // lblAutoPlayColorStatus
             //
@@ -401,7 +380,6 @@
             this.btnFoxAutoPlayIdentity.TabIndex = 26;
             this.btnFoxAutoPlayIdentity.Text = "身份";
             this.btnFoxAutoPlayIdentity.UseVisualStyleBackColor = true;
-            this.btnFoxAutoPlayIdentity.Click += new System.EventHandler(this.btnFoxAutoPlayIdentity_Click);
             //
             // radioBlack
             //
@@ -413,7 +391,6 @@
             this.radioBlack.TabStop = true;
             this.radioBlack.Text = "执黑";
             this.radioBlack.UseVisualStyleBackColor = true;
-            this.radioBlack.CheckedChanged += new System.EventHandler(this.radioBlack_CheckedChanged);
             // 
             // chkBothSync
             // 
@@ -424,7 +401,6 @@
             this.chkBothSync.TabIndex = 20;
             this.chkBothSync.Text = "双向同步";
             this.chkBothSync.UseVisualStyleBackColor = true;
-            this.chkBothSync.CheckedChanged += new System.EventHandler(this.checkBox1_CheckedChanged_1);
             // 
             // textBox1
             // 
@@ -432,7 +408,6 @@
             this.textBox1.Name = "textBox1";
             this.textBox1.Size = new System.Drawing.Size(51, 21);
             this.textBox1.TabIndex = 25;
-            this.textBox1.TextChanged += new System.EventHandler(this.textbox1_TextChanged);
             // 
             // lblTime
             // 
@@ -452,7 +427,6 @@
             this.btnTogglePonder.TabIndex = 21;
             this.btnTogglePonder.Text = "停止/分析";
             this.btnTogglePonder.UseVisualStyleBackColor = true;
-            this.btnTogglePonder.Click += new System.EventHandler(this.button7_Click_1);
             // 
             // lblTotalVisits
             // 
@@ -469,7 +443,6 @@
             this.textBox2.Name = "textBox2";
             this.textBox2.Size = new System.Drawing.Size(84, 21);
             this.textBox2.TabIndex = 27;
-            this.textBox2.TextChanged += new System.EventHandler(this.textBox2_TextChanged);
             // 
             // lblBestMoveVisits
             // 
@@ -486,7 +459,6 @@
             this.textBox3.Name = "textBox3";
             this.textBox3.Size = new System.Drawing.Size(84, 21);
             this.textBox3.TabIndex = 29;
-            this.textBox3.TextChanged += new System.EventHandler(this.textBox3_TextChanged);
             // 
             // btnHelp
             // 
@@ -561,7 +533,6 @@
             this.radioAutoPlayMoveFirst.TabStop = true;
             this.radioAutoPlayMoveFirst.Text = "一选落子";
             this.radioAutoPlayMoveFirst.UseVisualStyleBackColor = true;
-            this.radioAutoPlayMoveFirst.CheckedChanged += new System.EventHandler(this.radioAutoPlayMoveFirst_CheckedChanged);
             //
             // radioAutoPlayMoveGma
             //
@@ -572,7 +543,6 @@
             this.radioAutoPlayMoveGma.TabIndex = 43;
             this.radioAutoPlayMoveGma.Text = "引擎决策落子";
             this.radioAutoPlayMoveGma.UseVisualStyleBackColor = true;
-            this.radioAutoPlayMoveGma.CheckedChanged += new System.EventHandler(this.radioAutoPlayMoveGma_CheckedChanged);
             // 
             // flowLayoutPanel2
             // 
@@ -600,7 +570,6 @@
             this.chkAutoPlay.TabIndex = 32;
             this.chkAutoPlay.Text = "自动落子";
             this.chkAutoPlay.UseVisualStyleBackColor = true;
-            this.chkAutoPlay.CheckedChanged += new System.EventHandler(this.chkAutoPlay_CheckedChanged);
             // 
             // panel3
             // 
@@ -673,7 +642,6 @@
             this.btnExchange.TabIndex = 34;
             this.btnExchange.Text = "交换顺序";
             this.btnExchange.UseVisualStyleBackColor = true;
-            this.btnExchange.Click += new System.EventHandler(this.button8_Click);
             // 
             // chkShowInBoard
             // 
@@ -684,7 +652,6 @@
             this.chkShowInBoard.TabIndex = 35;
             this.chkShowInBoard.Text = "原棋盘上显示选点";
             this.chkShowInBoard.UseVisualStyleBackColor = true;
-            this.chkShowInBoard.CheckedChanged += new System.EventHandler(this.chkShowInBoard_CheckedChanged);
             // 
             // btnKomi65
             // 
@@ -704,7 +671,6 @@
             this.btnFastSync.TabIndex = 37;
             this.btnFastSync.Text = "一键同步";
             this.btnFastSync.UseVisualStyleBackColor = true;
-            this.btnFastSync.Click += new System.EventHandler(this.button10_Click);
             // 
             // btnCircleRow1
             // 
@@ -714,7 +680,6 @@
             this.btnCircleRow1.TabIndex = 38;
             this.btnCircleRow1.Text = "框选1路线";
             this.btnCircleRow1.UseVisualStyleBackColor = true;
-            this.btnCircleRow1.Click += new System.EventHandler(this.button11_Click);
             // 
             // MainForm
             // 
