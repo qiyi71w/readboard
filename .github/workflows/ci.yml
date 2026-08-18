@@ -3,17 +3,6 @@ name: CI
 on:
   workflow_dispatch:
   pull_request:
-    paths:
-      - "readboard/**"
-      - "tests/**"
-      - "fixtures/**"
-      - "scripts/**"
-      - "readboard.sln"
-      - "global.json"
-      - "NuGet.Config"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/ci.yml"
   push:
     paths:
       - "readboard/**"
