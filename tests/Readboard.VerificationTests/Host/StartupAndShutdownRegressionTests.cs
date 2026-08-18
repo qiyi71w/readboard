@@ -637,6 +637,18 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
+        public void UpdateDialog_StaysAboveTopMostMainWindow()
+        {
+            string designerSource = LoadSource("readboard", "FormUpdate.Designer.cs");
+            string mainFormSource = LoadSource("readboard", "Form1.cs");
+            string mainFormDesignerSource = LoadSource("readboard", "Form1.Designer.cs");
+
+            Assert.Contains("this.TopMost = true;", mainFormDesignerSource);
+            Assert.Contains("TopMost = true;", designerSource);
+            Assert.Contains("formUpdate.ShowDialog(this);", mainFormSource);
+        }
+
+        [Fact]
         public void ReplayStartupProtocolState_SkipsBlankNumericOverrides()
         {
             string source = LoadSource("readboard", "MainForm.Protocol.cs");
