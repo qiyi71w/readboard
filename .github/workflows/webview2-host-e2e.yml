@@ -3,13 +3,6 @@ name: WebView2 Host E2E
 on:
   workflow_dispatch:
   pull_request:
-    paths:
-      - "readboard/**"
-      - "tests/WebView/**"
-      - "package.json"
-      - "package-lock.json"
-      - "global.json"
-      - ".github/workflows/webview2-host-e2e.yml"
   schedule:
     - cron: "0 */6 * * *"
 
