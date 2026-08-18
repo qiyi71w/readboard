@@ -121,6 +121,10 @@
   let themePreference = "system";
   let localizedText = null;
   let localizedLanguage = "";
+  let preferenceChipDirty = false;
+  let preferenceSavedHideTimer = 0;
+  const preferenceSavedFlashMs = 2000;
+
 
   function updateViewportLayout() {
     resizeFrame = 0;
@@ -313,13 +317,7 @@
     setValue("#playouts", control.playouts ?? "");
     setValue("#first-policy", control.firstPolicy ?? "");
     setChecked("#show-on-board", control.showOnBoard);
-    const preferencesStatus = $("#preferences-status");
-    if (preferencesStatus) {
-      const saved = control.preferencesSaved !== false;
-      preferencesStatus.className = `preference-status${saved ? "" : " not-saved"}`;
-      preferencesStatus.textContent = control.preferencesStatus || "";
-      preferencesStatus.title = saved ? "" : (control.persistenceError || preferencesStatus.textContent);
-    }
+
     setDisabled('input[name="platform"], input[name="boardSize"]', !control.configurationEnabled);
     setDisabled('input[name="boardSize"][value="custom"]', !control.customBoardSizeEnabled);
     setDisabled("#board-width, #board-height", !control.customBoardDimensionsEnabled);
@@ -392,6 +390,7 @@
       const level = ["INFO", "SYNC", "WARN"].includes(log.level) ? log.level : "INFO";
       row.className = "log-row";
       const time = document.createElement("span");
+      time.className = "log-time";
       time.textContent = log.time || "--:--:--";
       const tag = document.createElement("span");
       tag.className = `log-tag ${level.toLowerCase()}`;
@@ -532,6 +531,55 @@
 
   function escapeAttr(value) { return escapeHtml(value); }
 
+  function renderPreferenceStatus() {
+    const el = $("#preferences-status");
+    if (!el) return;
+    const control = state.controlCenter || {};
+    const settings = state.settings || {};
+    const controlDirty = control.preferencesSaved === false;
+    const settingsDirty = Boolean(settings.dirty);
+    const dirty = controlDirty || settingsDirty;
+    if (dirty) {
+      if (preferenceSavedHideTimer) {
+        clearTimeout(preferenceSavedHideTimer);
+        preferenceSavedHideTimer = 0;
+      }
+      preferenceChipDirty = true;
+      el.hidden = false;
+      el.className = "preference-status not-saved";
+      el.textContent = controlDirty
+        ? (control.preferencesStatus || settings.dirtyStatus || "")
+        : (settings.dirtyStatus || "");
+      el.title = controlDirty ? (control.persistenceError || el.textContent) : el.textContent;
+      return;
+    }
+    const justSaved = preferenceChipDirty;
+    preferenceChipDirty = false;
+    if (justSaved) {
+      el.hidden = false;
+      el.className = "preference-status";
+      el.textContent = control.preferencesStatus || "";
+      el.title = "";
+      clearTimeout(preferenceSavedHideTimer);
+      preferenceSavedHideTimer = setTimeout(() => {
+        preferenceSavedHideTimer = 0;
+        const nextControl = (state && state.controlCenter) || {};
+        const nextSettings = (state && state.settings) || {};
+        if (nextControl.preferencesSaved === false || nextSettings.dirty) return;
+        el.hidden = true;
+        el.textContent = "";
+        el.title = "";
+      }, preferenceSavedFlashMs);
+      return;
+    }
+    if (!preferenceSavedHideTimer) {
+      el.hidden = true;
+      el.className = "preference-status";
+      el.textContent = "";
+      el.title = "";
+    }
+  }
+
   function render() {
     if (!state) return;
     localizeStaticPage();
@@ -540,6 +588,7 @@
     renderShell();
     renderControlCenter();
     renderSettings();
+    renderPreferenceStatus();
     renderLogs();
     renderModal();
   }

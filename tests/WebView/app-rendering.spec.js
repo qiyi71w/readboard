@@ -218,6 +218,98 @@ test("renders dynamic snapshots, language-switched logs, and accessible controls
   await expect(page.locator("#log-list")).not.toContainText("Initial warning");
 });
 
+test("hides idle saved preference badge and aligns log level tags", async ({ page }) => {
+  await page.clock.install();
+  await page.goto(baseUrl + "/index.html");
+
+  const badge = page.locator("#preferences-status");
+  await expect(badge).toBeHidden();
+
+  await page.evaluate(() => {
+    const snapshot = window.readboardPreview.getState();
+    snapshot.controlCenter = {
+      ...snapshot.controlCenter,
+      preferencesSaved: true,
+      preferencesStatus: "偏好已保存",
+      persistenceError: null
+    };
+    snapshot.settings = {
+      ...snapshot.settings,
+      dirty: true,
+      dirtyStatus: "有尚未保存的更改"
+    };
+    snapshot.logs = [
+      { time: "12:34:56", level: "INFO", message: "info line" },
+      { time: "12:34:57", level: "WARN", message: "warn line" },
+      { time: "12:34:58", level: "SYNC", message: "sync line" }
+    ];
+    window.readboardPreview.setState(snapshot);
+  });
+
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveClass(/not-saved/);
+  await expect(badge).toHaveText("有尚未保存的更改");
+
+  await page.evaluate(() => {
+    const snapshot = window.readboardPreview.getState();
+    snapshot.settings = {
+      ...snapshot.settings,
+      dirty: false,
+      dirtyStatus: "当前没有未保存的更改"
+    };
+    window.readboardPreview.setState(snapshot);
+  });
+
+  await expect(badge).toBeVisible();
+  await expect(badge).not.toHaveClass(/not-saved/);
+  await expect(badge).toHaveText("偏好已保存");
+
+  await page.clock.fastForward(2000);
+  await expect(badge).toBeHidden();
+  await expect(badge).toHaveText("");
+
+  await page.evaluate(() => {
+    const snapshot = window.readboardPreview.getState();
+    snapshot.controlCenter = {
+      ...snapshot.controlCenter,
+      preferencesSaved: false,
+      preferencesStatus: "当前选择已生效，但尚未保存",
+      persistenceError: "disk full"
+    };
+    window.readboardPreview.setState(snapshot);
+  });
+
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveClass(/not-saved/);
+  await expect(badge).toHaveText("当前选择已生效，但尚未保存");
+
+  await page.evaluate(() => {
+    const snapshot = window.readboardPreview.getState();
+    snapshot.controlCenter = {
+      ...snapshot.controlCenter,
+      preferencesSaved: true,
+      preferencesStatus: "偏好已保存",
+      persistenceError: null
+    };
+    window.readboardPreview.setState(snapshot);
+  });
+
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveText("偏好已保存");
+  await page.clock.fastForward(2000);
+  await expect(badge).toBeHidden();
+
+
+  const tagBoxes = await page.locator(".log-tag").evaluateAll(tags => tags.map(tag => {
+    const box = tag.getBoundingClientRect();
+    return { left: box.left, width: box.width, text: tag.textContent };
+  }));
+  expect(tagBoxes.map(tag => tag.text)).toEqual(["INFO", "WARN", "SYNC"]);
+  expect(tagBoxes[0].width).toBeGreaterThan(40);
+  expect(tagBoxes.every(tag => Math.abs(tag.left - tagBoxes[0].left) < 0.5)).toBe(true);
+  expect(tagBoxes.every(tag => Math.abs(tag.width - tagBoxes[0].width) < 0.5)).toBe(true);
+});
+
 test("renders generic dialog confirm and cancel labels", async ({ page }) => {
   await page.goto(baseUrl + "/index.html");
 

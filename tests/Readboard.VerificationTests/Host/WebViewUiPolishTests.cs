@@ -226,6 +226,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("id=\"preferences-status\"", html);
             Assert.Contains("role=\"status\"", html);
             Assert.Contains(".top-status #preferences-status.not-saved", styles);
+            Assert.Contains("#preferences-status[hidden]", styles);
 
             ReadBoardUiState state = new ReadBoardUiState
             {
