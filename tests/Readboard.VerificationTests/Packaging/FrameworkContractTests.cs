@@ -61,6 +61,20 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
+        public void PullRequestWorkflow_RunsVerificationAndWebViewDomWithoutPackaging()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string workflowContent = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "ci.yml"));
+
+            Assert.Contains("pull_request:", workflowContent);
+            Assert.Contains("Readboard.VerificationTests.csproj", workflowContent);
+            Assert.Contains("npm run test:webview", workflowContent);
+            Assert.DoesNotContain("package-readboard-release.local.ps1", workflowContent);
+            Assert.DoesNotContain("softprops/action-gh-release", workflowContent);
+            Assert.DoesNotContain("test:webview:host", workflowContent);
+        }
+
+        [Fact]
         public void PackagingWorkflow_RequiresVersionedChangelogAndPublishesExactAssets()
         {
             string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();

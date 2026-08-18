@@ -133,30 +133,19 @@ namespace readboard
         private void SendPlayCommandIfSelected()
         {
             ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
-            if (!controlCenter.CanSendAutoPlayCommand(sessionCoordinator.KeepSync))
+            if (controlCenter.CanSendAutoPlayCommand(sessionCoordinator.KeepSync))
             {
-                if (controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto)
-                    sessionCoordinator.RevokeAutoPlayIfAuthorized();
-                return;
-            }
-            FoxWindowContext foxWindowContext = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
-                ? ResolveFoxWindowContext()
-                : FoxWindowContext.Unknown();
-            ResolveCurrentAutoPlayColor(foxWindowContext);
-            controlCenter = controlCenterRuntime.Snapshot;
-            if (!controlCenter.AutoPlayColorResolution.IsKnown)
-            {
-                sessionCoordinator.RevokeAutoPlayIfAuthorized();
-                return;
+                FoxWindowContext foxWindowContext = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
+                    ? ResolveFoxWindowContext()
+                    : FoxWindowContext.Unknown();
+                ResolveCurrentAutoPlayColor(foxWindowContext);
+                controlCenter = controlCenterRuntime.Snapshot;
             }
 
-            sessionCoordinator.SendPlay(
-                controlCenter.PlayColor,
-                controlCenter.AutoPlayColorMode,
-                GetProtocolNumericValue(controlCenter.AiTimeValue),
-                GetProtocolNumericValue(controlCenter.PlayoutsValue),
-                GetProtocolNumericValue(controlCenter.FirstPolicyValue),
-                controlCenter.AutoPlayMoveMode);
+            AutoPlayWireIssuer.IssueIfAuthorized(
+                controlCenter,
+                sessionCoordinator.KeepSync,
+                sessionCoordinator);
         }
 
         private void SendPonderStatusCommand()
