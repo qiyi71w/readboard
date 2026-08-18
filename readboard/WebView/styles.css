@@ -208,6 +208,8 @@ main { grid-row: 2; grid-column: 2; display: grid; min-width: 0; min-height: 0; 
 .preference-status { padding: 3px 10px !important; border: 1px solid var(--success-border) !important; border-radius: 14px; }
 .top-status #preferences-status { margin-left: auto; border-right: 0; color: var(--success-text); background: var(--success-background); }
 .top-status #preferences-status.not-saved { color: var(--warning-text); background: var(--warning-background); }
+.top-status #preferences-status:empty,
+.top-status #preferences-status[hidden] { display: none; }
 .top-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; margin-left: auto; }
 .top-actions button { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 37px; padding: 0 7px; border: 0; }
 .top-actions .icon { font-size: 17px; }
@@ -281,9 +283,11 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .board-select-grid label { display: flex; min-height: var(--control-center-control-height); align-items: center; white-space: nowrap; }
 .log-card { display: grid; min-height: 0; grid-template-rows: minmax(0, 1fr); padding: 5px 10px 4px; }
 #log-list { min-height: 0; height: 100%; overflow-y: auto; }
-.log-row { display: grid; grid-template-columns: 72px 58px 1fr; min-height: 22px; align-items: center; border-bottom: 1px solid var(--line); }
+.log-row { display: grid; grid-template-columns: 72px 52px 1fr; column-gap: 8px; min-height: 22px; align-items: center; border-bottom: 1px solid var(--line); }
 .log-row:last-child { border-bottom: 0; }
-.log-tag { justify-self: start; padding: 1px 7px; border: 1px solid var(--log-info-border); border-radius: 5px; color: var(--accent); font-size: 11px; }
+.log-time { font-variant-numeric: tabular-nums; }
+.log-tag { justify-self: stretch; display: inline-flex; align-items: center; justify-content: center; min-height: 18px; padding: 0; border: 1px solid var(--log-info-border); border-radius: 5px; color: var(--accent); font-size: 11px; line-height: 1; }
+.log-tag.info { background: var(--accent-soft); }
 .log-tag.sync { color: var(--success-text); border-color: var(--success-border); background: var(--success-background); }
 .log-tag.warn { color: var(--warning-tag-text); border-color: var(--warning-tag-border); background: var(--warning-tag-background); }
 
