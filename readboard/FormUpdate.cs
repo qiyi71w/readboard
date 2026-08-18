@@ -119,7 +119,7 @@ namespace readboard
                 MaximizeBox = false;
                 MinimizeBox = false;
                 ConstrainUpdateDialogSize();
-                if (Program.uiThemeMode == Program.UiThemeOptimized)
+                if (Program.CurrentContext != null && Program.uiThemeMode == Program.UiThemeOptimized)
                     ApplyOptimizedUpdateTheme();
                 else
                     ApplyClassicUpdateTheme();

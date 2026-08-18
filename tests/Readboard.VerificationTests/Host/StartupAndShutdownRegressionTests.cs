@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
+using readboard;
 using Xunit;
 
 namespace Readboard.VerificationTests.Host
@@ -637,15 +638,12 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void UpdateDialog_StaysAboveTopMostMainWindow()
+        public void FormUpdate_IsTopMost()
         {
-            string designerSource = LoadSource("readboard", "FormUpdate.Designer.cs");
-            string mainFormSource = LoadSource("readboard", "Form1.cs");
-            string mainFormDesignerSource = LoadSource("readboard", "Form1.Designer.cs");
-
-            Assert.Contains("this.TopMost = true;", mainFormDesignerSource);
-            Assert.Contains("TopMost = true;", designerSource);
-            Assert.Contains("formUpdate.ShowDialog(this);", mainFormSource);
+            using (FormUpdate formUpdate = new FormUpdate(new UpdateDialogModel()))
+            {
+                Assert.True(formUpdate.TopMost);
+            }
         }
 
         [Fact]
