@@ -259,6 +259,7 @@ namespace readboard
             Padding = new System.Windows.Forms.Padding(12);
             ShowInTaskbar = false;
             StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+            TopMost = true;
             Text = "发现新版本";
         }
 

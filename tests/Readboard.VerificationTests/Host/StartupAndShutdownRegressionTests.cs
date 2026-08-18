@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
+using readboard;
 using Xunit;
 
 namespace Readboard.VerificationTests.Host
@@ -634,6 +635,15 @@ namespace Readboard.VerificationTests.Host
             Assert.Contains("rootPanel.Controls.Add(txtReleaseNotes, 0, 3);", designerSource);
             Assert.Contains("rootPanel.Controls.Add(lblHostedUpdateStatus, 0, 4);", designerSource);
             Assert.Contains("rootPanel.Controls.Add(buttonPanel, 0, 5);", designerSource);
+        }
+
+        [Fact]
+        public void FormUpdate_IsTopMost()
+        {
+            using (FormUpdate formUpdate = new FormUpdate(new UpdateDialogModel()))
+            {
+                Assert.True(formUpdate.TopMost);
+            }
         }
 
         [Fact]
