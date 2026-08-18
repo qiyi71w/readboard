@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Threading.Tasks;
 using Xunit;
+using Readboard.VerificationTests.Support;
 using readboard;
 
 namespace Readboard.VerificationTests.Host
@@ -46,8 +47,12 @@ namespace Readboard.VerificationTests.Host
 
             delayQueue.ReleaseNext();
 
-            await applied.Task.WaitAsync(TimeSpan.FromSeconds(1));
-            await restoredSignal.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            await VerificationCompletion.WaitAsync(
+                applied.Task,
+                "Resolved selection was not applied.");
+            await VerificationCompletion.WaitAsync(
+                restoredSignal.Task,
+                "Main form was not restored after selection.");
 
             Assert.False(resolvedAfterRestore);
             Assert.True(restored);
@@ -109,8 +114,12 @@ namespace Readboard.VerificationTests.Host
             delayQueue.ReleaseNext();
             delayQueue.ReleaseNext();
 
-            await secondApplied.Task.WaitAsync(TimeSpan.FromSeconds(1));
-            await secondRestored.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            await VerificationCompletion.WaitAsync(
+                secondApplied.Task,
+                "Latest selection was not applied.");
+            await VerificationCompletion.WaitAsync(
+                secondRestored.Task,
+                "Latest selection did not restore the main form.");
 
             Assert.Equal(1, appliedCount);
             Assert.Equal(1, restoredCount);

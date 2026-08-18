@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using readboard;
 using Xunit;
@@ -295,8 +296,8 @@ namespace Readboard.VerificationTests.Host
             GitHubUpdateChecker checker = new GitHubUpdateChecker(
                 () => "v3.0.9",
                 () => new Version(10, 0, 19045),
-                () => Task.FromException<string>(new Exception("manifest unavailable")),
-                tag =>
+                token => Task.FromException<string>(new Exception("manifest unavailable")),
+                (tag, token) =>
                 {
                     releaseRequested = true;
                     return Task.FromResult(BuildRelease(tag, MainAssetName));
@@ -330,6 +331,26 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(1, releaseRequestCount);
         }
 
+        [Fact]
+        public async Task CheckAsync_PropagatesCallerCancellation()
+        {
+            using var cancellation = new CancellationTokenSource();
+            GitHubUpdateChecker checker = new GitHubUpdateChecker(
+                () => "v3.0.9",
+                () => new Version(10, 0, 19045),
+                async token =>
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                    return BuildTwoChannelManifest();
+                },
+                (tag, token) => Task.FromResult(BuildRelease(tag, MainAssetName)));
+
+            Task<UpdateCheckResult> check = checker.CheckAsync(cancellation.Token);
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => check);
+        }
+
         [Theory]
         [InlineData("{\"tag_name\":\"v9.9.9\",\"draft\":false,\"prerelease\":false,\"html_url\":\"https://example.com\",\"assets\":[]}", "tag")]
         [InlineData("{\"tag_name\":\"v3.1.0\",\"draft\":true,\"prerelease\":false,\"html_url\":\"https://example.com\",\"assets\":[]}", "stable")]
@@ -358,8 +379,8 @@ namespace Readboard.VerificationTests.Host
             return new GitHubUpdateChecker(
                 () => currentVersion,
                 () => windowsVersion,
-                () => Task.FromResult(manifestJson),
-                tag => Task.FromResult(releaseJsonProvider(tag)));
+                token => Task.FromResult(manifestJson),
+                (tag, token) => Task.FromResult(releaseJsonProvider(tag)));
         }
 
         private static string BuildTwoChannelManifest()

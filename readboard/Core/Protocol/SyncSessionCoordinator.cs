@@ -31,6 +31,8 @@ namespace readboard
         private LastMoveSource lastSentBoardLastMoveSource;
         private string lastSentWindowContextSignature;
         private string lastSentPlayStateSignature;
+        private AutoPlayColorMode? lastSentAutoPlayColorMode;
+        private int autoPlayAuthorizationGeneration;
         private SessionState sessionState;
         private IProtocolCommandHost host;
 
@@ -478,9 +480,10 @@ namespace readboard
             SendProtocolMessage(protocolAdapter.CreateVersionMessage(version));
         }
 
-        public void SendReadboardUpdateReady(string tag, string absoluteZipPath)
+        public bool SendReadboardUpdateReady(string tag, string absoluteZipPath)
         {
-            SendProtocolMessage(protocolAdapter.CreateReadboardUpdateReadyMessage(tag, absoluteZipPath));
+            return outboundProtocolDispatcher.TrySend(
+                protocolAdapter.CreateReadboardUpdateReadyMessage(tag, absoluteZipPath));
         }
 
         public void SendSync()
@@ -533,13 +536,77 @@ namespace readboard
 
         public void SendPlay(
             string color,
+            AutoPlayColorMode colorMode,
             string time,
             string playouts,
             string firstPolicy,
             AutoPlayMoveMode moveMode = AutoPlayMoveMode.FirstCandidate)
         {
-            RememberSentPlayState(color, time, playouts, firstPolicy, moveMode);
-            SendProtocolMessage(protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode));
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                SendPlayAuthorizationWhileSynchronized(
+                    color,
+                    colorMode,
+                    time,
+                    playouts,
+                    firstPolicy,
+                    moveMode,
+                    true,
+                    null);
+            });
+        }
+
+        private void SendPlayAuthorizationWhileSynchronized(
+            string color,
+            AutoPlayColorMode colorMode,
+            string time,
+            string playouts,
+            string firstPolicy,
+            AutoPlayMoveMode moveMode,
+            bool force,
+            int? expectedGeneration)
+        {
+            string signature;
+            lock (stateLock)
+            {
+                if (expectedGeneration.HasValue
+                    && expectedGeneration.Value != autoPlayAuthorizationGeneration)
+                    return;
+                signature = BuildPlayStateSignatureForCurrentContext(
+                    color,
+                    time,
+                    playouts,
+                    firstPolicy,
+                    moveMode);
+                if (!force
+                    && lastSentAutoPlayColorMode == AppConfig.NormalizeAutoPlayColorMode(colorMode)
+                    && string.Equals(lastSentPlayStateSignature, signature, StringComparison.Ordinal))
+                    return;
+            }
+
+            SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
+                protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode),
+                moveMode);
+            lock (stateLock)
+            {
+                autoPlayAuthorizationGeneration++;
+                lastSentPlayStateSignature = signature;
+                lastSentAutoPlayColorMode = AppConfig.NormalizeAutoPlayColorMode(colorMode);
+            }
+        }
+
+        private void SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
+            ProtocolMessage message,
+            AutoPlayMoveMode moveMode)
+        {
+            outboundProtocolDispatcher.SendMessageWhileSynchronized(message);
+            if (AppConfig.NormalizeAutoPlayMoveMode(moveMode) != AutoPlayMoveMode.GenmoveAnalyze)
+                return;
+
+            lock (stateLock)
+            {
+                sessionState.LastBoardPayload = null;
+            }
         }
 
         public void SendNoInBoard()
@@ -577,9 +644,55 @@ namespace readboard
             SendProtocolMessage(protocolAdapter.CreateNoPonderMessage());
         }
 
+        public void SendResumePonder()
+        {
+            SendProtocolMessage(protocolAdapter.CreateResumePonderMessage());
+        }
+
         public void SendStopAutoPlay()
         {
-            SendProtocolMessage(protocolAdapter.CreateStopAutoPlayMessage());
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                RevokeAutoPlayAuthorizationWhileSynchronized(null, true, false);
+            });
+        }
+
+        public void RevokeAutoPlayIfAuthorized()
+        {
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                RevokeAutoPlayAuthorizationWhileSynchronized(null, false, false);
+            });
+        }
+
+        private void RevokeAutoPlayAuthorizationWhileSynchronized(
+            int? expectedGeneration,
+            bool force,
+            bool foxAutoOnly)
+        {
+            bool authorizationWasSent;
+            lock (stateLock)
+            {
+                if (expectedGeneration.HasValue
+                    && expectedGeneration.Value != autoPlayAuthorizationGeneration)
+                    return;
+                if (foxAutoOnly
+                    && lastSentAutoPlayColorMode != AutoPlayColorMode.FoxAuto)
+                    return;
+                authorizationWasSent = lastSentPlayStateSignature != null;
+            }
+
+            if (force || authorizationWasSent)
+            {
+                outboundProtocolDispatcher.SendMessageWhileSynchronized(
+                    protocolAdapter.CreateStopAutoPlayMessage());
+            }
+            lock (stateLock)
+            {
+                autoPlayAuthorizationGeneration++;
+                lastSentPlayStateSignature = null;
+                lastSentAutoPlayColorMode = null;
+            }
         }
 
         public void SendPass()
@@ -647,6 +760,11 @@ namespace readboard
                         if (IsYikeSyncPlatform())
                             StopSyncSession();
                     };
+                case ProtocolMessageKind.AnalysisState:
+                    IAnalysisStateProtocolHost analysisHost = currentHost as IAnalysisStateProtocolHost;
+                    return analysisHost == null
+                        ? null
+                        : () => analysisHost.HandleAnalysisState(message.AnalysisRunning);
                 case ProtocolMessageKind.LossFocus:
                     return currentHost.HandleLossFocus;
                 case ProtocolMessageKind.StopInBoard:
@@ -777,7 +895,31 @@ namespace readboard
             SyncSessionRuntimeDependencies runtime = runtimeDependencies;
             if (runtime == null || runtime.Host == null)
                 return;
-            runtime.Host.OnSyncCachesReset();
+            long observationGeneration;
+            lock (workerLock)
+            {
+                bool keepSyncActive = GetLockedSessionState(s => s.StartedSync);
+                bool continuousSyncActive = GetLockedSessionState(s => s.IsContinuousSyncing);
+                if (keepSyncActive && Volatile.Read(ref activeKeepObservationGeneration) != 0)
+                    observationGeneration = Volatile.Read(ref activeKeepObservationGeneration);
+                else if (continuousSyncActive && Volatile.Read(ref activeContinuousObservationGeneration) != 0)
+                    observationGeneration = Volatile.Read(ref activeContinuousObservationGeneration);
+                else
+                {
+                    observationGeneration = Volatile.Read(ref latestStopObservationGeneration);
+                    if (observationGeneration == 0)
+                        observationGeneration = runtime.Host.AllocateSessionObservationGeneration();
+                }
+            }
+            NotifySyncCachesReset(observationGeneration);
+        }
+
+        private void NotifySyncCachesReset(long observationGeneration)
+        {
+            SyncSessionRuntimeDependencies runtime = runtimeDependencies;
+            if (runtime == null || runtime.Host == null)
+                return;
+            runtime.Host.OnSyncCachesReset(observationGeneration);
         }
 
         private bool TryCompletePendingMove(bool success)

@@ -19,11 +19,15 @@
 - Lizzie parser 必须容忍并消费 ReadBoard 新增的 outbound 行；旧端不能因为未知 `lastMoveSource` 行破坏普通同步。
 - 仅常量化不允许改 `LegacyProtocolAdapter` 的 parse / emit 语义。
 
-## 2026-07-12 清空棋盘增量命令
+## 2026-07-12 增量控制命令
+
+WebView2 控制中心新增三组可选能力，所有既有 wire 文本保持逐字不变：
 
 - `clearBoard`：ReadBoard 请求宿主停止同步后的显式主棋盘清空。它不能复用旧 `clear`；旧 `clear` 仍只重置同步缓存和临时状态。
-- 新 ReadBoard 连接旧宿主时，旧宿主可能按历史 `startsWith("clear")` 逻辑把 `clearBoard` 降级为缓存清理，因此真正清空 Lizzie 主棋盘要求宿主与 ReadBoard 同时升级。
-- 当前 `lizzieyzy-next` 解析端已接入 `clearBoard -> Lizzie.board.clear(false)`，因此 ReadBoard 侧只需发出专用 wire token。
+- `resumeponder`：ReadBoard 请求宿主恢复主引擎分析。暂停继续使用既有 `noponder`。
+- `analysisState running` / `analysisState paused`：宿主在 native ReadBoard ready 后及执行暂停/恢复后回传实际分析状态，同时作为恢复能力声明。
+
+新 ReadBoard 连接旧宿主时，`noponder` 继续可用；没有收到 `analysisState` 时不会发送 `resumeponder`。旧宿主可能按历史 `startsWith("clear")` 逻辑把 `clearBoard` 降级为缓存清理，因此真正清空 Lizzie 主棋盘要求宿主与 ReadBoard 同时升级。Java 简易版 fallback 不接收这些新增能力行。当前 `lizzieyzy-next` 解析端已接入 `clearBoard -> Lizzie.board.clear(false)`。
 
 ## 2026-04-23 实现结果
 
@@ -84,6 +88,9 @@
 | outbound prefix | `playoutschanged ` |
 | outbound prefix | `firstchanged ` |
 | outbound command | `noponder` |
+| outbound command | `resumeponder` |
+| inbound command | `analysisState running` |
+| inbound command | `analysisState paused` |
 | outbound command | `stopAutoPlay` |
 | outbound command | `pass` |
 | outbound command | `yikeSyncStart` |

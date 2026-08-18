@@ -14,6 +14,11 @@ namespace readboard
         internal const int MinMoveVerifyMaxAttempts = 1;
         internal const int MaxMoveVerifyMaxAttempts = 10;
         internal const int DefaultMoveVerifyMaxAttempts = 1;
+        internal const int DefaultWindowClientWidth = 1100;
+        internal const int DefaultWindowClientHeight = 680;
+        internal const int MinimumWindowClientWidth = 960;
+        internal const int MinimumWindowClientHeight = 600;
+        internal const string FollowHostLanguage = "host";
 
         public string ProtocolVersion { get; set; }
         public string MachineKey { get; set; }
@@ -34,6 +39,7 @@ namespace readboard
         public bool PlayPonder { get; set; }
         public bool DisableShowInBoardShortcut { get; set; }
         public bool DebugDiagnosticsEnabled { get; set; }
+        public string LanguagePreference { get; set; }
         public int UiThemeMode { get; set; }
         public int ColorMode { get; set; }
         public SyncMode SyncMode { get; set; }
@@ -44,6 +50,9 @@ namespace readboard
         public int CustomBoardHeight { get; set; }
         public int WindowPosX { get; set; }
         public int WindowPosY { get; set; }
+        public int WindowClientWidth { get; set; }
+        public int WindowClientHeight { get; set; }
+        public bool WindowMaximized { get; set; }
         public AutoPlayColorMode AutoPlayColorMode { get; set; }
         public AutoPlayMoveMode AutoPlayMoveMode { get; set; }
         public string FoxAutoPlayNickname { get; set; }
@@ -72,6 +81,7 @@ namespace readboard
                 PlayPonder = true,
                 DisableShowInBoardShortcut = false,
                 DebugDiagnosticsEnabled = false,
+                LanguagePreference = FollowHostLanguage,
                 UiThemeMode = OptimizedUiThemeMode,
                 ColorMode = ColorModeSystem,
                 SyncMode = SyncMode.Fox,
@@ -82,6 +92,9 @@ namespace readboard
                 CustomBoardHeight = -1,
                 WindowPosX = -1,
                 WindowPosY = -1,
+                WindowClientWidth = DefaultWindowClientWidth,
+                WindowClientHeight = DefaultWindowClientHeight,
+                WindowMaximized = false,
                 AutoPlayColorMode = AutoPlayColorMode.ManualBlack,
                 AutoPlayMoveMode = AutoPlayMoveMode.FirstCandidate,
                 FoxAutoPlayNickname = string.Empty,
@@ -117,6 +130,21 @@ namespace readboard
             if (value == AutoPlayMoveMode.FirstCandidate || value == AutoPlayMoveMode.GenmoveAnalyze)
                 return value;
             return AutoPlayMoveMode.FirstCandidate;
+        }
+
+        internal static string NormalizeLanguagePreference(string value)
+        {
+            return IsSupportedLanguagePreference(value) ? value : FollowHostLanguage;
+        }
+
+        internal static bool IsSupportedLanguagePreference(string value)
+        {
+            return value == FollowHostLanguage || IsSupportedLanguage(value);
+        }
+
+        internal static bool IsSupportedLanguage(string value)
+        {
+            return value == "cn" || value == "en" || value == "jp" || value == "kr";
         }
 
         internal static int ResolveMoveVerifyTotalPlacementAttempts(int value)

@@ -73,6 +73,7 @@ namespace readboard
         public int SampleIntervalMs { get; set; }
         public bool UseEnhancedCapture { get; set; }
         public string PlayColor { get; set; }
+        public AutoPlayColorMode AutoPlayColorMode { get; set; }
         public string AiTimeValue { get; set; }
         public string PlayoutsValue { get; set; }
         public string FirstPolicyValue { get; set; }

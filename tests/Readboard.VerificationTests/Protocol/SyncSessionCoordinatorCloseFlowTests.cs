@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using readboard;
+using Readboard.VerificationTests.Support;
 
 namespace Readboard.VerificationTests.Protocol
 {
@@ -41,7 +42,9 @@ namespace Readboard.VerificationTests.Protocol
                 TaskScheduler.Default);
             coordinator.Stop();
 
-            bool result = await waitTask.WaitAsync(TimeSpan.FromSeconds(5));
+            bool result = await VerificationCompletion.WaitAsync(
+                waitTask,
+                "Stop did not resolve the pending move waiter.");
             Assert.False(result);
         }
 

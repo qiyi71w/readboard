@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json;
 using System.Drawing;
@@ -10,6 +11,23 @@ namespace readboard
 {
     internal sealed class DualFormatAppConfigStore : IAppConfigStore
     {
+        private sealed class ConfigWriteFile
+        {
+            public ConfigWriteFile(string fileName, string content)
+            {
+                FileName = fileName;
+                Content = content;
+            }
+
+            public string FileName { get; private set; }
+            public string Content { get; private set; }
+            public string TargetPath { get; set; }
+            public string StagedPath { get; set; }
+            public string BackupPath { get; set; }
+            public bool OriginalExists { get; set; }
+            public bool CommitAttempted { get; set; }
+        }
+
         private sealed class JsonConfigReadResult
         {
             public JsonConfigReadResult(AppConfig config, bool shouldPersistFallback)
@@ -33,19 +51,30 @@ namespace readboard
         private const string LegacyMainFileName = "config_readboard.txt";
         private const string LegacyOtherFileName = "config_readboard_others.txt";
         private const string JsonCorruptSuffix = ".corrupt.";
-        private const string JsonTempSuffix = ".tmp";
+        private const string TransactionDirectoryPrefix = ".readboard-config-transaction-";
 
         private readonly string baseDirectory;
         private readonly string machineKey;
         private readonly string protocolVersion;
+        private readonly IConfigFileSystem fileSystem;
         private static readonly JsonSerializerOptions DeserializeOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         private static readonly JsonSerializerOptions SerializeOptions = new JsonSerializerOptions { WriteIndented = true };
 
         public DualFormatAppConfigStore(string baseDirectory, string machineKey, string protocolVersion)
+            : this(baseDirectory, machineKey, protocolVersion, new PhysicalConfigFileSystem())
+        {
+        }
+
+        internal DualFormatAppConfigStore(
+            string baseDirectory,
+            string machineKey,
+            string protocolVersion,
+            IConfigFileSystem fileSystem)
         {
             this.baseDirectory = baseDirectory;
             this.machineKey = machineKey;
             this.protocolVersion = protocolVersion;
+            this.fileSystem = fileSystem ?? throw new ArgumentNullException("fileSystem");
         }
 
         public AppConfigLoadResult Load()
@@ -72,9 +101,162 @@ namespace readboard
 
             EnsureConfigMetadata(config);
             NormalizeWindowPosition(config);
-            WriteJsonConfig(config);
-            WriteLegacyMainConfig(config);
-            WriteLegacyOtherConfig(config);
+
+            ConfigWriteFile[] files = CreateConfigWriteFiles(config);
+            string transactionDirectory = GetTransactionDirectoryPath();
+            Exception failure = null;
+            bool retainTransactionDirectory = false;
+            try
+            {
+                fileSystem.CreateDirectory(transactionDirectory);
+                StageConfigFiles(files, transactionDirectory);
+                BackupConfigFiles(files, transactionDirectory);
+                failure = CommitConfigFiles(files, transactionDirectory);
+                retainTransactionDirectory = failure is DurableConfigurationException;
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+                retainTransactionDirectory = failure is DurableConfigurationException;
+            }
+            finally
+            {
+                if (!retainTransactionDirectory)
+                {
+                    Exception cleanupFailure = TryDeleteTransactionDirectory(transactionDirectory);
+                    if (cleanupFailure != null)
+                    {
+                        failure = new DurableConfigurationException(
+                            "Configuration transaction cleanup failed; persisted configuration state requires diagnosis.",
+                            failure,
+                            cleanupFailure,
+                            transactionDirectory);
+                    }
+                }
+            }
+
+            if (failure != null)
+                ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+
+        private ConfigWriteFile[] CreateConfigWriteFiles(AppConfig config)
+        {
+            return new[]
+            {
+                new ConfigWriteFile(
+                    JsonFileName,
+                    JsonSerializer.Serialize(config, SerializeOptions)),
+                new ConfigWriteFile(
+                    LegacyMainFileName,
+                    BuildLegacyMainConfig(config)),
+                new ConfigWriteFile(
+                    LegacyOtherFileName,
+                    BuildLegacyOtherConfig(config))
+            };
+        }
+
+        private string GetTransactionDirectoryPath()
+        {
+            return GetPath(TransactionDirectoryPrefix + Guid.NewGuid().ToString("N"));
+        }
+
+        private void StageConfigFiles(ConfigWriteFile[] files, string transactionDirectory)
+        {
+            for (int i = 0; i < files.Length; i++)
+            {
+                ConfigWriteFile file = files[i];
+                file.TargetPath = GetPath(file.FileName);
+                file.StagedPath = Path.Combine(transactionDirectory, file.FileName);
+                fileSystem.WriteAllText(file.StagedPath, file.Content);
+            }
+        }
+
+        private void BackupConfigFiles(ConfigWriteFile[] files, string transactionDirectory)
+        {
+            for (int i = 0; i < files.Length; i++)
+            {
+                ConfigWriteFile file = files[i];
+                file.OriginalExists = fileSystem.FileExists(file.TargetPath);
+                if (!file.OriginalExists)
+                    continue;
+
+                file.BackupPath = Path.Combine(transactionDirectory, file.FileName + ".backup");
+                fileSystem.Copy(file.TargetPath, file.BackupPath);
+            }
+        }
+
+        private Exception CommitConfigFiles(ConfigWriteFile[] files, string transactionDirectory)
+        {
+            try
+            {
+                for (int i = 0; i < files.Length; i++)
+                {
+                    ConfigWriteFile file = files[i];
+                    file.CommitAttempted = true;
+                    fileSystem.ReplaceOrMove(file.StagedPath, file.TargetPath);
+                }
+
+                return null;
+            }
+            catch (Exception commitFailure)
+            {
+                Exception rollbackFailure = RollbackConfigFiles(files);
+                if (rollbackFailure != null)
+                {
+                    return new DurableConfigurationException(
+                        "Configuration commit failed and rollback failed; persisted configuration state may be inconsistent.",
+                        commitFailure,
+                        rollbackFailure,
+                        transactionDirectory);
+                }
+
+                return commitFailure;
+            }
+        }
+
+        private Exception RollbackConfigFiles(ConfigWriteFile[] files)
+        {
+            List<Exception> failures = new List<Exception>();
+            for (int i = files.Length - 1; i >= 0; i--)
+            {
+                ConfigWriteFile file = files[i];
+                if (!file.CommitAttempted)
+                    continue;
+
+                try
+                {
+                    if (file.OriginalExists)
+                        fileSystem.ReplaceOrMove(file.BackupPath, file.TargetPath);
+                    else if (fileSystem.FileExists(file.TargetPath))
+                        fileSystem.DeleteFile(file.TargetPath);
+                }
+                catch (Exception ex)
+                {
+                    failures.Add(new IOException(
+                        "Failed to roll back configuration file " + file.FileName + ".",
+                        ex));
+                }
+            }
+
+            if (failures.Count == 0)
+                return null;
+            if (failures.Count == 1)
+                return failures[0];
+            return new AggregateException("Multiple configuration files failed to roll back.", failures);
+        }
+
+        private Exception TryDeleteTransactionDirectory(string transactionDirectory)
+        {
+            try
+            {
+                if (fileSystem.DirectoryExists(transactionDirectory))
+                    fileSystem.DeleteDirectory(transactionDirectory);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                return ex;
+            }
         }
 
         private JsonConfigReadResult ReadJsonConfig()
@@ -143,6 +325,7 @@ namespace readboard
             config.PlayPonder = ReadBoolValue(values, "PlayPonder", config.PlayPonder);
             config.DisableShowInBoardShortcut = ReadBoolValue(values, "DisableShowInBoardShortcut", config.DisableShowInBoardShortcut);
             config.DebugDiagnosticsEnabled = ReadBoolValue(values, "DebugDiagnosticsEnabled", config.DebugDiagnosticsEnabled);
+            config.LanguagePreference = ReadStringValue(values, "LanguagePreference", config.LanguagePreference);
             config.UiThemeMode = ReadIntValue(values, "UiThemeMode", config.UiThemeMode);
             config.ColorMode = ReadIntValue(values, "ColorMode", config.ColorMode);
             config.SyncMode = (SyncMode)ReadIntValue(values, "SyncMode", (int)config.SyncMode);
@@ -153,6 +336,9 @@ namespace readboard
             config.CustomBoardHeight = ReadIntValue(values, "CustomBoardHeight", config.CustomBoardHeight);
             config.WindowPosX = ReadIntValue(values, "WindowPosX", config.WindowPosX);
             config.WindowPosY = ReadIntValue(values, "WindowPosY", config.WindowPosY);
+            config.WindowClientWidth = ReadIntValue(values, "WindowClientWidth", config.WindowClientWidth);
+            config.WindowClientHeight = ReadIntValue(values, "WindowClientHeight", config.WindowClientHeight);
+            config.WindowMaximized = ReadBoolValue(values, "WindowMaximized", config.WindowMaximized);
             config.AutoPlayColorMode = (AutoPlayColorMode)ReadIntValue(values, "AutoPlayColorMode", (int)config.AutoPlayColorMode);
             config.AutoPlayMoveMode = (AutoPlayMoveMode)ReadIntValue(values, "AutoPlayMoveMode", (int)config.AutoPlayMoveMode);
             config.FoxAutoPlayNickname = ReadStringValue(values, "FoxAutoPlayNickname", config.FoxAutoPlayNickname);
@@ -190,6 +376,8 @@ namespace readboard
         //   15: + ColorMode @ 14
         //   18: + AutoPlayColorMode @ 15, FoxAutoPlayNickname @ 16, FoxAutoPlayNicknameSignature @ 17
         //   19: + AutoPlayMoveMode @ 18
+        //   22: + WindowClientWidth @ 19, WindowClientHeight @ 20, WindowMaximized @ 21
+        //   23: + LanguagePreference @ 22
         private bool ApplyLegacyOtherConfig(AppConfig config)
         {
             string[] parts = ReadLegacyParts(LegacyOtherFileName);
@@ -230,6 +418,14 @@ namespace readboard
                 config.FoxAutoPlayNicknameSignature = ReadString(parts[17], config.FoxAutoPlayNicknameSignature);
             if (parts.Length >= 19)
                 config.AutoPlayMoveMode = (AutoPlayMoveMode)ReadInt(parts[18], (int)config.AutoPlayMoveMode);
+            if (parts.Length >= 22)
+            {
+                config.WindowClientWidth = ReadInt(parts[19], config.WindowClientWidth);
+                config.WindowClientHeight = ReadInt(parts[20], config.WindowClientHeight);
+                config.WindowMaximized = ReadBool(parts[21], config.WindowMaximized);
+            }
+            if (parts.Length >= 23)
+                config.LanguagePreference = ReadString(parts[22], config.LanguagePreference);
             return true;
         }
 
@@ -247,24 +443,7 @@ namespace readboard
             return lines[0].Split('_');
         }
 
-        private void WriteJsonConfig(AppConfig config)
-        {
-            string path = GetPath(JsonFileName);
-            string tempPath = path + JsonTempSuffix;
-            string content = JsonSerializer.Serialize(config, SerializeOptions);
-            File.WriteAllText(tempPath, content, Encoding.UTF8);
-            try
-            {
-                ReplaceJsonFile(tempPath, path);
-            }
-            finally
-            {
-                if (File.Exists(tempPath))
-                    File.Delete(tempPath);
-            }
-        }
-
-        private void WriteLegacyMainConfig(AppConfig config)
+        private string BuildLegacyMainConfig(AppConfig config)
         {
             StringBuilder builder = new StringBuilder();
             builder.Append(config.BlackOffset);
@@ -279,10 +458,10 @@ namespace readboard
             builder.Append('_').Append(ToLegacyBool(config.AutoMinimize));
             builder.Append('_').Append(machineKey);
             builder.Append('_').Append((int)config.SyncMode);
-            File.WriteAllText(GetPath(LegacyMainFileName), builder.ToString(), Encoding.UTF8);
+            return builder.ToString();
         }
 
-        private void WriteLegacyOtherConfig(AppConfig config)
+        private string BuildLegacyOtherConfig(AppConfig config)
         {
             StringBuilder builder = new StringBuilder();
             builder.Append(protocolVersion);
@@ -304,7 +483,11 @@ namespace readboard
             builder.Append('_').Append(EscapeLegacyToken(config.FoxAutoPlayNickname));
             builder.Append('_').Append(EscapeLegacyToken(config.FoxAutoPlayNicknameSignature));
             builder.Append('_').Append((int)config.AutoPlayMoveMode);
-            File.WriteAllText(GetPath(LegacyOtherFileName), builder.ToString(), Encoding.UTF8);
+            builder.Append('_').Append(config.WindowClientWidth);
+            builder.Append('_').Append(config.WindowClientHeight);
+            builder.Append('_').Append(ToLegacyBool(config.WindowMaximized));
+            builder.Append('_').Append(config.LanguagePreference);
+            return builder.ToString();
         }
 
         private void EnsureConfigMetadata(AppConfig config)
@@ -317,6 +500,14 @@ namespace readboard
                 AppConfig.NormalizeAutoPlayColorMode(config.AutoPlayColorMode);
             config.AutoPlayMoveMode =
                 AppConfig.NormalizeAutoPlayMoveMode(config.AutoPlayMoveMode);
+            config.LanguagePreference =
+                AppConfig.NormalizeLanguagePreference(config.LanguagePreference);
+            config.WindowClientWidth = Math.Max(
+                AppConfig.MinimumWindowClientWidth,
+                config.WindowClientWidth);
+            config.WindowClientHeight = Math.Max(
+                AppConfig.MinimumWindowClientHeight,
+                config.WindowClientHeight);
         }
 
         private static void NormalizeWindowPosition(AppConfig config)
@@ -358,16 +549,6 @@ namespace readboard
         private string GetPath(string fileName)
         {
             return Path.Combine(baseDirectory, fileName);
-        }
-
-        private static void ReplaceJsonFile(string tempPath, string destinationPath)
-        {
-            if (File.Exists(destinationPath))
-            {
-                File.Replace(tempPath, destinationPath, null);
-                return;
-            }
-            File.Move(tempPath, destinationPath);
         }
 
         private bool IsOwnedByCurrentMachine(AppConfig config)

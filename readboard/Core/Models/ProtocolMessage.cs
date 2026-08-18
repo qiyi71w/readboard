@@ -16,7 +16,8 @@ namespace readboard
         YikeContext = 11,
         YikeGeometry = 12,
         YikeBrowserSyncStop = 13,
-        ReadboardUpdatePackageV2Supported = 14
+        AnalysisState = 14,
+        ReadboardUpdatePackageV2Supported = 15
     }
 
     internal sealed class ProtocolMessage
@@ -27,6 +28,7 @@ namespace readboard
         public string YikeRoomToken { get; set; }
         public int? YikeMoveNumber { get; set; }
         public YikeBoardGeometry YikeGeometry { get; set; }
+        public bool AnalysisRunning { get; set; }
 
         public static ProtocolMessage CreateLegacyLine(string rawText)
         {

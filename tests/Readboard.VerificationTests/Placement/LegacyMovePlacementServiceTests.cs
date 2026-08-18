@@ -278,6 +278,41 @@ namespace Readboard.VerificationTests.Placement
             Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(BuildMouseLParam(175, 325), message.LParam));
         }
 
+        [Fact]
+        public void CanResolvePlacementRegion_YikeBoundsAvailability_HasNoPlacementSideEffects()
+        {
+            RecordingNativeMethods nativeMethods = new RecordingNativeMethods
+            {
+                YikeRenderWidgetHandle = new IntPtr(6464),
+                YikeRenderWidgetBounds = new PixelRect(0, 0, 800, 600)
+            };
+            LegacyMovePlacementService service = new LegacyMovePlacementService(nativeMethods);
+            BoardFrame frame = new BoardFrame
+            {
+                SyncMode = SyncMode.Yike,
+                BoardSize = new BoardDimensions(5, 5),
+                Viewport = new BoardViewport
+                {
+                    SourceBounds = new PixelRect(100, 200, 250, 250)
+                },
+                Window = new WindowDescriptor
+                {
+                    Handle = new IntPtr(3003),
+                    Bounds = new PixelRect(0, 0, 800, 600)
+                }
+            };
+
+            Assert.True(service.CanResolvePlacementRegion(frame));
+
+            nativeMethods.YikeRenderWidgetBounds = null;
+
+            Assert.False(service.CanResolvePlacementRegion(frame));
+            Assert.Equal(0, nativeMethods.ForegroundClickCount);
+            Assert.Equal(0, nativeMethods.SwitchToWindowCount);
+            Assert.Empty(nativeMethods.PostedMessages);
+            Assert.Empty(nativeMethods.SentMessages);
+        }
+
         private static int BuildMouseLParam(int x, int y)
         {
             return (x & 0xFFFF) | ((y & 0xFFFF) << 16);
@@ -347,6 +382,7 @@ namespace Readboard.VerificationTests.Placement
             public List<PostedMouseMessage> PostedMessages { get; } = new List<PostedMouseMessage>();
             public List<PostedMouseMessage> SentMessages { get; } = new List<PostedMouseMessage>();
             public int ForegroundClickCount { get; private set; }
+            public int SwitchToWindowCount { get; private set; }
             public Action OnSwitchToWindow { get; set; }
             public IntPtr YikeRenderWidgetHandle { get; set; }
             public PixelRect YikeRenderWidgetBounds { get; set; }
@@ -377,6 +413,7 @@ namespace Readboard.VerificationTests.Placement
 
             public void SwitchToWindow(IntPtr handle)
             {
+                SwitchToWindowCount++;
                 if (OnSwitchToWindow != null)
                     OnSwitchToWindow();
             }

@@ -9,53 +9,78 @@ namespace readboard
         private void ApplyLoadedConfiguration()
         {
             AppConfig config = Program.CurrentContext.Config;
-            boardW = config.BoardWidth;
-            boardH = config.BoardHeight;
-            SetSyncBoth(config.SyncBoth);
+            ProjectControlCenterState();
             posX = config.WindowPosX;
             posY = config.WindowPosY;
-            SetCurrentSyncType((int)config.SyncMode);
-            ApplyBoardSelection(config);
-            ApplyAutoPlayColorMode(config.AutoPlayColorMode);
-            ApplyAutoPlayMoveMode(config.AutoPlayMoveMode);
-            ApplySyncModeSelection();
-            ApplySyncModeControlState();
-            chkShowInBoard.Checked = Program.showInBoard;
-            Program.showInBoard = chkShowInBoard.Checked;
-            ApplySyncModeControlState();
         }
 
         public void PersistConfiguration()
         {
-            Program.SaveAppConfig(BuildCurrentAppConfig());
+            try
+            {
+                Program.SaveAppConfig(BuildCurrentAppConfig());
+                controlCenterRuntime.MarkPersistenceSucceeded();
+            }
+            catch (Exception exception)
+            {
+                controlCenterRuntime.MarkPersistenceFailed(exception);
+                throw;
+            }
         }
 
         private AppConfig BuildCurrentAppConfig()
         {
             AppConfig config = Program.CurrentContext.Config.Clone();
-            int customBoardWidth;
-            int customBoardHeight;
-            Point persistedWindowLocation = ResolvePersistableWindowLocation();
-            GetCustomBoardDimensions(out customBoardWidth, out customBoardHeight);
-            config.BoardWidth = boardW;
-            config.BoardHeight = boardH;
-            config.CustomBoardWidth = customBoardWidth;
-            config.CustomBoardHeight = customBoardHeight;
-            config.SyncBoth = sessionCoordinator.SyncBoth;
-            config.SyncMode = (SyncMode)CurrentSyncType;
+            Rectangle persistedWindowBounds = ResolvePersistableWindowBounds();
+            Point persistedWindowLocation = ResolvePersistableWindowLocation(persistedWindowBounds);
+            ControlCenterPreferences preferences = controlCenterRuntime.CurrentPreferences;
+            config.BoardWidth = preferences.BoardWidth;
+            config.BoardHeight = preferences.BoardHeight;
+            config.CustomBoardWidth = preferences.CustomBoardWidth;
+            config.CustomBoardHeight = preferences.CustomBoardHeight;
+            config.SyncBoth = preferences.TwoWaySync;
+            config.ShowInBoard = preferences.ShowOnBoard;
+            config.SyncMode = preferences.Platform;
+            config.AutoPlayColorMode = preferences.AutoPlayColorMode;
+            config.AutoPlayMoveMode = preferences.AutoPlayMoveMode;
             config.WindowPosX = persistedWindowLocation.X;
             config.WindowPosY = persistedWindowLocation.Y;
-            config.AutoPlayColorMode = GetSelectedAutoPlayColorMode();
-            config.AutoPlayMoveMode = GetSelectedAutoPlayMoveMode();
+            Size persistedWindowClientSize = ResolvePersistableWindowClientSize(persistedWindowBounds);
+            Size logicalWindowSize = WebViewWindowLayoutPolicy.UnscalePhysicalSize(
+                persistedWindowClientSize,
+                DeviceDpi);
+            config.WindowClientWidth = Math.Max(AppConfig.MinimumWindowClientWidth, logicalWindowSize.Width);
+            config.WindowClientHeight = Math.Max(AppConfig.MinimumWindowClientHeight, logicalWindowSize.Height);
+            config.WindowMaximized = WindowState == FormWindowState.Maximized;
             return config;
         }
 
-        private Point ResolvePersistableWindowLocation()
+        private Rectangle ResolvePersistableWindowBounds()
         {
-            Rectangle boundsToPersist =
+            return
                 WindowState == FormWindowState.Normal && Bounds.Width > 0 && Bounds.Height > 0
                     ? Bounds
                     : RestoreBounds;
+        }
+
+        private Size ResolvePersistableWindowClientSize(Rectangle persistedWindowBounds)
+        {
+            if (WindowState == FormWindowState.Normal && ClientSize.Width > 0 && ClientSize.Height > 0)
+                return ClientSize;
+
+            Size nonClientSize = SizeFromClientSize(Size.Empty);
+            return ResolveClientSizeFromOuterBounds(persistedWindowBounds.Size, nonClientSize);
+        }
+
+        internal static Size ResolveClientSizeFromOuterBounds(Size outerSize, Size nonClientSize)
+        {
+            return new Size(
+                Math.Max(0, outerSize.Width - nonClientSize.Width),
+                Math.Max(0, outerSize.Height - nonClientSize.Height));
+        }
+
+        private static Point ResolvePersistableWindowLocation(Rectangle boundsToPersist)
+        {
             Point location = boundsToPersist.Location;
             Rectangle virtualScreen = SystemInformation.VirtualScreen;
             if (location.X <= -16000
@@ -70,88 +95,6 @@ namespace readboard
             return location;
         }
 
-        private void ApplyBoardSelection(AppConfig config)
-        {
-            if (boardW == boardH)
-            {
-                ApplySquareBoardSelection(config);
-                return;
-            }
 
-            txtBoardWidth.Text = boardW.ToString();
-            txtBoardHeight.Text = boardH.ToString();
-            rdoOtherBoard.Checked = true;
-        }
-
-        private void ApplySquareBoardSelection(AppConfig config)
-        {
-            if (boardW == 19)
-            {
-                rdo19x19.Checked = true;
-                ApplyCustomBoardText(config);
-                return;
-            }
-            if (boardW == 13)
-            {
-                rdo13x13.Checked = true;
-                ApplyCustomBoardText(config);
-                return;
-            }
-            if (boardW == 9)
-            {
-                rdo9x9.Checked = true;
-                ApplyCustomBoardText(config);
-                return;
-            }
-
-            txtBoardWidth.Text = boardW.ToString();
-            txtBoardHeight.Text = boardH.ToString();
-            rdoOtherBoard.Checked = true;
-        }
-
-        private void ApplyCustomBoardText(AppConfig config)
-        {
-            if (config.CustomBoardWidth > 0)
-                txtBoardWidth.Text = config.CustomBoardWidth.ToString();
-            if (config.CustomBoardHeight > 0)
-                txtBoardHeight.Text = config.CustomBoardHeight.ToString();
-        }
-
-        private void ApplySyncModeSelection()
-        {
-            switch (CurrentSyncType)
-            {
-                case TYPE_FOX:
-                    rdoFox.Checked = true;
-                    return;
-                case TYPE_TYGEM:
-                    rdoTygem.Checked = true;
-                    return;
-                case TYPE_SINA:
-                    rdoSina.Checked = true;
-                    return;
-                case TYPE_FOX_BACKGROUND_PLACE:
-                    rdoFoxBack.Checked = true;
-                    return;
-                case TYPE_FOREGROUND:
-                    rdoFore.Checked = true;
-                    return;
-                case TYPE_YIKE:
-                    rdoYike.Checked = true;
-                    return;
-            }
-            rdoBack.Checked = true;
-        }
-
-        private void GetCustomBoardDimensions(out int customBoardWidth, out int customBoardHeight)
-        {
-            customBoardWidth = -1;
-            customBoardHeight = -1;
-            int parsedValue;
-            if (int.TryParse(txtBoardWidth.Text, out parsedValue))
-                customBoardWidth = parsedValue;
-            if (int.TryParse(txtBoardHeight.Text, out parsedValue))
-                customBoardHeight = parsedValue;
-        }
     }
 }

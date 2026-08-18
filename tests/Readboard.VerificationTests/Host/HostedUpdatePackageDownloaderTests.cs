@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using readboard;
 using Xunit;
@@ -114,6 +115,51 @@ namespace Readboard.VerificationTests.Host
 
                 Assert.Equal("download failed", exception.Message);
                 Assert.Empty(Directory.GetFiles(workspace.RootPath, "*", SearchOption.AllDirectories));
+            }
+        }
+
+        [Fact]
+        public async Task DownloadAsync_CancellationDeletesPartialAndFinalArtifacts()
+        {
+            using (var workspace = new DownloadWorkspace())
+            {
+                var gate = new TaskCompletionSource<object>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                using (var cancellation = new CancellationTokenSource())
+                {
+                    string temporaryPath = null;
+                    HostedUpdatePackageDownloader downloader = new HostedUpdatePackageDownloader(
+                        workspace.RootPath,
+                        async (downloadUri, destinationPath, cancellationToken) =>
+                        {
+                            temporaryPath = destinationPath;
+                            await File.WriteAllTextAsync(destinationPath, "partial");
+                            await gate.Task;
+                        });
+
+                    HostedUpdateRequest request = new HostedUpdateRequest(
+                        "v3.0.2",
+                        "readboard-github-release-v3.0.2.zip",
+                        "https://github.com/qiyi71w/readboard/releases/download/v3.0.2/readboard-github-release-v3.0.2.zip",
+                        PayloadSha256);
+                    string finalPath = Path.Combine(
+                        workspace.RootPath,
+                        request.VersionTag,
+                        request.AssetName);
+                    Directory.CreateDirectory(Path.GetDirectoryName(finalPath));
+                    File.WriteAllText(finalPath, "stale candidate");
+                    Task<string> download = downloader.DownloadAsync(request, cancellation.Token);
+
+                    cancellation.Cancel();
+                    gate.TrySetResult(null);
+
+                    await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await download);
+
+                    Assert.NotNull(temporaryPath);
+                    Assert.False(File.Exists(temporaryPath));
+                    Assert.False(File.Exists(finalPath));
+                    Assert.Empty(Directory.GetFiles(workspace.RootPath, "*", SearchOption.AllDirectories));
+                }
             }
         }
 

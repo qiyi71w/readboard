@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace readboard
@@ -22,8 +23,8 @@ namespace readboard
 
         private readonly Func<string> _currentVersionProvider;
         private readonly Func<Version> _windowsVersionProvider;
-        private readonly Func<Task<string>> _channelManifestJsonProvider;
-        private readonly Func<string, Task<string>> _releaseJsonProvider;
+        private readonly Func<CancellationToken, Task<string>> _channelManifestJsonProvider;
+        private readonly Func<string, CancellationToken, Task<string>> _releaseJsonProvider;
 
         public GitHubUpdateChecker()
             : this(
@@ -34,23 +35,29 @@ namespace readboard
         {
         }
 
+
         internal GitHubUpdateChecker(
             Func<string> currentVersionProvider,
             Func<Version> windowsVersionProvider,
-            Func<Task<string>> channelManifestJsonProvider,
-            Func<string, Task<string>> releaseJsonProvider)
+            Func<CancellationToken, Task<string>> channelManifestJsonProvider,
+            Func<string, CancellationToken, Task<string>> releaseJsonProvider)
         {
             _currentVersionProvider = currentVersionProvider ??
-                throw new ArgumentNullException("currentVersionProvider");
+                throw new ArgumentNullException(nameof(currentVersionProvider));
             _windowsVersionProvider = windowsVersionProvider ??
-                throw new ArgumentNullException("windowsVersionProvider");
+                throw new ArgumentNullException(nameof(windowsVersionProvider));
             _channelManifestJsonProvider = channelManifestJsonProvider ??
-                throw new ArgumentNullException("channelManifestJsonProvider");
+                throw new ArgumentNullException(nameof(channelManifestJsonProvider));
             _releaseJsonProvider = releaseJsonProvider ??
-                throw new ArgumentNullException("releaseJsonProvider");
+                throw new ArgumentNullException(nameof(releaseJsonProvider));
         }
 
-        public async Task<UpdateCheckResult> CheckAsync()
+        public Task<UpdateCheckResult> CheckAsync()
+        {
+            return CheckAsync(CancellationToken.None);
+        }
+
+        public async Task<UpdateCheckResult> CheckAsync(CancellationToken cancellationToken)
         {
             string currentVersion = null;
             try
@@ -62,7 +69,7 @@ namespace readboard
                     throw new InvalidOperationException("Windows version is unavailable.");
 
                 string manifestJson = await RequireTask(
-                    _channelManifestJsonProvider(),
+                    _channelManifestJsonProvider(cancellationToken),
                     "Channel manifest request");
                 List<UpdateChannel> channels = ParseManifest(manifestJson);
                 UpdateChannel channel = SelectChannel(channels, windowsVersion);
@@ -76,7 +83,7 @@ namespace readboard
                 }
 
                 string releaseJson = await RequireTask(
-                    _releaseJsonProvider(channel.LatestTag),
+                    _releaseJsonProvider(channel.LatestTag, cancellationToken),
                     "Release request");
                 GitHubReleaseInfo release = ParseRelease(releaseJson, channel);
                 SemanticVersion latestVersion =
@@ -92,6 +99,10 @@ namespace readboard
                     channel,
                     incompatibleNewerChannel,
                     release);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception exception)
             {
@@ -572,17 +583,24 @@ namespace readboard
                 label + " is not a valid semantic version: " + value);
         }
 
-        private static Task<string> DownloadChannelManifestJsonAsync()
+        private static Task<string> DownloadChannelManifestJsonAsync(
+            CancellationToken cancellationToken)
         {
-            return DownloadJsonAsync(ChannelManifestUrl);
+            return DownloadJsonAsync(ChannelManifestUrl, cancellationToken);
         }
 
-        private static Task<string> DownloadReleaseJsonAsync(string tag)
+        private static Task<string> DownloadReleaseJsonAsync(
+            string tag,
+            CancellationToken cancellationToken)
         {
-            return DownloadJsonAsync(ReleaseApiUrlPrefix + Uri.EscapeDataString(tag));
+            return DownloadJsonAsync(
+                ReleaseApiUrlPrefix + Uri.EscapeDataString(tag),
+                cancellationToken);
         }
 
-        private static async Task<string> DownloadJsonAsync(string url)
+        private static async Task<string> DownloadJsonAsync(
+            string url,
+            CancellationToken cancellationToken)
         {
             var handler = new HttpClientHandler
             {
@@ -595,7 +613,7 @@ namespace readboard
                 client.DefaultRequestHeaders.Accept.Add(
                     new MediaTypeWithQualityHeaderValue(GitHubAcceptHeader));
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(GitHubUserAgent);
-                return await client.GetStringAsync(url);
+                return await client.GetStringAsync(url, cancellationToken);
             }
         }
 

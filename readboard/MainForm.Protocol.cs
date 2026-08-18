@@ -8,24 +8,47 @@ namespace readboard
         {
             if (command == null)
                 throw new ArgumentNullException("command");
-            if (TryDispatchProtocolCommand(command))
+            Action trackedCommand = delegate
+            {
+                MarkHostCommunicationEstablished();
+                command();
+            };
+            if (TryDispatchProtocolCommand(trackedCommand))
                 return;
-            EnqueuePendingProtocolCommand(command);
+            EnqueuePendingProtocolCommand(trackedCommand);
+        }
+
+        private void MarkHostCommunicationEstablished()
+        {
+            if (hostCommunicationEstablished)
+                return;
+            hostCommunicationEstablished = true;
+            ApplyControlCenterSessionObservation(
+                new ControlCenterSessionObservation(
+                    controlCenterRuntime.CaptureSessionObservationGeneration())
+                    .WithHostConnected(true)
+                    .WithSemanticLog("INFO", "WebView_hostConnected"));
         }
 
         public void NotifyProtocolReady()
         {
             sessionCoordinator.NotifyReady(Program.playPonder);
+            ApplyControlCenterSessionObservation(
+                new ControlCenterSessionObservation(
+                    controlCenterRuntime.CaptureSessionObservationGeneration())
+                    .WithHostConnected(true)
+                    .WithSemanticLog("INFO", "WebView_hostReadyLog"));
         }
 
         public void ReplayStartupProtocolState()
         {
             SendBothSyncStateChange();
-            if (!string.IsNullOrWhiteSpace(textBox1.Text))
+            ControlCenterSessionState sessionState = controlCenterRuntime.CurrentSessionState;
+            if (!string.IsNullOrWhiteSpace(sessionState.AiTimeValue))
                 SendTimeChangedCommand();
-            if (!string.IsNullOrWhiteSpace(textBox2.Text))
+            if (!string.IsNullOrWhiteSpace(sessionState.PlayoutsValue))
                 SendPlayoutsChangedCommand();
-            if (!string.IsNullOrWhiteSpace(textBox3.Text))
+            if (!string.IsNullOrWhiteSpace(sessionState.FirstPolicyValue))
                 SendFirstPolicyChangedCommand();
             SendPlayCommandIfSelected();
         }
@@ -114,14 +137,52 @@ namespace readboard
             {
                 ClearYikeContext();
                 ApplyMainWindowTitle();
+                ApplyControlCenterSessionObservation(
+                    new ControlCenterSessionObservation(
+                        controlCenterRuntime.CaptureSessionObservationGeneration())
+                        .WithYikeWindowContext(YikeWindowContext.Unknown()));
                 return;
             }
 
-            lastYikeWindowContext = YikeWindowContext.CopyOf(context);
-            if (hwnd != IntPtr.Zero)
-                lastYikeContextWindowHandle = hwnd;
-            sessionCoordinator.SetYikeContext(lastYikeWindowContext);
-            ApplyMainWindowTitle();
+            yikeContextRuntime.Apply(context);
+        }
+
+        private sealed class MainFormYikeContextAdapter : IYikeContextAdapter
+        {
+            private readonly MainForm owner;
+
+            public MainFormYikeContextAdapter(MainForm owner)
+            {
+                this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            }
+
+            public long CaptureObservationGeneration()
+            {
+                return owner.controlCenterRuntime.CaptureSessionObservationGeneration();
+            }
+
+            public void StoreContext(YikeWindowContext context)
+            {
+                owner.lastYikeWindowContext = context;
+                if (owner.hwnd != IntPtr.Zero)
+                    owner.lastYikeContextWindowHandle = owner.hwnd;
+            }
+
+            public void SetCoordinatorContext(YikeWindowContext context)
+            {
+                owner.sessionCoordinator.SetYikeContext(context);
+            }
+
+            public void ApplyTitle()
+            {
+                owner.ApplyMainWindowTitle();
+            }
+
+            public ControlCenterSessionObservationApplyResult ApplyObservation(
+                ControlCenterSessionObservation observation)
+            {
+                return owner.ApplyControlCenterSessionObservation(observation);
+            }
         }
 
         void IProtocolCommandHost.HandleYikeGeometry(YikeBoardGeometry geometry)
@@ -167,23 +228,25 @@ namespace readboard
 
         void IProtocolCommandHost.HandleReadboardUpdateInstalling()
         {
-            FormUpdate dialog = activeHostedUpdateDialog;
-            if (dialog != null && !dialog.IsDisposed)
-                dialog.MarkHostedInstalling();
+            MarkWebViewHostedUpdateInstalling();
+        }
+
+        void IAnalysisStateProtocolHost.HandleAnalysisState(bool running)
+        {
+            ApplyControlCenterSessionObservation(
+                new ControlCenterSessionObservation(
+                    controlCenterRuntime.CaptureSessionObservationGeneration())
+                    .WithAnalysisState(running, true));
         }
 
         void IProtocolCommandHost.HandleReadboardUpdateCancelled()
         {
-            FormUpdate dialog = activeHostedUpdateDialog;
-            if (dialog != null && !dialog.IsDisposed)
-                dialog.MarkHostedCancelled();
+            MarkWebViewHostedUpdateCancelled();
         }
 
         void IProtocolCommandHost.HandleReadboardUpdateFailed(string message)
         {
-            FormUpdate dialog = activeHostedUpdateDialog;
-            if (dialog != null && !dialog.IsDisposed)
-                dialog.MarkHostedFailed(message ?? string.Empty);
+            MarkWebViewHostedUpdateFailed(message ?? string.Empty);
         }
     }
 }

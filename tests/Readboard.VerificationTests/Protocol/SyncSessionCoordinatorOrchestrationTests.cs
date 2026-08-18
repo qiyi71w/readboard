@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,12 +35,12 @@ namespace Readboard.VerificationTests.Protocol
 
             bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
             Assert.True(started);
-            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(transport.WaitForLines(7, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
+            Assert.True(transport.WaitForLines(7));
 
             Invoke(coordinator, "StopSyncSession");
 
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
             Assert.Equal(
                 new[]
                 {
@@ -88,8 +87,77 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Same(recognition.Snapshot, hostRecorder.LastRecognizedSnapshot);
         }
 
+        [Theory]
+        [InlineData(0, "play>black>0 0 0", 1)]
+        [InlineData(1, "play>black>0 0 0 gma", 2)]
+        public void KeepSync_ResendsPlayAfterFoxLiveRoomContextChanges(
+            int moveModeValue,
+            string playLine,
+            int expectedBoardFrameCount)
+        {
+            AutoPlayMoveMode moveMode = (AutoPlayMoveMode)moveModeValue;
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncPlatform("fox");
+            coordinator.SetSyncBoth(true);
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            Type descriptorInterfaceType = RequireType(assembly, "readboard.IWindowDescriptorFactory");
+
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, new IntPtr(5151));
+            SetProperty(snapshot, "PlayColor", "black");
+            SetProperty(snapshot, "AutoPlayMoveMode", moveMode);
+            FoxLiveContextSequenceHostRecorder hostRecorder = new FoxLiveContextSequenceHostRecorder(
+                snapshot,
+                coordinator,
+                CreateFoxLiveRoomContext("111号", 57),
+                CreateFoxLiveRoomContext("222号", 57));
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            ScriptedBlockingRecognitionService recognitionService = new ScriptedBlockingRecognitionService(
+                CreateResult("re=fox"),
+                4);
+            SetProperty(runtime, "RecognitionService", recognitionService);
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            SetProperty(runtime, "WindowDescriptorFactory", CreateProxy(
+                descriptorInterfaceType,
+                new DescriptorFactoryRecorder().HandleCall));
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+            try
+            {
+                VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
+                VerificationCompletion.Wait(recognitionService.BlockedRecognizeStarted, "Recognition did not block as expected.");
+            }
+            finally
+            {
+                recognitionService.Release();
+                Invoke(coordinator, "StopSyncSession");
+            }
+
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
+            int secondRoomIndex = transport.SentLines.IndexOf("roomToken 222号");
+            int firstPlayIndex = transport.SentLines.IndexOf(playLine);
+            int firstBoardIndex = transport.SentLines.IndexOf("re=fox");
+            int secondPlayIndex = transport.SentLines.IndexOf(playLine, firstPlayIndex + 1);
+            int postPlayBoardIndex = transport.SentLines.IndexOf("re=fox", secondPlayIndex + 1);
+            Assert.True(firstPlayIndex >= 0, "Initial keep sync should send the selected play color.");
+            Assert.True(firstBoardIndex > firstPlayIndex, "Initial keep sync should send an authoritative board after play state replay.");
+            Assert.True(secondRoomIndex >= 0, "The second Fox room context should be sent.");
+            Assert.True(secondPlayIndex > secondRoomIndex, "Changing Fox live room should resend play after the new room context.");
+            Assert.Equal(moveMode == AutoPlayMoveMode.GenmoveAnalyze, postPlayBoardIndex > secondPlayIndex);
+            Assert.Equal(expectedBoardFrameCount, transport.CountLines("re=fox"));
+        }
+
         [Fact]
-        public void KeepSync_ResendsPlayAfterFoxLiveRoomContextChanges()
+        public void KeepSync_DoesNotSendPlayAfterFoxRoomAuthorizationIsInvalidated()
         {
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
@@ -103,7 +171,8 @@ namespace Readboard.VerificationTests.Protocol
 
             object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, new IntPtr(5151));
             SetProperty(snapshot, "PlayColor", "black");
-            FoxLiveContextSequenceHostRecorder hostRecorder = new FoxLiveContextSequenceHostRecorder(
+            SetProperty(snapshot, "AutoPlayColorMode", AutoPlayColorMode.FoxAuto);
+            FoxRoomAuthorizationSequenceHostRecorder hostRecorder = new FoxRoomAuthorizationSequenceHostRecorder(
                 snapshot,
                 coordinator,
                 CreateFoxLiveRoomContext("111号", 57),
@@ -112,7 +181,10 @@ namespace Readboard.VerificationTests.Protocol
             object runtime = Activator.CreateInstance(runtimeType);
             SetProperty(runtime, "Host", host);
             SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
-            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=fox")));
+            ScriptedBlockingRecognitionService recognitionService = new ScriptedBlockingRecognitionService(
+                CreateResult("re=fox"),
+                2);
+            SetProperty(runtime, "RecognitionService", recognitionService);
             SetProperty(runtime, "PlacementService", new PassivePlacementService());
             SetProperty(runtime, "OverlayService", new PassiveOverlayService());
             SetProperty(runtime, "WindowDescriptorFactory", CreateProxy(
@@ -121,26 +193,99 @@ namespace Readboard.VerificationTests.Protocol
 
             Invoke(coordinator, "AttachRuntime", runtime);
 
-            bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
-            Assert.True(started);
-            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(WaitForCondition(delegate
+            Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+            try
             {
+                VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
+                VerificationCompletion.Wait(
+                    recognitionService.BlockedRecognizeStarted,
+                    "Current-room recognition did not block as expected.");
+                Assert.Equal(1, transport.CountLines("stopAutoPlay"));
+                recognitionService.Release();
+            }
+            finally
+            {
+                recognitionService.Release();
+                Invoke(coordinator, "StopSyncSession");
+            }
+
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
+            Assert.Equal(1, transport.CountLines("play>black>0 0 0"));
+            Assert.Equal(1, transport.CountLines("stopAutoPlay"));
+        }
+
+        [Theory]
+        [InlineData(0, "play>black>0 0 0")]
+        [InlineData(1, "play>black>0 0 0 gma")]
+        public void KeepSync_RearmsUnchangedPlayAfterStopAutoPlay(
+            int moveModeValue,
+            string playLine)
+        {
+            AutoPlayMoveMode moveMode = (AutoPlayMoveMode)moveModeValue;
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncBoth(true);
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+
+            AutoPlayToggleHostRecorder hostRecorder = new AutoPlayToggleHostRecorder(
+                snapshotType,
+                moveMode);
+            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            ScriptedBlockingRecognitionService recognitionService = new ScriptedBlockingRecognitionService(
+                CreateResult("re=foreground"),
+                3);
+            SetProperty(runtime, "RecognitionService", recognitionService);
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+            try
+            {
+                VerificationCompletion.Wait(recognitionService.BlockedRecognizeStarted, "Recognition did not block as expected.");
+                Assert.Equal(1, transport.CountLines(playLine));
+
+                hostRecorder.SetAutoPlayEnabled(false);
+                coordinator.SendStopAutoPlay();
+                recognitionService.Release();
+                VerificationCompletion.Wait(hostRecorder.DisabledSnapshotCaptured, "Disabled snapshot was not captured.");
+                Assert.Equal(1, transport.CountLines(playLine));
+
+                hostRecorder.SetAutoPlayEnabled(true);
+                VerificationCompletion.Wait(hostRecorder.PostReenableSamplesSettled, "Re-enabled samples did not settle.");
+                Assert.Equal(2, transport.CountLines(playLine));
+
+                int secondPlayIndex;
                 lock (transport.SentLines)
                 {
-                    return transport.SentLines.IndexOf("roomToken 222号") >= 0;
+                    int firstPlayIndex = transport.SentLines.IndexOf(playLine);
+                    int stopIndex = transport.SentLines.IndexOf("stopAutoPlay", firstPlayIndex + 1);
+                    secondPlayIndex = transport.SentLines.IndexOf(playLine, stopIndex + 1);
+                    Assert.True(stopIndex > firstPlayIndex);
+                    Assert.True(secondPlayIndex > stopIndex);
                 }
-            }, TimeSpan.FromSeconds(1)));
+                lock (transport.SentLines)
+                {
+                    int postPlayBoardIndex = transport.SentLines.IndexOf("re=foreground", secondPlayIndex + 1);
+                    Assert.Equal(
+                        moveMode == AutoPlayMoveMode.GenmoveAnalyze,
+                        postPlayBoardIndex > secondPlayIndex);
+                }
+            }
+            finally
+            {
+                recognitionService.Release();
+                Invoke(coordinator, "StopSyncSession");
+            }
 
-            Invoke(coordinator, "StopSyncSession");
-
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
-            int secondRoomIndex = transport.SentLines.IndexOf("roomToken 222号");
-            int firstPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0");
-            int secondPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0", firstPlayIndex + 1);
-            Assert.True(firstPlayIndex >= 0, "Initial keep sync should send the selected play color.");
-            Assert.True(secondRoomIndex >= 0, "The second Fox room context should be sent.");
-            Assert.True(secondPlayIndex > secondRoomIndex, "Changing Fox live room should resend play after the new room context.");
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
         }
 
         [Fact]
@@ -179,18 +324,12 @@ namespace Readboard.VerificationTests.Protocol
 
             bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
             Assert.True(started);
-            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(WaitForCondition(delegate
-            {
-                lock (transport.SentLines)
-                {
-                    return transport.SentLines.IndexOf("recordCurrentMove 11") >= 0;
-                }
-            }, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
+            Assert.True(transport.WaitForLine("recordCurrentMove 11"));
 
             Invoke(coordinator, "StopSyncSession");
 
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
             int secondFingerprintIndex = transport.SentLines.IndexOf("recordTitleFingerprint game-1-variant");
             int firstPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0");
             int secondPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0", firstPlayIndex + 1);
@@ -235,18 +374,12 @@ namespace Readboard.VerificationTests.Protocol
 
             bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
             Assert.True(started);
-            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(WaitForCondition(delegate
-            {
-                lock (transport.SentLines)
-                {
-                    return transport.SentLines.IndexOf("liveTitleMove 58") >= 0;
-                }
-            }, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
+            Assert.True(transport.WaitForLine("liveTitleMove 58"));
 
             Invoke(coordinator, "StopSyncSession");
 
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
             Assert.Equal(1, transport.CountLines("play>black>0 0 0"));
         }
 
@@ -289,18 +422,12 @@ namespace Readboard.VerificationTests.Protocol
 
             bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
             Assert.True(started);
-            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(WaitForCondition(delegate
-            {
-                lock (transport.SentLines)
-                {
-                    return transport.SentLines.IndexOf("roomToken 222号") >= 0;
-                }
-            }, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
+            Assert.True(transport.WaitForLine("roomToken 222号"));
 
             Invoke(coordinator, "StopSyncSession");
 
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
             int secondRoomIndex = transport.SentLines.IndexOf("roomToken 222号");
             int firstPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0");
             int secondPlayIndex = transport.SentLines.IndexOf("play>black>0 0 0", firstPlayIndex + 1);
@@ -337,12 +464,12 @@ namespace Readboard.VerificationTests.Protocol
 
             bool started = (bool)Invoke(coordinator, "TryStartKeepSync");
             Assert.True(started);
-            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(transport.WaitForLines(7, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
+            Assert.True(transport.WaitForLines(7));
 
             Invoke(coordinator, "StopSyncSession");
 
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
             int syncIndex = transport.SentLines.IndexOf("sync");
             int yikeStartIndex = transport.SentLines.IndexOf("yikeSyncStart");
             int startIndex = transport.SentLines.IndexOf("start 19 19 4242");
@@ -394,12 +521,12 @@ namespace Readboard.VerificationTests.Protocol
             coordinator.Start();
 
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(transport.WaitForLines(7, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
+            Assert.True(transport.WaitForLines(7));
 
             transport.Emit("yikeBrowserSyncStop");
 
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
             Assert.False(coordinator.StartedSync);
             Assert.Contains("yikeSyncStop", transport.SentLines);
             Assert.Contains("stopsync", transport.SentLines);
@@ -437,12 +564,12 @@ namespace Readboard.VerificationTests.Protocol
 
             bool started = (bool)Invoke(coordinator, "TryStartContinuousSync");
             Assert.True(started);
-            Assert.True(hostRecorder.ContinuousStarted.Wait(TimeSpan.FromSeconds(1)));
-            Assert.True(transport.WaitForLines(7, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.ContinuousStarted, "Continuous sync did not start.");
+            Assert.True(transport.WaitForLines(7));
 
             Invoke(coordinator, "StopSyncSession");
 
-            Assert.True(hostRecorder.ContinuousStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.ContinuousStopped, "Continuous sync did not stop.");
             Assert.True(locatorRecorder.Calls > 0);
             Assert.Equal(new IntPtr(4242), hostRecorder.LastSelectedWindow);
             Assert.Equal(
@@ -516,13 +643,13 @@ namespace Readboard.VerificationTests.Protocol
             Invoke(coordinator, "AttachRuntime", runtime);
 
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
 
-            Thread worker = WaitForWorkerThread(coordinator, "keepSyncThread");
+            Thread worker = ReadWorkerThread(coordinator, "keepSyncThread");
             Assert.True(worker.IsBackground);
 
             Invoke(coordinator, "StopSyncSession");
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
         }
 
         [Fact]
@@ -552,11 +679,11 @@ namespace Readboard.VerificationTests.Protocol
 
             Assert.True((bool)Invoke(coordinator, "TryStartContinuousSync"));
 
-            Thread worker = WaitForWorkerThread(coordinator, "continuousSyncThread");
+            Thread worker = ReadWorkerThread(coordinator, "continuousSyncThread");
             Assert.True(worker.IsBackground);
 
             Invoke(coordinator, "StopSyncSession");
-            Assert.True(hostRecorder.ContinuousStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.ContinuousStopped, "Continuous sync did not stop.");
         }
 
         [Fact]
@@ -585,38 +712,34 @@ namespace Readboard.VerificationTests.Protocol
             Invoke(coordinator, "AttachRuntime", runtime);
 
             Assert.True((bool)Invoke(coordinator, "TryStartContinuousSync"));
-            Thread staleWorker = WaitForWorkerThread(coordinator, "continuousSyncThread");
-            Assert.True(hostRecorder.BlockedContinuousSnapshotStarted.Wait(TimeSpan.FromSeconds(1)));
+            Thread staleWorker = ReadWorkerThread(coordinator, "continuousSyncThread");
+            VerificationCompletion.Wait(hostRecorder.BlockedContinuousSnapshotStarted, "Continuous snapshot did not block as expected.");
 
             Invoke(coordinator, "StopSyncSession");
 
+            hostRecorder.ContinuousStarted.Reset();
             Assert.True((bool)Invoke(coordinator, "TryStartContinuousSync"));
-            Assert.True(WaitForCondition(() => hostRecorder.ContinuousStartedCount == 2, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.ContinuousStarted, "Restarted continuous sync did not start.");
 
-            Thread newWorker = null;
-            Assert.True(WaitForCondition(delegate
-            {
-                Thread candidate = ReadWorkerThread(coordinator, "continuousSyncThread");
-                if (candidate == null || candidate == staleWorker)
-                    return false;
-                newWorker = candidate;
-                return true;
-            }, TimeSpan.FromSeconds(1)));
+            Thread newWorker = ReadWorkerThread(coordinator, "continuousSyncThread");
+            Assert.NotNull(newWorker);
+            Assert.NotSame(staleWorker, newWorker);
 
+            hostRecorder.ContinuousStopped.Reset();
             hostRecorder.ReleaseBlockedContinuousSnapshot();
 
-            Assert.True(WaitForCondition(() => !staleWorker.IsAlive, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Join(staleWorker, "Stale continuous worker did not exit.");
             Assert.Equal(0, hostRecorder.ContinuousStoppedCount);
             Assert.Same(newWorker, ReadWorkerThread(coordinator, "continuousSyncThread"));
 
             Invoke(coordinator, "StopSyncSession");
 
-            Assert.True(WaitForCondition(() => hostRecorder.ContinuousStoppedCount == 1, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.ContinuousStopped, "Restarted continuous sync did not stop.");
             Assert.Equal(1, hostRecorder.ContinuousStoppedCount);
         }
 
         [Fact]
-        public async Task Stop_DoesNotHangWhenKeepSyncWorkerBlocksInCapture()
+        public void Stop_DoesNotHangWhenKeepSyncWorkerBlocksInCapture()
         {
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
@@ -637,21 +760,23 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(runtime, "OverlayService", new PassiveOverlayService());
             Invoke(coordinator, "AttachRuntime", runtime);
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(captureService.BlockedCaptureStarted, "Capture did not block as expected.");
 
             try
             {
-                Task stopTask = Task.Run(() => coordinator.Stop());
-                Task finishedTask = await Task.WhenAny(stopTask, Task.Delay(TimeSpan.FromSeconds(1)));
-                Assert.Same(stopTask, finishedTask);
-                await stopTask;
+                Task stopTask = StartDedicatedThread(
+                    () => coordinator.Stop(),
+                    "SyncSessionCoordinatorOrchestrationTests.Stop");
+                AssertCompletes(
+                    stopTask,
+                    "Stop must return while capture is blocked.");
             }
             finally
             {
                 captureService.Release();
             }
 
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
         }
 
         [Fact]
@@ -676,18 +801,26 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(runtime, "OverlayService", new PassiveOverlayService());
             Invoke(coordinator, "AttachRuntime", runtime);
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(captureService.BlockedCaptureStarted, "Capture did not block as expected.");
 
-            Task disposeTask = Task.Run(() => coordinator.Dispose());
-            Task completedTask = await Task.WhenAny(disposeTask, Task.Delay(TimeSpan.FromMilliseconds(250)));
-
-            Assert.NotSame(disposeTask, completedTask);
+            FieldInfo stopEventField = typeof(SyncSessionCoordinator).GetField(
+                "keepSyncStopRequestedEvent",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(stopEventField);
+            ManualResetEventSlim stopRequested = (ManualResetEventSlim)stopEventField.GetValue(coordinator);
+            Task disposeTask = StartDedicatedThread(
+                () => coordinator.Dispose(),
+                "SyncSessionCoordinatorOrchestrationTests.Dispose");
+            VerificationCompletion.Wait(stopRequested, "Coordinator stop was not requested.");
+            Assert.False(disposeTask.IsCompleted);
             Assert.False(hostRecorder.KeepStopped.IsSet);
 
             captureService.Release();
 
-            await disposeTask.WaitAsync(TimeSpan.FromSeconds(1));
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            await VerificationCompletion.WaitAsync(
+                disposeTask,
+                "Coordinator dispose did not complete.");
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
         }
 
         [Fact]
@@ -712,18 +845,27 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(runtime, "OverlayService", new PassiveOverlayService());
             Invoke(coordinator, "AttachRuntime", runtime);
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(captureService.BlockedCaptureStarted, "Capture did not block as expected.");
 
-            Task stopTask = Task.Run(() => Invoke(coordinator, "StopSyncSession"));
-            Task finishedTask = await Task.WhenAny(stopTask, Task.Delay(TimeSpan.FromMilliseconds(250)));
+            Task stopTask = StartDedicatedThread(
+                () => Invoke(coordinator, "StopSyncSession"),
+                "SyncSessionCoordinatorOrchestrationTests.StopSyncSession");
+            try
+            {
+                AssertCompletes(
+                    stopTask,
+                    "StopSyncSession must return while capture cleanup is blocked.");
+                Assert.False(hostRecorder.KeepStopped.IsSet);
+            }
+            finally
+            {
+                captureService.Release();
+                await VerificationCompletion.WaitAsync(
+                    stopTask,
+                    "StopSyncSession did not complete after release.");
+            }
 
-            Assert.Same(stopTask, finishedTask);
-            Assert.False(hostRecorder.KeepStopped.IsSet);
-
-            captureService.Release();
-
-            await stopTask;
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
         }
 
         [Fact]
@@ -748,7 +890,7 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(runtime, "OverlayService", new PassiveOverlayService());
             Invoke(coordinator, "AttachRuntime", runtime);
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(captureService.BlockedCaptureStarted, "Capture did not block as expected.");
 
             Invoke(coordinator, "StopSyncSessionAndClearBoard");
 
@@ -758,7 +900,7 @@ namespace Readboard.VerificationTests.Protocol
 
             captureService.Release();
 
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
             Assert.Equal(1, transport.CountLines("stopsync"));
             Assert.Equal("clearBoard", transport.SentLines[transport.SentLines.Count - 1]);
         }
@@ -787,8 +929,10 @@ namespace Readboard.VerificationTests.Protocol
 
             bool? startResult = null;
             Exception startException = null;
+            ManualResetEventSlim startEntered = new ManualResetEventSlim(false);
             Thread startThread = new Thread(new ThreadStart(delegate
             {
+                startEntered.Set();
                 try
                 {
                     startResult = coordinator.TryStartKeepSync();
@@ -804,14 +948,12 @@ namespace Readboard.VerificationTests.Protocol
             Invoke(dispatcher, "ExecuteBatch", (Action)delegate
             {
                 startThread.Start();
-                Assert.True(WaitForCondition(
-                    () => (startThread.ThreadState & System.Threading.ThreadState.WaitSleepJoin) != 0,
-                    TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Wait(startEntered, "Concurrent startup thread did not enter.");
 
                 coordinator.StopSyncSessionAndClearBoard();
             });
 
-            Assert.True(startThread.Join(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Join(startThread, "Concurrent startup thread did not exit.");
             Assert.Null(startException);
             Assert.False(startResult);
             Assert.Equal(new[] { "clearBoard" }, transport.SentLines);
@@ -843,23 +985,24 @@ namespace Readboard.VerificationTests.Protocol
             try
             {
                 Assert.True(coordinator.TryStartKeepSync());
-                staleWorker = WaitForWorkerThread(coordinator, "keepSyncThread");
-                Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
+                staleWorker = ReadWorkerThread(coordinator, "keepSyncThread");
+                VerificationCompletion.Wait(captureService.BlockedCaptureStarted, "Capture did not block as expected.");
 
                 coordinator.StopSyncSessionAndClearBoard();
                 Assert.True(coordinator.TryStartKeepSync());
-                Thread restartedWorker = WaitForWorkerThread(coordinator, "keepSyncThread");
+                Thread restartedWorker = ReadWorkerThread(coordinator, "keepSyncThread");
 
                 captureService.Release();
 
-                Assert.True(WaitForCondition(() => !staleWorker.IsAlive, TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Join(staleWorker, "Stale keep-sync worker did not exit.");
                 Assert.True(restartedWorker.IsAlive);
                 Assert.True(coordinator.StartedSync);
                 Assert.Equal(1, transport.CountLines("stopsync"));
 
+                hostRecorder.KeepStopped.Reset();
                 coordinator.StopSyncSession();
 
-                Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Wait(hostRecorder.KeepStopped, "Restarted keep sync did not stop.");
                 Assert.Equal(2, transport.CountLines("stopsync"));
             }
             finally
@@ -869,46 +1012,6 @@ namespace Readboard.VerificationTests.Protocol
             }
         }
 
-        [Fact]
-        public void StopSyncSessionAndClearBoard_SuppressesPendingDeferredStop()
-        {
-            RecordingTransport transport = new RecordingTransport();
-            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
-            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
-            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
-            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
-            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
-            BlockingCaptureService captureService = new BlockingCaptureService(CreateFrame());
-            object snapshot = CreateSnapshot(snapshotType, SyncMode.Foreground, IntPtr.Zero);
-            SetProperty(snapshot, "SampleIntervalMs", 0);
-            HostRecorder hostRecorder = new HostRecorder(snapshot);
-            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
-            object runtime = Activator.CreateInstance(runtimeType);
-            SetProperty(runtime, "Host", host);
-            SetProperty(runtime, "CaptureService", captureService);
-            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=foreground")));
-            SetProperty(runtime, "PlacementService", new PassivePlacementService());
-            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
-            Invoke(coordinator, "AttachRuntime", runtime);
-            Assert.True(coordinator.TryStartKeepSync());
-            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
-
-            object dispatcher = GetOutboundProtocolDispatcher(coordinator);
-            Invoke(dispatcher, "ExecuteBatch", (Action)delegate
-            {
-                coordinator.StopSyncSession();
-                captureService.Release();
-                Assert.True(WaitForCondition(
-                    () => ReadWorkerThread(coordinator, "keepSyncThread") == null,
-                    TimeSpan.FromSeconds(1)));
-
-                coordinator.StopSyncSessionAndClearBoard();
-            });
-
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
-            Assert.Equal(1, transport.CountLines("stopsync"));
-            Assert.Equal("clearBoard", transport.SentLines[transport.SentLines.Count - 1]);
-        }
 
         [Fact]
         public void StopThenRestart_ClearBoardDoesNotTreatClosedWorkerStopAsPending()
@@ -936,13 +1039,13 @@ namespace Readboard.VerificationTests.Protocol
             try
             {
                 Assert.True(coordinator.TryStartKeepSync());
-                Thread worker = WaitForWorkerThread(coordinator, "keepSyncThread");
-                Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
+                Thread worker = ReadWorkerThread(coordinator, "keepSyncThread");
+                VerificationCompletion.Wait(captureService.BlockedCaptureStarted, "Capture did not block as expected.");
 
                 coordinator.Stop();
                 captureService.Release();
 
-                Assert.True(WaitForCondition(() => !worker.IsAlive, TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Join(worker, "Stopped worker did not exit before restart.");
                 coordinator.Start();
                 coordinator.StopSyncSessionAndClearBoard();
 
@@ -977,31 +1080,29 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(runtime, "OverlayService", new PassiveOverlayService());
             Invoke(coordinator, "AttachRuntime", runtime);
             Assert.True(coordinator.TryStartKeepSync());
-            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(5)));
+            VerificationCompletion.Wait(captureService.BlockedCaptureStarted, "Capture did not block as expected.");
 
             coordinator.StopSyncSession();
             captureService.Release();
-            Assert.True(transport.BlockedSendStarted.Wait(TimeSpan.FromSeconds(5)));
+            VerificationCompletion.Wait(transport.BlockedSendStarted, "Outbound send did not block as expected.");
 
-            int resetCountBeforeClear = hostRecorder.SyncCachesResetCount;
-            Task clearTask = Task.Factory.StartNew(
+            hostRecorder.SyncCachesReset.Reset();
+            Task clearTask = StartDedicatedThread(
                 () => coordinator.StopSyncSessionAndClearBoard(),
-                CancellationToken.None,
-                TaskCreationOptions.LongRunning,
-                TaskScheduler.Default);
+                "SyncSessionCoordinatorOrchestrationTests.StopSyncSessionAndClearBoard");
             try
             {
-                Assert.True(WaitForCondition(
-                    () => hostRecorder.SyncCachesResetCount > resetCountBeforeClear,
-                    TimeSpan.FromSeconds(5)));
+                VerificationCompletion.Wait(hostRecorder.SyncCachesReset, "Sync cache reset did not occur.");
             }
             finally
             {
                 transport.Release();
             }
 
-            await clearTask.WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(5)));
+            await VerificationCompletion.WaitAsync(
+                clearTask,
+                "StopSyncSessionAndClearBoard did not complete.");
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
             Assert.Equal(1, transport.CountLines("stopsync"));
             Assert.Equal("clearBoard", transport.SentLines[transport.SentLines.Count - 1]);
         }
@@ -1035,12 +1136,12 @@ namespace Readboard.VerificationTests.Protocol
             Invoke(coordinator, "AttachRuntime", runtime);
 
             Assert.True((bool)Invoke(coordinator, "TryStartContinuousSync"));
-            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(captureService.BlockedCaptureStarted, "Capture did not block as expected.");
 
             Invoke(coordinator, "StopSyncSession");
             captureService.Release();
 
-            Assert.True(hostRecorder.ContinuousStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.ContinuousStopped, "Continuous sync did not stop.");
             Assert.Equal(0, hostRecorder.KeepStartedCount);
             Assert.DoesNotContain("sync", transport.SentLines);
             Assert.DoesNotContain("start 19 19 4242", transport.SentLines);
@@ -1069,19 +1170,29 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(runtime, "OverlayService", new PassiveOverlayService());
             Invoke(coordinator, "AttachRuntime", runtime);
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
             coordinator.SetSyncBoth(true);
             Assert.True(coordinator.TryQueuePendingMove(new MoveRequest { X = 1, Y = 1, VerifyMove = false }, 190, 19));
-            Assert.True(placementService.BlockedPlacementStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(placementService.BlockedPlacementStarted, "Placement did not block as expected.");
 
-            Task stopTask = Task.Run(() => coordinator.Stop());
-            Task finishedTask = await Task.WhenAny(stopTask, Task.Delay(TimeSpan.FromSeconds(1)));
-            Assert.Same(stopTask, finishedTask);
-            await stopTask;
+            Task stopTask = StartDedicatedThread(
+                () => coordinator.Stop(),
+                "SyncSessionCoordinatorOrchestrationTests.StopDuringPlacement");
+            try
+            {
+                AssertCompletes(
+                    stopTask,
+                    "Stop must return while placement is blocked.");
+            }
+            finally
+            {
+                placementService.Release();
+                await VerificationCompletion.WaitAsync(
+                    stopTask,
+                    "Stop did not complete after placement release.");
+            }
 
-            placementService.Release();
-
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
             Assert.Equal(1, placementService.PlaceCallCount);
             Assert.Equal(0, placementService.ActualPlacementCount);
         }
@@ -1110,17 +1221,19 @@ namespace Readboard.VerificationTests.Protocol
             try
             {
                 Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-                Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
                 coordinator.SetSyncBoth(true);
                 SetRuntimeBoardPixelWidth(coordinator, 190);
 
-                Task<PlaceRequestExecutionResult> resultTask = Task.Run(delegate
-                {
-                    return coordinator.HandlePlaceRequest(new MoveRequest { X = 1, Y = 1, VerifyMove = false });
-                });
+                Task<PlaceRequestExecutionResult> resultTask = StartDedicatedThread(
+                    () => coordinator.HandlePlaceRequest(
+                        new MoveRequest { X = 1, Y = 1, VerifyMove = false }),
+                    "SyncSessionCoordinatorOrchestrationTests.HandlePlaceRequest");
 
-                Assert.True(placementService.PlaceCalled.Wait(TimeSpan.FromSeconds(1)));
-                PlaceRequestExecutionResult result = await resultTask.WaitAsync(TimeSpan.FromSeconds(1));
+                VerificationCompletion.Wait(placementService.PlaceCalled, "Placement was not called.");
+                PlaceRequestExecutionResult result = await VerificationCompletion.WaitAsync(
+                    resultTask,
+                    "Place request result did not complete.");
 
                 Assert.True(result.ShouldSendResponse);
                 Assert.False(result.Success);
@@ -1152,27 +1265,28 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(runtime, "OverlayService", new PassiveOverlayService());
             Invoke(coordinator, "AttachRuntime", runtime);
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
             coordinator.SetSyncBoth(true);
             SetRuntimeBoardPixelWidth(coordinator, 190);
 
-            Task<PlaceRequestExecutionResult> resultTask = Task.Run(delegate
-            {
-                return coordinator.HandlePlaceRequest(new MoveRequest { X = 1, Y = 1, VerifyMove = false });
-            });
+            Task<PlaceRequestExecutionResult> resultTask = StartDedicatedThread(
+                () => coordinator.HandlePlaceRequest(
+                    new MoveRequest { X = 1, Y = 1, VerifyMove = false }),
+                "SyncSessionCoordinatorOrchestrationTests.HandlePlaceRequest");
 
-            Assert.True(placementService.SideEffectApplied.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(placementService.SideEffectApplied, "Placement side effect was not applied.");
             Invoke(coordinator, "StopSyncSession");
 
-            Task completedTask = await Task.WhenAny(resultTask, Task.Delay(TimeSpan.FromMilliseconds(150)));
-            Assert.NotSame(resultTask, completedTask);
+            Assert.False(resultTask.IsCompleted);
 
             placementService.Release();
 
-            PlaceRequestExecutionResult result = await resultTask.WaitAsync(TimeSpan.FromSeconds(1));
+            PlaceRequestExecutionResult result = await VerificationCompletion.WaitAsync(
+                resultTask,
+                "Place request result did not complete.");
             Assert.True(result.ShouldSendResponse);
             Assert.True(result.Success);
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
         }
 
         [Fact]
@@ -1196,27 +1310,28 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(runtime, "OverlayService", new PassiveOverlayService());
             Invoke(coordinator, "AttachRuntime", runtime);
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
             coordinator.SetSyncBoth(true);
             SetRuntimeBoardPixelWidth(coordinator, 190);
 
-            Task<PlaceRequestExecutionResult> resultTask = Task.Run(delegate
-            {
-                return coordinator.HandlePlaceRequest(new MoveRequest { X = 1, Y = 1, VerifyMove = false });
-            });
+            Task<PlaceRequestExecutionResult> resultTask = StartDedicatedThread(
+                () => coordinator.HandlePlaceRequest(
+                    new MoveRequest { X = 1, Y = 1, VerifyMove = false }),
+                "SyncSessionCoordinatorOrchestrationTests.HandlePlaceRequest");
 
-            Assert.True(placementService.SideEffectApplied.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(placementService.SideEffectApplied, "Placement side effect was not applied.");
             coordinator.Stop();
 
-            Task completedTask = await Task.WhenAny(resultTask, Task.Delay(TimeSpan.FromMilliseconds(150)));
-            Assert.NotSame(resultTask, completedTask);
+            Assert.False(resultTask.IsCompleted);
 
             placementService.Release();
 
-            PlaceRequestExecutionResult result = await resultTask.WaitAsync(TimeSpan.FromSeconds(1));
+            PlaceRequestExecutionResult result = await VerificationCompletion.WaitAsync(
+                resultTask,
+                "Place request result did not complete.");
             Assert.True(result.ShouldSendResponse);
             Assert.True(result.Success);
-            Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
         }
 
         [Fact]
@@ -1241,24 +1356,26 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(runtime, "OverlayService", new PassiveOverlayService());
             Invoke(coordinator, "AttachRuntime", runtime);
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(WaitForCondition(() => hostRecorder.KeepStartedCount == 1, TimeSpan.FromSeconds(1)));
-            Thread staleWorker = WaitForWorkerThread(coordinator, "keepSyncThread");
-            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
+            Thread staleWorker = ReadWorkerThread(coordinator, "keepSyncThread");
+            VerificationCompletion.Wait(captureService.BlockedCaptureStarted, "Capture did not block as expected.");
 
             Invoke(coordinator, "StopSyncSession");
+            hostRecorder.KeepStarted.Reset();
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(WaitForCondition(() => hostRecorder.KeepStartedCount == 2, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Restarted keep sync did not start.");
 
             captureService.Release();
 
-            Assert.True(WaitForCondition(() => !staleWorker.IsAlive, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Join(staleWorker, "Stale keep-sync worker did not exit.");
             Assert.True(coordinator.StartedSync);
             Assert.Equal(0, hostRecorder.KeepStoppedCount);
             Assert.Equal(0, transport.CountLines("stopsync"));
 
+            hostRecorder.KeepStopped.Reset();
             Invoke(coordinator, "StopSyncSession");
 
-            Assert.True(WaitForCondition(() => hostRecorder.KeepStoppedCount == 1, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Restarted keep sync did not stop.");
             Assert.Equal(1, hostRecorder.KeepStoppedCount);
             Assert.Equal(1, transport.CountLines("stopsync"));
         }
@@ -1292,26 +1409,28 @@ namespace Readboard.VerificationTests.Protocol
             coordinator.SetSyncBoth(true);
 
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
             Assert.True(hostRecorder.InitialMoveQueued);
-            Assert.True(WaitForCondition(() => placementService.PlaceCallCount == 1, TimeSpan.FromSeconds(1)));
-            Thread staleWorker = WaitForWorkerThread(coordinator, "keepSyncThread");
-            Assert.True(captureService.BlockedCaptureStarted.Wait(TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(placementService.PlaceCalled, "Initial move was not placed.");
+            Thread staleWorker = ReadWorkerThread(coordinator, "keepSyncThread");
+            VerificationCompletion.Wait(captureService.BlockedCaptureStarted, "Capture did not block as expected.");
 
             Invoke(coordinator, "StopSyncSession");
             SetProperty(snapshot, "SelectedWindowHandle", secondHandle);
+            hostRecorder.KeepStarted.Reset();
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            Assert.True(WaitForCondition(() => hostRecorder.KeepStartedCount == 2, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Restarted keep sync did not start.");
 
             captureService.Release();
 
-            Assert.True(WaitForCondition(() => !staleWorker.IsAlive, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Join(staleWorker, "Stale keep-sync worker did not exit.");
             Assert.True(coordinator.StartedSync);
             Assert.Equal(0, hostRecorder.KeepStoppedCount);
 
+            hostRecorder.KeepStopped.Reset();
             Invoke(coordinator, "StopSyncSession");
 
-            Assert.True(WaitForCondition(() => hostRecorder.KeepStoppedCount == 1, TimeSpan.FromSeconds(1)));
+            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Restarted keep sync did not stop.");
         }
 
         [Fact]
@@ -1343,10 +1462,10 @@ namespace Readboard.VerificationTests.Protocol
             try
             {
                 Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-                Assert.True(hostRecorder.KeepStarted.Wait(TimeSpan.FromSeconds(1)));
-                Assert.True(recognitionService.BlockedRecognizeStarted.Wait(TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
+                VerificationCompletion.Wait(recognitionService.BlockedRecognizeStarted, "Recognition did not block as expected.");
 
-                holdOutboundLockTask = Task.Run(delegate
+                holdOutboundLockTask = StartDedicatedThread(delegate
                 {
                     object dispatcher = GetOutboundProtocolDispatcher(coordinator);
                     Invoke(dispatcher, "ExecuteBatch", (Action)delegate
@@ -1354,17 +1473,17 @@ namespace Readboard.VerificationTests.Protocol
                         outboundLockHeld.Set();
                         releaseOutboundLock.Wait();
                     });
-                });
-                Assert.True(outboundLockHeld.Wait(TimeSpan.FromSeconds(1)));
+                }, "SyncSessionCoordinatorOrchestrationTests.OutboundLock");
+                VerificationCompletion.Wait(outboundLockHeld, "Outbound lock was not acquired.");
 
                 recognitionService.Release();
-                Assert.True(WaitForCallCountToStabilizeAtLeast(() => recognitionService.CallCount, 2, TimeSpan.FromSeconds(1)));
+                recognitionService.WaitForCallCount(2);
 
                 Invoke(coordinator, "StopSyncSession");
 
                 releaseOutboundLock.Set();
 
-                Assert.True(hostRecorder.KeepStopped.Wait(TimeSpan.FromSeconds(1)));
+                VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
                 Assert.DoesNotContain("start 19 19", transport.SentLines);
                 Assert.DoesNotContain("syncPlatform generic", transport.SentLines);
                 Assert.DoesNotContain("re=foreground", transport.SentLines);
@@ -1376,7 +1495,9 @@ namespace Readboard.VerificationTests.Protocol
                 recognitionService.Release();
                 releaseOutboundLock.Set();
                 if (holdOutboundLockTask != null)
-                    await holdOutboundLockTask.WaitAsync(TimeSpan.FromSeconds(1));
+                    await VerificationCompletion.WaitAsync(
+                        holdOutboundLockTask,
+                        "Outbound lock holder did not exit.");
             }
         }
 
@@ -1390,13 +1511,10 @@ namespace Readboard.VerificationTests.Protocol
             SetField(coordinator, "keepSyncThread", keepSyncWorker.Thread);
             SetField(coordinator, "continuousSyncThread", continuousSyncWorker.Thread);
 
-            Stopwatch stopwatch = Stopwatch.StartNew();
             coordinator.Stop();
-            stopwatch.Stop();
 
-            Assert.True(
-                stopwatch.Elapsed < TimeSpan.FromMilliseconds(250),
-                "Application shutdown should not wait for background sync workers to finish.");
+            Assert.True(keepSyncWorker.Thread.IsAlive);
+            Assert.True(continuousSyncWorker.Thread.IsAlive);
         }
 
         [Fact]
@@ -1429,6 +1547,112 @@ namespace Readboard.VerificationTests.Protocol
 
             Assert.False(captured);
             Assert.Null(methodArgs[1]);
+        }
+
+        [Fact]
+        public void TryStartKeepSync_CaptureCancellationRevokesExistingAutoPlayAuthorization()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SendPlay(
+                "black",
+                AutoPlayColorMode.FoxAuto,
+                "0",
+                "0",
+                "0");
+            AttachCaptureCancellingRuntime(coordinator);
+
+            Assert.False((bool)Invoke(coordinator, "TryStartKeepSync"));
+
+            Assert.Equal(
+                new[] { "play>black>0 0 0", "stopAutoPlay" },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void TryStartContinuousSync_CaptureCancellationRevokesExistingAutoPlayAuthorization()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SendPlay(
+                "black",
+                AutoPlayColorMode.FoxAuto,
+                "0",
+                "0",
+                "0");
+            AttachCaptureCancellingRuntime(coordinator);
+
+            Assert.True((bool)Invoke(coordinator, "TryStartContinuousSync"));
+            try
+            {
+                Assert.True(transport.WaitForLine("stopAutoPlay"));
+            }
+            finally
+            {
+                Invoke(coordinator, "StopSyncSession");
+            }
+
+            Assert.Equal(1, transport.CountLines("stopAutoPlay"));
+        }
+
+        [Fact]
+        public void TryStartKeepSync_CaptureCancellationPreservesManualAutoPlayAuthorization()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SendPlay(
+                "black",
+                AutoPlayColorMode.ManualBlack,
+                "0",
+                "0",
+                "0");
+            AttachCaptureCancellingRuntime(coordinator);
+
+            Assert.False((bool)Invoke(coordinator, "TryStartKeepSync"));
+
+            Assert.Equal(
+                new[] { "play>black>0 0 0" },
+                transport.SentLines);
+        }
+
+        [Theory]
+        [InlineData((int)AutoPlayColorMode.ManualBlack, 0)]
+        [InlineData((int)AutoPlayColorMode.ManualWhite, 0)]
+        [InlineData((int)AutoPlayColorMode.FoxAuto, 1)]
+        public void TryRunOneTimeSync_FoxRecognitionFailureOnlyRevokesFoxAutoAuthorization(
+            int authorizedColorModeValue,
+            int expectedStopCount)
+        {
+            AutoPlayColorMode authorizedColorMode = (AutoPlayColorMode)authorizedColorModeValue;
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncPlatform("fox");
+            coordinator.SendPlay("black", authorizedColorMode, "0", "0", "0");
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+            Type descriptorInterfaceType = RequireType(assembly, "readboard.IWindowDescriptorFactory");
+            object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, new IntPtr(5151));
+            SetProperty(snapshot, "PlayColor", "black");
+            SetProperty(snapshot, "AutoPlayColorMode", AutoPlayColorMode.FoxAuto);
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", CreateProxy(
+                hostInterfaceType,
+                new HostRecorder(snapshot).HandleCall));
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(
+                (BoardRecognitionResult)null));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            SetProperty(runtime, "WindowDescriptorFactory", CreateProxy(
+                descriptorInterfaceType,
+                new DescriptorFactoryRecorder().HandleCall));
+            Invoke(coordinator, "AttachRuntime", runtime);
+
+            Assert.False((bool)Invoke(coordinator, "TryRunOneTimeSync"));
+
+            Assert.Equal(expectedStopCount, transport.CountLines("stopAutoPlay"));
         }
 
         [Fact]
@@ -1603,6 +1827,73 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal(new[] { "clear" }, transport.SentLines);
         }
 
+        [Fact]
+        public void ActiveKeepSyncCacheReset_ReusesActiveObservationGeneration()
+        {
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(
+                new RecordingTransport(),
+                new LegacyProtocolAdapter());
+            ObservationGenerationHost host = new ObservationGenerationHost();
+            coordinator.AttachRuntime(new SyncSessionRuntimeDependencies
+            {
+                Host = host,
+                CaptureService = new SequencedCaptureService(CreateFrame()),
+                RecognitionService = new SequencedRecognitionService(CreateResult("re=foreground")),
+                PlacementService = new PassivePlacementService(),
+                OverlayService = new PassiveOverlayService()
+            });
+            coordinator.BeginKeepSync();
+            SetField(coordinator, "activeKeepObservationGeneration", 41L);
+
+            try
+            {
+                coordinator.ResetSyncCaches();
+            }
+            finally
+            {
+                coordinator.EndKeepSync();
+            }
+
+            Assert.Equal(41L, host.LastSyncCachesResetGeneration);
+            Assert.Equal(0, host.AllocationCount);
+        }
+
+        [Fact]
+        public void AreaChangeCacheReset_DoesNotReportRuntimeFrameCleared()
+        {
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(
+                new RecordingTransport(),
+                new LegacyProtocolAdapter());
+            WebViewHostRecorder host = new WebViewHostRecorder();
+            SyncSessionRuntimeDependencies runtime = new SyncSessionRuntimeDependencies { Host = host };
+            SetRuntimeBoardPixelDimensions(coordinator, 200, 200);
+
+            Type sampleType = typeof(SyncSessionCoordinator).GetNestedType(
+                "RecognizedSyncSample",
+                BindingFlags.NonPublic);
+            Assert.NotNull(sampleType);
+            object sample = Activator.CreateInstance(
+                sampleType,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                null,
+                new object[] { 100, CreateFrame(), null },
+                null);
+
+            Invoke(
+                coordinator,
+                "BuildRecognizedSampleProtocolDispatch",
+                new SyncCoordinatorHostSnapshot { BoardWidth = 19, BoardHeight = 19 },
+                sample,
+                false,
+                0);
+
+            Assert.Equal(0, host.RuntimeFrameClearedCount);
+
+            Invoke(coordinator, "ClearRuntimeFrame", runtime, 0L);
+
+            Assert.Equal(1, host.RuntimeFrameClearedCount);
+        }
+
         private static object CreateProxy(Type interfaceType, Func<MethodInfo, object[], object> handler)
         {
             MethodInfo createMethod = null;
@@ -1638,6 +1929,26 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(snapshot, "AutoMinimize", false);
             SetProperty(snapshot, "SampleIntervalMs", 5);
             return snapshot;
+        }
+
+        private static void AttachCaptureCancellingRuntime(SyncSessionCoordinator coordinator)
+        {
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            object host = CreateProxy(hostInterfaceType, (method, args) =>
+            {
+                if (method.Name == "CaptureSnapshot")
+                    throw new SnapshotCaptureCancelledException();
+                return GetDefault(method.ReturnType);
+            });
+            object runtime = Activator.CreateInstance(runtimeType);
+            SetProperty(runtime, "Host", host);
+            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=foreground")));
+            SetProperty(runtime, "PlacementService", new PassivePlacementService());
+            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+            Invoke(coordinator, "AttachRuntime", runtime);
         }
 
         private static BoardFrame CreateFrame()
@@ -1734,6 +2045,19 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(runtimeState, "CurrentBoardPixelWidth", boardPixelWidth);
         }
 
+        private static void SetRuntimeBoardPixelDimensions(
+            SyncSessionCoordinator coordinator,
+            int boardPixelWidth,
+            int boardPixelHeight)
+        {
+            FieldInfo runtimeStateField = typeof(SyncSessionCoordinator).GetField("runtimeState", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.True(runtimeStateField != null, "Missing coordinator field: runtimeState");
+            object runtimeState = runtimeStateField.GetValue(coordinator);
+            Assert.NotNull(runtimeState);
+            SetProperty(runtimeState, "CurrentBoardPixelWidth", boardPixelWidth);
+            SetProperty(runtimeState, "CurrentBoardPixelHeight", boardPixelHeight);
+        }
+
         private static object GetOutboundProtocolDispatcher(SyncSessionCoordinator coordinator)
         {
             FieldInfo dispatcherField = typeof(SyncSessionCoordinator).GetField(
@@ -1745,20 +2069,6 @@ namespace Readboard.VerificationTests.Protocol
             return dispatcher;
         }
 
-        private static Thread WaitForWorkerThread(object target, string fieldName)
-        {
-            DateTime deadline = DateTime.UtcNow.AddSeconds(1);
-            while (DateTime.UtcNow < deadline)
-            {
-                Thread worker = ReadWorkerThread(target, fieldName);
-                if (worker != null)
-                    return worker;
-                Thread.Sleep(10);
-            }
-
-            Assert.Fail("Expected worker thread field to be populated: " + fieldName);
-            return null;
-        }
 
         private static Thread ReadWorkerThread(object target, string fieldName)
         {
@@ -1767,30 +2077,43 @@ namespace Readboard.VerificationTests.Protocol
             return (Thread)field.GetValue(target);
         }
 
-        private static bool WaitForCondition(Func<bool> condition, TimeSpan timeout)
+        private static Task StartDedicatedThread(Action action, string name)
         {
-            DateTime deadline = DateTime.UtcNow.Add(timeout);
-            while (DateTime.UtcNow < deadline)
+            return StartDedicatedThread<object>(delegate
             {
-                if (condition())
-                    return true;
-                Thread.Sleep(10);
-            }
-
-            return condition();
+                action();
+                return null;
+            }, name);
         }
 
-        private static bool WaitForCallCountToStabilizeAtLeast(Func<int> readCallCount, int minimumCallCount, TimeSpan timeout)
+        private static Task<T> StartDedicatedThread<T>(Func<T> action, string name)
         {
-            int lastCallCount = -1;
-            return WaitForCondition(delegate
+            TaskCompletionSource<T> completion = new TaskCompletionSource<T>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            Thread thread = new Thread(new ThreadStart(delegate
             {
-                int currentCallCount = readCallCount();
-                bool isStable = currentCallCount == lastCallCount;
-                lastCallCount = currentCallCount;
-                return isStable && currentCallCount >= minimumCallCount;
-            }, timeout);
+                try
+                {
+                    completion.SetResult(action());
+                }
+                catch (Exception ex)
+                {
+                    completion.SetException(ex);
+                }
+            }));
+            thread.IsBackground = true;
+            thread.Name = name;
+            thread.Start();
+            return completion.Task;
         }
+
+        private static void AssertCompletes(Task task, string message)
+        {
+            Assert.True(task.Wait(VerificationCompletion.WatchdogTimeout), message);
+            task.GetAwaiter().GetResult();
+        }
+
+
 
         private class ReflectionProxy : DispatchProxy
         {
@@ -1815,6 +2138,7 @@ namespace Readboard.VerificationTests.Protocol
             public ManualResetEventSlim KeepStopped { get; } = new ManualResetEventSlim(false);
             public ManualResetEventSlim ContinuousStarted { get; } = new ManualResetEventSlim(false);
             public ManualResetEventSlim ContinuousStopped { get; } = new ManualResetEventSlim(false);
+            public ManualResetEventSlim SyncCachesReset { get; } = new ManualResetEventSlim(false);
             public int SnapshotRequests { get; private set; }
             public IntPtr LastSelectedWindow { get; private set; }
             public int KeepStartedCount { get; private set; }
@@ -1854,11 +2178,149 @@ namespace Readboard.VerificationTests.Protocol
                         return null;
                     case "OnSyncCachesReset":
                         SyncCachesResetCount++;
+                        SyncCachesReset.Set();
                         return null;
                     case "OnBoardSnapshotRecognized":
                         RecognizedSnapshotCount++;
                         LastRecognizedSnapshot = (BoardSnapshot)args[0];
                         return null;
+                    case "ShowMissingSyncSourceMessage":
+                    case "ShowRecognitionFailureMessage":
+                    case "MinimizeWindow":
+                        return null;
+                    default:
+                        return GetDefault(method.ReturnType);
+                }
+            }
+        }
+
+        private sealed class WebViewHostRecorder : ISyncCoordinatorHost, IWebViewSyncCoordinatorHost
+        {
+            public int RuntimeFrameClearedCount { get; private set; }
+
+            public SyncCoordinatorHostSnapshot CaptureSnapshot() { return new SyncCoordinatorHostSnapshot(); }
+            public long AllocateSessionObservationGeneration() { return 0; }
+            public void UpdateSelectedWindowHandle(IntPtr handle, long observationGeneration) { }
+            public void OnKeepSyncStarted(long observationGeneration) { }
+            public void OnKeepSyncStopped(bool continuousSyncActive, long observationGeneration) { }
+            public void OnContinuousSyncStarted(long observationGeneration) { }
+            public void OnContinuousSyncStopped(long observationGeneration) { }
+            public void OnSyncCachesReset(long observationGeneration) { }
+            public void OnBoardSnapshotRecognized(
+                BoardSnapshot snapshot,
+                TimeSpan duration,
+                long observationGeneration) { }
+            public void OnBoardSnapshotSent(BoardSnapshot snapshot, long observationGeneration) { }
+            public void ShowMissingSyncSourceMessage() { }
+            public void ShowRecognitionFailureMessage() { }
+            public void MinimizeWindow() { }
+            public bool TrySendPlaceProtocolError(string message) { return false; }
+
+            public void OnRuntimeFrameCleared(long observationGeneration)
+            {
+                RuntimeFrameClearedCount++;
+            }
+
+            public void OnBoardFrameRecognized(
+                BoardFrame frame,
+                int boardPixelWidth,
+                int boardPixelHeight,
+                bool placementRegionResolved,
+                long observationGeneration)
+            {
+            }
+        }
+
+        private sealed class ObservationGenerationHost : ISyncCoordinatorHost
+        {
+            public int AllocationCount { get; private set; }
+            public long LastSyncCachesResetGeneration { get; private set; }
+
+            public SyncCoordinatorHostSnapshot CaptureSnapshot()
+            {
+                return new SyncCoordinatorHostSnapshot();
+            }
+
+            public long AllocateSessionObservationGeneration()
+            {
+                AllocationCount++;
+                return 100L + AllocationCount;
+            }
+
+            public void UpdateSelectedWindowHandle(IntPtr handle, long observationGeneration) { }
+            public void OnKeepSyncStarted(long observationGeneration) { }
+            public void OnKeepSyncStopped(bool continuousSyncActive, long observationGeneration) { }
+            public void OnContinuousSyncStarted(long observationGeneration) { }
+            public void OnContinuousSyncStopped(long observationGeneration) { }
+
+            public void OnSyncCachesReset(long observationGeneration)
+            {
+                LastSyncCachesResetGeneration = observationGeneration;
+            }
+
+            public void OnBoardSnapshotRecognized(
+                BoardSnapshot snapshot,
+                TimeSpan duration,
+                long observationGeneration) { }
+
+            public void ShowMissingSyncSourceMessage() { }
+            public void ShowRecognitionFailureMessage() { }
+            public void MinimizeWindow() { }
+            public bool TrySendPlaceProtocolError(string message) { return false; }
+        }
+
+        private sealed class AutoPlayToggleHostRecorder
+        {
+            private readonly Type snapshotType;
+            private readonly AutoPlayMoveMode moveMode;
+            private int autoPlayEnabled = 1;
+            private int disabledSnapshotCaptured;
+            private int postReenableSnapshotCount;
+
+            public AutoPlayToggleHostRecorder(Type snapshotType, AutoPlayMoveMode moveMode)
+            {
+                this.snapshotType = snapshotType;
+                this.moveMode = moveMode;
+            }
+
+            public ManualResetEventSlim KeepStarted { get; } = new ManualResetEventSlim(false);
+            public ManualResetEventSlim KeepStopped { get; } = new ManualResetEventSlim(false);
+            public ManualResetEventSlim DisabledSnapshotCaptured { get; } = new ManualResetEventSlim(false);
+            public ManualResetEventSlim PostReenableSamplesSettled { get; } = new ManualResetEventSlim(false);
+
+            public void SetAutoPlayEnabled(bool enabled)
+            {
+                Interlocked.Exchange(ref autoPlayEnabled, enabled ? 1 : 0);
+            }
+
+            public object HandleCall(MethodInfo method, object[] args)
+            {
+                switch (method.Name)
+                {
+                    case "CaptureSnapshot":
+                        bool enabled = Volatile.Read(ref autoPlayEnabled) != 0;
+                        object snapshot = CreateSnapshot(snapshotType, SyncMode.Foreground, IntPtr.Zero);
+                        SetProperty(snapshot, "PlayColor", enabled ? "black" : null);
+                        SetProperty(snapshot, "AutoPlayMoveMode", moveMode);
+                        if (!enabled)
+                        {
+                            Interlocked.Exchange(ref disabledSnapshotCaptured, 1);
+                            DisabledSnapshotCaptured.Set();
+                        }
+                        else if (Volatile.Read(ref disabledSnapshotCaptured) != 0
+                            && Interlocked.Increment(ref postReenableSnapshotCount) == 3)
+                        {
+                            PostReenableSamplesSettled.Set();
+                        }
+                        return snapshot;
+                    case "OnKeepSyncStarted":
+                        KeepStarted.Set();
+                        return null;
+                    case "OnKeepSyncStopped":
+                        KeepStopped.Set();
+                        return null;
+                    case "UpdateSelectedWindowHandle":
+                    case "OnSyncCachesReset":
                     case "ShowMissingSyncSourceMessage":
                     case "ShowRecognitionFailureMessage":
                     case "MinimizeWindow":
@@ -1899,6 +2361,57 @@ namespace Readboard.VerificationTests.Protocol
                             Interlocked.Increment(ref snapshotRequests) - 1,
                             contexts.Length - 1);
                         coordinator.SetFoxWindowContext(contexts[contextIndex]);
+                        return snapshot;
+                    case "OnKeepSyncStarted":
+                        KeepStarted.Set();
+                        return null;
+                    case "OnKeepSyncStopped":
+                        KeepStopped.Set();
+                        return null;
+                    case "UpdateSelectedWindowHandle":
+                    case "OnSyncCachesReset":
+                    case "ShowMissingSyncSourceMessage":
+                    case "ShowRecognitionFailureMessage":
+                    case "MinimizeWindow":
+                        return null;
+                    default:
+                        return GetDefault(method.ReturnType);
+                }
+            }
+        }
+
+        private sealed class FoxRoomAuthorizationSequenceHostRecorder
+        {
+            private readonly object snapshot;
+            private readonly SyncSessionCoordinator coordinator;
+            private readonly FoxWindowContext[] contexts;
+            private int snapshotRequests;
+
+            public FoxRoomAuthorizationSequenceHostRecorder(
+                object snapshot,
+                SyncSessionCoordinator coordinator,
+                params FoxWindowContext[] contexts)
+            {
+                this.snapshot = snapshot;
+                this.coordinator = coordinator;
+                Assert.True(contexts != null && contexts.Length > 0);
+                this.contexts = contexts;
+            }
+
+            public ManualResetEventSlim KeepStarted { get; } = new ManualResetEventSlim(false);
+            public ManualResetEventSlim KeepStopped { get; } = new ManualResetEventSlim(false);
+
+            public object HandleCall(MethodInfo method, object[] args)
+            {
+                switch (method.Name)
+                {
+                    case "CaptureSnapshot":
+                        int snapshotRequest = Interlocked.Increment(ref snapshotRequests);
+                        int contextIndex = Math.Min(
+                            snapshotRequest - 1,
+                            contexts.Length - 1);
+                        coordinator.SetFoxWindowContext(contexts[contextIndex]);
+                        SetProperty(snapshot, "PlayColor", contextIndex == 0 ? "black" : null);
                         return snapshot;
                     case "OnKeepSyncStarted":
                         KeepStarted.Set();
@@ -2155,10 +2668,9 @@ namespace Readboard.VerificationTests.Protocol
                 IsConnected = false;
             }
 
-            public bool WaitForLines(int expectedCount, TimeSpan timeout)
+            public bool WaitForLines(int expectedCount)
             {
-                DateTime deadline = DateTime.UtcNow.Add(timeout);
-                while (DateTime.UtcNow < deadline)
+                while (true)
                 {
                     lock (SentLines)
                     {
@@ -2166,12 +2678,32 @@ namespace Readboard.VerificationTests.Protocol
                             return true;
                     }
 
-                    lineEvent.Wait(TimeSpan.FromMilliseconds(25));
+                    VerificationCompletion.Wait(
+                        lineEvent,
+                        "Expected transport lines were not sent.");
                     lineEvent.Reset();
                 }
-
-                return false;
             }
+            public bool WaitForLine(string expectedLine)
+            {
+                while (true)
+                {
+                    lock (SentLines)
+                    {
+                        for (int index = 0; index < SentLines.Count; index++)
+                        {
+                            if (string.Equals(SentLines[index], expectedLine, StringComparison.Ordinal))
+                                return true;
+                        }
+                    }
+
+                    VerificationCompletion.Wait(
+                        lineEvent,
+                        "Expected transport line was not sent: " + expectedLine);
+                    lineEvent.Reset();
+                }
+            }
+
 
             public int CountLines(string line)
             {
@@ -2385,15 +2917,26 @@ namespace Readboard.VerificationTests.Protocol
             }
 
             public ManualResetEventSlim BlockedRecognizeStarted { get; } = new ManualResetEventSlim(false);
+            private ManualResetEventSlim CallCountChanged { get; } = new ManualResetEventSlim(false);
 
             public int CallCount
             {
                 get { return Volatile.Read(ref callCount); }
             }
 
+            public void WaitForCallCount(int minimumCallCount)
+            {
+                while (CallCount < minimumCallCount)
+                {
+                    VerificationCompletion.Wait(CallCountChanged, "Recognition call count did not advance.");
+                    CallCountChanged.Reset();
+                }
+            }
+
             public BoardRecognitionResult Recognize(BoardRecognitionRequest request)
             {
                 int currentCall = Interlocked.Increment(ref callCount);
+                CallCountChanged.Set();
                 if (currentCall == blockedCallNumber)
                 {
                     BlockedRecognizeStarted.Set();
@@ -2411,6 +2954,11 @@ namespace Readboard.VerificationTests.Protocol
 
         private sealed class PassivePlacementService : IMovePlacementService
         {
+            public bool CanResolvePlacementRegion(BoardFrame frame)
+            {
+                return false;
+            }
+
             public MovePlacementResult Place(MovePlacementRequest request)
             {
                 return new MovePlacementResult { Success = true };
@@ -2421,6 +2969,11 @@ namespace Readboard.VerificationTests.Protocol
         {
             public ManualResetEventSlim PlaceCalled { get; } = new ManualResetEventSlim(false);
 
+            public bool CanResolvePlacementRegion(BoardFrame frame)
+            {
+                return false;
+            }
+
             public MovePlacementResult Place(MovePlacementRequest request)
             {
                 PlaceCalled.Set();
@@ -2430,11 +2983,18 @@ namespace Readboard.VerificationTests.Protocol
 
         private sealed class SingleLightweightPlacementService : IMovePlacementService
         {
+            public ManualResetEventSlim PlaceCalled { get; } = new ManualResetEventSlim(false);
             public int PlaceCallCount { get; private set; }
+
+            public bool CanResolvePlacementRegion(BoardFrame frame)
+            {
+                return false;
+            }
 
             public MovePlacementResult Place(MovePlacementRequest request)
             {
                 PlaceCallCount++;
+                PlaceCalled.Set();
                 if (PlaceCallCount == 1)
                 {
                     return new MovePlacementResult
@@ -2455,6 +3015,11 @@ namespace Readboard.VerificationTests.Protocol
             public ManualResetEventSlim BlockedPlacementStarted { get; } = new ManualResetEventSlim(false);
             public int PlaceCallCount { get; private set; }
             public int ActualPlacementCount { get; private set; }
+
+            public bool CanResolvePlacementRegion(BoardFrame frame)
+            {
+                return false;
+            }
 
             public MovePlacementResult Place(MovePlacementRequest request)
             {
@@ -2487,6 +3052,11 @@ namespace Readboard.VerificationTests.Protocol
             private readonly ManualResetEventSlim releaseEvent = new ManualResetEventSlim(false);
 
             public ManualResetEventSlim SideEffectApplied { get; } = new ManualResetEventSlim(false);
+
+            public bool CanResolvePlacementRegion(BoardFrame frame)
+            {
+                return false;
+            }
 
             public MovePlacementResult Place(MovePlacementRequest request)
             {

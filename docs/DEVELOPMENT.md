@@ -27,6 +27,35 @@ dotnet build readboard.sln -c Debug
 dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --no-build
 ```
 
+WebView DOM rendering test（WSL/Node.js 20+）：
+
+```bash
+npm ci
+npm run test:webview
+```
+
+脚本会自动准备 Chromium，并验证 snapshot 动态文本、语言切换日志、校验错误和 accessibility 文本。
+
+真实 WebView2 宿主 E2E（仅原生 Windows checkout；需 Evergreen WebView2 Runtime、.NET 10 和上述 Node 依赖）：
+
+```powershell
+$env:DOTNET_EXE = "C:\Users\admin\.dotnet\dotnet.exe"
+npm run test:webview:host
+```
+
+该测试每次从当前源码 fresh publish `readboard.exe`，为每个场景创建独立应用目录和 WebView2 profile，通过动态 TCP fake host 与 CDP 驱动真实 Evergreen WebView2。它串行、零 retry，验证首个权威快照与生产 shell close 的 shutdown wire、配置、进程和 CDP target 退出；不要在 WSL 的 UNC 工作目录中通过 `npm.cmd` 运行。
+
+CI 将真实 host E2E 分为两个非 required Windows jobs：build job 只 publish 一次 Release artifact；core job 运行首快照、Control Center bridge 和 Settings Save/restart；extended job 在 core 后运行 Cancel、完整 analysis actions 和 shell close。两个 job 均使用 Evergreen WebView2 Runtime、单 worker、零 retry。失败产物位于 GitHub Actions artifact，包含 semantic DOM、截图、console/page errors、TCP wire、进程输出、配置、Runtime 版本和 cleanup 状态。
+
+本地按 job 分组运行（原生 Windows checkout）：
+
+```powershell
+npm run test:webview:host:core
+npm run test:webview:host:extended
+```
+
+CI 已构建 Release artifact 时，可通过 `READBOARD_PUBLISH_DIRECTORY` 指向该目录，避免测试 job 重复 publish；不设置时，host suite 保持本地 fresh publish fallback。
+
 只跑一组测试：
 
 ```powershell
@@ -159,7 +188,9 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 - `config_readboard.txt`：旧主配置镜像
 - `config_readboard_others.txt`：旧扩展配置镜像
 
-`DualFormatAppConfigStore` 优先读 JSON；没有 JSON 时尝试导入旧格式。保存时同时写 JSON 和旧格式镜像，保证老集成路径仍能读到配置。
+`DualFormatAppConfigStore` 优先读 JSON；没有 JSON 时尝试导入旧格式。保存时先在同一运行目录的临时事务目录中写完 JSON 和两份 legacy 内容，再逐个替换三个目标文件。普通进程内的替换失败会尝试用旧文件集合回滚；回滚失败或事务目录清理失败会抛出 `DurableConfigurationException`，其中包含应人工诊断的事务目录路径，并保留该目录作为有界证据。成功或可恢复失败会清理事务目录。
+
+这不是跨文件的文件系统事务：每个目标文件的替换具备单文件语义，但进程崩溃或操作系统故障可能仍留下混合集合。不要把该实现描述为跨文件原子提交；事务目录前缀为 `.readboard-config-transaction-`，残留目录应作为故障证据处理。
 
 改配置字段时：
 

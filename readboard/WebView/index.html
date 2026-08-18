@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="und">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title data-i18n="MainForm_title">ReadBoard / 棋盘同步工具</title>
+  <link rel="icon" href="lizziey.ico">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="titlebar">
+      <div class="brand"><img src="lizziey.ico" alt=""><strong><span>ReadBoard / </span><span data-i18n="MainForm_title">棋盘同步工具</span></strong><span id="title-version">v3.1.0</span></div>
+      <div class="window-controls" aria-label="窗口控制" data-i18n-aria-label="WebView_windowControls">
+        <button type="button" data-command="window.minimize" aria-label="最小化" data-i18n-aria-label="WebView_minimize"><i class="icon">&#xE921;</i></button>
+        <button type="button" data-command="window.maximize" aria-label="最大化" data-i18n-aria-label="WebView_maximize"><i class="icon">&#xE922;</i></button>
+        <button type="button" data-command="window.close" aria-label="关闭" data-i18n-aria-label="Update_close"><i class="icon">&#xE8BB;</i></button>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <nav aria-label="主导航" data-i18n-aria-label="WebView_mainNavigation">
+        <button class="nav-item active" data-page="controlCenter" type="button"><i class="icon">&#xE80F;</i><span data-i18n="WebView_navControlCenter">控制中心</span></button>
+        <button class="nav-item" data-page="settings" type="button"><i class="icon">&#xE713;</i><span data-i18n="SettingsForm_title">参数设置</span></button>
+        <button class="nav-item" data-page="rules" type="button"><i class="icon">&#xE82D;</i><span data-i18n="WebView_rules">规则说明</span></button>
+        <button class="nav-item" data-page="about" type="button"><i class="icon">&#xE946;</i><span data-i18n="WebView_about">关于</span></button>
+      </nav>
+      <div class="sidebar-rule"></div>
+      <h2 data-i18n="WebView_quickActions">快速操作</h2>
+      <div class="quick-actions">
+        <button type="button" data-command="sync.quick"><i class="icon">&#xE945;</i><span id="quick-label" data-i18n="WebView_quickSync">快速同步</span></button>
+        <button class="running" type="button" data-command="sync.continuous"><i class="icon">&#xE895;</i><span id="continuous-label" data-i18n="WebView_continuousSync">持续同步</span></button>
+        <button type="button" data-command="sync.once"><i class="icon">&#xE768;</i><span data-i18n="MainForm_btnOneTimeSync">单次同步</span></button>
+        <button type="button" data-command="sync.toggleAnalysis"><i class="icon">&#xE9D2;</i><span id="analysis-label" data-i18n="WebView_pauseAnalysis">暂停分析</span></button>
+        <button type="button" data-command="sync.swapOrder"><i class="icon">&#xE8AB;</i><span data-i18n="MainForm_btnExchange">交换顺序</span></button>
+        <button type="button" data-command="sync.rebuild"><i class="icon">&#xE90F;</i><span data-i18n="MainForm_btnForceRebuild">强制重建</span></button>
+        <button class="danger" type="button" data-command="sync.clearBoard"><i class="icon">&#xE74D;</i><span data-i18n="MainForm_btnClearBoard">清空棋盘</span></button>
+      </div>
+    </aside>
+
+    <main>
+      <div class="top-status">
+        <span><b class="dot" id="sync-dot"></b><span data-i18n="WebView_status">状态：</span> <strong id="sync-status" data-i18n="WebView_hostModeStarted">宿主模式已启动</strong></span>
+        <span><span data-i18n="WebView_lastSync">最后同步：</span> <b id="last-sync">--:--:--</b></span>
+        <span><span data-i18n="WebView_stoneCount">棋子数：</span> <b id="stone-count">0</b></span>
+        <span><span data-i18n="WebView_duration">耗时：</span> <b id="duration">--</b></span>
+        <span><span data-i18n="WebView_version">版本：</span> <b id="version">v3.1.0</b></span>
+        <span id="preferences-status" class="preference-status" role="status" aria-live="polite"></span>
+        <div class="top-actions">
+          <button type="button" data-page="settings"><i class="icon">&#xE713;</i><span data-i18n="MainForm_btnSettings">设置</span></button>
+          <button type="button" data-command="rules.openManual"><i class="icon">&#xE897;</i><span data-i18n="MainForm_btnHelp">帮助</span></button>
+        </div>
+      </div>
+
+      <section class="page active" data-page-panel="controlCenter">
+        <div class="context-strip card">
+          <span><i class="icon">&#xE7F4;</i><span data-i18n="WebView_platform">平台：</span> <b id="context-platform" data-i18n="WebView_notSelected">未选择</b></span>
+          <span><span data-i18n="MainForm_titleTagRoom">房间：</span> <b id="context-room">--</b></span>
+          <span><span data-i18n="WebView_moves">手数：</span> <b id="context-moves">--</b></span>
+          <span><span data-i18n="WebView_nextTurn">下一手：</span> <b id="context-turn">--</b></span>
+          <span><span data-i18n="WebView_title">标题：</span> <b class="dot" id="binding-dot"></b><b id="context-binding" data-i18n="WebView_notBound">未绑定</b></span>
+        </div>
+
+        <fieldset class="card compact"><legend data-i18n="MainForm_groupPlatform">平台类型</legend>
+          <div class="choice-grid platforms">
+            <label><input type="radio" name="platform" value="fox"><span data-i18n="MainForm_rdoFox">野狐</span></label>
+            <label><input type="radio" name="platform" value="foxBackground"><span data-i18n="MainForm_rdoFoxBack">野狐(后台落子)</span></label>
+            <label><input type="radio" name="platform" value="yike"><span data-i18n="MainForm_rdoYike">弈客</span></label>
+            <label><input type="radio" name="platform" value="yicheng"><span data-i18n="MainForm_rdoTygem">弈城</span></label>
+            <label><input type="radio" name="platform" value="sina"><span data-i18n="MainForm_rdoSina">新浪</span></label>
+            <label><input type="radio" name="platform" value="otherBackground"><span data-i18n="MainForm_rdoBack">其他(后台)</span></label>
+            <label><input type="radio" name="platform" value="otherForeground"><span data-i18n="MainForm_rdoFore">其他(前台)</span></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="card compact"><legend data-i18n="MainForm_groupBoard">棋盘规格</legend>
+          <div class="board-size-row">
+            <label><input type="radio" name="boardSize" value="19">19×19</label>
+            <label><input type="radio" name="boardSize" value="13">13×13</label>
+            <label><input type="radio" name="boardSize" value="9">9×9</label>
+            <label><input type="radio" name="boardSize" value="custom"><span data-i18n="MainForm_rdoCustomBoard">自定义</span></label>
+            <input id="board-width" type="number" min="2" max="25" value="19" aria-label="棋盘宽度" data-i18n-aria-label="WebView_boardWidth"><b>×</b><input id="board-height" type="number" min="2" max="25" value="19" aria-label="棋盘高度" data-i18n-aria-label="WebView_boardHeight">
+          </div>
+        </fieldset>
+
+        <fieldset class="card sync-card"><legend data-i18n="MainForm_groupSync">同步与自动落子</legend>
+          <div class="sync-options">
+            <h3 data-i18n="WebView_syncSettings">同步设置</h3>
+            <div class="sync-toggle-row">
+              <label><input id="two-way" type="checkbox"><span data-i18n="MainForm_chkBothSync">双向同步</span></label>
+              <div class="auto-play-option"><label><input id="auto-play" type="checkbox"><span data-i18n="MainForm_chkAutoPlay">自动落子</span></label><span id="auto-play-color-status" class="auto-play-color-status" role="status" aria-live="polite" hidden></span></div>
+            </div>
+            <div class="color-row"><b data-i18n="WebView_stoneColor">执子颜色</b><div class="segments color-segments" role="radiogroup" aria-label="执子颜色" data-i18n-aria-label="WebView_stoneColor"><label><input type="radio" name="color" value="black"><span data-i18n="MainForm_radioBlack">执黑</span></label><label><input type="radio" name="color" value="white"><span data-i18n="MainForm_radioWhite">执白</span></label><label><input type="radio" name="color" value="auto"><span data-i18n="MainForm_radioAutoPlayColor">自动</span></label></div><button type="button" data-command="identity.open"><span data-i18n="MainForm_btnFoxAutoPlayIdentity">身份</span></button></div>
+            <div class="placement-row"><b data-i18n="WebView_moveMode">落子方式</b><div class="segments" role="radiogroup" aria-label="落子方式" data-i18n-aria-label="WebView_moveMode"><label><input type="radio" name="placement" value="direct"><span data-i18n="MainForm_radioAutoPlayMoveFirst">一选落子</span></label><label><input type="radio" name="placement" value="engine"><span data-i18n="MainForm_radioAutoPlayMoveGma">引擎决策落子</span></label></div></div>
+          </div>
+          <div class="engine-options">
+            <h3 data-i18n="WebView_engineConditions">引擎条件</h3>
+            <label><span data-i18n="MainForm_lblTime">每手用时</span> <span class="engine-value"><input id="ai-time" type="number" min="1" value="2"><span class="engine-unit" data-i18n="WebView_seconds">秒</span></span></label>
+            <label><span data-i18n="MainForm_lblTotalVisits">最大计算量(选填)</span> <span class="engine-value"><input id="playouts" type="number" min="0"><span class="engine-unit" aria-hidden="true"></span></span></label>
+            <label><span data-i18n="MainForm_lblBestMoveVisits">首选计算量(选填)</span> <span class="engine-value"><input id="first-policy" type="number" min="0"><span class="engine-unit" aria-hidden="true"></span></span></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="card compact"><legend data-i18n="WebView_boardSelection">棋盘选择方式</legend>
+          <div class="board-select-grid">
+            <button class="selected" type="button" data-command="board.select" data-board-mode="inside" data-payload='{"mode":"inside"}'><i class="icon">&#xE7C9;</i><span data-i18n="MainForm_btnClickBoard">选择棋盘(点击棋盘内部)</span></button>
+            <button type="button" data-command="board.select" data-board-mode="rectangle" data-payload='{"mode":"rectangle"}'><i class="icon">&#xE9A6;</i><span data-i18n="MainForm_btnCircleBoard">框选棋盘</span></button>
+            <button type="button" data-command="board.select" data-board-mode="line1" data-payload='{"mode":"line1"}'><i class="icon">&#xE9A6;</i><span data-i18n="MainForm_btnCircleRow1">框选1路线</span></button>
+            <label><input id="show-on-board" type="checkbox"><span data-i18n="MainForm_chkShowInBoard">原棋盘上显示选点</span></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="card log-card"><legend data-i18n="WebView_logOutput">日志输出</legend><div id="log-list" role="log" aria-live="polite"></div></fieldset>
+      </section>
+
+      <section class="page" data-page-panel="settings">
+        <header class="page-heading"><h1 data-i18n="SettingsForm_title">参数设置</h1><p data-i18n="WebView_settingsDescription">调整同步行为、识别参数和界面外观。修改仅在保存后生效。</p></header>
+        <fieldset class="card settings-card"><legend data-i18n="WebView_generalBehavior">常规行为</legend><div class="toggle-grid" id="behavior-settings">
+          <label><span><b data-i18n="WebView_autoMinimize">自动最小化</b><small data-i18n="WebView_autoMinimizeDescription">开始同步后收起窗口</small></span><input type="checkbox" data-setting="autoMinimize"></label>
+          <label><span><b data-i18n="WebView_backgroundAnalysis">后台分析</b><small data-i18n="WebView_backgroundAnalysisDescription">同步时允许宿主继续分析</small></span><input type="checkbox" data-setting="backgroundAnalysis"></label>
+          <label><span><b data-i18n="SettingsForm_chkMag">使用放大镜</b><small data-i18n="WebView_magnifierDescription">框选棋盘时辅助精确定位</small></span><input type="checkbox" data-setting="magnifier"></label>
+          <label><span><b data-i18n="SettingsForm_chkEnhanceScreen">增强截图</b><small data-i18n="WebView_enhancedCaptureDescription">提高部分窗口的捕获兼容性</small></span><input type="checkbox" data-setting="enhancedCapture"></label>
+          <label><span><b data-i18n="WebView_placementValidation">落子校验</b><small data-i18n="WebView_placementValidationDescription">自动落子后检查执行结果</small></span><input type="checkbox" data-setting="placementValidation"></label>
+        </div></fieldset>
+        <fieldset class="card settings-card"><legend data-i18n="WebView_recognitionParameters">识别参数</legend><div class="input-grid">
+          <label><span data-i18n="WebView_syncInterval">同步间隔</span><span><input type="number" min="20" data-setting="syncInterval"><i>ms</i></span><small class="field-error"></small></label>
+          <label><span data-i18n="WebView_grayOffset">灰度偏移</span><input type="number" min="0" max="255" data-setting="grayOffset"><small class="field-error"></small></label>
+          <label><span data-i18n="WebView_blackOffset">黑棋颜色偏移</span><span><input type="number" min="0" max="255" data-setting="blackOffset"><i>0–255</i></span><small class="field-error"></small></label>
+          <label><span data-i18n="WebView_blackPercent">黑棋识别百分比</span><span><input type="number" min="0" max="100" data-setting="blackPercent"><i>%</i></span><small class="field-error"></small></label>
+          <label><span data-i18n="WebView_whiteOffset">白棋颜色偏移</span><span><input type="number" min="0" max="255" data-setting="whiteOffset"><i>0–255</i></span><small class="field-error"></small></label>
+          <label><span data-i18n="WebView_whitePercent">白棋识别百分比</span><span><input type="number" min="0" max="100" data-setting="whitePercent"><i>%</i></span><small class="field-error"></small></label>
+        </div></fieldset>
+        <fieldset class="card settings-card"><legend data-i18n="WebView_appearanceDiagnostics">外观与诊断</legend><div class="appearance-grid">
+          <div class="appearance-theme"><b data-i18n="SettingsForm_lblColorMode">颜色模式</b><div class="segments"><label><input type="radio" name="theme" value="system"><span data-i18n="SettingsForm_rdoColorSystem">跟随系统</span></label><label><input type="radio" name="theme" value="dark"><span data-i18n="SettingsForm_rdoColorDark">深色</span></label><label><input type="radio" name="theme" value="light"><span data-i18n="SettingsForm_rdoColorLight">浅色</span></label></div></div>
+          <label class="diagnostics"><span><b data-i18n="WebView_debugDiagnostics">调试诊断</b><small data-i18n="WebView_debugDiagnosticsDescription">可能生成较大的诊断文件</small></span><input type="checkbox" data-setting="diagnostics"></label>
+          <button type="button" data-command="settings.openDiagnostics"><span data-i18n="SettingsForm_btnOpenDebugDiagnostics">打开诊断目录</span></button>
+        </div><div class="appearance-language"><span><b data-i18n="WebView_language">界面语言</b><small data-i18n="WebView_languageDescription">保存后立即应用</small></span><select id="settings-language" data-setting="language"><option value="host" data-i18n="WebView_followHostLanguage">跟随 LizzieYzy-Next</option><option value="cn">简体中文</option><option value="en">English</option><option value="jp">日本語</option><option value="kr">한국어</option></select></div></fieldset>
+        <span id="settings-error" class="settings-error" role="alert" aria-live="polite"></span>
+        <div class="settings-actions card"><button class="danger-outline" type="button" data-command="settings.resetDefaults"><span data-i18n="SettingsForm_btnReset">恢复默认</span></button><span id="settings-dirty"></span><div><button type="button" data-command="settings.cancel"><span data-i18n="SettingsForm_btnCancel">取消</span></button><button class="primary" type="button" data-command="settings.save"><span data-i18n="WebView_saveSettings">保存设置</span></button></div></div>
+      </section>
+
+      <section class="page" data-page-panel="rules">
+        <header class="page-heading"><h1 data-i18n="WebView_rules">规则说明</h1><p data-i18n="WebView_rulesDescription">了解贴目模拟方式与完整说明入口。</p></header>
+        <fieldset class="card rules-card"><legend data-i18n="WebView_komiRuleLimits">贴目与规则限制</legend>
+          <div class="warning"><i class="icon">&#xE7BA;</i><span><b data-i18n="WebView_captureCountWarning">同步时无法可靠获取历史提子数</b><small data-i18n="WebView_japaneseScoringWarning">按日本规则数目时，直接使用当前盘面计算可能产生偏差。</small></span></div>
+          <p><b data-i18n="WebView_komiSimulationIntro">同步贴 6.5 目的日本规则棋局时，可在 KataGo 中使用以下组合模拟：</b></p>
+          <div class="formula"><b data-i18n="WebView_areaScoring">数子</b><span>+</span><strong data-i18n="WebView_komiSeven">贴目 7.0</strong><span>+</span><strong data-i18n="WebView_lastMoveCompensation">收后方贴还 0.5 目</strong></div>
+        </fieldset>
+        <div class="card manual-card"><div><b data-i18n="WebView_fullManual">完整说明文档</b><p data-i18n="WebView_fullManualDescription">根据当前界面语言打开随程序发布的 readme*.rtf 文档。</p></div><button class="primary" type="button" data-command="rules.openManual"><span data-i18n="WebView_openFullManual">打开完整说明</span></button></div>
+      </section>
+
+      <section class="page" data-page-panel="about">
+        <header class="page-heading"><h1 data-i18n="WebView_about">关于</h1><p data-i18n="WebView_aboutDescription">ReadBoard 版本与项目信息。</p></header>
+        <div class="card about-hero"><img src="lizziey.ico" alt="ReadBoard"><div><h1>ReadBoard</h1><span class="version-pill" id="about-version">v3.1.0</span><h3 data-i18n="WebView_productSubtitle">LizzieYzy-Next 的 Windows 棋盘同步工具</h3><p data-i18n="WebView_productDescription">负责捕获第三方棋盘窗口、识别盘面，并把同步结果交给宿主。</p></div><div class="host-state"><b><i class="dot" id="host-dot"></i><span id="host-state" data-i18n="WebView_hostModeStarted">宿主模式已启动</span></b><p data-i18n="WebView_hostTool">LizzieYzy-Next 棋盘同步工具</p></div></div>
+        <fieldset class="card project-info"><legend data-i18n="WebView_projectInfo">项目信息</legend><dl><dt data-i18n="WebView_currentVersion">当前版本</dt><dd id="project-version">v3.1.0</dd><dt data-i18n="WebView_hostProject">宿主项目</dt><dd>LizzieYzy-Next</dd><dt data-i18n="WebView_platformRuntime">运行平台</dt><dd>Windows 10 / Windows 11</dd><dt data-i18n="WebView_projectRepository">项目仓库</dt><dd>github.com/qiyi71w/readboard</dd></dl></fieldset>
+        <div class="card update-card"><div><b data-i18n="WebView_projectUpdates">项目与更新</b><p data-i18n="WebView_projectUpdatesDescription">打开项目仓库，或检查当前版本是否有可用更新。</p></div><div><button type="button" data-command="about.openRepository"><span data-i18n="WebView_openRepository">打开项目仓库</span></button><button class="primary" type="button" data-command="about.checkUpdate"><span data-i18n="MainForm_btnCheckUpdate">检查更新</span></button></div></div>
+      </section>
+    </main>
+
+    <footer><span><i class="dot" id="target-dot"></i><b id="target-status" data-i18n="WebView_waitTarget">等待选择目标窗口</b></span><span><i class="dot" id="board-dot"></i><b id="board-status" data-i18n="WebView_waitBoardRecognition">等待首次棋盘识别</b></span><span><i class="dot" id="placement-dot"></i><b id="placement-status" data-i18n="WebView_placementUnavailable">落子区域暂不可用</b></span></footer>
+  </div>
+
+  <div class="modal-layer" id="modal-layer" hidden>
+    <section class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <header><h2 id="modal-title"></h2><button type="button" data-command="modal.close" aria-label="关闭" data-i18n-aria-label="Update_close"><i class="icon">&#xE8BB;</i></button></header>
+      <div class="modal-body" id="modal-body"></div>
+      <footer class="modal-actions" id="modal-actions"></footer>
+    </section>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

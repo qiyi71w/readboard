@@ -40,6 +40,21 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
+        public void SkipBuild_RejectsBundledFixedVersionWebView2Runtime()
+        {
+            using (PackagingWorkspace workspace = PackagingWorkspace.Create("v3.1.0"))
+            {
+                workspace.CreateBuildOutputs();
+                workspace.WriteFile("WebView2Runtime\\msedgewebview2.exe");
+
+                PackagingResult result = workspace.RunPackagingScript(skipZip: true);
+
+                Assert.NotEqual(0, result.ExitCode);
+                Assert.Contains("Fixed Version Runtime", result.Output);
+            }
+        }
+
+        [Fact]
         public void SkipBuild_DoesNotSeedLegacyOtherConfigIntoReleasePackage()
         {
             using (PackagingWorkspace workspace = PackagingWorkspace.Create())
@@ -114,6 +129,11 @@ namespace Readboard.VerificationTests
                 Assert.True(File.Exists(Path.Combine(
                     workspace.ReleaseRoot,
                     "readboard-webview2-v3.1.0.zip")));
+                Assert.True(File.Exists(Path.Combine(
+                    workspace.ReleaseRoot,
+                    "readboard-webview2-v3.1.0",
+                    "readboard",
+                    "WebView2Loader.dll")));
             }
         }
 
@@ -255,6 +275,27 @@ namespace Readboard.VerificationTests
                 WriteFile("readboard.exe");
                 WriteFile("readboard.dll");
                 WriteFile("readboard.runtimeconfig.json");
+                WriteFile("readboard.deps.json");
+                WriteFile("language_cn.txt");
+                WriteFile("language_en.txt");
+                WriteFile("language_jp.txt");
+                WriteFile("language_kr.txt");
+                WriteFile("readme.rtf");
+                WriteFile("readme_en.rtf");
+                WriteFile("readme_jp.rtf");
+                WriteFile("OpenCvSharp.dll");
+                WriteFile("OpenCvSharp.Extensions.dll");
+                WriteFile("OpenCvSharpExtern.dll");
+                WriteFile("opencv_videoio_ffmpeg4100_64.dll");
+                WriteFile("Microsoft.Web.WebView2.Core.dll");
+                WriteFile("Microsoft.Web.WebView2.WinForms.dll");
+                WriteFile("runtimes\\win-x64\\native\\WebView2Loader.dll");
+                WriteFile("WebView\\index.html");
+                WriteFile("WebView\\styles.css");
+                WriteFile("WebView\\app.js");
+                WriteFile("WebView\\lizziey.ico");
+                WriteFile("WebView\\fonts\\InterVariable.woff2");
+                WriteFile("WebView\\fonts\\LICENSE-Inter.txt");
             }
 
             public void SetBuildOutputTimestamp(string relativePath, DateTime timestampUtc)

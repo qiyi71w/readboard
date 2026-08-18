@@ -45,6 +45,7 @@ namespace readboard
         ProtocolMessage CreatePlayoutsChangedMessage(string value);
         ProtocolMessage CreateFirstPolicyChangedMessage(string value);
         ProtocolMessage CreateNoPonderMessage();
+        ProtocolMessage CreateResumePonderMessage();
         ProtocolMessage CreateStopAutoPlayMessage();
         ProtocolMessage CreatePassMessage();
         ProtocolMessage CreateReadboardUpdateReadyMessage(string tag, string absoluteZipPath);

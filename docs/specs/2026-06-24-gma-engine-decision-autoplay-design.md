@@ -36,6 +36,9 @@ play>black>5 1000 0 gma
 - 不带 `gma` 的消息永远是既有“一选落子”。
 - 保留前三个数值及其顺序，旧 Lizzie Host 会忽略末尾 token，因此向后兼容。
 - 落子方式改变时发送一条携带当前完整棋色、时间、最大计算量、首选计算量和方式的 `play>`，防止参数与模式先后错配。方式也必须计入重连重发与去重签名，不能因“同色同数值”而吞掉切换。
+- `stopAutoPlay` 取消已发送 `play>` 对当前自动落子的授权。同步会话不停止而再次开启自动落子时，即使棋色、数值、方式和房间上下文均未变化，ReadBoard 也必须让后续一次真实识别重新发送完整 `play>`，不能被旧去重签名吞掉。
+- Host 收到 `play>... gma` 后要等下一帧已接受的棋盘再启动 GMA；ReadBoard 因此必须让下一次真实识别帧绕过去重，即使棋盘 payload 未变化也要在该 `play>` 之后完整发送。
+- 该保证不能通过重放缓存帧或从 `play>` 直接启动 GMA 实现；authoritative frame 仍来自下一次正常棋盘识别。
 - 既有 `timechanged`、`playoutschanged`、`firstchanged` 与 `playponder` 消息继续保持原有职责；`timechanged` / `playoutschanged` 在 `gma` 下更新 Host 的下一手原始限制，当前已经开始的搜索不变。所有 `SendPlay`、重连重放和自动落子发送入口都统一携带当前方式。
 
 本设计有意新增该可选 token，作为独立功能扩展；这覆盖旧的自动棋色规格中“本轮不新增 wire protocol”的非目标，但不放宽其他协议兼容约束。
@@ -60,7 +63,7 @@ ReadBoard 的显式“分析/停止” (`noponder`) 和“停止自动落子”�
 ## 非目标
 
 - 不在 ReadBoard 添加“对手回合持续显示分析”的开关。
-- 不改变棋盘识别、落子坐标、同步会话、PASS、快照或历史恢复。
+- 不改变棋盘识别、落子坐标、PASS、快照 payload/识别语义或历史恢复。
 - 不为非 KataGo 引擎模拟 `gma`。
 - 不增加另一个泛化的 genmove 模式。
 - 不支持双引擎/引擎 PK 会话中的 `gma` 自动落子；Host 会安全阻止该模式，ReadBoard 不另行增加第二引擎设置。

@@ -41,7 +41,7 @@ namespace readboard
         void NotifyReady(bool playPonderEnabled);
         void SendPonderStatus(bool playPonderEnabled);
         void SendVersion(string version);
-        void SendReadboardUpdateReady(string tag, string absoluteZipPath);
+        bool SendReadboardUpdateReady(string tag, string absoluteZipPath);
         void SendSync();
         void SendStopSync();
         void SendBothSync(bool enabled);
@@ -50,6 +50,7 @@ namespace readboard
         void SendStart(int boardWidth, int boardHeight, IntPtr windowHandle, bool includeWindowHandle);
         void SendPlay(
             string color,
+            AutoPlayColorMode colorMode,
             string time,
             string playouts,
             string firstPolicy,
@@ -61,7 +62,9 @@ namespace readboard
         void SendPlayoutsChanged(string numericValue);
         void SendFirstPolicyChanged(string numericValue);
         void SendNoPonder();
+        void SendResumePonder();
         void SendStopAutoPlay();
+        void RevokeAutoPlayIfAuthorized();
         void SendPass();
         void SendShutdownProtocol();
         void SendLine(string line);

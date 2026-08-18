@@ -45,6 +45,19 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
+        public void TrySend_ReturnsFalseWhenDispatcherIsClosed()
+        {
+            FakeTransport transport = new FakeTransport();
+            LegacyProtocolAdapter protocolAdapter = new LegacyProtocolAdapter();
+            OutboundProtocolDispatcher dispatcher = new OutboundProtocolDispatcher(transport, protocolAdapter);
+
+            dispatcher.Close();
+
+            Assert.False(dispatcher.TrySend(protocolAdapter.CreateReadyMessage()));
+            Assert.Empty(transport.SentLines);
+        }
+
+        [Fact]
         public void SendLegacyLine_IgnoresBlankInput()
         {
             FakeTransport transport = new FakeTransport();

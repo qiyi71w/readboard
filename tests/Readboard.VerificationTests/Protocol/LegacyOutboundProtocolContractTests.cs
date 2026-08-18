@@ -173,6 +173,8 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal("playoutschanged ", ProtocolKeywords.PlayoutsChangedPrefix);
             Assert.Equal("firstchanged ", ProtocolKeywords.FirstPolicyChangedPrefix);
             Assert.Equal("noponder", ProtocolKeywords.NoPonder);
+            Assert.Equal("clearBoard", ProtocolKeywords.ClearBoard);
+            Assert.Equal("resumeponder", ProtocolKeywords.ResumePonder);
             Assert.Equal("stopAutoPlay", ProtocolKeywords.StopAutoPlay);
             Assert.Equal("pass", ProtocolKeywords.Pass);
             Assert.Equal("0", ProtocolKeywords.DefaultNumericValue);
@@ -226,9 +228,9 @@ namespace Readboard.VerificationTests.Protocol
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
 
-            coordinator.SendReadboardUpdateReady(
+            Assert.True(coordinator.SendReadboardUpdateReady(
                 "v3.0.2",
-                @"C:\updates\readboard-github-release-v3.0.2.zip");
+                @"C:\updates\readboard-github-release-v3.0.2.zip"));
 
             Assert.Equal(
                 new[]
@@ -236,6 +238,20 @@ namespace Readboard.VerificationTests.Protocol
                     @"readboardUpdateReady	v3.0.2	C:\updates\readboard-github-release-v3.0.2.zip"
                 },
                 transport.SentLines);
+        }
+
+        [Fact]
+        public void SendReadboardUpdateReady_ReturnsFalseAfterCoordinatorClosesOutboundTransport()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            coordinator.Start();
+            coordinator.Stop();
+
+            Assert.False(coordinator.SendReadboardUpdateReady(
+                "v3.0.2",
+                @"C:\updates\readboard-github-release-v3.0.2.zip"));
         }
 
         private static string BuildVisibleOverlayLine(LegacyOverlayService overlayService)

@@ -5,16 +5,13 @@ using System.Text;
 using System.Windows.Forms;
 using System.Diagnostics;
 using System.IO;
-using System.Threading;
 using System.Runtime.InteropServices;
 using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.ComponentModel;
 
 namespace readboard
 {
-    public partial class MainForm : Form, IProtocolCommandHost, ISyncCoordinatorHost
+    public partial class MainForm : Form, IProtocolCommandHost, IAnalysisStateProtocolHost, ISyncCoordinatorHost, IWebViewSyncCoordinatorHost
     {
         // Boolean showDebugImage = true;
         Boolean clicked = false;
@@ -34,30 +31,26 @@ namespace readboard
         private const int TYPE_FOREGROUND = 5;
         private const int TYPE_YIKE = 6;
         private const int ContinuousSyncPollIntervalMs = 100;
-        private int currentSyncType = TYPE_FOX;
         // Boolean isQTYC = false;
         // int boardWidth=19;
-        int boardH = 19;
-        int boardW = 19;
         //Boolean noticeLast = true;
         //Boolean noLw = false;
         Boolean isMannulCircle = false;
         float factor = 1.0f;
-        private GlobalKeyboardHook keyboardHook;
         private readonly LaunchOptions launchOptions;
         private readonly ISyncSessionCoordinator sessionCoordinator;
         private readonly ILegacySelectionCalibrationService selectionCalibrationService;
+        private readonly ControlCenterRuntime controlCenterRuntime;
+        private readonly FoxIdentitySelection foxIdentitySelection;
         private readonly UiThreadInvoker uiThreadInvoker;
         private readonly SerialBackgroundWorkQueue placeRequestQueue;
+        private HostedUpdateJourney hostedUpdateJourney;
         private readonly object placeProtocolSyncRoot = new object();
         private readonly object protocolCommandSyncRoot = new object();
         private readonly GitHubUpdateChecker updateChecker = new GitHubUpdateChecker();
-        private readonly ToolTip showInBoardShortcutToolTip = new ToolTip();
         private readonly Queue<Action> pendingProtocolCommands = new Queue<Action>();
         private readonly BackgroundSelectionWindowBindingCoordinator backgroundSelectionWindowBindingCoordinator =
             new BackgroundSelectionWindowBindingCoordinator();
-        private const int MainFormMinimumLogicalWidth = 360;
-        private const int MainFormScreenLogicalPadding = 40;
         private FoxWindowContext lastFoxWindowContext = FoxWindowContext.Unknown();
         private YikeWindowContext lastYikeWindowContext = YikeWindowContext.Unknown();
         private IntPtr lastYikeContextWindowHandle = IntPtr.Zero;
@@ -70,81 +63,38 @@ namespace readboard
         private IntPtr lastFoxAutoPlayColorDetectionWindowHandle = IntPtr.Zero;
         private string lastFoxAutoPlayColorDetectionContextSignature = string.Empty;
         private string lastFoxAutoPlayColorDetectionNicknameSignature = string.Empty;
-        private string currentFoxAutoPlayNicknameSignature = string.Empty;
         private DateTime lastFoxAutoPlayColorDetectionTimestampUtc = DateTime.MinValue;
         private const int FoxAutoPlayColorDetectionCacheMs = 1000;
 
         int posX = -1;
         int posY = -1;
 
-        private Button btnTheme;
-        private Panel pnlAutoPlayColorStatus;
-        private Panel pnlFoxAutoPlayIdentity;
-        private ContextMenuStrip themeMenu;
-        private ToolStripMenuItem menuThemeOptimized;
-        private ToolStripMenuItem menuThemeClassic;
-        private bool isMainFormSizeInitialized = false;
-        private bool isApplyingMainFormLayout = false;
         private bool isShuttingDown = false;
         private bool closeRequestedBeforeHandle = false;
+        private bool webViewWindowBoundsAppliedAfterHandle = false;
         private bool isInitializingProtocolState = true;
         private bool hostedUpdateSupported = false;
         private bool hostedUpdatePackageV2Supported = false;
-        private FormUpdate activeHostedUpdateDialog = null;
-        private bool suppressAutoPlayColorModeEvents = false;
-        private bool suppressAutoPlayMoveModeEvents = false;
+        private readonly WebViewStatePublisher webViewStatePublisher;
+        private readonly WebViewWindowCommandRuntime webViewWindowCommandRuntime;
+        private readonly WebViewUpdateCheckJourney webViewUpdateCheckJourney;
+        private readonly MainFormShutdownCoordinator shutdownCoordinator;
+        private readonly YikeContextRuntime yikeContextRuntime;
         private AutoPlayColorMode lastManualAutoPlayColorMode = AutoPlayColorMode.ManualBlack;
-        private static readonly System.Drawing.Size MainFormDefaultSize = new System.Drawing.Size(852, 374);
-
-        private readonly struct MainHeaderLayoutMetrics
-        {
-            public MainHeaderLayoutMetrics(int platformBottom, int utilityBottom, int platformWidth, bool utilitiesInRightColumn)
-            {
-                PlatformBottom = platformBottom;
-                UtilityBottom = utilityBottom;
-                PlatformWidth = platformWidth;
-                UtilitiesInRightColumn = utilitiesInRightColumn;
-            }
-
-            public int PlatformBottom { get; }
-
-            public int UtilityBottom { get; }
-
-            public int PlatformWidth { get; }
-
-            public bool UtilitiesInRightColumn { get; }
-        }
 
         private static Boolean IsFoxSyncType(int syncType)
         {
             return syncType == TYPE_FOX || syncType == TYPE_FOX_BACKGROUND_PLACE;
         }
 
-        private static Boolean UsesManualSelectionType(int syncType)
-        {
-            return syncType == TYPE_BACKGROUND || syncType == TYPE_FOREGROUND;
-        }
-
-        private static Boolean SupportsFastSyncType(int syncType)
-        {
-            return IsFoxSyncType(syncType) || syncType == TYPE_TYGEM || syncType == TYPE_SINA || syncType == TYPE_YIKE;
-        }
-
-        private bool SupportsShowInBoard()
-        {
-            return CurrentSyncType != TYPE_FOREGROUND;
-        }
-
         private int CurrentSyncType
         {
-            get { return currentSyncType; }
-        }
-
-        private void SetCurrentSyncType(int syncType)
-        {
-            if (currentSyncType != syncType)
-                ClearFoxAutoPlayColorDetectionState();
-            currentSyncType = syncType;
+            get
+            {
+                return controlCenterRuntime == null
+                    ? TYPE_FOX
+                    : (int)controlCenterRuntime.CurrentPreferences.Platform;
+            }
         }
 
         private void UpdateSelectionBounds(int x1, int y1, int x2, int y2)
@@ -155,1220 +105,14 @@ namespace readboard
             oy2 = y2;
         }
 
-        private static System.Drawing.Point ClampToScreenWorkingArea(System.Drawing.Point location, System.Drawing.Size windowSize)
-        {
-            Rectangle workingArea = Screen.FromPoint(location).WorkingArea;
-            int maxX = Math.Max(workingArea.Left, workingArea.Right - windowSize.Width);
-            int maxY = Math.Max(workingArea.Top, workingArea.Bottom - windowSize.Height);
-            return new System.Drawing.Point(
-                Math.Min(Math.Max(workingArea.Left, location.X), maxX),
-                Math.Min(Math.Max(workingArea.Top, location.Y), maxY));
-        }
-
-        private void RestoreSavedWindowLocation()
-        {
-            if (posX == -1 || posY == -1)
-                return;
-
-            Location = ClampToScreenWorkingArea(new System.Drawing.Point(posX, posY), Size);
-        }
-
-        private void RestoreSavedWindowLocationIfNeeded()
-        {
-            if (isMainFormSizeInitialized)
-                return;
-
-            RestoreSavedWindowLocation();
-        }
-
-        private Point? TryGetStartupReferencePoint()
-        {
-            if (isMainFormSizeInitialized || posX == -1 || posY == -1)
-                return null;
-
-            return new Point(posX, posY);
-        }
-
-        private Point ResolveLayoutReferencePoint()
-        {
-            return DisplayScaling.ResolveReferencePoint(
-                IsHandleCreated,
-                Bounds,
-                Location,
-                TryGetStartupReferencePoint());
-        }
-
-        internal void RefreshShowInBoardShortcutToolTip()
-        {
-            showInBoardShortcutToolTip.SetToolTip(this.chkShowInBoard, Program.disableShowInBoardShortcut ? string.Empty : "Ctrl+X");
-        }
-
-        private bool IsOptimizedTheme()
-        {
-            return Program.uiThemeMode == Program.UiThemeOptimized;
-        }
-
-        private static bool IsDarkMode()
-        {
-            return UiTheme.IsDarkMode;
-        }
-
-        private IEnumerable<GroupBox> MainThemeGroups()
-        {
-            return new[] { groupBox1, groupBox2, groupBox4 };
-        }
-
-        private IEnumerable<Control> MainThemeSurfaces()
-        {
-            return new Control[] { flowLayoutPanel1, flowLayoutPanel2, flowLayoutPanelAutoPlayMoveMode, panel1, panel2, panel3, panel4, pnlAutoPlayColorStatus, pnlFoxAutoPlayIdentity };
-        }
-
-        private IEnumerable<ButtonBase> MainThemeOptions()
-        {
-            return new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore, rdo19x19, rdo13x13, rdo9x9, rdoOtherBoard, chkBothSync, chkAutoPlay, chkShowInBoard, radioBlack, radioWhite, radioAutoPlayColor, radioAutoPlayMoveFirst, radioAutoPlayMoveGma, btnFoxAutoPlayIdentity };
-        }
-
-        private IEnumerable<TextBox> MainThemeInputs()
-        {
-            return new[] { textBox1, textBox2, textBox3, txtBoardWidth, txtBoardHeight };
-        }
-
-        private IEnumerable<Label> MainThemeLabels()
-        {
-            return new[] { lblBoardSize, lblPlayCondition, lblTime, lblTotalVisits, lblBestMoveVisits, lblAutoPlayColorStatus, lblAutoPlayMoveMode, label6 };
-        }
-
-        private IEnumerable<Button> MainPrimaryButtons()
-        {
-            return new[] { btnFastSync, btnKeepSync };
-        }
-
-        private IEnumerable<Button> MainSecondaryButtons()
-        {
-            return new[] { btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnForceRebuild, btnSettings, btnHelp, btnKomi65, btnCheckUpdate, btnTheme };
-        }
-
-        private IEnumerable<Button> MainTypographyButtons()
-        {
-            return new[] { btnFastSync, btnKeepSync, btnClickBoard, btnCircleBoard, btnCircleRow1, btnOneTimeSync, btnTogglePonder, btnExchange, btnForceRebuild, btnSettings, btnHelp, btnKomi65, btnCheckUpdate, btnClearBoard, btnTheme };
-        }
-
-        private void EnsureThemeControls()
-        {
-            if (btnTheme != null)
-                return;
-
-            btnTheme = new Button();
-            btnTheme.Name = "btnTheme";
-            btnTheme.Size = new System.Drawing.Size(68, 32);
-            btnTheme.TabIndex = 39;
-            btnTheme.UseVisualStyleBackColor = true;
-            btnTheme.Click += btnTheme_Click;
-
-            themeMenu = new ContextMenuStrip();
-            themeMenu.ShowImageMargin = false;
-            menuThemeOptimized = new ToolStripMenuItem();
-            menuThemeClassic = new ToolStripMenuItem();
-            menuThemeOptimized.Click += menuThemeOptimized_Click;
-            menuThemeClassic.Click += menuThemeClassic_Click;
-            themeMenu.Items.Add(menuThemeOptimized);
-            themeMenu.Items.Add(menuThemeClassic);
-            Controls.Add(btnTheme);
-            btnTheme.BringToFront();
-
-            pnlAutoPlayColorStatus = new Panel();
-            pnlAutoPlayColorStatus.Name = "pnlAutoPlayColorStatus";
-            pnlAutoPlayColorStatus.Margin = Padding.Empty;
-            pnlAutoPlayColorStatus.TabStop = false;
-
-            pnlFoxAutoPlayIdentity = new Panel();
-            pnlFoxAutoPlayIdentity.Name = "pnlFoxAutoPlayIdentity";
-            pnlFoxAutoPlayIdentity.Margin = Padding.Empty;
-            pnlFoxAutoPlayIdentity.TabStop = false;
-        }
-
-        private void ApplyThemeControlTexts()
-        {
-            EnsureThemeControls();
-            btnTheme.Text = getLangStr("MainForm_btnTheme");
-            menuThemeOptimized.Text = getLangStr("MainForm_themeOptimized");
-            menuThemeClassic.Text = getLangStr("MainForm_themeClassic");
-            menuThemeOptimized.Checked = IsOptimizedTheme();
-            menuThemeClassic.Checked = !IsOptimizedTheme();
-        }
-
-        private void btnTheme_Click(object sender, EventArgs e)
-        {
-            if (themeMenu != null)
-                themeMenu.Show(btnTheme, new System.Drawing.Point(0, btnTheme.Height));
-        }
-
-        private void menuThemeOptimized_Click(object sender, EventArgs e)
-        {
-            SwitchTheme(Program.UiThemeOptimized);
-        }
-
-        private void menuThemeClassic_Click(object sender, EventArgs e)
-        {
-            SwitchTheme(Program.UiThemeClassic);
-        }
-
-        private void SwitchTheme(int themeMode)
-        {
-            if (Program.uiThemeMode == themeMode)
-                return;
-
-            Program.uiThemeMode = themeMode;
-            ApplyMainFormUi();
-            saveOtherConfig();
-        }
-
-        private void ApplyMainFormUi()
-        {
-            if (isApplyingMainFormLayout)
-                return;
-
-            isApplyingMainFormLayout = true;
-            SuspendLayout();
-            try
-            {
-                DoubleBuffered = true;
-                AutoScroll = true;
-                EnsureThemeControls();
-                factor = GetCurrentDpiScale();
-                ConstrainMainFormWidth();
-                groupBox1.Text = getLangStr("MainForm_groupPlatform");
-                groupBox2.Text = getLangStr("MainForm_groupBoard");
-                groupBox4.Text = getLangStr("MainForm_groupSync");
-                rdoOtherBoard.Text = getLangStr("MainForm_rdoCustomBoard");
-                label6.Text = "x";
-                ApplyMainFormTypography();
-                ApplyThemeControlTexts();
-                ApplyMainFormTheme();
-                MainHeaderLayoutMetrics headerLayout = ArrangeMainHeader();
-                int boardTop = headerLayout.UtilitiesInRightColumn
-                    ? headerLayout.PlatformBottom + ScaleValue(12)
-                    : headerLayout.UtilityBottom + ScaleValue(12);
-                int boardBottom = ArrangeMainBoardSection(boardTop, headerLayout);
-                int syncBottom = ArrangeMainSyncSection(Math.Max(boardBottom, headerLayout.UtilityBottom) + ScaleValue(12));
-                ArrangeMainActions(syncBottom + ScaleValue(12));
-            }
-            finally
-            {
-                ResumeLayout(false);
-                PerformLayout();
-                RestoreSavedWindowLocationIfNeeded();
-                if (IsHandleCreated && !isMainFormSizeInitialized)
-                    isMainFormSizeInitialized = true;
-                factor = GetCurrentDpiScale();
-                isApplyingMainFormLayout = false;
-            }
-        }
-
-        private void ApplyMainFormTypography()
-        {
-            Font = UiTheme.BodyFont;
-
-            foreach (GroupBox group in MainThemeGroups())
-                group.Font = UiTheme.SectionFont;
-
-            foreach (Control surface in MainThemeSurfaces())
-                surface.Font = UiTheme.BodyFont;
-
-            foreach (ButtonBase option in MainThemeOptions())
-                option.Font = UiTheme.BodyFont;
-
-            foreach (TextBox textBox in MainThemeInputs())
-                textBox.Font = UiTheme.BodyFont;
-
-            foreach (Label label in MainThemeLabels())
-                label.Font = UiTheme.BodyFont;
-
-            foreach (Button button in MainTypographyButtons())
-                button.Font = UiTheme.BodyFont;
-        }
-
-        private void ApplyMainFormTheme()
-        {
-            if (IsOptimizedTheme())
-            {
-                UiTheme.ApplyWindow(this);
-                ApplyOptimizedMainFormTheme();
-                return;
-            }
-
-            ApplyClassicMainFormTheme();
-        }
-
-        private void ApplyOptimizedMainFormTheme()
-        {
-            foreach (GroupBox group in MainThemeGroups())
-                UiTheme.StyleGroupBox(group);
-
-            foreach (Control surface in MainThemeSurfaces())
-                UiTheme.StylePanelSurface(surface);
-
-            foreach (ButtonBase option in MainThemeOptions())
-                UiTheme.StyleOption(option);
-
-            foreach (TextBox textBox in MainThemeInputs())
-                UiTheme.StyleInput(textBox);
-
-            foreach (Label label in MainThemeLabels())
-                UiTheme.StyleSubtleLabel(label);
-
-            foreach (Button button in MainPrimaryButtons())
-                UiTheme.StylePrimaryButton(button);
-
-            foreach (Button button in MainSecondaryButtons())
-                UiTheme.StyleSecondaryButton(button);
-
-            UiTheme.StyleDangerButton(btnClearBoard);
-        }
-
-        private void ApplyClassicMainFormTheme()
-        {
-            BackColor = SystemColors.Control;
-            ForeColor = SystemColors.ControlText;
-            Font = Control.DefaultFont;
-
-            foreach (GroupBox group in MainThemeGroups())
-            {
-                group.BackColor = SystemColors.Control;
-                group.ForeColor = SystemColors.ControlText;
-                group.Font = Control.DefaultFont;
-                group.Padding = new Padding(3);
-            }
-
-            foreach (Control surface in MainThemeSurfaces())
-            {
-                surface.BackColor = SystemColors.Control;
-                surface.ForeColor = SystemColors.ControlText;
-                surface.Font = Control.DefaultFont;
-            }
-
-            foreach (ButtonBase option in MainThemeOptions())
-            {
-                UiTheme.ResetOption(option);
-                option.BackColor = SystemColors.Control;
-                option.ForeColor = SystemColors.ControlText;
-                option.Font = Control.DefaultFont;
-                option.Cursor = Cursors.Default;
-                option.FlatStyle = FlatStyle.Standard;
-                option.UseVisualStyleBackColor = true;
-            }
-
-            foreach (TextBox textBox in MainThemeInputs())
-            {
-                textBox.BackColor = SystemColors.Window;
-                textBox.ForeColor = SystemColors.WindowText;
-                textBox.Font = Control.DefaultFont;
-                textBox.BorderStyle = BorderStyle.Fixed3D;
-            }
-
-            foreach (Label label in MainThemeLabels())
-            {
-                label.BackColor = Color.Transparent;
-                label.ForeColor = SystemColors.ControlText;
-                label.Font = Control.DefaultFont;
-                label.BorderStyle = BorderStyle.None;
-                label.Padding = Padding.Empty;
-            }
-
-            foreach (Button button in MainPrimaryButtons())
-            {
-                button.FlatStyle = FlatStyle.System;
-                button.UseVisualStyleBackColor = true;
-                button.Font = Control.DefaultFont;
-                button.Cursor = Cursors.Default;
-            }
-
-            foreach (Button button in MainSecondaryButtons())
-            {
-                button.FlatStyle = FlatStyle.System;
-                button.UseVisualStyleBackColor = true;
-                button.Font = Control.DefaultFont;
-                button.Cursor = Cursors.Default;
-            }
-
-            btnClearBoard.FlatStyle = FlatStyle.System;
-            btnClearBoard.UseVisualStyleBackColor = true;
-            btnClearBoard.Font = Control.DefaultFont;
-            btnClearBoard.Cursor = Cursors.Default;
-        }
-
-        private MainHeaderLayoutMetrics ArrangeMainHeader()
-        {
-            if (CanUseLegacyMainDesktopLayout())
-                return ArrangeLegacyMainHeader();
-
-            return ArrangeAdaptiveMainHeader();
-        }
-
-        private MainHeaderLayoutMetrics ArrangeLegacyMainHeader()
-        {
-            int left = ScaleValue(12);
-            int top = ScaleValue(12);
-            int buttonHeight = ScaleValue(32);
-            int optionLeft = ScaleValue(14);
-            int optionTop = ScaleValue(31);
-            int optionGap = ScaleValue(10);
-            int utilityGap = ScaleValue(8);
-            int settingsWidth = MeasureButtonWidth(btnSettings, 72);
-            int helpWidth = MeasureButtonWidth(btnHelp, 68);
-            int themeWidth = MeasureButtonWidth(btnTheme, 68);
-            int utilityRight = ClientSize.Width - left;
-            int themeLeft = utilityRight - themeWidth;
-            int helpLeft = themeLeft - utilityGap - helpWidth;
-            int settingsLeft = helpLeft - utilityGap - settingsWidth;
-
-            groupBox1.SetBounds(left, top, settingsLeft - left - utilityGap, ScaleValue(72));
-            rdoFox.Location = new Point(optionLeft, optionTop);
-            rdoFoxBack.Location = new Point(rdoFox.Right + optionGap, optionTop);
-            rdoYike.Location = new Point(rdoFoxBack.Right + optionGap, optionTop);
-            rdoTygem.Location = new Point(rdoYike.Right + optionGap, optionTop);
-            rdoSina.Location = new Point(rdoTygem.Right + optionGap, optionTop);
-            rdoBack.Location = new Point(rdoSina.Right + optionGap, optionTop);
-            rdoFore.Location = new Point(rdoBack.Right + optionGap, optionTop);
-            btnSettings.SetBounds(settingsLeft, top, settingsWidth, buttonHeight);
-            btnHelp.SetBounds(helpLeft, top, helpWidth, buttonHeight);
-            btnTheme.SetBounds(themeLeft, top, themeWidth, buttonHeight);
-            btnKomi65.SetBounds(settingsLeft, top + buttonHeight + utilityGap, utilityRight - settingsLeft, buttonHeight);
-            btnCheckUpdate.SetBounds(settingsLeft, btnKomi65.Bottom + utilityGap, utilityRight - settingsLeft, buttonHeight);
-            return new MainHeaderLayoutMetrics(groupBox1.Bottom, btnCheckUpdate.Bottom, groupBox1.Width, true);
-        }
-
-        private MainHeaderLayoutMetrics ArrangeAdaptiveMainHeader()
-        {
-            int left = ScaleValue(12);
-            int top = ScaleValue(12);
-            int contentWidth = ClientSize.Width - left * 2;
-            int buttonHeight = ScaleValue(32);
-            int optionGap = ScaleValue(10);
-            int rowGap = ScaleValue(8);
-            int buttonGap = ScaleValue(8);
-            int optionLeft = ScaleValue(14);
-            int optionTop = ScaleValue(31);
-            int groupPaddingBottom = ScaleValue(16);
-            int settingsWidth = MeasureButtonWidth(btnSettings, 72);
-            int helpWidth = MeasureButtonWidth(btnHelp, 68);
-            int themeWidth = MeasureButtonWidth(btnTheme, 68);
-            int komiWidth = MeasureButtonWidth(btnKomi65, 170);
-            int updateWidth = MeasureButtonWidth(btnCheckUpdate, 170);
-            int utilityRowWidth = settingsWidth + helpWidth + themeWidth + buttonGap * 2;
-            int utilityColumnWidth = Math.Max(utilityRowWidth, Math.Max(komiWidth, updateWidth));
-            int minimumPlatformWidth = Math.Min(contentWidth, MeasureOptionsWidth(new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore }, optionGap) + ScaleValue(28));
-            bool canUseSideBySide = contentWidth >= minimumPlatformWidth + buttonGap + utilityColumnWidth + ScaleValue(24);
-
-            int groupWidth = canUseSideBySide ? contentWidth - utilityColumnWidth - buttonGap : contentWidth;
-            groupBox1.SetBounds(left, top, groupWidth, 0);
-            int groupBottom = LayoutOptionsRow(new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore }, groupBox1, optionLeft, optionTop, optionGap, rowGap);
-            groupBox1.Height = groupBottom + groupPaddingBottom;
-
-            if (canUseSideBySide)
-            {
-                int utilityLeft = groupBox1.Right + buttonGap;
-                btnSettings.SetBounds(utilityLeft, top, settingsWidth, buttonHeight);
-                btnHelp.SetBounds(btnSettings.Right + buttonGap, top, helpWidth, buttonHeight);
-                btnTheme.SetBounds(btnHelp.Right + buttonGap, top, themeWidth, buttonHeight);
-                btnKomi65.SetBounds(utilityLeft, btnSettings.Bottom + rowGap, utilityColumnWidth, buttonHeight);
-                btnCheckUpdate.SetBounds(utilityLeft, btnKomi65.Bottom + rowGap, utilityColumnWidth, buttonHeight);
-                return new MainHeaderLayoutMetrics(groupBox1.Bottom, btnCheckUpdate.Bottom, groupBox1.Width, true);
-            }
-
-            int utilityTop = groupBox1.Bottom + rowGap;
-            btnSettings.SetBounds(left, utilityTop, settingsWidth, buttonHeight);
-            btnHelp.SetBounds(btnSettings.Right + buttonGap, utilityTop, helpWidth, buttonHeight);
-            btnTheme.SetBounds(btnHelp.Right + buttonGap, utilityTop, themeWidth, buttonHeight);
-            btnKomi65.SetBounds(left, btnSettings.Bottom + rowGap, contentWidth, buttonHeight);
-            btnCheckUpdate.SetBounds(left, btnKomi65.Bottom + rowGap, contentWidth, buttonHeight);
-            return new MainHeaderLayoutMetrics(groupBox1.Bottom, btnCheckUpdate.Bottom, contentWidth, false);
-        }
-
-        private int ArrangeMainBoardSection(int top, MainHeaderLayoutMetrics headerLayout)
-        {
-            if (CanUseLegacyMainDesktopLayout())
-                return ArrangeLegacyMainBoardSection(top);
-
-            return ArrangeAdaptiveMainBoardSection(top, headerLayout);
-        }
-
-        private int ArrangeLegacyMainBoardSection(int top)
-        {
-            int left = ScaleValue(12);
-            int optionTop = ScaleValue(29);
-            int optionGap = ScaleValue(8);
-            int textBoxWidth = ScaleValue(34);
-            int inputTop = ScaleValue(27);
-            int inputHeight = ScaleValue(24);
-            int customInputGap = ScaleValue(12);
-            int separatorGap = ScaleValue(4);
-            int sectionPadding = ScaleValue(16);
-
-            lblBoardSize.SetBounds(sectionPadding, ScaleValue(30), Math.Max(lblBoardSize.PreferredSize.Width, ScaleValue(52)), ScaleValue(20));
-            lblBoardSize.TextAlign = ContentAlignment.MiddleLeft;
-            rdo19x19.Location = new Point(lblBoardSize.Right + ScaleValue(6), optionTop);
-            rdo13x13.Location = new Point(rdo19x19.Right + optionGap, optionTop);
-            rdo9x9.Location = new Point(rdo13x13.Right + optionGap, optionTop);
-            rdoOtherBoard.Location = new Point(rdo9x9.Right + optionGap + ScaleValue(4), optionTop);
-            txtBoardWidth.AutoSize = false;
-            txtBoardHeight.AutoSize = false;
-            int customInputLeft = rdoOtherBoard.Right + customInputGap;
-            txtBoardWidth.SetBounds(customInputLeft, inputTop, textBoxWidth, inputHeight);
-            txtBoardWidth.TextAlign = HorizontalAlignment.Center;
-            label6.TextAlign = ContentAlignment.MiddleCenter;
-            label6.SetBounds(txtBoardWidth.Right + separatorGap, ScaleValue(30), ScaleValue(10), ScaleValue(18));
-            txtBoardHeight.SetBounds(label6.Right + separatorGap, inputTop, textBoxWidth, inputHeight);
-            txtBoardHeight.TextAlign = HorizontalAlignment.Center;
-            groupBox2.SetBounds(left, top, txtBoardHeight.Right + sectionPadding, ScaleValue(72));
-            return groupBox2.Bottom;
-        }
-
-        private int ArrangeAdaptiveMainBoardSection(int top, MainHeaderLayoutMetrics headerLayout)
-        {
-            int left = ScaleValue(12);
-            int optionTop = ScaleValue(29);
-            int optionGap = ScaleValue(8);
-            int textBoxWidth = ScaleValue(42);
-            int inputTop = ScaleValue(27);
-            int inputHeight = ScaleValue(26);
-            int customInputGap = ScaleValue(12);
-            int separatorGap = ScaleValue(4);
-            int contentWidth = ClientSize.Width - left * 2;
-            int groupWidth = headerLayout.UtilitiesInRightColumn ? headerLayout.PlatformWidth : contentWidth;
-            int sectionPadding = ScaleValue(16);
-            int rowGap = ScaleValue(12);
-
-            groupBox2.SetBounds(left, top, groupWidth, 0);
-            lblBoardSize.SetBounds(sectionPadding, optionTop, Math.Max(lblBoardSize.PreferredSize.Width, ScaleValue(52)), ScaleValue(20));
-            lblBoardSize.TextAlign = ContentAlignment.MiddleLeft;
-            rdo19x19.Location = new System.Drawing.Point(lblBoardSize.Right + ScaleValue(6), optionTop);
-            rdo13x13.Location = new System.Drawing.Point(rdo19x19.Right + optionGap, optionTop);
-            rdo9x9.Location = new System.Drawing.Point(rdo13x13.Right + optionGap, optionTop);
-            rdoOtherBoard.Location = new System.Drawing.Point(rdo9x9.Right + optionGap + ScaleValue(4), optionTop);
-            txtBoardWidth.AutoSize = false;
-            txtBoardHeight.AutoSize = false;
-            int customInputLeft = rdoOtherBoard.Right + customInputGap;
-            txtBoardWidth.SetBounds(customInputLeft, inputTop, textBoxWidth, inputHeight);
-            txtBoardWidth.TextAlign = HorizontalAlignment.Center;
-            label6.TextAlign = ContentAlignment.MiddleCenter;
-            label6.SetBounds(txtBoardWidth.Right + separatorGap, inputTop + ScaleValue(4), ScaleValue(10), ScaleValue(18));
-            txtBoardHeight.SetBounds(label6.Right + separatorGap, inputTop, textBoxWidth, inputHeight);
-            txtBoardHeight.TextAlign = HorizontalAlignment.Center;
-            if (txtBoardHeight.Right + sectionPadding > groupWidth)
-            {
-                int wrappedTop = rdoOtherBoard.Bottom + rowGap;
-                txtBoardWidth.SetBounds(sectionPadding, wrappedTop, textBoxWidth, inputHeight);
-                label6.SetBounds(txtBoardWidth.Right + separatorGap, wrappedTop + ScaleValue(2), ScaleValue(10), ScaleValue(18));
-                txtBoardHeight.SetBounds(label6.Right + separatorGap, wrappedTop, textBoxWidth, inputHeight);
-            }
-
-            int bottom = Math.Max(Math.Max(txtBoardHeight.Bottom, rdoOtherBoard.Bottom), lblBoardSize.Bottom);
-            groupBox2.Height = bottom + ScaleValue(18);
-            return groupBox2.Bottom;
-        }
-
-        private int ArrangeMainSyncSection(int top)
-        {
-            if (CanUseLegacyMainDesktopLayout())
-                return ArrangeLegacyMainSyncSection(top);
-
-            return ArrangeAdaptiveMainSyncSection(top);
-        }
-
-        private int ArrangeLegacyMainSyncSection(int top)
-        {
-            int left = ScaleValue(12);
-            int rowHeight = ScaleValue(24);
-            int timeFieldGap = ScaleValue(8);
-            int groupWidth = ClientSize.Width - ScaleValue(42);
-            int rowWidth = groupWidth - ScaleValue(34);
-            int sharedVisitsLabelWidth = GetSharedMainSyncVisitsLabelWidth();
-            int sharedLegacyVisitsPanelWidth = GetLegacyMainSyncVisitsPanelWidth();
-            int conditionLabelWidth = GetMainSyncConditionTimeLabelWidth();
-
-            ArrangeMainSyncFlowOrder();
-            groupBox4.SetBounds(left, top, groupWidth, ScaleValue(132));
-            flowLayoutPanel1.SetBounds(ScaleValue(16), ScaleValue(28), rowWidth, ScaleValue(30));
-            flowLayoutPanel2.SetBounds(ScaleValue(16), ScaleValue(62), rowWidth, ScaleValue(30));
-            flowLayoutPanelAutoPlayMoveMode.SetBounds(ScaleValue(16), ScaleValue(96), rowWidth, ScaleValue(30));
-            flowLayoutPanel1.WrapContents = false;
-            flowLayoutPanel2.WrapContents = false;
-            flowLayoutPanelAutoPlayMoveMode.WrapContents = false;
-            chkBothSync.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            radioBlack.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            chkAutoPlay.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            radioWhite.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            lblAutoPlayMoveMode.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            radioAutoPlayMoveFirst.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            radioAutoPlayMoveGma.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            pnlAutoPlayColorStatus.Margin = new Padding(0, 0, 0, 0);
-            pnlFoxAutoPlayIdentity.Margin = new Padding(0, 0, 0, 0);
-            panel1.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
-            panel2.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
-            panel3.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
-            panel4.Margin = new Padding(GetMainSyncTimeRowVisitsLeftMargin(), ScaleValue(2), 0, 0);
-            panel1.AutoSize = false;
-            panel2.AutoSize = false;
-            panel3.AutoSize = false;
-            panel4.AutoSize = false;
-            panel1.Size = new Size(GetMainSyncConditionTimeSlotWidth(), rowHeight);
-            panel2.Size = new Size(sharedLegacyVisitsPanelWidth, rowHeight);
-            panel3.Size = new Size(GetMainSyncTimeLabelPanelWidth(), rowHeight);
-            panel4.Size = new Size(sharedLegacyVisitsPanelWidth, rowHeight);
-            lblPlayCondition.AutoSize = false;
-            lblTotalVisits.AutoSize = false;
-            lblTime.AutoSize = false;
-            lblBestMoveVisits.AutoSize = false;
-            lblPlayCondition.SetBounds(0, ScaleValue(3), conditionLabelWidth, ScaleValue(18));
-            lblTotalVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(18));
-            lblTime.SetBounds(0, ScaleValue(3), lblTime.PreferredSize.Width, ScaleValue(18));
-            lblBestMoveVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(18));
-            lblPlayCondition.TextAlign = ContentAlignment.MiddleLeft;
-            lblTotalVisits.TextAlign = ContentAlignment.MiddleLeft;
-            lblTime.TextAlign = ContentAlignment.MiddleLeft;
-            lblBestMoveVisits.TextAlign = ContentAlignment.MiddleLeft;
-            textBox1.AutoSize = false;
-            textBox2.AutoSize = false;
-            textBox3.AutoSize = false;
-            textBox1.Margin = new Padding(timeFieldGap, 1, 0, 0);
-            textBox2.Margin = new Padding(ScaleValue(8), 1, 0, 0);
-            textBox3.Margin = new Padding(ScaleValue(8), 1, 0, 0);
-            textBox1.Size = new Size(ScaleValue(68), rowHeight);
-            textBox2.Size = new Size(ScaleValue(92), rowHeight);
-            textBox3.Size = new Size(ScaleValue(92), rowHeight);
-            ArrangeMainSyncAutoStatusColumn(rowHeight);
-            flowLayoutPanel1.Height = ScaleValue(30);
-            flowLayoutPanel2.Height = ScaleValue(30);
-            flowLayoutPanelAutoPlayMoveMode.Height = ScaleValue(30);
-            return groupBox4.Bottom;
-        }
-
-        private int ArrangeAdaptiveMainSyncSection(int top)
-        {
-            int left = ScaleValue(12);
-            int rowHeight = ScaleValue(26);
-            int timeFieldGap = ScaleValue(8);
-            int groupWidth = ClientSize.Width - left * 2;
-            int rowWidth = groupWidth - ScaleValue(34);
-            int sharedVisitsLabelWidth = GetSharedMainSyncVisitsLabelWidth();
-            int sharedAdaptiveVisitsPanelWidth = GetAdaptiveMainSyncVisitsPanelWidth();
-            int conditionLabelWidth = GetMainSyncConditionTimeLabelWidth();
-
-            ArrangeMainSyncFlowOrder();
-            groupBox4.SetBounds(left, top, groupWidth, 0);
-            flowLayoutPanel1.SetBounds(ScaleValue(16), ScaleValue(28), rowWidth, rowHeight);
-            flowLayoutPanel2.SetBounds(ScaleValue(16), flowLayoutPanel1.Bottom + ScaleValue(8), rowWidth, rowHeight);
-            flowLayoutPanelAutoPlayMoveMode.SetBounds(ScaleValue(16), flowLayoutPanel2.Bottom + ScaleValue(8), rowWidth, rowHeight);
-            flowLayoutPanel1.WrapContents = true;
-            flowLayoutPanel2.WrapContents = true;
-            flowLayoutPanelAutoPlayMoveMode.WrapContents = true;
-            chkBothSync.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            radioBlack.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            chkAutoPlay.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            radioWhite.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            lblAutoPlayMoveMode.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            radioAutoPlayMoveFirst.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            radioAutoPlayMoveGma.Margin = new Padding(0, ScaleValue(5), ScaleValue(12), 0);
-            pnlAutoPlayColorStatus.Margin = new Padding(0, 0, 0, 0);
-            pnlFoxAutoPlayIdentity.Margin = new Padding(0, 0, 0, 0);
-            panel1.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
-            panel2.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
-            panel3.Margin = new Padding(ScaleValue(12), ScaleValue(2), 0, 0);
-            panel4.Margin = new Padding(GetMainSyncTimeRowVisitsLeftMargin(), ScaleValue(2), 0, 0);
-            panel1.AutoSize = false;
-            panel2.AutoSize = false;
-            panel3.AutoSize = false;
-            panel4.AutoSize = false;
-            panel1.Size = new System.Drawing.Size(GetMainSyncConditionTimeSlotWidth(), rowHeight);
-            panel2.Size = new System.Drawing.Size(sharedAdaptiveVisitsPanelWidth, rowHeight);
-            panel3.Size = new System.Drawing.Size(GetMainSyncTimeLabelPanelWidth(), rowHeight);
-            panel4.Size = new System.Drawing.Size(sharedAdaptiveVisitsPanelWidth, rowHeight);
-            lblPlayCondition.AutoSize = false;
-            lblTotalVisits.AutoSize = false;
-            lblTime.AutoSize = false;
-            lblBestMoveVisits.AutoSize = false;
-            lblPlayCondition.SetBounds(0, ScaleValue(3), conditionLabelWidth, ScaleValue(20));
-            lblTotalVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(20));
-            lblTime.SetBounds(0, ScaleValue(3), lblTime.PreferredSize.Width, ScaleValue(20));
-            lblBestMoveVisits.SetBounds(0, ScaleValue(3), sharedVisitsLabelWidth, ScaleValue(20));
-            lblPlayCondition.TextAlign = ContentAlignment.MiddleLeft;
-            lblTotalVisits.TextAlign = ContentAlignment.MiddleLeft;
-            lblTime.TextAlign = ContentAlignment.MiddleLeft;
-            lblBestMoveVisits.TextAlign = ContentAlignment.MiddleLeft;
-            textBox1.AutoSize = false;
-            textBox2.AutoSize = false;
-            textBox3.AutoSize = false;
-            textBox1.Margin = new Padding(timeFieldGap, 1, 0, 0);
-            textBox2.Margin = new Padding(ScaleValue(8), 1, 0, 0);
-            textBox3.Margin = new Padding(ScaleValue(8), 1, 0, 0);
-            textBox1.Size = new System.Drawing.Size(ScaleValue(68), rowHeight);
-            textBox2.Size = new System.Drawing.Size(ScaleValue(92), rowHeight);
-            textBox3.Size = new System.Drawing.Size(ScaleValue(92), rowHeight);
-            ArrangeMainSyncAutoStatusColumn(rowHeight);
-            flowLayoutPanel1.Height = flowLayoutPanel1.GetPreferredSize(new Size(rowWidth, 0)).Height;
-            flowLayoutPanel2.Top = flowLayoutPanel1.Bottom + ScaleValue(8);
-            flowLayoutPanel2.Height = flowLayoutPanel2.GetPreferredSize(new Size(rowWidth, 0)).Height;
-            flowLayoutPanelAutoPlayMoveMode.Top = flowLayoutPanel2.Bottom + ScaleValue(8);
-            flowLayoutPanelAutoPlayMoveMode.Height = flowLayoutPanelAutoPlayMoveMode.GetPreferredSize(new Size(rowWidth, 0)).Height;
-            groupBox4.Height = flowLayoutPanelAutoPlayMoveMode.Bottom + ScaleValue(10);
-            return groupBox4.Bottom;
-        }
-
-        private void ArrangeMainSyncFlowOrder()
-        {
-            if (radioAutoPlayColor.Parent != pnlAutoPlayColorStatus)
-                pnlAutoPlayColorStatus.Controls.Add(radioAutoPlayColor);
-            if (lblAutoPlayColorStatus.Parent != pnlAutoPlayColorStatus)
-                pnlAutoPlayColorStatus.Controls.Add(lblAutoPlayColorStatus);
-            if (btnFoxAutoPlayIdentity.Parent != pnlFoxAutoPlayIdentity)
-                pnlFoxAutoPlayIdentity.Controls.Add(btnFoxAutoPlayIdentity);
-            if (pnlAutoPlayColorStatus.Parent != flowLayoutPanel1)
-                flowLayoutPanel1.Controls.Add(pnlAutoPlayColorStatus);
-            if (pnlFoxAutoPlayIdentity.Parent != flowLayoutPanel2)
-                flowLayoutPanel2.Controls.Add(pnlFoxAutoPlayIdentity);
-            if (lblAutoPlayMoveMode.Parent != flowLayoutPanelAutoPlayMoveMode)
-                flowLayoutPanelAutoPlayMoveMode.Controls.Add(lblAutoPlayMoveMode);
-            if (radioAutoPlayMoveFirst.Parent != flowLayoutPanelAutoPlayMoveMode)
-                flowLayoutPanelAutoPlayMoveMode.Controls.Add(radioAutoPlayMoveFirst);
-            if (radioAutoPlayMoveGma.Parent != flowLayoutPanelAutoPlayMoveMode)
-                flowLayoutPanelAutoPlayMoveMode.Controls.Add(radioAutoPlayMoveGma);
-
-            flowLayoutPanel1.Controls.SetChildIndex(chkBothSync, 0);
-            flowLayoutPanel1.Controls.SetChildIndex(radioBlack, 1);
-            flowLayoutPanel1.Controls.SetChildIndex(pnlAutoPlayColorStatus, 2);
-            flowLayoutPanel1.Controls.SetChildIndex(panel1, 3);
-            flowLayoutPanel1.Controls.SetChildIndex(panel2, 4);
-            flowLayoutPanel1.Controls.SetChildIndex(textBox2, 5);
-
-            flowLayoutPanel2.Controls.SetChildIndex(chkAutoPlay, 0);
-            flowLayoutPanel2.Controls.SetChildIndex(radioWhite, 1);
-            flowLayoutPanel2.Controls.SetChildIndex(pnlFoxAutoPlayIdentity, 2);
-            flowLayoutPanel2.Controls.SetChildIndex(panel3, 3);
-            flowLayoutPanel2.Controls.SetChildIndex(textBox1, 4);
-            flowLayoutPanel2.Controls.SetChildIndex(panel4, 5);
-            flowLayoutPanel2.Controls.SetChildIndex(textBox3, 6);
-
-            flowLayoutPanelAutoPlayMoveMode.Controls.SetChildIndex(lblAutoPlayMoveMode, 0);
-            flowLayoutPanelAutoPlayMoveMode.Controls.SetChildIndex(radioAutoPlayMoveFirst, 1);
-            flowLayoutPanelAutoPlayMoveMode.Controls.SetChildIndex(radioAutoPlayMoveGma, 2);
-        }
-
-        private void ArrangeMainSyncAutoStatusColumn(int rowHeight)
-        {
-            int columnWidth = GetMainSyncAutoStatusColumnWidth();
-            int columnHeight = Math.Max(rowHeight, btnFoxAutoPlayIdentity.PreferredSize.Height + ScaleValue(2));
-            pnlAutoPlayColorStatus.Size = new Size(columnWidth, columnHeight);
-            pnlFoxAutoPlayIdentity.Size = new Size(columnWidth, columnHeight);
-            radioAutoPlayColor.Margin = Padding.Empty;
-            lblAutoPlayColorStatus.Margin = Padding.Empty;
-            btnFoxAutoPlayIdentity.Margin = Padding.Empty;
-            radioAutoPlayColor.Location = new Point(0, Math.Max(0, (columnHeight - radioAutoPlayColor.PreferredSize.Height) / 2));
-            lblAutoPlayColorStatus.Location = new Point(
-                radioAutoPlayColor.Right + ScaleValue(6),
-                Math.Max(0, (columnHeight - lblAutoPlayColorStatus.PreferredSize.Height) / 2));
-            btnFoxAutoPlayIdentity.Location = new Point(0, Math.Max(0, (columnHeight - btnFoxAutoPlayIdentity.PreferredSize.Height) / 2));
-        }
-
-        private int GetMainSyncAutoStatusColumnWidth()
-        {
-            int autoStatusWidth = GetLayoutOptionPreferredSize(radioAutoPlayColor).Width + ScaleValue(6) + GetMainSyncAutoPlayStatusTextWidth();
-            int identityWidth = GetLayoutOptionPreferredSize(btnFoxAutoPlayIdentity).Width;
-            return Math.Max(autoStatusWidth, identityWidth);
-        }
-
-        private int GetMainSyncAutoPlayStatusTextWidth()
-        {
-            string[] statusTexts = new string[]
-            {
-                string.Empty,
-                getLangStr("MainForm_autoPlayColorStatusUnconfigured"),
-                getLangStr("MainForm_autoPlayColorStatusBlack"),
-                getLangStr("MainForm_autoPlayColorStatusWhite"),
-                getLangStr("MainForm_autoPlayColorStatusUnsupported"),
-                getLangStr("MainForm_autoPlayColorStatusSpectating"),
-                getLangStr("MainForm_autoPlayColorStatusWaiting")
-            };
-            int width = 0;
-            for (int i = 0; i < statusTexts.Length; i++)
-                width = Math.Max(width, TextRenderer.MeasureText(statusTexts[i], lblAutoPlayColorStatus.Font).Width);
-            return width;
-        }
-
-        private int GetMainSyncConditionTimeLabelWidth()
-        {
-            return Math.Max(lblPlayCondition.PreferredSize.Width, lblTime.PreferredSize.Width);
-        }
-
-        private int GetMainSyncTimeLabelPanelWidth()
-        {
-            return lblTime.PreferredSize.Width + ScaleValue(18);
-        }
-
-        private int GetMainSyncConditionTimeSlotWidth()
-        {
-            return GetMainSyncConditionTimeLabelWidth() + ScaleValue(18) + ScaleValue(8) + ScaleValue(68);
-        }
-
-        private int GetMainSyncTimeRowVisitsLeftMargin()
-        {
-            int usedWidth = GetMainSyncTimeLabelPanelWidth() + ScaleValue(8) + ScaleValue(68);
-            return ScaleValue(12) + Math.Max(0, GetMainSyncConditionTimeSlotWidth() - usedWidth);
-        }
-
-        private void ArrangeMainActions(int top)
-        {
-            if (CanUseLegacyMainDesktopLayout())
-            {
-                ArrangeLegacyMainActions(top);
-                return;
-            }
-
-            ArrangeAdaptiveMainActions(top);
-        }
-
-        private void ArrangeLegacyMainActions(int top)
-        {
-            int left = ScaleValue(12);
-            int firstRowTop = top;
-            int secondRowTop = top + ScaleValue(38);
-            int buttonHeight = ScaleValue(32);
-            int buttonGap = ScaleValue(12);
-
-            btnFastSync.SetBounds(left, firstRowTop, MeasureButtonWidth(btnFastSync, 118), buttonHeight);
-            btnClickBoard.SetBounds(btnFastSync.Right + buttonGap, firstRowTop, MeasureButtonWidth(btnClickBoard, 186), buttonHeight);
-            btnCircleBoard.SetBounds(btnClickBoard.Right + buttonGap, firstRowTop, MeasureButtonWidth(btnCircleBoard, 104), buttonHeight);
-            btnCircleRow1.SetBounds(btnCircleBoard.Right + buttonGap, firstRowTop, MeasureButtonWidth(btnCircleRow1, 104), buttonHeight);
-            chkShowInBoard.AutoSize = true;
-            chkShowInBoard.Location = new Point(btnCircleRow1.Right + ScaleValue(16), firstRowTop + ScaleValue(8));
-            btnKeepSync.SetBounds(left, secondRowTop, MeasureButtonWidth(btnKeepSync, 128), buttonHeight);
-            btnOneTimeSync.SetBounds(btnKeepSync.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnOneTimeSync, 112), buttonHeight);
-            btnTogglePonder.SetBounds(btnOneTimeSync.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnTogglePonder, 112), buttonHeight);
-            btnExchange.SetBounds(btnTogglePonder.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnExchange, 104), buttonHeight);
-            btnForceRebuild.SetBounds(btnExchange.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnForceRebuild, 118), buttonHeight);
-            btnClearBoard.SetBounds(btnForceRebuild.Right + buttonGap, secondRowTop, MeasureButtonWidth(btnClearBoard, 110), buttonHeight);
-            ApplyMainFormClientHeight(Math.Max(chkShowInBoard.Bottom, btnClearBoard.Bottom) + ScaleValue(12));
-        }
-
-        private void ArrangeAdaptiveMainActions(int top)
-        {
-            int left = ScaleValue(12);
-            int buttonHeight = ScaleValue(32);
-            int buttonGap = ScaleValue(12);
-            int rowGap = ScaleValue(8);
-            int maxRight = ClientSize.Width - left;
-            int currentX = left;
-            int currentY = top;
-            int rowHeight = buttonHeight;
-
-            Button[] actionButtons = new[]
-            {
-                btnFastSync,
-                btnClickBoard,
-                btnCircleBoard,
-                btnCircleRow1,
-                btnKeepSync,
-                btnOneTimeSync,
-                btnTogglePonder,
-                btnExchange,
-                btnForceRebuild,
-                btnClearBoard
-            };
-            int[] minWidths = new[] { 118, 186, 104, 104, 128, 112, 112, 104, 118, 110 };
-            for (int index = 0; index < actionButtons.Length; index++)
-            {
-                Button button = actionButtons[index];
-                int width = MeasureButtonWidth(button, minWidths[index]);
-                if (currentX > left && currentX + width > maxRight)
-                {
-                    currentX = left;
-                    currentY += rowHeight + rowGap;
-                }
-
-                button.SetBounds(currentX, currentY, width, buttonHeight);
-                currentX = button.Right + buttonGap;
-            }
-
-            chkShowInBoard.AutoSize = true;
-            int showInBoardWidth = GetLayoutOptionPreferredSize(chkShowInBoard).Width;
-            if (currentX + showInBoardWidth > maxRight)
-            {
-                currentX = left;
-                currentY += rowHeight + rowGap;
-            }
-            chkShowInBoard.Location = new Point(currentX, currentY + ScaleValue(8));
-            ApplyMainFormClientHeight(chkShowInBoard.Bottom + ScaleValue(12));
-        }
-
-        private int LayoutOptionsRow(ButtonBase[] options, GroupBox groupBox, int startX, int startY, int itemGap, int rowGap)
-        {
-            int currentX = startX;
-            int currentY = startY;
-            int availableRight = groupBox.Width - startX;
-            int rowHeight = 0;
-            foreach (ButtonBase option in options)
-            {
-                Size preferredSize = GetLayoutOptionPreferredSize(option);
-                if (currentX > startX && currentX + preferredSize.Width > availableRight)
-                {
-                    currentX = startX;
-                    currentY += rowHeight + rowGap;
-                    rowHeight = 0;
-                }
-
-                option.Location = new Point(currentX, currentY);
-                currentX += preferredSize.Width + itemGap;
-                rowHeight = Math.Max(rowHeight, preferredSize.Height);
-            }
-
-            return currentY + rowHeight;
-        }
-
-        private int MeasureOptionsWidth(ButtonBase[] options, int itemGap)
-        {
-            int width = 0;
-            foreach (ButtonBase option in options)
-                width += GetLayoutOptionPreferredSize(option).Width;
-            return width + itemGap * Math.Max(0, options.Length - 1);
-        }
-
-        private Size GetLayoutOptionPreferredSize(ButtonBase option)
-        {
-            Size standardSize = MeasureLayoutOptionPreferredSize(option, FlatStyle.Standard);
-            Size flatSize = MeasureLayoutOptionPreferredSize(option, FlatStyle.Flat);
-            return new Size(
-                Math.Max(standardSize.Width, flatSize.Width),
-                Math.Max(standardSize.Height, flatSize.Height));
-        }
-
-        private static Size MeasureLayoutOptionPreferredSize(ButtonBase option, FlatStyle flatStyle)
-        {
-            if (option is RadioButton radioButton)
-            {
-                using (RadioButton probe = new RadioButton())
-                {
-                    probe.AutoSize = true;
-                    probe.Text = radioButton.Text;
-                    probe.Font = radioButton.Font;
-                    probe.FlatStyle = flatStyle;
-                    return probe.PreferredSize;
-                }
-            }
-
-            if (option is CheckBox checkBox)
-            {
-                using (CheckBox probe = new CheckBox())
-                {
-                    probe.AutoSize = true;
-                    probe.Text = checkBox.Text;
-                    probe.Font = checkBox.Font;
-                    probe.FlatStyle = flatStyle;
-                    return probe.PreferredSize;
-                }
-            }
-
-            if (option is Button button)
-            {
-                using (Button probe = new Button())
-                {
-                    probe.AutoSize = true;
-                    probe.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-                    probe.Text = button.Text;
-                    probe.Font = button.Font;
-                    probe.FlatStyle = flatStyle;
-                    return probe.PreferredSize;
-                }
-            }
-
-            throw new NotSupportedException($"Unsupported layout option type: {option.GetType().FullName}");
-        }
-
-        private int MeasureButtonWidth(Button button, int minimumLogicalWidth)
-        {
-            int minimumWidth = ScaleValue(minimumLogicalWidth);
-            return Math.Max(minimumWidth, TextRenderer.MeasureText(button.Text, button.Font).Width + ScaleValue(28));
-        }
-
-        private int GetSharedMainSyncVisitsLabelWidth()
-        {
-            return Math.Max(lblTotalVisits.PreferredSize.Width, lblBestMoveVisits.PreferredSize.Width);
-        }
-
-        private int GetLegacyMainSyncVisitsPanelWidth()
-        {
-            return Math.Max(ScaleValue(112), GetSharedMainSyncVisitsLabelWidth() + ScaleValue(11));
-        }
-
-        private int GetAdaptiveMainSyncVisitsPanelWidth()
-        {
-            return GetSharedMainSyncVisitsLabelWidth() + ScaleValue(18) + ScaleValue(92);
-        }
-
-        private bool CanUseLegacyMainDesktopLayout()
-        {
-            return ClientSize.Width >= Math.Max(
-                Math.Max(GetLegacyMainHeaderRequiredWidth(), GetLegacyMainSyncRequiredWidth()),
-                Math.Max(GetLegacyMainBoardRequiredWidth(), GetLegacyMainActionsRequiredWidth()));
-        }
-
-        private int GetLegacyMainHeaderRequiredWidth()
-        {
-            int left = ScaleValue(12);
-            int optionLeft = ScaleValue(14);
-            int optionGap = ScaleValue(10);
-            int utilityGap = ScaleValue(8);
-            int buttonGap = ScaleValue(8);
-            int settingsWidth = MeasureButtonWidth(btnSettings, 72);
-            int helpWidth = MeasureButtonWidth(btnHelp, 68);
-            int themeWidth = MeasureButtonWidth(btnTheme, 68);
-            int utilityColumnWidth = Math.Max(
-                settingsWidth + helpWidth + themeWidth + buttonGap * 2,
-                Math.Max(MeasureButtonWidth(btnKomi65, 170), MeasureButtonWidth(btnCheckUpdate, 170)));
-            int platformWidth = optionLeft + MeasureOptionsWidth(
-                new ButtonBase[] { rdoFox, rdoFoxBack, rdoYike, rdoTygem, rdoSina, rdoBack, rdoFore },
-                optionGap) + ScaleValue(20);
-            return left * 2 + platformWidth + utilityGap + utilityColumnWidth;
-        }
-
-        private int GetLegacyMainBoardRequiredWidth()
-        {
-            int left = ScaleValue(12);
-            int sectionPadding = ScaleValue(16);
-            int optionGap = ScaleValue(8);
-            int textBoxWidth = ScaleValue(34);
-            int customInputGap = ScaleValue(12);
-            int separatorGap = ScaleValue(4);
-            int labelWidth = Math.Max(lblBoardSize.PreferredSize.Width, ScaleValue(52));
-            int contentWidth =
-                sectionPadding
-                + labelWidth
-                + ScaleValue(6)
-                + GetLayoutOptionPreferredSize(rdo19x19).Width
-                + optionGap
-                + GetLayoutOptionPreferredSize(rdo13x13).Width
-                + optionGap
-                + GetLayoutOptionPreferredSize(rdo9x9).Width
-                + optionGap
-                + ScaleValue(4)
-                + GetLayoutOptionPreferredSize(rdoOtherBoard).Width
-                + customInputGap
-                + textBoxWidth
-                + separatorGap
-                + ScaleValue(10)
-                + separatorGap
-                + textBoxWidth
-                + sectionPadding;
-            return left * 2 + contentWidth;
-        }
-
-        private int GetLegacyMainSyncRequiredWidth()
-        {
-            int left = ScaleValue(12);
-            int buttonGap = ScaleValue(12);
-            int sharedVisitsPanelWidth = GetLegacyMainSyncVisitsPanelWidth();
-            int row1Width =
-                GetLayoutOptionPreferredSize(chkBothSync).Width
-                + buttonGap
-                + GetLayoutOptionPreferredSize(radioBlack).Width
-                + buttonGap
-                + GetMainSyncAutoStatusColumnWidth()
-                + buttonGap
-                + GetMainSyncConditionTimeSlotWidth()
-                + buttonGap
-                + sharedVisitsPanelWidth
-                + ScaleValue(8)
-                + ScaleValue(92);
-            int row2Width =
-                GetLayoutOptionPreferredSize(chkAutoPlay).Width
-                + buttonGap
-                + GetLayoutOptionPreferredSize(radioWhite).Width
-                + buttonGap
-                + GetMainSyncAutoStatusColumnWidth()
-                + buttonGap
-                + GetMainSyncConditionTimeSlotWidth()
-                + buttonGap
-                + sharedVisitsPanelWidth
-                + ScaleValue(8)
-                + ScaleValue(92);
-            int moveModeWidth =
-                lblAutoPlayMoveMode.PreferredSize.Width
-                + buttonGap
-                + GetLayoutOptionPreferredSize(radioAutoPlayMoveFirst).Width
-                + buttonGap
-                + GetLayoutOptionPreferredSize(radioAutoPlayMoveGma).Width;
-            return left * 2 + ScaleValue(34) + Math.Max(Math.Max(row1Width, row2Width), moveModeWidth);
-        }
-
-        private int GetLegacyMainActionsRequiredWidth()
-        {
-            int left = ScaleValue(12);
-            int buttonGap = ScaleValue(12);
-            int firstRowWidth =
-                MeasureButtonWidth(btnFastSync, 118)
-                + buttonGap
-                + MeasureButtonWidth(btnClickBoard, 186)
-                + buttonGap
-                + MeasureButtonWidth(btnCircleBoard, 104)
-                + buttonGap
-                + MeasureButtonWidth(btnCircleRow1, 104)
-                + ScaleValue(16)
-                + GetLayoutOptionPreferredSize(chkShowInBoard).Width;
-            int secondRowWidth =
-                MeasureButtonWidth(btnKeepSync, 128)
-                + buttonGap
-                + MeasureButtonWidth(btnOneTimeSync, 112)
-                + buttonGap
-                + MeasureButtonWidth(btnTogglePonder, 112)
-                + buttonGap
-                + MeasureButtonWidth(btnExchange, 104)
-                + buttonGap
-                + MeasureButtonWidth(btnForceRebuild, 118)
-                + buttonGap
-                + MeasureButtonWidth(btnClearBoard, 110);
-            return left * 2 + Math.Max(firstRowWidth, secondRowWidth);
-        }
-
-        private void ConstrainMainFormWidth()
-        {
-            Rectangle workingArea = GetCurrentWorkingArea();
-            int maxWidth = Math.Max(ScaleValue(300), workingArea.Width - ScaleValue(MainFormScreenLogicalPadding));
-            int minimumWidth = Math.Min(ScaleValue(MainFormMinimumLogicalWidth), maxWidth);
-            int maxHeight = GetMaxMainFormClientHeight();
-            int targetWidth = isMainFormSizeInitialized
-                ? Math.Min(Math.Max(ClientSize.Width, minimumWidth), maxWidth)
-                : Math.Min(ScaleSize(MainFormDefaultSize).Width, maxWidth);
-            int targetHeight = isMainFormSizeInitialized
-                ? Math.Min(ClientSize.Height, maxHeight)
-                : Math.Min(ScaleSize(MainFormDefaultSize).Height, maxHeight);
-
-            ClientSize = new Size(targetWidth, targetHeight);
-        }
-
-        private int GetMaxMainFormClientHeight()
-        {
-            Rectangle workingArea = GetCurrentWorkingArea();
-            return Math.Max(ScaleValue(280), workingArea.Height - ScaleValue(MainFormScreenLogicalPadding));
-        }
-
-        private void ApplyMainFormClientHeight(int desiredHeight)
-        {
-            int maxHeight = GetMaxMainFormClientHeight();
-            int constrainedHeight = Math.Min(desiredHeight, maxHeight);
-            AutoScrollMinSize = desiredHeight > constrainedHeight
-                ? new Size(0, desiredHeight)
-                : Size.Empty;
-            ClientSize = new Size(ClientSize.Width, constrainedHeight);
-        }
-
-        private Rectangle GetCurrentWorkingArea()
-        {
-            return DisplayScaling.GetScreenWorkingAreaFromPoint(ResolveLayoutReferencePoint());
-        }
-
-        private int ScaleValue(int logicalValue)
-        {
-            return (int)Math.Round(logicalValue * GetCurrentDpiScale());
-        }
-
-        private Size ScaleSize(Size logicalSize)
-        {
-            return new Size(ScaleValue(logicalSize.Width), ScaleValue(logicalSize.Height));
-        }
-
-        private float GetCurrentDpiScale()
-        {
-            try
-            {
-                Point? startupReferencePoint = TryGetStartupReferencePoint();
-                if (startupReferencePoint.HasValue)
-                    return (float)DisplayScaling.NormalizeScale(DisplayScaling.GetScaleForPoint(startupReferencePoint.Value));
-                if (IsHandleCreated)
-                    return (float)DisplayScaling.NormalizeScale(DisplayScaling.GetScaleForWindow(Handle));
-                if (factor > 0f)
-                    return factor;
-                return DeviceDpi > 0 ? DeviceDpi / 96f : 1f;
-            }
-            catch
-            {
-                return factor > 0f ? factor : 1f;
-            }
-        }
-
-        private void setNativeBoardMode(int syncType)
-        {
-            SetCurrentSyncType(syncType);
-            ApplySyncModeControlState();
-        }
-
-        private void setManualSelectionMode(int syncType)
-        {
-            SetCurrentSyncType(syncType);
-            ApplySyncModeControlState();
-        }
 
         private void ApplySyncModeControlState()
         {
-            bool manualSelectionMode = UsesManualSelectionType(CurrentSyncType);
             if (CurrentSyncType != TYPE_YIKE)
                 ClearYikeContext();
-            btnCircleBoard.Enabled = manualSelectionMode;
-            btnCircleRow1.Enabled = manualSelectionMode;
-            btnClickBoard.Enabled = !manualSelectionMode;
-            btnFastSync.Enabled = SupportsFastSyncType(CurrentSyncType);
-            if (!manualSelectionMode && rdoOtherBoard.Checked)
-                rdo19x19.Checked = true;
-            rdoOtherBoard.Enabled = manualSelectionMode;
-            ApplyShowInBoardControlState();
-            ApplyAutoPlayColorAvailability();
             ResetMainWindowTitle();
         }
 
-        private void ApplyShowInBoardControlState()
-        {
-            bool supportsShowInBoard = SupportsShowInBoard();
-            chkShowInBoard.Enabled = supportsShowInBoard;
-            if (!supportsShowInBoard && chkShowInBoard.Checked)
-                chkShowInBoard.Checked = false;
-        }
-
-        private void ApplyAutoPlayColorAvailability()
-        {
-            radioAutoPlayColor.Enabled = chkAutoPlay.Checked && IsFoxSyncType(CurrentSyncType);
-            btnFoxAutoPlayIdentity.Enabled = IsFoxSyncType(CurrentSyncType);
-            if (!IsFoxSyncType(CurrentSyncType) && radioAutoPlayColor.Checked)
-                ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);
-            if (!radioAutoPlayColor.Enabled)
-                UpdateAutoPlayColorStatus(null);
-        }
-
-        private void SetSyncConfigurationControlsEnabled(bool enabled)
-        {
-            rdoFox.Enabled = enabled;
-            rdoFoxBack.Enabled = enabled;
-            rdoYike.Enabled = enabled;
-            rdoTygem.Enabled = enabled;
-            rdoBack.Enabled = enabled;
-            rdoSina.Enabled = enabled;
-            rdo19x19.Enabled = enabled;
-            rdo13x13.Enabled = enabled;
-            rdo9x9.Enabled = enabled;
-            rdoOtherBoard.Enabled = enabled;
-            rdoFore.Enabled = enabled;
-        }
-
-        private void DisableBoardSelectionControls()
-        {
-            btnCircleRow1.Enabled = false;
-            btnCircleBoard.Enabled = false;
-            btnClickBoard.Enabled = false;
-            btnOneTimeSync.Enabled = false;
-        }
-
-        private void RestoreBoardSelectionControls()
-        {
-            ApplySyncModeControlState();
-            btnOneTimeSync.Enabled = true;
-        }
 
         private void SetSyncBoth(bool enabled)
         {
@@ -1381,26 +125,27 @@ namespace readboard
             sessionCoordinator.SendError(strMsg);
         }
 
-        private string GetProtocolNumericValue(TextBox textBox)
+        private static string GetProtocolNumericValue(string value)
         {
-            return string.IsNullOrWhiteSpace(textBox.Text) ? "0" : textBox.Text;
+            return string.IsNullOrWhiteSpace(value) ? "0" : value;
         }
 
         private void SendPlayCommandIfSelected()
         {
-            if (!sessionCoordinator.SyncBoth || !chkAutoPlay.Checked)
-                return;
-            AutoPlayColorResolution autoPlayColor = ResolveCurrentAutoPlayColor(
-                GetSelectedAutoPlayColorMode() == AutoPlayColorMode.FoxAuto ? ResolveFoxWindowContext() : FoxWindowContext.Unknown());
-            if (!autoPlayColor.IsKnown)
-                return;
+            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
+            if (controlCenter.CanSendAutoPlayCommand(sessionCoordinator.KeepSync))
+            {
+                FoxWindowContext foxWindowContext = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
+                    ? ResolveFoxWindowContext()
+                    : FoxWindowContext.Unknown();
+                ResolveCurrentAutoPlayColor(foxWindowContext);
+                controlCenter = controlCenterRuntime.Snapshot;
+            }
 
-            sessionCoordinator.SendPlay(
-                autoPlayColor.PlayColor,
-                GetProtocolNumericValue(textBox1),
-                GetProtocolNumericValue(textBox2),
-                GetProtocolNumericValue(textBox3),
-                GetSelectedAutoPlayMoveMode());
+            AutoPlayWireIssuer.IssueIfAuthorized(
+                controlCenter,
+                sessionCoordinator.KeepSync,
+                sessionCoordinator);
         }
 
         private void SendPonderStatusCommand()
@@ -1440,9 +185,10 @@ namespace readboard
 
         private void SendBothSyncStateChange()
         {
-            SendBothSyncCommand(sessionCoordinator.SyncBoth);
-            if (Program.showInBoard && CanUseForegroundFoxInBoardProtocol())
-                SendForegroundFoxInBoardCommand(sessionCoordinator.SyncBoth);
+            ControlCenterPreferences preferences = controlCenterRuntime.CurrentPreferences;
+            SendBothSyncCommand(preferences.TwoWaySync);
+            if (preferences.ShowOnBoard && CanUseForegroundFoxInBoardProtocol())
+                SendForegroundFoxInBoardCommand(preferences.TwoWaySync);
         }
 
         private void ResendSyncSessionState()
@@ -1475,17 +221,20 @@ namespace readboard
 
         private void SendTimeChangedCommand()
         {
-            sessionCoordinator.SendTimeChanged(GetProtocolNumericValue(textBox1));
+            sessionCoordinator.SendTimeChanged(
+                GetProtocolNumericValue(controlCenterRuntime.CurrentSessionState.AiTimeValue));
         }
 
         private void SendPlayoutsChangedCommand()
         {
-            sessionCoordinator.SendPlayoutsChanged(GetProtocolNumericValue(textBox2));
+            sessionCoordinator.SendPlayoutsChanged(
+                GetProtocolNumericValue(controlCenterRuntime.CurrentSessionState.PlayoutsValue));
         }
 
         private void SendFirstPolicyChangedCommand()
         {
-            sessionCoordinator.SendFirstPolicyChanged(GetProtocolNumericValue(textBox3));
+            sessionCoordinator.SendFirstPolicyChanged(
+                GetProtocolNumericValue(controlCenterRuntime.CurrentSessionState.FirstPolicyValue));
         }
 
         private void SendNoPonderCommand()
@@ -1547,7 +296,11 @@ namespace readboard
 
         private BoardDimensions CreateCurrentBoardSize()
         {
-            return new BoardDimensions(boardW, boardH);
+            if (controlCenterRuntime == null)
+                return new BoardDimensions(19, 19);
+
+            ControlCenterPreferences preferences = controlCenterRuntime.CurrentPreferences;
+            return new BoardDimensions(preferences.BoardWidth, preferences.BoardHeight);
         }
 
         private bool HasManualSelection()
@@ -1563,123 +316,106 @@ namespace readboard
             return new PixelRect(selectionX1, selectionY1, ox2 - selectionX1, oy2 - selectionY1);
         }
 
-        private AutoPlayColorMode GetSelectedAutoPlayColorMode()
-        {
-            if (radioWhite.Checked)
-                return AutoPlayColorMode.ManualWhite;
-            if (radioAutoPlayColor.Checked)
-                return AutoPlayColorMode.FoxAuto;
-            return AutoPlayColorMode.ManualBlack;
-        }
-
-        private AutoPlayMoveMode GetSelectedAutoPlayMoveMode()
-        {
-            return radioAutoPlayMoveGma.Checked
-                ? AutoPlayMoveMode.GenmoveAnalyze
-                : AutoPlayMoveMode.FirstCandidate;
-        }
-
         private void ApplyAutoPlayColorMode(AutoPlayColorMode mode)
         {
-            suppressAutoPlayColorModeEvents = true;
-            try
-            {
-                radioBlack.Checked = mode == AutoPlayColorMode.ManualBlack;
-                radioWhite.Checked = mode == AutoPlayColorMode.ManualWhite;
-                radioAutoPlayColor.Checked = mode == AutoPlayColorMode.FoxAuto;
-                if (mode == AutoPlayColorMode.ManualBlack || mode == AutoPlayColorMode.ManualWhite)
-                    lastManualAutoPlayColorMode = mode;
-            }
-            finally
-            {
-                suppressAutoPlayColorModeEvents = false;
-            }
+            if (mode == AutoPlayColorMode.ManualBlack || mode == AutoPlayColorMode.ManualWhite)
+                lastManualAutoPlayColorMode = mode;
 
             if (mode != AutoPlayColorMode.FoxAuto)
-            {
                 ClearFoxAutoPlayColorDetectionState();
-                UpdateAutoPlayColorStatus(null);
-            }
         }
 
-        private void ApplyAutoPlayMoveMode(AutoPlayMoveMode mode)
-        {
-            suppressAutoPlayMoveModeEvents = true;
-            try
-            {
-                radioAutoPlayMoveFirst.Checked = mode == AutoPlayMoveMode.FirstCandidate;
-                radioAutoPlayMoveGma.Checked = mode == AutoPlayMoveMode.GenmoveAnalyze;
-                if (!radioAutoPlayMoveFirst.Checked && !radioAutoPlayMoveGma.Checked)
-                    radioAutoPlayMoveFirst.Checked = true;
-            }
-            finally
-            {
-                suppressAutoPlayMoveModeEvents = false;
-            }
-            ApplyAutoPlayMoveModeControlState();
-        }
-
-        private void ApplyAutoPlayMoveModeControlState()
-        {
-            radioAutoPlayMoveFirst.Enabled = chkAutoPlay.Checked;
-            radioAutoPlayMoveGma.Enabled = chkAutoPlay.Checked;
-            textBox3.Enabled = chkAutoPlay.Checked && GetSelectedAutoPlayMoveMode() == AutoPlayMoveMode.FirstCandidate;
-        }
 
         private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)
         {
-            if (!chkAutoPlay.Checked)
-            {
-                UpdateAutoPlayColorStatus(null);
+            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
+            if (!controlCenter.AutoPlayEnabled)
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
-            }
 
-            AutoPlayColorResolution detected = GetSelectedAutoPlayColorMode() == AutoPlayColorMode.FoxAuto
-                ? ResolveDetectedFoxAutoPlayColor(foxWindowContext)
+            FoxIdentityRecognitionResult recognition = null;
+            AutoPlayColorResolution detected = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
+                ? ResolveDetectedFoxAutoPlayColor(foxWindowContext, out recognition)
                 : null;
-            AutoPlayColorResolution resolution = FoxAutoPlayColorResolver.Resolve(
-                GetSelectedAutoPlayColorMode(),
-                GetCurrentSyncMode(),
-                ResolveCurrentFoxAutoPlayNicknameSignature(),
-                foxWindowContext,
-                detected);
-            UpdateAutoPlayColorStatus(resolution);
-            return resolution;
+            if (recognition == null)
+            {
+                controlCenterRuntime.UpdateAutoPlayObservation(
+                    foxIdentitySelection.EffectiveIdentitySignature,
+                    foxWindowContext,
+                    detected);
+            }
+            else if (recognition.Accepted)
+            {
+                controlCenterRuntime.ApplyFoxIdentityRecognition(
+                    foxIdentitySelection.EffectiveIdentitySignature,
+                    foxWindowContext,
+                    recognition);
+            }
+            return controlCenterRuntime.Snapshot.AutoPlayColorResolution;
         }
 
-        private AutoPlayColorResolution ResolveDetectedFoxAutoPlayColor(FoxWindowContext foxWindowContext)
+        private AutoPlayColorResolution ResolveDetectedFoxAutoPlayColor(
+            FoxWindowContext foxWindowContext,
+            out FoxIdentityRecognitionResult recognitionResult)
         {
-            string nicknameSignature = ResolveCurrentFoxAutoPlayNicknameSignature();
+            recognitionResult = null;
+            string nicknameSignature = foxIdentitySelection.EffectiveIdentitySignature;
+            FoxIdentityRoomSnapshot roomSnapshot = foxIdentitySelection.BeginRoomContext(foxWindowContext);
+            long operationGeneration = roomSnapshot.OperationGeneration;
             if (!IsFoxSyncType(CurrentSyncType)
                 || hwnd == IntPtr.Zero
                 || string.IsNullOrWhiteSpace(nicknameSignature))
-                return null;
-
-            IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(hwnd);
-            if (captureHandle == IntPtr.Zero)
-                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
-
-            string contextSignature = BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext);
-            DateTime now = DateTime.UtcNow;
-            if (lastFoxAutoPlayColorDetection != null
-                && lastFoxAutoPlayColorDetectionWindowHandle == captureHandle
-                && string.Equals(lastFoxAutoPlayColorDetectionContextSignature, contextSignature, StringComparison.Ordinal)
-                && string.Equals(lastFoxAutoPlayColorDetectionNicknameSignature, nicknameSignature, StringComparison.Ordinal)
-                && (now - lastFoxAutoPlayColorDetectionTimestampUtc).TotalMilliseconds < FoxAutoPlayColorDetectionCacheMs)
-                return lastFoxAutoPlayColorDetection;
-
-            AutoPlayColorResolution detection;
-            using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(captureHandle))
             {
-                detection = FoxAutoPlayColorDetector.DetectPlayerListPanel(bitmap, nicknameSignature);
+                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
             }
 
-            lastFoxAutoPlayColorDetection = detection;
-            lastFoxAutoPlayColorDetectionWindowHandle = captureHandle;
-            lastFoxAutoPlayColorDetectionContextSignature = contextSignature;
-            lastFoxAutoPlayColorDetectionNicknameSignature = nicknameSignature;
-            lastFoxAutoPlayColorDetectionTimestampUtc = now;
-            return detection;
+            IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(hwnd);
+            AutoPlayColorResolution detection;
+            if (captureHandle == IntPtr.Zero)
+            {
+                detection = AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
+            }
+            else
+            {
+                string contextSignature = BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext);
+                DateTime now = DateTime.UtcNow;
+                if (lastFoxAutoPlayColorDetection != null
+                    && lastFoxAutoPlayColorDetectionWindowHandle == captureHandle
+                    && string.Equals(lastFoxAutoPlayColorDetectionContextSignature, contextSignature, StringComparison.Ordinal)
+                    && string.Equals(lastFoxAutoPlayColorDetectionNicknameSignature, nicknameSignature, StringComparison.Ordinal)
+                    && (now - lastFoxAutoPlayColorDetectionTimestampUtc).TotalMilliseconds < FoxAutoPlayColorDetectionCacheMs)
+                {
+                    detection = lastFoxAutoPlayColorDetection;
+                }
+                else
+                {
+                    using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(captureHandle))
+                    {
+                        detection = FoxAutoPlayColorDetector.DetectPlayerListPanel(bitmap, nicknameSignature);
+                    }
+
+                    lastFoxAutoPlayColorDetection = detection;
+                    lastFoxAutoPlayColorDetectionWindowHandle = captureHandle;
+                    lastFoxAutoPlayColorDetectionContextSignature = contextSignature;
+                    lastFoxAutoPlayColorDetectionNicknameSignature = nicknameSignature;
+                    lastFoxAutoPlayColorDetectionTimestampUtc = now;
+                }
+            }
+
+            FoxIdentityRecognitionResult recognition = foxIdentitySelection.ApplyRoomRecognition(
+                operationGeneration,
+                foxWindowContext,
+                (SyncMode)CurrentSyncType,
+                IsUniqueFoxIdentityMatch(detection),
+                detection);
+            recognitionResult = recognition;
+            return recognition.Snapshot.DerivedAuthorization;
+        }
+
+        private static bool IsUniqueFoxIdentityMatch(AutoPlayColorResolution detection)
+        {
+            return detection != null
+                && detection.Status != AutoPlayColorStatus.NicknameNotMatched
+                && detection.Status != AutoPlayColorStatus.Unconfigured;
         }
 
         private static string BuildFoxAutoPlayColorDetectionContextSignature(FoxWindowContext context)
@@ -1709,130 +445,22 @@ namespace readboard
             return value.HasValue ? value.Value.ToString() : string.Empty;
         }
 
-        private string ResolveCurrentFoxAutoPlayNicknameSignature()
-        {
-            return !string.IsNullOrWhiteSpace(currentFoxAutoPlayNicknameSignature)
-                ? currentFoxAutoPlayNicknameSignature
-                : Program.CurrentContext.Config.FoxAutoPlayNicknameSignature;
-        }
 
-        private void UpdateAutoPlayColorStatus(AutoPlayColorResolution resolution)
+
+        private FoxIdentitySelectionResult ClearSavedFoxAutoPlayIdentity()
         {
-            if (!radioAutoPlayColor.Checked || resolution == null)
+            FoxIdentitySelectionResult result = foxIdentitySelection.ClearSaved();
+            if (result.Accepted
+                && result.PersistedIdentityChanged
+                && string.IsNullOrWhiteSpace(foxIdentitySelection.CurrentProcessIdentitySignature))
             {
-                SetAutoPlayColorStatusText(string.Empty);
-                return;
-            }
-
-            switch (resolution.Status)
-            {
-                case AutoPlayColorStatus.Unconfigured:
-                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusUnconfigured"));
-                    return;
-                case AutoPlayColorStatus.RecognizedBlack:
-                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusBlack"));
-                    return;
-                case AutoPlayColorStatus.RecognizedWhite:
-                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusWhite"));
-                    return;
-                case AutoPlayColorStatus.UnsupportedPlatform:
-                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusUnsupported"));
-                    return;
-                case AutoPlayColorStatus.Spectating:
-                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusSpectating"));
-                    return;
-                default:
-                    SetAutoPlayColorStatusText(getLangStr("MainForm_autoPlayColorStatusWaiting"));
-                    return;
-            }
-        }
-
-        private void SetAutoPlayColorStatusText(string text)
-        {
-            if (string.Equals(lblAutoPlayColorStatus.Text, text, StringComparison.Ordinal))
-                return;
-
-            lblAutoPlayColorStatus.Text = text;
-        }
-
-        private bool TryConfigureFoxAutoPlayIdentity()
-        {
-            using (FoxAutoPlayIdentityDialog dialog = new FoxAutoPlayIdentityDialog(
-                ResolveCurrentFoxAutoPlayNicknameSignature(),
-                HasSavedFoxAutoPlayIdentity(),
-                BuildFoxAutoPlayIdentityCandidates()))
-            {
-                if (dialog.ShowDialog(this) != DialogResult.OK)
-                    return false;
-
-                if (dialog.SelectedAction == FoxAutoPlayIdentityDialogAction.ClearSaved)
-                {
-                    ClearSavedFoxAutoPlayIdentity();
-                    ClearFoxAutoPlayColorDetectionState();
-                    return true;
-                }
-
-                currentFoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;
-                if (dialog.SelectedAction == FoxAutoPlayIdentityDialogAction.SaveAndUse)
-                {
-                    AppConfig updatedConfig = Program.CurrentConfig.Clone();
-                    updatedConfig.FoxAutoPlayNickname = string.Empty;
-                    updatedConfig.FoxAutoPlayNicknameSignature = dialog.SelectedNicknameSignature;
-                    Program.SaveAppConfig(updatedConfig);
-                }
                 ClearFoxAutoPlayColorDetectionState();
-                return true;
+                controlCenterRuntime.UpdateAutoPlayObservation(
+                    foxIdentitySelection.EffectiveIdentitySignature,
+                    ResolveFoxWindowContext(),
+                    null);
             }
-        }
-
-        private void ClearSavedFoxAutoPlayIdentity()
-        {
-            AppConfig updatedConfig = Program.CurrentConfig.Clone();
-            updatedConfig.FoxAutoPlayNickname = string.Empty;
-            updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;
-            Program.SaveAppConfig(updatedConfig);
-        }
-
-        private static bool HasSavedFoxAutoPlayIdentity()
-        {
-            AppConfig config = Program.CurrentContext.Config;
-            return config != null
-                && (!string.IsNullOrWhiteSpace(config.FoxAutoPlayNickname)
-                    || !string.IsNullOrWhiteSpace(config.FoxAutoPlayNicknameSignature));
-        }
-
-        private IList<FoxAutoPlayIdentityCandidate> BuildFoxAutoPlayIdentityCandidates()
-        {
-            List<FoxAutoPlayIdentityCandidate> candidates = new List<FoxAutoPlayIdentityCandidate>();
-            if (!IsFoxSyncType(CurrentSyncType))
-                return candidates;
-
-            IntPtr boardHandle = ResolveFoxAutoPlayIdentityBoardHandle();
-            if (boardHandle == IntPtr.Zero)
-                return candidates;
-
-            IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(boardHandle);
-            if (captureHandle == IntPtr.Zero)
-                return candidates;
-
-            using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(captureHandle))
-            {
-                IList<FoxPlayerRowCandidate> rows = FoxPlayerRowLocator.LocatePlayerListPanel(bitmap);
-                for (int i = 0; i < rows.Count; i++)
-                {
-                    using (Bitmap nicknameSnippet = CropBitmap(bitmap, rows[i].NicknameBounds))
-                    {
-                        string signature = FoxPlayerNicknameSignature.FromBitmap(nicknameSnippet).Serialize();
-                        if (!string.IsNullOrWhiteSpace(signature))
-                        {
-                            Bitmap rowPreview = CropBitmap(bitmap, rows[i].RowBounds);
-                            candidates.Add(new FoxAutoPlayIdentityCandidate("玩家行 " + (i + 1), signature, rowPreview));
-                        }
-                    }
-                }
-            }
-
-            return candidates;
+            return result;
         }
 
         private IntPtr ResolveFoxAutoPlayIdentityBoardHandle()
@@ -1907,18 +535,10 @@ namespace readboard
             lastFoxAutoPlayColorDetectionContextSignature = string.Empty;
             lastFoxAutoPlayColorDetectionNicknameSignature = string.Empty;
             lastFoxAutoPlayColorDetectionTimestampUtc = DateTime.MinValue;
-        }
-
-        private void InvokeHostAction(Action action)
-        {
-            if (action == null)
-                throw new ArgumentNullException("action");
-            if (IsHandleCreated && InvokeRequired)
-            {
-                BeginInvoke(action);
-                return;
-            }
-            action();
+            if (foxIdentitySelection != null)
+                foxIdentitySelection.ClearRoomRecognition();
+            if (controlCenterRuntime != null)
+                controlCenterRuntime.ClearAutoPlayObservation();
         }
 
         private bool TryDispatchProtocolCommand(Action command)
@@ -2026,32 +646,36 @@ namespace readboard
 
         private SyncCoordinatorHostSnapshot CaptureSnapshotCore()
         {
-            string syncPlatform = ResolveSyncPlatform();
+            ControlCenterPreferences controlCenter = controlCenterRuntime.CurrentPreferences;
+            SyncMode syncMode = controlCenter.Platform;
+            string syncPlatform = ResolveSyncPlatform(syncMode);
             FoxWindowContext foxWindowContext = ResolveFoxWindowContext();
             int? foxMoveNumber = foxWindowContext.ResolveDisplayedMoveNumber();
             UpdateMainWindowTitle(foxWindowContext);
             AutoPlayColorResolution autoPlayColor = ResolveCurrentAutoPlayColor(foxWindowContext);
+            ControlCenterRuntimeSnapshot runtimeSnapshot = controlCenterRuntime.Snapshot;
 
             SyncCoordinatorHostSnapshot snapshot = new SyncCoordinatorHostSnapshot
             {
-                SyncMode = GetCurrentSyncMode(),
-                BoardWidth = boardW,
-                BoardHeight = boardH,
+                SyncMode = syncMode,
+                BoardWidth = controlCenter.BoardWidth,
+                BoardHeight = controlCenter.BoardHeight,
                 SelectionBounds = BuildCaptureSelectionBounds(),
                 SelectedWindowHandle = hwnd,
                 DpiScale = factor,
-                LegacyTypeToken = CurrentSyncType.ToString(),
-                ShowInBoard = Program.showInBoard,
+                LegacyTypeToken = ((int)syncMode).ToString(),
+                ShowInBoard = controlCenter.ShowOnBoard,
                 SupportsForegroundFoxInBoardProtocol = CanUseForegroundFoxInBoardProtocol(),
                 AutoMinimize = Program.autoMin,
                 SampleIntervalMs = Program.timeinterval,
                 UseEnhancedCapture = Program.useEnhanceScreen,
                 FoxMoveNumber = foxMoveNumber,
                 PlayColor = autoPlayColor.PlayColor,
-                AiTimeValue = GetProtocolNumericValue(textBox1),
-                PlayoutsValue = GetProtocolNumericValue(textBox2),
-                FirstPolicyValue = GetProtocolNumericValue(textBox3),
-                AutoPlayMoveMode = GetSelectedAutoPlayMoveMode()
+                AutoPlayColorMode = runtimeSnapshot.AutoPlayColorMode,
+                AiTimeValue = runtimeSnapshot.AiTimeValue,
+                PlayoutsValue = runtimeSnapshot.PlayoutsValue,
+                FirstPolicyValue = runtimeSnapshot.FirstPolicyValue,
+                AutoPlayMoveMode = runtimeSnapshot.AutoPlayMoveMode
             };
 
             sessionCoordinator.SetSyncPlatform(syncPlatform);
@@ -2060,11 +684,11 @@ namespace readboard
             return snapshot;
         }
 
-        private string ResolveSyncPlatform()
+        private static string ResolveSyncPlatform(SyncMode syncMode)
         {
-            if (IsFoxSyncType(CurrentSyncType))
+            if (syncMode == SyncMode.Fox || syncMode == SyncMode.FoxBackgroundPlace)
                 return "fox";
-            if (CurrentSyncType == TYPE_YIKE)
+            if (syncMode == SyncMode.Yike)
                 return ProtocolKeywords.Yike;
             return "generic";
         }
@@ -2140,9 +764,20 @@ namespace readboard
             string previousContextSignature = BuildFoxAutoPlayColorDetectionContextSignature(lastFoxWindowContext);
             string nextContextSignature = BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext);
             if (!string.Equals(previousContextSignature, nextContextSignature, StringComparison.Ordinal))
+            {
                 ClearFoxAutoPlayColorDetectionState();
+            }
             lastFoxWindowContext = FoxWindowContext.CopyOf(foxWindowContext);
+            if (foxIdentitySelection != null)
+                foxIdentitySelection.BeginRoomContext(lastFoxWindowContext);
             ApplyMainWindowTitle();
+            if (controlCenterRuntime != null)
+            {
+                ApplyControlCenterSessionObservation(
+                    new ControlCenterSessionObservation(
+                        controlCenterRuntime.CaptureSessionObservationGeneration())
+                        .WithFoxWindowContext(lastFoxWindowContext));
+            }
         }
 
         private void RefreshMainWindowTitleFromCurrentWindow()
@@ -2161,6 +796,18 @@ namespace readboard
                 lastYikeContextWindowHandle = IntPtr.Zero;
             InvalidateFoxWindowBinding();
             ApplyMainWindowTitle();
+            if (controlCenterRuntime != null)
+            {
+                ApplyControlCenterSessionObservation(
+                    new ControlCenterSessionObservation(
+                        controlCenterRuntime.CaptureSessionObservationGeneration())
+                        .WithTargetWindowValid(
+                            hwnd == IntPtr.Zero ? (bool?)null : IsWindow(hwnd))
+                        .WithBoardRegion(false, false)
+                        .WithFoxWindowContext(lastFoxWindowContext)
+                        .WithYikeWindowContext(lastYikeWindowContext)
+                        .WithTitleTurn(lastMainWindowTitleTurn));
+            }
         }
 
         private MainWindowTitleDisplayMode ResolveMainWindowTitleDisplayMode()
@@ -2237,21 +884,45 @@ namespace readboard
             return sessionCoordinator.StartedSync || sessionCoordinator.IsContinuousSyncing;
         }
 
-        void ISyncCoordinatorHost.UpdateSelectedWindowHandle(IntPtr handle)
+        long ISyncCoordinatorHost.AllocateSessionObservationGeneration()
         {
-            InvokeHostAction(delegate
+            return controlCenterRuntime.BeginSessionObservationGeneration();
+        }
+
+        void ISyncCoordinatorHost.UpdateSelectedWindowHandle(
+            IntPtr handle,
+            long observationGeneration)
+        {
+            bool? targetWindowValid = handle == IntPtr.Zero
+                ? (bool?)null
+                : IsWindow(handle);
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithTargetWindowValid(targetWindowValid)
+                .WithBoardRegion(false, false)
+                .WithFoxWindowContext(FoxWindowContext.Unknown())
+                .WithYikeWindowContext(YikeWindowContext.Unknown())
+                .WithTitleTurn(MainWindowTitleTurn.None);
+            InvokeUiHostAction(delegate
             {
-                SetSelectedWindowHandle(handle);
-                hasRetainedFoxTitleSnapshot = false;
-                lastMainWindowTitleTurn = MainWindowTitleTurn.None;
-                lastFoxWindowContext = FoxWindowContext.Unknown();
-                InvalidateFoxWindowBinding();
-                if (HasActiveSyncOperation())
+                RunWithBatchedWebViewStatePublication(delegate
                 {
-                    RefreshMainWindowTitleFromCurrentWindow();
-                    return;
-                }
-                ApplyMainWindowTitle();
+                    ControlCenterSessionObservationApplyResult result =
+                        ApplyControlCenterSessionObservation(observation);
+                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                        return;
+                    SetSelectedWindowHandle(handle);
+                    hasRetainedFoxTitleSnapshot = false;
+                    lastMainWindowTitleTurn = MainWindowTitleTurn.None;
+                    lastFoxWindowContext = FoxWindowContext.Unknown();
+                    InvalidateFoxWindowBinding();
+                    if (HasActiveSyncOperation())
+                    {
+                        RefreshMainWindowTitleFromCurrentWindow();
+                        return;
+                    }
+                    ApplyMainWindowTitle();
+                });
             });
         }
 
@@ -2260,7 +931,9 @@ namespace readboard
             if (CurrentSyncType == TYPE_YIKE && hwnd != handle)
                 ClearYikeContext();
             if (hwnd != handle)
+            {
                 ClearFoxAutoPlayColorDetectionState();
+            }
             hwnd = handle;
         }
 
@@ -2269,44 +942,181 @@ namespace readboard
             return hwnd != IntPtr.Zero && IsWindow(hwnd);
         }
 
-        void ISyncCoordinatorHost.OnKeepSyncStarted()
+        void ISyncCoordinatorHost.OnKeepSyncStarted(long observationGeneration)
         {
-            InvokeUiHostAction(ApplyKeepSyncStartedUi);
-        }
-
-        void ISyncCoordinatorHost.OnKeepSyncStopped(bool continuousSyncActive)
-        {
+            bool quickSyncActive = sessionCoordinator.IsContinuousSyncing;
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithSyncActivity(quickSyncActive, !quickSyncActive);
+            if (!quickSyncActive)
+                observation = observation.WithSemanticLog("SYNC", "WebView_continuousSyncStarted");
             InvokeUiHostAction(delegate
             {
-                ApplyKeepSyncStoppedUi(continuousSyncActive);
+                RunWithBatchedWebViewStatePublication(delegate
+                {
+                    ControlCenterSessionObservationApplyResult result =
+                        ApplyControlCenterSessionObservation(observation);
+                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                        return;
+                    ApplyKeepSyncStartedUi();
+                });
             });
         }
 
-        void ISyncCoordinatorHost.OnContinuousSyncStarted()
+        void ISyncCoordinatorHost.OnKeepSyncStopped(
+            bool continuousSyncActive,
+            long observationGeneration)
         {
-            InvokeUiHostAction(ApplyContinuousSyncStartedUi);
-        }
-
-        void ISyncCoordinatorHost.OnContinuousSyncStopped()
-        {
-            InvokeUiHostAction(ApplyContinuousSyncStoppedUi);
-        }
-
-        void ISyncCoordinatorHost.OnSyncCachesReset()
-        {
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithSyncActivity(continuousSyncActive, false);
+            if (!continuousSyncActive)
+                observation = observation.WithSemanticLog("SYNC", "WebView_continuousSyncStopped");
             InvokeUiHostAction(delegate
             {
-                lastMainWindowTitleTurn = MainWindowTitleTurn.None;
-                ApplyMainWindowTitle();
+                RunWithBatchedWebViewStatePublication(
+                    delegate
+                    {
+                        ControlCenterSessionObservationApplyResult result =
+                            ApplyControlCenterSessionObservation(observation);
+                        if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                            return;
+                        ApplyKeepSyncStoppedUi(continuousSyncActive);
+                    });
             });
         }
 
-        void ISyncCoordinatorHost.OnBoardSnapshotRecognized(BoardSnapshot snapshot)
+        void ISyncCoordinatorHost.OnContinuousSyncStarted(long observationGeneration)
         {
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithSyncActivity(true, false)
+                .WithSemanticLog("SYNC", "WebView_quickSyncStarted");
             InvokeUiHostAction(delegate
             {
-                lastMainWindowTitleTurn = ResolveMainWindowTitleTurn(snapshot);
-                ApplyMainWindowTitle();
+                RunWithBatchedWebViewStatePublication(delegate
+                {
+                    ControlCenterSessionObservationApplyResult result =
+                        ApplyControlCenterSessionObservation(observation);
+                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                        return;
+                    ApplyContinuousSyncStartedUi();
+                });
+            });
+        }
+
+        void ISyncCoordinatorHost.OnContinuousSyncStopped(long observationGeneration)
+        {
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithSyncActivity(false, sessionCoordinator.StartedSync)
+                .WithSemanticLog("SYNC", "WebView_quickSyncStopped");
+            InvokeUiHostAction(delegate
+            {
+                RunWithBatchedWebViewStatePublication(delegate
+                {
+                    ControlCenterSessionObservationApplyResult result =
+                        ApplyControlCenterSessionObservation(observation);
+                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                        return;
+                    ApplyContinuousSyncStoppedUi();
+                });
+            });
+        }
+
+        void ISyncCoordinatorHost.OnSyncCachesReset(long observationGeneration)
+        {
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithTitleTurn(MainWindowTitleTurn.None);
+            InvokeUiHostAction(delegate
+            {
+                RunWithBatchedWebViewStatePublication(delegate
+                {
+                    ControlCenterSessionObservationApplyResult result =
+                        ApplyControlCenterSessionObservation(observation);
+                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                        return;
+                    lastMainWindowTitleTurn = MainWindowTitleTurn.None;
+                    ApplyMainWindowTitle();
+                });
+            });
+        }
+
+        void IWebViewSyncCoordinatorHost.OnRuntimeFrameCleared(long observationGeneration)
+        {
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .ClearRuntimeFrame();
+            InvokeUiHostAction(delegate
+            {
+                ApplyControlCenterSessionObservation(observation);
+            });
+        }
+
+        void IWebViewSyncCoordinatorHost.OnBoardFrameRecognized(
+            BoardFrame frame,
+            int boardPixelWidth,
+            int boardPixelHeight,
+            bool placementRegionResolved,
+            long observationGeneration)
+        {
+            bool boardRegionRecognized = IsBoardRegionRecognized(
+                frame,
+                boardPixelWidth,
+                boardPixelHeight);
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithBoardRegion(
+                    boardRegionRecognized,
+                    boardRegionRecognized && placementRegionResolved);
+            InvokeUiHostAction(delegate
+            {
+                ApplyControlCenterSessionObservation(observation);
+            });
+        }
+
+        void IWebViewSyncCoordinatorHost.OnBoardSnapshotSent(
+            BoardSnapshot snapshot,
+            long observationGeneration)
+        {
+            if (snapshot == null || !snapshot.IsValid)
+                return;
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithSemanticLog("SYNC", "WebView_boardSent");
+            InvokeUiHostAction(delegate
+            {
+                ApplyControlCenterSessionObservation(observation);
+            });
+        }
+
+        void ISyncCoordinatorHost.OnBoardSnapshotRecognized(
+            BoardSnapshot snapshot,
+            TimeSpan duration,
+            long observationGeneration)
+        {
+            if (snapshot == null || !snapshot.IsValid)
+                return;
+            MainWindowTitleTurn titleTurn = ResolveMainWindowTitleTurn(snapshot);
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(
+                observationGeneration)
+                .WithTitleTurn(titleTurn)
+                    .WithRecentSync(
+                        DateTime.Now.ToString("HH:mm:ss"),
+                        snapshot.BlackStoneCount + snapshot.WhiteStoneCount,
+                        FormatWebViewDuration(duration));
+            InvokeUiHostAction(delegate
+            {
+                RunWithBatchedWebViewStatePublication(delegate
+                {
+                    ControlCenterSessionObservationApplyResult result =
+                        ApplyControlCenterSessionObservation(observation);
+                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                        return;
+                    lastMainWindowTitleTurn = titleTurn;
+                    ApplyMainWindowTitle();
+                });
             });
         }
 
@@ -2314,7 +1124,7 @@ namespace readboard
         {
             InvokeUiHostAction(delegate
             {
-                MessageBox.Show(getLangStr("noSelectedBoardAndFailed"));
+                ShowWebViewMessage("WebView_syncFailedTitle", "noSelectedBoardAndFailed");
             });
         }
 
@@ -2322,7 +1132,7 @@ namespace readboard
         {
             InvokeUiHostAction(delegate
             {
-                MessageBox.Show(getLangStr("recgnizeFaild"));
+                ShowWebViewMessage("WebView_recognitionFailedTitle", "recgnizeFaild");
             });
         }
 
@@ -2342,10 +1152,6 @@ namespace readboard
 
         private void ApplyKeepSyncStartedUi()
         {
-            btnKeepSync.Text = getLangStr("stopSync");
-            btnFastSync.Text = getLangStr("stopSync");
-            SetSyncConfigurationControlsEnabled(false);
-            DisableBoardSelectionControls();
             hasRetainedFoxTitleSnapshot = false;
             if (lastMainWindowTitleTurn == MainWindowTitleTurn.None)
                 lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
@@ -2376,25 +1182,16 @@ namespace readboard
 
         private void ApplyKeepSyncStoppedUi(bool continuousSyncActive)
         {
-            btnKeepSync.Text = getLangStr("keepSync") + "(" + Program.timename + "ms)";
             if (!SyncToolbarTextResolver.ShouldRestoreIdleUiAfterKeepSyncStop(continuousSyncActive))
             {
                 ApplyMainWindowTitle();
                 return;
             }
-            btnFastSync.Text = getLangStr("fastSync");
-            btnKeepSync.Enabled = true;
-            SetSyncConfigurationControlsEnabled(true);
-            RestoreBoardSelectionControls();
             ResetMainWindowTitle();
         }
 
         private void ApplyContinuousSyncStartedUi()
         {
-            btnFastSync.Text = getLangStr("stopSync");
-            btnKeepSync.Enabled = false;
-            SetSyncConfigurationControlsEnabled(false);
-            DisableBoardSelectionControls();
             hasRetainedFoxTitleSnapshot = false;
             lastMainWindowTitleTurn = MainWindowTitleTurn.Unknown;
             RefreshMainWindowTitleFromCurrentWindow();
@@ -2402,35 +1199,12 @@ namespace readboard
 
         private void ApplyContinuousSyncStoppedUi()
         {
-            bool keepSyncActive = sessionCoordinator.StartedSync;
-            btnFastSync.Text = SyncToolbarTextResolver.ResolveFastSyncTextAfterContinuousStop(
-                keepSyncActive,
-                getLangStr("stopSync"),
-                getLangStr("fastSync"));
-
-            if (keepSyncActive)
+            if (sessionCoordinator.StartedSync)
             {
                 ApplyMainWindowTitle();
                 return;
             }
             ApplyKeepSyncStoppedUi(false);
-        }
-
-        private Boolean isCtrlDown = false;
-
-        private void HookListener_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)
-        {
-            // Console.Out.WriteLine(e.KeyValue);
-            if (e.KeyValue == 162 || e.KeyValue == 163)
-                isCtrlDown = true;
-            if (isCtrlDown && e.KeyValue == 88 && SupportsShowInBoard() && !Program.disableShowInBoardShortcut)
-                chkShowInBoard.Checked = !chkShowInBoard.Checked;
-        }
-
-        private void HookListener_KeyUp(object sender, System.Windows.Forms.KeyEventArgs e)
-        {
-            if (e.KeyValue == 162 || e.KeyValue == 163)
-                isCtrlDown = false;
         }
 
         internal bool IsShutdownRequested
@@ -2458,13 +1232,40 @@ namespace readboard
             this.launchOptions = launchOptions;
             this.sessionCoordinator = sessionCoordinator;
             this.selectionCalibrationService = selectionCalibrationService;
+            this.foxIdentitySelection = new FoxIdentitySelection(new AppConfigFoxIdentityPersistence());
+            this.webViewStatePublisher = new WebViewStatePublisher(PostWebViewStateCore);
+            this.webViewWindowCommandRuntime = new WebViewWindowCommandRuntime(
+                new MainFormWebViewWindowAdapter(this));
+            this.webViewUpdateCheckJourney = new WebViewUpdateCheckJourney(
+                OnWebViewUpdateCheckObservation);
+            this.shutdownCoordinator = new MainFormShutdownCoordinator(
+                new MainFormShutdownActions(this));
+            this.yikeContextRuntime = new YikeContextRuntime(
+                new MainFormYikeContextAdapter(this));
             this.uiThreadInvoker = new UiThreadInvoker(this);
             this.placeRequestQueue = new SerialBackgroundWorkQueue("ReadboardPlaceRequestQueue");
+            this.hostedUpdateJourney = new HostedUpdateJourney(
+                new HostedUpdatePackageDownloader(),
+                new HostedUpdatePackageVerifier(),
+                delegate(string tag, string zipPath)
+                {
+                    return this.sessionCoordinator.SendReadboardUpdateReady(tag, zipPath);
+                },
+                new HostedUpdateResponseTimeoutScheduler(),
+                OnHostedUpdateObservation);
             InitializeComponent();
-            keyboardHook = new GlobalKeyboardHook();
-            keyboardHook.KeyDown += HookListener_KeyDown;
-            keyboardHook.KeyUp += HookListener_KeyUp;
-            keyboardHook.Start();
+            this.controlCenterRuntime = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(Program.CurrentConfig),
+                ControlCenterSessionState.FromLaunchOptions(launchOptions),
+                new MainFormControlCenterSessionAdapter(this),
+                new AppConfigControlCenterPreferencePersistence(
+                    delegate { return Program.CurrentConfig; },
+                    Program.SaveAppConfig),
+                new MainFormControlCenterActionAdapter(this));
+            this.controlCenterRuntime.UpdateAutoPlayObservation(
+                foxIdentitySelection.EffectiveIdentitySignature,
+                FoxWindowContext.Unknown(),
+                null);
             using (System.Drawing.Bitmap bitmap = new Bitmap(1, 1))
             using (System.Drawing.Graphics graphics2 = Graphics.FromImage(bitmap))
             {
@@ -2476,357 +1277,16 @@ namespace readboard
             }
             ApplyLoadedConfiguration();
             this.MaximizeBox = false;
-            if (!launchOptions.AiTime.Equals(" "))
-                textBox1.Text = launchOptions.AiTime;
-            if (!launchOptions.Playouts.Equals(" "))
-                textBox2.Text = launchOptions.Playouts;
-            if (!launchOptions.FirstPolicy.Equals(" "))
-                textBox3.Text = launchOptions.FirstPolicy;
-            radioWhite.Enabled = false;
-            radioBlack.Enabled = false;
-            radioAutoPlayColor.Enabled = false;
-            radioAutoPlayMoveFirst.Enabled = false;
-            radioAutoPlayMoveGma.Enabled = false;
-            btnFoxAutoPlayIdentity.Enabled = false;
-            textBox1.Enabled = false;
-            textBox2.Enabled = false;
-            textBox3.Enabled = false;
-            if (sessionCoordinator.SyncBoth)
-            {
-                chkBothSync.Checked = true;
-                chkAutoPlay.Enabled = true;
-            }
-            else
-            {
-                chkBothSync.Checked = false;
-                chkAutoPlay.Enabled = false;
-            }
-            this.rdoFox.Text = getLangStr("MainForm_rdoFox");
-            this.rdoFoxBack.Text = getLangStr("MainForm_rdoFoxBack");
-            this.rdoYike.Text = getLangStr("MainForm_rdoYike");
-            this.rdoTygem.Text = getLangStr("MainForm_rdoTygem");
-            this.rdoSina.Text = getLangStr("MainForm_rdoSina");
-            this.rdoBack.Text = getLangStr("MainForm_rdoBack");
-            this.rdoFore.Text = getLangStr("MainForm_rdoFore");
-            this.btnSettings.Text = getLangStr("MainForm_btnSettings");
-            this.btnHelp.Text = getLangStr("MainForm_btnHelp");
-            this.btnCheckUpdate.Text = getLangStr("MainForm_btnCheckUpdate");
-            this.btnFastSync.Text = getLangStr("MainForm_btnFastSync");
-            this.lblBoardSize.Text = getLangStr("MainForm_lblBoardSize");
-            this.btnKomi65.Text = getLangStr("MainForm_btnKomi65");
-            this.chkBothSync.Text = getLangStr("MainForm_chkBothSync");
-            this.chkAutoPlay.Text = getLangStr("MainForm_chkAutoPlay");
-            this.radioBlack.Text = getLangStr("MainForm_radioBlack");
-            this.radioWhite.Text = getLangStr("MainForm_radioWhite");
-            this.radioAutoPlayColor.Text = getLangStr("MainForm_radioAutoPlayColor");
-            this.btnFoxAutoPlayIdentity.Text = getLangStr("MainForm_btnFoxAutoPlayIdentity");
-            this.lblAutoPlayColorStatus.Text = string.Empty;
-            this.lblAutoPlayMoveMode.Text = getLangStr("MainForm_lblAutoPlayMoveMode");
-            this.radioAutoPlayMoveFirst.Text = getLangStr("MainForm_radioAutoPlayMoveFirst");
-            this.radioAutoPlayMoveGma.Text = getLangStr("MainForm_radioAutoPlayMoveGma");
-            this.lblPlayCondition.Text = getLangStr("MainForm_lblPlayCondition");
-            this.lblTime.Text = getLangStr("MainForm_lblTime");
-            this.lblTotalVisits.Text = getLangStr("MainForm_lblTotalVisits");
-            this.lblBestMoveVisits.Text=getLangStr("MainForm_lblBestMoveVisits");
-            this.btnClickBoard.Text = getLangStr("MainForm_btnClickBoard");
-            this.btnCircleBoard.Text = getLangStr("MainForm_btnCircleBoard");
-            this.btnCircleRow1.Text = getLangStr("MainForm_btnCircleRow1");
-            this.btnTogglePonder.Text = getLangStr("MainForm_btnTogglePonder");
-            this.chkShowInBoard.Text = getLangStr("MainForm_chkShowInBoard");
-            this.btnKeepSync.Text = getLangStr("MainForm_btnKeepSync");
-            this.btnOneTimeSync.Text = getLangStr("MainForm_btnOneTimeSync");
-            this.btnExchange.Text = getLangStr("MainForm_btnExchange");
-            this.btnForceRebuild.Text = getLangStr("MainForm_btnForceRebuild");
-            this.btnClearBoard.Text = getLangStr("MainForm_btnClearBoard");
             ResetMainWindowTitle();
-            ApplyMainFormUi();
-            RefreshShowInBoardShortcutToolTip();
+            InitializeWebViewShell();
             isInitializingProtocolState = false;
         }
 
         private String getLangStr(String itemName)
         {
-            String result  = "";
-            try {
-                result = Program.langItems[itemName].ToString();
-            }
-            catch (Exception e)
-            {
-                SendError(e.ToString());              
-            }
-            return result;
+            return Program.ResolveLanguageText(itemName);
         }
 
-        private void SetCheckUpdateButtonBusy(Boolean isChecking)
-        {
-            this.btnCheckUpdate.Enabled = !isChecking;
-            this.btnCheckUpdate.Text = isChecking
-                ? getLangStr("MainForm_btnCheckUpdate_Checking")
-                : getLangStr("MainForm_btnCheckUpdate");
-        }
-
-        private void ApplyUpdateDialogLanguage(FormUpdate formUpdate)
-        {
-            formUpdate.Text = getLangStr("Update_dialogTitle");
-            SetControlText(formUpdate, "lblTitle", getLangStr("Update_dialogTitle"));
-            SetControlText(formUpdate, "lblCurrentVersion", getLangStr("Update_currentVersion"));
-            SetControlText(formUpdate, "lblLatestVersion", getLangStr("Update_latestVersion"));
-            SetControlText(formUpdate, "lblReleaseDate", getLangStr("Update_releaseDate"));
-            SetControlText(formUpdate, "lblReleaseNotes", getLangStr("Update_releaseNotes"));
-            SetControlText(formUpdate, "btnClose", getLangStr("Update_close"));
-        }
-
-        private void SetControlText(Control root, string controlName, string text)
-        {
-            Control control = FindControl(root, controlName);
-            if (control == null)
-                return;
-            control.Text = text;
-        }
-
-        private static Control FindControl(Control root, string controlName)
-        {
-            if (root == null || string.IsNullOrEmpty(controlName))
-                return null;
-
-            if (root.Name == controlName)
-                return root;
-            foreach (Control child in root.Controls)
-            {
-                Control result = FindControl(child, controlName);
-                if (result != null)
-                    return result;
-            }
-            return null;
-        }
-
-        private void ShowUpdateAvailable(UpdateCheckResult result)
-        {
-            string hostedReleaseTag = result.Tag;
-            string releaseNotes = result.ReleaseNotes;
-            string channelNotice = null;
-            if (string.Equals(result.ChannelStatus, "retired", StringComparison.Ordinal))
-            {
-                channelNotice = string.Format(
-                    getLangStr("Update_retiredFinalVersion"),
-                    result.LatestVersion);
-            }
-            channelNotice = AppendIncompatibleNewerVersionMessage(result, channelNotice);
-            if (!string.IsNullOrWhiteSpace(channelNotice))
-                releaseNotes = string.IsNullOrWhiteSpace(releaseNotes)
-                    ? channelNotice
-                    : channelNotice + Environment.NewLine + Environment.NewLine + releaseNotes;
-            bool hostedInstallAvailable = IsHostedInstallAvailable(
-                result,
-                launchOptions.TransportKind,
-                sessionCoordinator.IsProtocolSessionActive,
-                hostedUpdateSupported,
-                hostedUpdatePackageV2Supported);
-            UpdateDialogModel model = new UpdateDialogModel
-            {
-                CurrentVersion = result.CurrentVersion,
-                LatestVersion = result.LatestVersion,
-                PublishedAt = result.PublishedAt,
-                ReleaseNotes = releaseNotes,
-                DownloadUrl = result.ReleaseUrl,
-                UnavailableText = getLangStr("Update_notProvided"),
-                EmptyReleaseNotesText = getLangStr("Update_releaseNotesUnavailable"),
-                MissingDownloadUrlMessage = getLangStr("Update_missingDownloadUrl"),
-                InvalidDownloadUrlFormatMessage = getLangStr("Update_invalidDownloadUrlFormat"),
-                UnsupportedDownloadUrlSchemeMessage = getLangStr("Update_unsupportedDownloadUrlScheme"),
-                OpenDownloadUrlFailedMessage = getLangStr("Update_openDownloadFailed"),
-                HostedInstallAvailable = hostedInstallAvailable,
-                HostedReleaseTag = hostedReleaseTag,
-                HostedAssetName = result.AssetName,
-                HostedAssetDownloadUrl = result.AssetDownloadUrl,
-                HostedAssetSha256 = result.AssetSha256,
-                DownloadButtonText = getLangStr("Update_download"),
-                DownloadAndInstallButtonText = getLangStr("Update_downloadAndInstall"),
-                DownloadingButtonText = getLangStr("Update_downloading"),
-                DownloadingPackageStatusText = getLangStr("Update_downloadingPackage"),
-                VerifyingPackageStatusText = getLangStr("Update_verifyingPackage"),
-                NotifyingHostStatusText = getLangStr("Update_notifyingHost"),
-                WaitingForHostInstallText = getLangStr("Update_waitingForHostInstall"),
-                HostInstallingStatusText = getLangStr("Update_hostInstalling"),
-                HostCancelledText = getLangStr("Update_hostCancelled"),
-                HostFailedText = getLangStr("Update_hostFailed"),
-                HostTimedOutText = getLangStr("Update_hostTimedOut"),
-                ManualDownloadFallbackMessage = getLangStr("Update_manualDownloadFallback"),
-                PrepareHostedUpdateAsync = PrepareHostedUpdatePackageAsync,
-                NotifyHostedUpdateReady = NotifyHostedUpdateReady
-            };
-            using (FormUpdate formUpdate = new FormUpdate(model))
-            {
-                activeHostedUpdateDialog = formUpdate;
-                formUpdate.FormClosed += delegate
-                {
-                    if (ReferenceEquals(activeHostedUpdateDialog, formUpdate))
-                        activeHostedUpdateDialog = null;
-                };
-                ApplyUpdateDialogLanguage(formUpdate);
-                formUpdate.ShowDialog(this);
-                if (ReferenceEquals(activeHostedUpdateDialog, formUpdate))
-                    activeHostedUpdateDialog = null;
-            }
-        }
-
-        internal static bool IsHostedUpdateAssetSupported(
-            string assetName,
-            string versionTag,
-            bool packageV2Supported)
-        {
-            return HostedUpdatePackageVerifier.IsSupportedFileName(
-                versionTag,
-                assetName,
-                packageV2Supported);
-        }
-
-        internal static bool IsHostedInstallAvailable(
-            UpdateCheckResult result,
-            TransportKind transportKind,
-            bool protocolSessionActive,
-            bool hostedUpdateSupported,
-            bool packageV2Supported)
-        {
-            return transportKind == TransportKind.Pipe &&
-                protocolSessionActive &&
-                hostedUpdateSupported &&
-                IsHostedUpdateAssetSupported(
-                    result.AssetName,
-                    result.Tag,
-                    packageV2Supported) &&
-                !string.IsNullOrWhiteSpace(result.AssetDownloadUrl) &&
-                !string.IsNullOrWhiteSpace(result.AssetName) &&
-                !string.IsNullOrWhiteSpace(result.AssetSha256) &&
-                !string.IsNullOrWhiteSpace(result.Tag);
-        }
-
-        private async Task<string> PrepareHostedUpdatePackageAsync(UpdateDialogModel model)
-        {
-            if (model == null)
-                throw new ArgumentNullException("model");
-
-            HostedUpdatePackageDownloader downloader = new HostedUpdatePackageDownloader();
-            string zipPath = await downloader.DownloadAsync(
-                model.HostedReleaseTag,
-                model.HostedAssetName,
-                model.HostedAssetDownloadUrl,
-                model.HostedAssetSha256);
-            model.ReportHostedUpdateStatus?.Invoke(
-                model.VerifyingPackageStatusText,
-                "Verifying update package...");
-            new HostedUpdatePackageVerifier().Verify(model.HostedReleaseTag, zipPath);
-            return zipPath;
-        }
-
-        private void NotifyHostedUpdateReady(string tag, string absoluteZipPath)
-        {
-            sessionCoordinator.SendReadboardUpdateReady(tag, absoluteZipPath);
-        }
-
-        private void ShowUpdateUpToDate(UpdateCheckResult result)
-        {
-            string messageKey = string.Equals(
-                result.ChannelStatus,
-                "retired",
-                StringComparison.Ordinal)
-                ? "Update_upToDateRetired"
-                : "Update_upToDate";
-            ShowUpdateInformation(
-                AppendIncompatibleNewerVersionMessage(
-                    result,
-                    getLangStr(messageKey)));
-        }
-
-        private string BuildOutsideChannelMessage(UpdateCheckResult result)
-        {
-            string message = getLangStr("Update_outsideChannel");
-            if (string.Equals(result.ChannelStatus, "retired", StringComparison.Ordinal))
-            {
-                message += Environment.NewLine + string.Format(
-                    getLangStr("Update_retiredFinalVersion"),
-                    result.LatestVersion);
-            }
-
-            return AppendIncompatibleNewerVersionMessage(result, message);
-        }
-
-        private string AppendIncompatibleNewerVersionMessage(
-            UpdateCheckResult result,
-            string message)
-        {
-            if (string.IsNullOrWhiteSpace(result.IncompatibleNewerVersion) ||
-                string.IsNullOrWhiteSpace(result.IncompatibleMinimumWindowsVersion))
-            {
-                return message;
-            }
-
-            string incompatibleMessage = string.Format(
-                getLangStr("Update_newerVersionRequiresWindows"),
-                result.IncompatibleNewerVersion,
-                result.IncompatibleMinimumWindowsVersion);
-            return string.IsNullOrWhiteSpace(message)
-                ? incompatibleMessage
-                : message + Environment.NewLine + incompatibleMessage;
-        }
-
-        private void ShowUpdateInformation(string message)
-        {
-            MessageBox.Show(this, message, getLangStr("MainForm_btnCheckUpdate"), MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-
-        private void ShowUpdateCheckFailed(string errorMessage)
-        {
-            string reason = string.IsNullOrWhiteSpace(errorMessage)
-                ? getLangStr("Update_unknownError")
-                : errorMessage;
-            string message = getLangStr("Update_checkFailed") + Environment.NewLine + reason;
-            MessageBox.Show(this, message, getLangStr("MainForm_btnCheckUpdate"), MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-
-        private void HandleUpdateCheckResult(UpdateCheckResult result)
-        {
-            switch (result.Status)
-            {
-                case UpdateCheckStatus.UpdateAvailable:
-                    ShowUpdateAvailable(result);
-                    return;
-                case UpdateCheckStatus.UpToDate:
-                    ShowUpdateUpToDate(result);
-                    return;
-                case UpdateCheckStatus.OutsideChannel:
-                    ShowUpdateInformation(BuildOutsideChannelMessage(result));
-                    return;
-                case UpdateCheckStatus.NoMatchingChannel:
-                    ShowUpdateInformation(getLangStr("Update_noMatchingChannel"));
-                    return;
-                case UpdateCheckStatus.Failed:
-                    ShowUpdateCheckFailed(result.ErrorMessage);
-                    return;
-                default:
-                    throw new InvalidEnumArgumentException("result.Status", (int)result.Status, typeof(UpdateCheckStatus));
-            }
-        }
-
-        private async void btnCheckUpdate_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                SetCheckUpdateButtonBusy(true);
-                UpdateCheckResult result = await updateChecker.CheckAsync();
-                if (result == null)
-                    throw new InvalidOperationException("Update check returned no result.");
-                HandleUpdateCheckResult(result);
-            }
-            catch (Exception ex)
-            {
-                ShowUpdateCheckFailed(ex.Message);
-            }
-            finally
-            {
-                SetCheckUpdateButtonBusy(false);
-            }
-        }
 
         public void sendPonderStatus()
         {
@@ -2875,7 +1335,6 @@ namespace readboard
             mouseHook.MouseMove += mh_MouseMoveEvent;
             mouseHook.MouseClick += mh_MouseMoveEvent2;
             mouseHook.Enabled = false;
-            this.btnKeepSync.Text = getLangStr("keepSync") + "(" + Program.timename + "ms)";
         }
 
         //[DllImport("user32.dll")]
@@ -2889,7 +1348,7 @@ namespace readboard
                 Math.Max(y1, y2));
             if (!TryFinalizeSelectionBounds())
             {
-                MessageBox.Show(getLangStr("recgnizeFaild"));// Program.isChn ? "不能识别棋盘,请调整被同步棋盘大小后重新选择或尝试[框选1路线]" : "Can not detect board,Please zoom the board and try again or use [CircleRow1]");
+                ShowWebViewMessage("WebView_recognitionFailedTitle", "recgnizeFaild");
                 RestoreMainWindowAfterSelection();
             }
             else if (CurrentSyncType == TYPE_BACKGROUND)
@@ -2910,8 +1369,9 @@ namespace readboard
 
         private void ExpandManualSelectionBounds()
         {
-            int gapX = (int)Math.Round((ox2 - selectionX1) / ((boardW - 1) * 2f));
-            int gapY = (int)Math.Round((oy2 - selectionY1) / ((boardH - 1) * 2f));
+            BoardDimensions boardSize = CreateCurrentBoardSize();
+            int gapX = (int)Math.Round((ox2 - selectionX1) / ((boardSize.Width - 1) * 2f));
+            int gapY = (int)Math.Round((oy2 - selectionY1) / ((boardSize.Height - 1) * 2f));
             UpdateSelectionBounds(selectionX1 - gapX, selectionY1 - gapY, ox2 + gapX, oy2 + gapY);
         }
 
@@ -2987,16 +1447,6 @@ namespace readboard
 
         }
 
-        private void button3_Click(object sender, EventArgs e)
-        {
-            mouseHook.Enabled = true;
-            clicked = true;
-        }
-
-        private void button4_Click(object sender, EventArgs e)
-        {
-            oneTimeSync();
-        }
 
         [DllImport("user32.dll")]
         internal static extern IntPtr WindowFromPoint(Point Point);
@@ -3011,58 +1461,35 @@ namespace readboard
             return WindowFromPoint(p);
         }
 
-        private void oneTimeSync()
+        private bool TryRunOneTimeSyncAction()
         {
             hasRetainedFoxTitleSnapshot = false;
             bool oneTimeSyncSucceeded = sessionCoordinator.TryRunOneTimeSync();
             if (!oneTimeSyncSucceeded)
             {
                 ResetMainWindowTitle();
-                return;
+                return false;
             }
             if (IsFoxSyncType(CurrentSyncType))
             {
                 hasRetainedFoxTitleSnapshot = true;
                 ApplyMainWindowTitle();
             }
+            return true;
         }
 
-        public void resetBtnKeepSyncName()
-        {
-            if (!sessionCoordinator.StartedSync)
-                this.btnKeepSync.Text = getLangStr("keepSync") + "("+ Program.timename + "ms)";
-        }
 
         [DllImport("user32.dll", EntryPoint = "FindWindow", SetLastError = true)]
         public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 
-        private void button5_Click(object sender, EventArgs e)
-        {
-            if (sessionCoordinator.IsContinuousSyncing)
-            {
-                sessionCoordinator.EndContinuousSync();
-            }
-            if (!sessionCoordinator.StartedSync)
-            {
-                sessionCoordinator.TryStartKeepSync();
-            }
-            else
-            {
-                stopSync();
-            }
-        }
 
         private void stopSync()
         {
             sessionCoordinator.StopSyncSession();
         }
 
-        private void button6_Click(object sender, EventArgs e)
-        {
-            SendClearCommand();
-        }
 
-        private void btnForceRebuild_Click(object sender, EventArgs e)
+        private void ArmForceRebuildAction()
         {
             sessionCoordinator.ArmForceRebuild();
             if (HasActiveSyncOperation())
@@ -3072,43 +1499,6 @@ namespace readboard
             }
         }
 
-        private void radioButton1_CheckedChanged(object sender, EventArgs e)
-        {
-            if (this.rdoFox.Checked)
-                setNativeBoardMode(TYPE_FOX);
-        }
-
-        private void radioButton2_CheckedChanged(object sender, EventArgs e)
-        {
-            if (this.rdoTygem.Checked)
-                setNativeBoardMode(TYPE_TYGEM);
-        }
-
-        private void radioButton3_CheckedChanged(object sender, EventArgs e)
-        {
-            if (this.rdoBack.Checked)
-                setManualSelectionMode(TYPE_BACKGROUND);
-        }
-
-        private void radioButton4_CheckedChanged(object sender, EventArgs e)
-        {
-
-            if (this.rdoSina.Checked)
-                setNativeBoardMode(TYPE_SINA);
-
-        }
-
-        private void radioButtonFoxBack_CheckedChanged(object sender, EventArgs e)
-        {
-            if (this.rdoFoxBack.Checked)
-                setNativeBoardMode(TYPE_FOX_BACKGROUND_PLACE);
-        }
-
-        private void radioButtonYike_CheckedChanged(object sender, EventArgs e)
-        {
-            if (this.rdoYike.Checked)
-                setNativeBoardMode(TYPE_YIKE);
-        }
 
         public void saveOtherConfig()
         {
@@ -3130,35 +1520,56 @@ namespace readboard
                     return;
 
                 isShuttingDown = true;
-                RunShutdownStep(shutdownExceptions, delegate { placeRequestQueue.Stop(); });
-                RunShutdownStep(shutdownExceptions, delegate { ClearPendingProtocolCommands(); });
             }
-            ResetMainWindowTitle();
-            if (persistConfiguration)
-                RunShutdownStep(shutdownExceptions, delegate { PersistConfiguration(); });
-            RunShutdownStep(shutdownExceptions, delegate { DisposeInputHooks(); });
-            RunShutdownStep(shutdownExceptions, delegate { SendShutdownProtocol(); });
-            RunShutdownStep(shutdownExceptions, delegate { Program.DisposeBitmap(); });
-            RunShutdownStep(shutdownExceptions, delegate { sessionCoordinator.Stop(); });
-            RunShutdownStep(shutdownExceptions, delegate
-            {
-                if (!IsHandleCreated)
-                {
-                    closeRequestedBeforeHandle = true;
-                    return;
-                }
-                if (IsDisposed || Disposing)
-                    return;
-                BeginInvoke((Action)Close);
-            });
+            shutdownCoordinator.Execute(persistConfiguration, shutdownExceptions.Add);
             ThrowShutdownExceptions(shutdownExceptions);
+        }
+
+        private void RequestCloseAfterShutdown()
+        {
+            if (!IsHandleCreated)
+            {
+                closeRequestedBeforeHandle = true;
+                return;
+            }
+            if (IsDisposed || Disposing)
+                return;
+            BeginInvoke((Action)Close);
+        }
+
+        private sealed class MainFormShutdownActions : IMainFormShutdownActions
+        {
+            private readonly MainForm owner;
+
+            public MainFormShutdownActions(MainForm owner)
+            {
+                this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            }
+
+            public void StopPlaceRequestQueue() { owner.placeRequestQueue.Stop(); }
+            public void ClearPendingProtocolCommands() { owner.ClearPendingProtocolCommands(); }
+            public void ResetTitle() { owner.ResetMainWindowTitle(); }
+            public void PersistConfiguration() { owner.PersistConfiguration(); }
+            public void DisposeInputHooks() { owner.DisposeInputHooks(); }
+            public void SendShutdownProtocol() { owner.SendShutdownProtocol(); }
+            public void DisposeBitmap() { Program.DisposeBitmap(); }
+            public void StopCoordinator() { owner.sessionCoordinator.Stop(); }
+            public void DisposeWebViewUpdateBridge() { owner.DisposeWebViewUpdateBridge(); }
+            public void RequestClose() { owner.RequestCloseAfterShutdown(); }
         }
 
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            if (!isShuttingDown && !IsDisposed && !Disposing)
-                ApplyMainFormUi();
+            if (!isShuttingDown
+                && !IsDisposed
+                && !Disposing
+                && webView != null
+                && !webViewWindowBoundsAppliedAfterHandle)
+            {
+                ApplySavedWebViewWindowBounds();
+                webViewWindowBoundsAppliedAfterHandle = true;
+            }
             FlushPendingProtocolCommands();
             if (!closeRequestedBeforeHandle || IsDisposed)
                 return;
@@ -3170,20 +1581,11 @@ namespace readboard
             base.OnDpiChanged(e);
             if (isShuttingDown || IsDisposed || Disposing)
                 return;
-            factor = GetCurrentDpiScale();
-            ApplyMainFormUi();
+            UpdateWebViewMinimumSizeForCurrentDpi();
         }
 
         private void DisposeInputHooks()
         {
-            if (keyboardHook != null)
-            {
-                keyboardHook.KeyDown -= HookListener_KeyDown;
-                keyboardHook.KeyUp -= HookListener_KeyUp;
-                keyboardHook.Stop();
-                keyboardHook.Dispose();
-                keyboardHook = null;
-            }
             if (mouseHook == null)
                 return;
             mouseHook.MouseMove -= mh_MouseMoveEvent;
@@ -3194,17 +1596,7 @@ namespace readboard
             mouseHook = null;
         }
 
-        private static void RunShutdownStep(List<Exception> shutdownExceptions, Action shutdownStep)
-        {
-            try
-            {
-                shutdownStep();
-            }
-            catch (Exception ex)
-            {
-                shutdownExceptions.Add(ex);
-            }
-        }
+
 
         private static void ThrowShutdownExceptions(List<Exception> shutdownExceptions)
         {
@@ -3223,47 +1615,6 @@ namespace readboard
             shutdown();
         }
 
-        private void radioButton5_CheckedChanged(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (this.rdo19x19.Checked)
-            {
-                boardW = 19;
-                boardH = 19;
-                this.txtBoardHeight.BackColor = System.Drawing.SystemColors.Menu;
-                this.txtBoardWidth.BackColor = System.Drawing.SystemColors.Menu;
-            }
-            saveOtherConfig();
-        }
-
-        private void radioButton6_CheckedChanged(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (this.rdo13x13.Checked)
-            {
-                boardW = 13;
-                boardH = 13;
-                this.txtBoardHeight.BackColor = System.Drawing.SystemColors.Menu;
-                this.txtBoardWidth.BackColor = System.Drawing.SystemColors.Menu;
-            }
-            saveOtherConfig();
-        }
-
-        private void radioButton7_CheckedChanged(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (this.rdo9x9.Checked)
-            {
-                boardW = 9;
-                boardH = 9;
-                this.txtBoardHeight.BackColor = System.Drawing.SystemColors.Menu;
-                this.txtBoardWidth.BackColor = System.Drawing.SystemColors.Menu;
-            }
-            saveOtherConfig();
-        }
 
         public void sendVersion()
         {
@@ -3272,7 +1623,13 @@ namespace readboard
 
         public void stopInBoard()
         {
-            this.chkShowInBoard.Checked = false;
+            ControlCenterApplyResult result = ApplyControlCenterIntent(
+                ControlCenterIntent.SetShowOnBoard(false));
+            if (result.Outcome == ControlCenterApplyOutcome.Rejected)
+                ProjectControlCenterState();
+            else
+                if (result.ShouldPublishSnapshot)
+                    PostWebViewState();
         }
         [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetForegroundWindow", CharSet = System.Runtime.InteropServices.CharSet.Auto, ExactSpelling = true)]
         public static extern IntPtr GetF();
@@ -3370,352 +1727,30 @@ namespace readboard
         [DllImport("User32")]
         public extern static void mouse_event(int dwFlags, int dx, int dy, int dwData, IntPtr dwExtraInfo);
 
-        private void textbox1_TextChanged(object sender, EventArgs e)
-        {
-            NormalizeNumericTextBox(textBox1);
-            if (isInitializingProtocolState)
-                return;
-            SendTimeChangedCommand();
-        }
 
-        private void button7_Click_1(object sender, EventArgs e)
-        {
-            SendNoPonderCommand();
-        }
 
-        private void textBox2_TextChanged(object sender, EventArgs e)
-        {
-            NormalizeNumericTextBox(textBox2);
-            if (isInitializingProtocolState)
-                return;
-            SendPlayoutsChangedCommand();
-        }
 
-        private void textBox3_TextChanged(object sender, EventArgs e)
+        private void ApplyNativeBoardSelection(ControlCenterBoardSelectionMode mode)
         {
-            NormalizeNumericTextBox(textBox3);
-            if (isInitializingProtocolState)
-                return;
-            SendFirstPolicyChangedCommand();
-        }
-
-        private void checkBox1_CheckedChanged_1(object sender, EventArgs e)
-        {
-            SetSyncBoth(chkBothSync.Checked);
-            chkAutoPlay.Enabled = sessionCoordinator.SyncBoth;
-            if (isInitializingProtocolState)
-                return;
-            SendBothSyncStateChange();
-            ResendSyncSessionState();
-            this.saveOtherConfig();
-        }
-
-        private void button1_Click(object sender, EventArgs e)
-        {
-            try
+            if (mode == ControlCenterBoardSelectionMode.Inside)
             {
-                Process process1 = new Process();
-                process1.StartInfo.FileName = getLangStr("helpFile");
-                process1.StartInfo.Arguments = "";
-                process1.StartInfo.WindowStyle = ProcessWindowStyle.Maximized;
-                process1.Start();
+                mouseHook.Enabled = true;
+                clicked = true;
+                return;
             }
-            catch (Exception)
+
+            if (mode == ControlCenterBoardSelectionMode.Rectangle)
             {
-                MessageBox.Show(getLangStr("noHelpFile")); //(Program.isChn ? "找不到说明文档,请检查Lizzie目录下[readboard]文件夹内的[readme.rtf]文件是否存在" : "Can not find file,Please check [readme.rtf] file is in the folder [readboard]");
+                isMannulCircle = false;
             }
-        }
-
-        private void rdoqiantai_CheckedChanged(object sender, EventArgs e)
-        {
-            if (this.rdoFore.Checked)
-                setManualSelectionMode(TYPE_FOREGROUND);
-        }
-
-        private void chkAutoPlay_CheckedChanged(object sender, EventArgs e)
-        {
-            if (chkAutoPlay.Checked)
+            else if (mode == ControlCenterBoardSelectionMode.Line1)
             {
-                radioWhite.Enabled = true;
-                radioBlack.Enabled = true;
-                if (!radioBlack.Checked && !radioWhite.Checked && !radioAutoPlayColor.Checked)
-                    ApplyAutoPlayColorMode(Program.CurrentContext.Config.AutoPlayColorMode);
-                ApplyAutoPlayColorAvailability();
-                textBox1.Enabled = true;
-                textBox2.Enabled = true;
-                ApplyAutoPlayMoveModeControlState();
-                ResolveCurrentAutoPlayColor(radioAutoPlayColor.Checked ? ResolveFoxWindowContext() : FoxWindowContext.Unknown());
+                isMannulCircle = true;
             }
             else
             {
-                radioWhite.Enabled = false;
-                radioBlack.Enabled = false;
-                ApplyAutoPlayColorAvailability();
-                textBox1.Enabled = false;
-                textBox2.Enabled = false;
-                ApplyAutoPlayMoveModeControlState();
-                UpdateAutoPlayColorStatus(null);
-                SendStopAutoPlayCommand();
+                throw new ArgumentOutOfRangeException("mode");
             }
-        }
-
-        private void btnSettings_Click(object sender, EventArgs e)
-        {
-            SettingsForm form4 = new SettingsForm(this);
-            form4.Show(this);
-        }
-
-        private void radioButton8_CheckedChanged(object sender, EventArgs e)
-        {
-            if (isInitializingProtocolState)
-                return;
-            if (this.rdoOtherBoard.Checked)
-            {
-                try
-                {
-                    this.boardW = int.Parse(txtBoardWidth.Text);
-                    this.boardH = int.Parse(txtBoardHeight.Text);
-                }
-                catch (Exception)
-                {
-                    // MessageBox.Show(Program.isChn?"错误的棋盘大小":"Wrong goban size!");
-                }
-            }
-            saveOtherConfig();
-        }
-
-
-
-        private void parseWidth(object sender, EventArgs e)
-        {
-            try
-            {
-                if (this.rdoOtherBoard.Checked)
-                {
-                    this.boardW = int.Parse(txtBoardWidth.Text);
-                    saveOtherConfig();
-                }
-                else
-                {
-                    int w = int.Parse(txtBoardWidth.Text);
-                }
-            }
-            catch (Exception)
-            {
-            }
-        }
-
-        private void parseHeight(object sender, EventArgs e)
-        {
-            try
-            {
-                if (this.rdoOtherBoard.Checked)
-                {
-                    this.boardH = int.Parse(txtBoardHeight.Text);
-                    saveOtherConfig();
-                }
-                else
-                {
-                    int h = int.Parse(txtBoardHeight.Text);
-                }
-            }
-            catch (Exception)
-            {
-            }
-        }
-
-        private void tb_KeyPressWidth(object sender, KeyPressEventArgs e)
-        {
-            if (!(e.KeyChar == '\b' || (e.KeyChar >= '0' && e.KeyChar <= '9')))
-            {
-                e.Handled = true;
-            }
-            txtBoardWidth.BackColor = System.Drawing.SystemColors.Menu;
-        }
-
-        private void tb_KeyPressHeight(object sender, KeyPressEventArgs e)
-        {
-            if (!(e.KeyChar == '\b' || (e.KeyChar >= '0' && e.KeyChar <= '9')))
-            {
-                e.Handled = true;
-            }
-            txtBoardHeight.BackColor = System.Drawing.SystemColors.Menu;
-        }
-
-        private void radioBlack_CheckedChanged(object sender, EventArgs e)
-        {
-            if (suppressAutoPlayColorModeEvents)
-                return;
-            if (radioBlack.Checked)
-            {
-                radioWhite.Checked = false;
-                radioAutoPlayColor.Checked = false;
-                lastManualAutoPlayColorMode = AutoPlayColorMode.ManualBlack;
-                ClearFoxAutoPlayColorDetectionState();
-            }
-            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
-                SendPlayCommandIfSelected();
-        }
-
-        private void radioWhite_CheckedChanged(object sender, EventArgs e)
-        {
-            if (suppressAutoPlayColorModeEvents)
-                return;
-            if (radioWhite.Checked)
-            {
-                radioBlack.Checked = false;
-                radioAutoPlayColor.Checked = false;
-                lastManualAutoPlayColorMode = AutoPlayColorMode.ManualWhite;
-                ClearFoxAutoPlayColorDetectionState();
-            }
-            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
-                SendPlayCommandIfSelected();
-        }
-
-        private void radioAutoPlayColor_CheckedChanged(object sender, EventArgs e)
-        {
-            if (suppressAutoPlayColorModeEvents)
-                return;
-            if (radioAutoPlayColor.Checked)
-            {
-                if (!IsFoxSyncType(CurrentSyncType))
-                {
-                    ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);
-                    return;
-                }
-                radioBlack.Checked = false;
-                radioWhite.Checked = false;
-                if (isInitializingProtocolState)
-                    return;
-                if (IsFoxSyncType(CurrentSyncType)
-                    && string.IsNullOrWhiteSpace(ResolveCurrentFoxAutoPlayNicknameSignature()))
-                {
-                    bool configured = TryConfigureFoxAutoPlayIdentity();
-                    if (!configured)
-                    {
-                        ApplyAutoPlayColorMode(lastManualAutoPlayColorMode);
-                        return;
-                    }
-                }
-                ResolveCurrentAutoPlayColor(ResolveFoxWindowContext());
-            }
-            else
-            {
-                ClearFoxAutoPlayColorDetectionState();
-                UpdateAutoPlayColorStatus(null);
-            }
-            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
-                SendPlayCommandIfSelected();
-        }
-
-        private void radioAutoPlayMoveFirst_CheckedChanged(object sender, EventArgs e)
-        {
-            if (suppressAutoPlayMoveModeEvents || !radioAutoPlayMoveFirst.Checked)
-                return;
-            ApplyAutoPlayMoveModeControlState();
-            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
-                SendPlayCommandIfSelected();
-        }
-
-        private void radioAutoPlayMoveGma_CheckedChanged(object sender, EventArgs e)
-        {
-            if (suppressAutoPlayMoveModeEvents || !radioAutoPlayMoveGma.Checked)
-                return;
-            ApplyAutoPlayMoveModeControlState();
-            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
-                SendPlayCommandIfSelected();
-        }
-
-        private void btnFoxAutoPlayIdentity_Click(object sender, EventArgs e)
-        {
-            if (!IsFoxSyncType(CurrentSyncType))
-                return;
-
-            TryConfigureFoxAutoPlayIdentity();
-            if (radioAutoPlayColor.Checked)
-                ResolveCurrentAutoPlayColor(ResolveFoxWindowContext());
-            if (sessionCoordinator.KeepSync && !isInitializingProtocolState)
-                SendPlayCommandIfSelected();
-        }
-
-
-        private void button8_Click(object sender, EventArgs e)
-        {
-            SendPassCommand();
-        }
-
-        private void chkShowInBoard_CheckedChanged(object sender, EventArgs e)
-        {
-            if (chkShowInBoard.Checked && CurrentSyncType == TYPE_FOREGROUND)
-            {
-                chkShowInBoard.Checked = false;
-                return;
-            }
-            Program.showInBoard = chkShowInBoard.Checked;
-            if (isInitializingProtocolState)
-                return;
-            PersistConfiguration();
-            if (CanUseForegroundFoxInBoardProtocol())
-                SendForegroundFoxInBoardCommand(chkShowInBoard.Checked && sessionCoordinator.SyncBoth);
-            if (chkShowInBoard.Checked)
-            {
-                if (Program.showInBoardHint)
-                {
-                    TipsForm form7 = new TipsForm(this);
-                    form7.ShowDialog(this);
-                }
-            }
-            else
-            {
-                SendNotInBoardCommand();
-            }
-        }
-
-        private void button9_Click(object sender, EventArgs e)
-        {
-            MessageBox.Show(getLangStr("komi65Describe")); 
-            //if (!Program.isChn)
-            //    MessageBox.Show("Because of lack of move history,captured stone number will be incorrectly,So only area scoring can be used.You can set rules [area scoring + 7.0 komi + hasbutton] to simulate Japanese rule.");
-            //else
-            //MessageBox.Show("由于同步时无法获取提子数,日本规则(数目)将变得不准确,需要同步日本规则贴6.5目的棋局时可在Katago中使用[数子+贴目7.0+收后方贴还0.5目]规则模拟");
-
-            //else {
-            //    try
-            //    {
-            //        Process process1 = new Process();
-            //        process1.StartInfo.FileName = "readboard\\65komi.rtf";
-            //        process1.StartInfo.Arguments = "";
-            //        process1.StartInfo.WindowStyle = ProcessWindowStyle.Maximized;
-            //        process1.Start();
-            //    }
-            //    catch (Exception)
-            //    {
-            //        MessageBox.Show(Program.isChn ? "找不到说明文档,请检查Lizzie目录下[readboard]文件夹内的[65komi.rtf]文件是否存在" : "Can not find file,Please check [65komi.rtf] file is in the folder [readboard]");
-            //    }
-            //}            
-        }
-
-        private void button10_Click(object sender, EventArgs e)
-        {
-            if (!sessionCoordinator.IsContinuousSyncing && !sessionCoordinator.StartedSync)
-            {
-                sessionCoordinator.TryStartContinuousSync();
-            }
-            else
-            {
-                stopSync();
-            }
-        }
-
-        private void Button2_Click(object sender, EventArgs e)
-        {
-            isMannulCircle = false;
-            selectBoard();
-        }
-
-        private void button11_Click(object sender, EventArgs e)
-        {
-            isMannulCircle = true;
             selectBoard();
         }
 
