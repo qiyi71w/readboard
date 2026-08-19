@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
-using Microsoft.Web.WebView2.Core;
 using readboard;
 using Xunit;
 
@@ -23,6 +22,7 @@ namespace Readboard.VerificationTests.Host
             Assert.DoesNotContain("150.0.4078.44", requirement);
             Assert.Contains("CoreWebView2Environment.GetAvailableBrowserVersionString", requirement);
             Assert.Contains("CoreWebView2Environment.CompareBrowserVersions", requirement);
+            Assert.Contains("catch (WebView2RuntimeNotFoundException)", requirement);
         }
 
         [Fact]
@@ -45,7 +45,7 @@ namespace Readboard.VerificationTests.Host
         public void Probe_MissingRuntime_DoesNotTreatEmptyVersionAsAvailable()
         {
             WebViewRuntimeProbeResult missing = WebViewRuntimeRequirement.Probe(
-                delegate { throw new WebView2RuntimeNotFoundException(); },
+                delegate { return null; },
                 CompareIgnoringChannelSuffix);
             WebViewRuntimeProbeResult blank = WebViewRuntimeRequirement.Evaluate(
                 "   ",
