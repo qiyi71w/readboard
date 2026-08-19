@@ -516,6 +516,27 @@ namespace Readboard.VerificationTests.Architecture
             Assert.Equal(1d, WebViewWindowLayoutPolicy.ResolveScale(new Size(960, 600)));
             Assert.Equal(48, WebViewWindowLayoutPolicy.ResolveTitleControlExtent(new Size(1100, 680), 96));
             Assert.Equal(40, WebViewWindowLayoutPolicy.ResolveTitleControlExtent(new Size(700, 433), 96));
+            Assert.Equal(230, WebViewWindowLayoutPolicy.SidebarComfortLogicalWidth);
+            Assert.Equal(48, WebViewWindowLayoutPolicy.SidebarIconLogicalWidth);
+            Assert.Equal(
+                WebViewWindowLayoutPolicy.MainComfortLogicalWidth,
+                WebViewWindowLayoutPolicy.BaseLogicalClientSize.Width
+                    - WebViewWindowLayoutPolicy.SidebarComfortLogicalWidth);
+            Assert.Equal(
+                WebViewWindowLayoutPolicy.PageDenseMaxLogicalWidth,
+                WebViewWindowLayoutPolicy.SidebarIconLogicalWidth
+                    + WebViewWindowLayoutPolicy.MainComfortLogicalWidth);
+            Assert.Equal(
+                WebViewWindowLayoutPolicy.SidebarLabelHideWindowWidth,
+                WebViewWindowLayoutPolicy.SidebarLabelMinLogicalWidth
+                    + WebViewWindowLayoutPolicy.MainComfortLogicalWidth);
+            Assert.Equal(
+                WebViewWindowLayoutPolicy.SidebarLabelShowWindowWidth,
+                WebViewWindowLayoutPolicy.SidebarLabelHideWindowWidth
+                    + WebViewWindowLayoutPolicy.SidebarLabelHysteresis);
+            Assert.Equal(48, WebViewWindowLayoutPolicy.ResolveTitleControlExtent(new Size(1000, 680), 96));
+            Assert.Equal(48, WebViewWindowLayoutPolicy.ResolveTitleControlExtent(new Size(918, 680), 96));
+            Assert.Equal(42, WebViewWindowLayoutPolicy.ResolveTitleControlExtent(new Size(1100, 500), 96));
             Assert.Equal(new Size(1050, 650), WebViewWindowLayoutPolicy.ScaleLogicalSize(
                 WebViewWindowLayoutPolicy.MinimumLogicalClientSize,
                 144));
@@ -532,6 +553,10 @@ namespace Readboard.VerificationTests.Architecture
                 "app.js"));
             Assert.Contains("width: 1100, height: 680", appJs);
             Assert.Contains("width: 700, height: 433", appJs);
+            Assert.Contains("const sidebarComfort = 230", appJs);
+            Assert.Contains("const sidebarIcon = 48", appJs);
+            Assert.Contains("const sidebarLabelMin = 140", appJs);
+            Assert.Contains("const sidebarLabelHysteresis = 24", appJs);
 
         }
 

@@ -9,6 +9,30 @@
   const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
   const baseViewport = Object.freeze({ width: 1100, height: 680 });
   const minimumViewport = Object.freeze({ width: 700, height: 433 });
+  const sidebarComfort = 230;
+  const sidebarWide = 264;
+  const sidebarIcon = 48;
+  const sidebarLabelMin = 140;
+  const sidebarWideMinWidth = 1281;
+  const sidebarLabelHysteresis = 24;
+  const mainComfort = baseViewport.width - sidebarComfort;
+  const pageDenseMaxWidth = sidebarIcon + mainComfort;
+  const sidebarLabelHideWidth = sidebarLabelMin + mainComfort;
+  const sidebarLabelShowWidth = sidebarLabelHideWidth + sidebarLabelHysteresis;
+
+  function clamp01(value) {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  function lerpRound(start, end, t) {
+    return Math.round(start + (end - start) * t);
+  }
+
+  function resolveVerticalT(height) {
+    return clamp01((baseViewport.height - height) / (baseViewport.height - minimumViewport.height));
+  }
+
+
   const previewState = {
     page: "controlCenter",
     language: "cn",
@@ -123,22 +147,66 @@
   let preferenceChipDirty = false;
   let preferenceSavedHideTimer = 0;
   const preferenceSavedFlashMs = 2000;
+  let sidebarIcons = false;
 
+  function resolveSidebarWidth(width) {
+    if (width >= sidebarWideMinWidth) return sidebarWide;
+    if (width >= baseViewport.width) return sidebarComfort;
+    if (width <= pageDenseMaxWidth) return sidebarIcon;
+    return width - mainComfort;
+  }
 
   function updateViewportLayout() {
     resizeFrame = 0;
     const viewportWidth = Math.max(1, window.innerWidth);
     const viewportHeight = Math.max(1, window.innerHeight);
     const emergency = viewportWidth < minimumViewport.width || viewportHeight < minimumViewport.height;
-    const dense = viewportWidth < baseViewport.width || viewportHeight < baseViewport.height;
+    const denseX = viewportWidth <= pageDenseMaxWidth;
+    const verticalT = resolveVerticalT(viewportHeight);
+    const denseY = verticalT > 0;
+    const dense = denseX;
+    sidebarIcons = sidebarIcons
+      ? viewportWidth < sidebarLabelShowWidth
+      : viewportWidth < sidebarLabelHideWidth;
+    const sidebarWidth = resolveSidebarWidth(viewportWidth);
+    const titleHeight = lerpRound(48, 40, verticalT);
+    const footerHeight = lerpRound(44, 32, verticalT);
+    const statusHeight = lerpRound(44, 32, verticalT);
+    const contextHeight = lerpRound(44, 28, verticalT);
+    const sidebarItemHeight = lerpRound(42, 28, verticalT);
+    const sidebarGap = lerpRound(6, 4, verticalT);
+    const sidebarPadBlock = lerpRound(10, 4, verticalT);
+    const sidebarRuleMargin = lerpRound(12, 4, verticalT);
+    const sidebarHeadingSize = lerpRound(14, 12, verticalT);
+    const sidebarHeadingMargin = lerpRound(8, 2, verticalT);
+    const brandIcon = lerpRound(28, 22, verticalT);
+    const brandFont = lerpRound(18, 14, verticalT);
+    const logMin = lerpRound(118, 40, verticalT);
     const layoutWidth = emergency ? Math.max(viewportWidth, minimumViewport.width) : viewportWidth;
     const layoutHeight = emergency ? Math.max(viewportHeight, minimumViewport.height) : viewportHeight;
     const root = document.documentElement;
     root.style.setProperty("--ui-scale", "1");
     root.style.setProperty("--layout-width", `${layoutWidth}px`);
     root.style.setProperty("--layout-height", `${layoutHeight}px`);
+    root.style.setProperty("--sidebar-width", `${sidebarWidth}px`);
+    root.style.setProperty("--title-height", `${titleHeight}px`);
+    root.style.setProperty("--footer-height", `${footerHeight}px`);
+    root.style.setProperty("--status-height", `${statusHeight}px`);
+    root.style.setProperty("--context-height", `${contextHeight}px`);
+    root.style.setProperty("--sidebar-item-height", `${sidebarItemHeight}px`);
+    root.style.setProperty("--sidebar-gap", `${sidebarGap}px`);
+    root.style.setProperty("--sidebar-pad-block", `${sidebarPadBlock}px`);
+    root.style.setProperty("--sidebar-rule-margin", `${sidebarRuleMargin}px`);
+    root.style.setProperty("--sidebar-heading-size", `${sidebarHeadingSize}px`);
+    root.style.setProperty("--sidebar-heading-margin", `${sidebarHeadingMargin}px`);
+    root.style.setProperty("--brand-icon-size", `${brandIcon}px`);
+    root.style.setProperty("--brand-title-size", `${brandFont}px`);
+    root.style.setProperty("--log-min-height", `${logMin}px`);
     root.classList.toggle("emergency", emergency);
     root.classList.toggle("dense", dense);
+    root.classList.toggle("dense-x", denseX);
+    root.classList.toggle("dense-y", denseY);
+    root.classList.toggle("sidebar-icons", sidebarIcons);
     root.dataset.uiScale = "1.000000";
   }
 
@@ -691,10 +759,16 @@
     getState() { return structuredClone(state); },
     getLayoutMetrics() {
       const shell = $(".app-shell");
+      const root = document.documentElement;
       return {
-        scale: Number(document.documentElement.dataset.uiScale || "1"),
-        dense: document.documentElement.classList.contains("dense"),
-        emergency: document.documentElement.classList.contains("emergency"),
+        scale: Number(root.dataset.uiScale || "1"),
+        dense: root.classList.contains("dense"),
+        denseX: root.classList.contains("dense-x"),
+        denseY: root.classList.contains("dense-y"),
+        sidebarIcons: root.classList.contains("sidebar-icons"),
+        sidebarWidth: Number.parseFloat(getComputedStyle(root).getPropertyValue("--sidebar-width")) || 0,
+        titleHeight: Number.parseFloat(getComputedStyle(root).getPropertyValue("--title-height")) || 0,
+        emergency: root.classList.contains("emergency"),
         viewport: { width: window.innerWidth, height: window.innerHeight },
         layout: shell ? { width: shell.offsetWidth, height: shell.offsetHeight } : null
       };

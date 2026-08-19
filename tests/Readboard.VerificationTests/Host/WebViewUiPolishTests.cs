@@ -56,9 +56,9 @@ namespace Readboard.VerificationTests.Host
         {
             string styles = LoadWebViewAsset("styles.css");
 
-            Assert.Contains("--control-center-control-height: clamp(37px, calc(5.5vh - .4px), 48px);", styles);
-            Assert.Contains("--control-center-section-gap: clamp(6px, calc(.9vh - .12px), 12px);", styles);
-            Assert.Contains("--control-center-inner-gap: clamp(4px, calc(.65vh - .42px), 8px);", styles);
+            Assert.Contains("--control-center-control-height: clamp(32px, calc(5.5vh - .4px), 48px);", styles);
+            Assert.Contains("--control-center-section-gap: clamp(4px, calc(.9vh - .12px), 12px);", styles);
+            Assert.Contains("--control-center-inner-gap: clamp(2px, calc(.65vh - .42px), 8px);", styles);
             Assert.Contains("gap: var(--control-center-section-gap);", styles);
             Assert.Contains(".engine-options { display: grid; min-width: 0; grid-template-rows: auto repeat(3, var(--control-center-control-height)); gap: var(--control-center-inner-gap); }", styles);
         }
@@ -68,7 +68,7 @@ namespace Readboard.VerificationTests.Host
         {
             string styles = LoadWebViewAsset("styles.css");
 
-            Assert.Contains("--control-center-group-padding: clamp(3px, calc(2.75vh - 15.7px), 8px);", styles);
+            Assert.Contains("--control-center-group-padding: clamp(2px, calc(2.75vh - 15.7px), 8px);", styles);
             Assert.Contains(".page[data-page-panel=\"controlCenter\"] > fieldset:not(.log-card) { padding-bottom: var(--control-center-group-padding); }", styles);
         }
 
