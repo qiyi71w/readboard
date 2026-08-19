@@ -407,6 +407,12 @@ test("keeps native type when the resident panel is compact", async ({ page }) =>
   expect(Math.max(...metrics.inputLefts) - Math.min(...metrics.inputLefts)).toBeLessThan(1);
   expect(metrics.sidebarButtonCount).toBe(11);
   expect(metrics.sidebarButtonsVisible).toBe(true);
+  const compactLayout = await page.evaluate(() => window.readboardPreview.getLayoutMetrics());
+  expect(compactLayout.denseX).toBe(true);
+  expect(compactLayout.denseY).toBe(true);
+  expect(compactLayout.sidebarIcons).toBe(true);
+  expect(compactLayout.sidebarWidth).toBe(48);
+
 
   await page.locator('[data-page="settings"]').first().click();
   const settingsLayout = await page.evaluate(() => {
@@ -431,4 +437,152 @@ test("keeps native type when the resident panel is compact", async ({ page }) =>
   expect(settingsLayout.resetInsideBar).toBe(true);
   expect(settingsLayout.saveInsideBar).toBe(true);
 });
+
+async function afterViewportResize(page) {
+  await page.evaluate(() => new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  }));
+}
+
+test("follows window width for the sidebar and keeps label hysteresis", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 680 });
+  await page.goto(baseUrl + "/index.html");
+
+  const factory = await page.evaluate(() => {
+    const label = document.querySelector(".nav-item span");
+    return {
+      ...window.readboardPreview.getLayoutMetrics(),
+      labelWidth: label ? label.getBoundingClientRect().width : 0,
+      titleHeight: document.querySelector(".window-controls").getBoundingClientRect().height
+    };
+  });
+  expect(factory.dense).toBe(false);
+  expect(factory.sidebarIcons).toBe(false);
+  expect(factory.sidebarWidth).toBe(230);
+  expect(factory.labelWidth).toBeGreaterThan(20);
+  expect(factory.titleHeight).toBe(48);
+
+  await page.setViewportSize({ width: 1050, height: 680 });
+  await afterViewportResize(page);
+  const shrinking = await page.evaluate(() => {
+    const label = document.querySelector(".nav-item span");
+    return {
+      ...window.readboardPreview.getLayoutMetrics(),
+      labelWidth: label ? label.getBoundingClientRect().width : 0,
+      titleHeight: document.querySelector(".window-controls").getBoundingClientRect().height
+    };
+  });
+  expect(shrinking.dense).toBe(false);
+  expect(shrinking.sidebarIcons).toBe(false);
+  expect(shrinking.sidebarWidth).toBe(180);
+  expect(shrinking.labelWidth).toBeGreaterThan(20);
+  expect(shrinking.titleHeight).toBe(48);
+
+  await page.setViewportSize({ width: 1000, height: 680 });
+  await afterViewportResize(page);
+  const icons = await page.evaluate(() => {
+    const label = document.querySelector(".nav-item span");
+    const input = document.querySelector(".engine-options input");
+    return {
+      ...window.readboardPreview.getLayoutMetrics(),
+      labelWidth: label ? label.getBoundingClientRect().width : 0,
+      titleHeight: document.querySelector(".window-controls").getBoundingClientRect().height,
+      inputWidth: input ? input.getBoundingClientRect().width : 0
+    };
+  });
+  expect(icons.dense).toBe(false);
+  expect(icons.denseX).toBe(false);
+  expect(icons.sidebarIcons).toBe(true);
+  expect(icons.sidebarWidth).toBe(130);
+  expect(icons.labelWidth).toBeLessThan(2);
+  expect(icons.titleHeight).toBe(48);
+  expect(icons.inputWidth).toBeGreaterThan(100);
+
+  await page.setViewportSize({ width: 1020, height: 680 });
+  await afterViewportResize(page);
+  const hysteresis = await page.evaluate(() => window.readboardPreview.getLayoutMetrics());
+  expect(hysteresis.sidebarIcons).toBe(true);
+  expect(hysteresis.sidebarWidth).toBe(150);
+
+  await page.setViewportSize({ width: 1034, height: 680 });
+  await afterViewportResize(page);
+  const restored = await page.evaluate(() => {
+    const label = document.querySelector(".nav-item span");
+    return {
+      ...window.readboardPreview.getLayoutMetrics(),
+      labelWidth: label ? label.getBoundingClientRect().width : 0
+    };
+  });
+  expect(restored.sidebarIcons).toBe(false);
+  expect(restored.sidebarWidth).toBe(164);
+  expect(restored.labelWidth).toBeGreaterThan(20);
+
+
+  await page.setViewportSize({ width: 1100, height: 600 });
+  await afterViewportResize(page);
+  const midHeight = await page.evaluate(() => window.readboardPreview.getLayoutMetrics());
+  expect(midHeight.denseX).toBe(false);
+  expect(midHeight.titleHeight).toBe(45);
+  expect(midHeight.sidebarWidth).toBe(230);
+
+  await page.setViewportSize({ width: 1200, height: 500 });
+  await afterViewportResize(page);
+  const shortWide = await page.evaluate(() => {
+    const label = document.querySelector(".nav-item span");
+    const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
+    const buttonsVisible = [...document.querySelectorAll(".nav-item, .quick-actions button")].every(button => {
+      const box = button.getBoundingClientRect();
+      return box.top >= sidebar.top - 0.5 && box.bottom <= sidebar.bottom + 0.5;
+    });
+    return {
+      ...window.readboardPreview.getLayoutMetrics(),
+      labelWidth: label ? label.getBoundingClientRect().width : 0,
+      titleHeight: document.querySelector(".window-controls").getBoundingClientRect().height,
+      buttonsVisible
+    };
+  });
+  expect(shortWide.dense).toBe(false);
+  expect(shortWide.denseX).toBe(false);
+  expect(shortWide.denseY).toBe(true);
+  expect(shortWide.sidebarIcons).toBe(false);
+  expect(shortWide.sidebarWidth).toBe(230);
+  expect(shortWide.labelWidth).toBeGreaterThan(20);
+  expect(shortWide.titleHeight).toBe(42);
+  expect(shortWide.buttonsVisible).toBe(true);
+});
+
+test("keeps labeled sidebar actions visible at short factory width", async ({ page }) => {
+  const measure = () => page.evaluate(() => {
+    const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
+    const label = document.querySelector(".nav-item span");
+    const buttons = [...document.querySelectorAll(".nav-item, .quick-actions button")].map(button => {
+      const box = button.getBoundingClientRect();
+      return box.top >= sidebar.top - 0.5 && box.bottom <= sidebar.bottom + 0.5;
+    });
+    return {
+      ...window.readboardPreview.getLayoutMetrics(),
+      labelWidth: label ? label.getBoundingClientRect().width : 0,
+      sidebarButtonCount: buttons.length,
+      sidebarButtonsVisible: buttons.every(Boolean)
+    };
+  });
+
+  await page.setViewportSize({ width: 1100, height: 433 });
+  await page.goto(baseUrl + "/index.html");
+  const minLabeled = await measure();
+  expect(minLabeled.sidebarIcons).toBe(false);
+  expect(minLabeled.sidebarWidth).toBe(230);
+  expect(minLabeled.labelWidth).toBeGreaterThan(20);
+  expect(minLabeled.sidebarButtonCount).toBe(11);
+  expect(minLabeled.sidebarButtonsVisible).toBe(true);
+
+  await page.setViewportSize({ width: 1100, height: 500 });
+  await afterViewportResize(page);
+  const shortLabeled = await measure();
+  expect(shortLabeled.sidebarIcons).toBe(false);
+  expect(shortLabeled.labelWidth).toBeGreaterThan(20);
+  expect(shortLabeled.sidebarButtonCount).toBe(11);
+  expect(shortLabeled.sidebarButtonsVisible).toBe(true);
+});
+
 

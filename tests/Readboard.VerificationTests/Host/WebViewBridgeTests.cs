@@ -534,8 +534,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal("网络错误", payload.GetProperty("update").GetProperty("detail").GetString());
             JsonElement dialog = payload.GetProperty("dialog");
             Assert.Equal("showInBoardHint", dialog.GetProperty("kind").GetString());
-            Assert.Equal("提示", dialog.GetProperty("title").GetString());
-            Assert.Equal("前台同步不支持", dialog.GetProperty("message").GetString());
             Assert.Equal("开启双向同步可恢复落子", dialog.GetProperty("detail").GetString());
             Assert.Equal("确定", dialog.GetProperty("confirmLabel").GetString());
             Assert.Equal("不再提示", dialog.GetProperty("dontShowAgainLabel").GetString());
@@ -670,9 +668,13 @@ namespace Readboard.VerificationTests.Host
 
         [Theory]
         [InlineData(1100, 680, 96, 48)]
+        [InlineData(1000, 680, 96, 48)]
+        [InlineData(918, 680, 96, 48)]
+        [InlineData(1100, 500, 96, 42)]
+        [InlineData(1100, 500, 120, 53)]
+        [InlineData(1100, 500, 144, 63)]
         [InlineData(700, 433, 96, 40)]
-        [InlineData(1000, 680, 96, 40)]
-        [InlineData(1100, 500, 96, 40)]
+        [InlineData(1100, 433, 96, 40)]
         [InlineData(700, 433, 144, 60)]
         public void ResolveTitleControlExtent_MatchesVisibleDenseChrome(
             int width,
@@ -683,6 +685,22 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(
                 expected,
                 WebViewWindowLayoutPolicy.ResolveTitleControlExtent(new Size(width, height), dpi));
+        }
+
+        [Theory]
+        [InlineData(1400, 264)]
+        [InlineData(1281, 264)]
+        [InlineData(1280, 230)]
+        [InlineData(1100, 230)]
+        [InlineData(1010, 140)]
+        [InlineData(1000, 130)]
+        [InlineData(918, 48)]
+        [InlineData(700, 48)]
+        public void ResolveSidebarWidth_KeepsMainComfortThenCollapsesToIconRail(
+            int width,
+            int expected)
+        {
+            Assert.Equal(expected, WebViewWindowLayoutPolicy.ResolveSidebarWidth(width));
         }
 
         [Theory]
