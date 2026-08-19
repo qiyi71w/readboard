@@ -310,7 +310,7 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .log-tag.sync { color: var(--success-text); border-color: var(--success-border); background: var(--success-background); }
 .log-tag.warn { color: var(--warning-tag-text); border-color: var(--warning-tag-border); background: var(--warning-tag-background); }
 
-.page:not([data-page-panel="controlCenter"]).active { display: grid; align-content: start; gap: 7px; overflow: auto; }
+.page:not([data-page-panel="controlCenter"]).active { display: grid; align-content: start; gap: 7px; }
 .page-heading { margin: 0 4px; padding: 4px 0 2px; }
 .page-heading h1 { margin: 0 0 2px; font-size: 20px; font-weight: 500; }
 .page-heading p, .card p, small { color: var(--secondary-text); }
@@ -440,7 +440,8 @@ html.dense-x .top-status > span:nth-child(4),
 html.dense-x .top-status > span:nth-child(5) { display: none; }
 html.dense-x .top-actions button span { display: none; }
 html.dense .page { padding: 0 8px 4px; }
-html.dense .page:not([data-page-panel="controlCenter"]).active { overflow: auto; }
+html.dense .page:not([data-page-panel="controlCenter"]).active,
+html.dense-y .page:not([data-page-panel="controlCenter"]).active { overflow: auto; }
 html.dense .context-strip > span { padding: 0 8px; }
 html.dense fieldset { padding: 0 8px 2px; }
 html.dense legend { padding: 0 6px; font-size: 13px; }
