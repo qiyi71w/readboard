@@ -534,6 +534,8 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal("网络错误", payload.GetProperty("update").GetProperty("detail").GetString());
             JsonElement dialog = payload.GetProperty("dialog");
             Assert.Equal("showInBoardHint", dialog.GetProperty("kind").GetString());
+            Assert.Equal("提示", dialog.GetProperty("title").GetString());
+            Assert.Equal("前台同步不支持", dialog.GetProperty("message").GetString());
             Assert.Equal("开启双向同步可恢复落子", dialog.GetProperty("detail").GetString());
             Assert.Equal("确定", dialog.GetProperty("confirmLabel").GetString());
             Assert.Equal("不再提示", dialog.GetProperty("dontShowAgainLabel").GetString());
