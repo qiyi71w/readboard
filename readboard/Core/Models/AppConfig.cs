@@ -16,8 +16,8 @@ namespace readboard
         internal const int DefaultMoveVerifyMaxAttempts = 1;
         internal const int DefaultWindowClientWidth = 1100;
         internal const int DefaultWindowClientHeight = 680;
-        internal const int MinimumWindowClientWidth = 960;
-        internal const int MinimumWindowClientHeight = 600;
+        internal const int MinimumWindowClientWidth = 700;
+        internal const int MinimumWindowClientHeight = 433;
         internal const string FollowHostLanguage = "host";
 
         public string ProtocolVersion { get; set; }

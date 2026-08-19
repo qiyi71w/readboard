@@ -8,8 +8,7 @@
   if (!preview) document.body.classList.add("awaiting-state");
   const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
   const baseViewport = Object.freeze({ width: 1100, height: 680 });
-  const minimumViewport = Object.freeze({ width: 960, height: 600 });
-  const minimumScale = minimumViewport.width / baseViewport.width;
+  const minimumViewport = Object.freeze({ width: 700, height: 433 });
   const previewState = {
     page: "controlCenter",
     language: "cn",
@@ -131,20 +130,24 @@
     const viewportWidth = Math.max(1, window.innerWidth);
     const viewportHeight = Math.max(1, window.innerHeight);
     const emergency = viewportWidth < minimumViewport.width || viewportHeight < minimumViewport.height;
-    const limitingScale = Math.min(
-      viewportWidth / baseViewport.width,
-      viewportHeight / baseViewport.height);
-    const scale = emergency
-      ? minimumScale
-      : Math.min(1, Math.max(minimumScale, limitingScale));
-    const layoutWidth = Math.max(baseViewport.width, viewportWidth / scale);
-    const layoutHeight = Math.max(baseViewport.height, viewportHeight / scale);
+    const dense = viewportWidth < baseViewport.width || viewportHeight < baseViewport.height;
+    const layoutWidth = emergency ? Math.max(viewportWidth, minimumViewport.width) : viewportWidth;
+    const layoutHeight = emergency ? Math.max(viewportHeight, minimumViewport.height) : viewportHeight;
     const root = document.documentElement;
-    root.style.setProperty("--ui-scale", String(scale));
+    root.style.setProperty("--ui-scale", "1");
     root.style.setProperty("--layout-width", `${layoutWidth}px`);
     root.style.setProperty("--layout-height", `${layoutHeight}px`);
     root.classList.toggle("emergency", emergency);
-    root.dataset.uiScale = scale.toFixed(6);
+    root.classList.toggle("dense", dense);
+    root.dataset.uiScale = "1.000000";
+  }
+
+  function syncCompactControlTitles() {
+    $$(".nav-item, .quick-actions button, .top-actions button").forEach(button => {
+      const label = button.querySelector("span");
+      const text = label && label.textContent.trim();
+      if (text) button.title = text;
+    });
   }
 
   function scheduleViewportLayout() {
@@ -591,6 +594,8 @@
     renderPreferenceStatus();
     renderLogs();
     renderModal();
+    syncCompactControlTitles();
+    updateViewportLayout();
   }
 
   function commandPayload(element) {
@@ -688,6 +693,7 @@
       const shell = $(".app-shell");
       return {
         scale: Number(document.documentElement.dataset.uiScale || "1"),
+        dense: document.documentElement.classList.contains("dense"),
         emergency: document.documentElement.classList.contains("emergency"),
         viewport: { width: window.innerWidth, height: window.innerHeight },
         layout: shell ? { width: shell.offsetWidth, height: shell.offsetHeight } : null

@@ -113,9 +113,11 @@ namespace Readboard.VerificationTests.Host
         [Theory]
         [InlineData(1100, 680, 1d)]
         [InlineData(1400, 900, 1d)]
-        [InlineData(960, 600, 0.8727272727d)]
-        [InlineData(800, 500, 0.8727272727d)]
-        public void ResolveWebViewScale_UsesLimitingDimensionWithinSupportedRange(
+        [InlineData(960, 600, 1d)]
+        [InlineData(800, 500, 1d)]
+        [InlineData(700, 433, 1d)]
+        [InlineData(600, 400, 1d)]
+        public void ResolveWebViewScale_StaysNativeForResidentPanelDensity(
             int width,
             int height,
             double expected)
@@ -126,9 +128,9 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Theory]
-        [InlineData(96, 960, 600)]
-        [InlineData(120, 1200, 750)]
-        [InlineData(144, 1440, 900)]
+        [InlineData(96, 700, 433)]
+        [InlineData(120, 875, 541)]
+        [InlineData(144, 1050, 650)]
         public void ScaleLogicalClientSize_UsesPerMonitorDpi(int dpi, int expectedWidth, int expectedHeight)
         {
             Size actual = WebViewWindowLayoutPolicy.ScaleLogicalSize(
@@ -156,7 +158,7 @@ namespace Readboard.VerificationTests.Host
 
         [Theory]
         [InlineData(1800, 900, 1200, 800, 0, 0, 1920, 1080, 720, 280, 1200, 800)]
-        [InlineData(320, 240, 500, 400, 0, 0, 1920, 1080, 320, 240, 960, 600)]
+        [InlineData(320, 240, 500, 400, 0, 0, 1920, 1080, 320, 240, 700, 433)]
         [InlineData(320, 240, 1100, 680, 0, 0, 800, 500, 0, 0, 800, 500)]
         public void ClampBoundsToWorkingArea_PreservesReachableUsableWindow(
             int x,
