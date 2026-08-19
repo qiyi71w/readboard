@@ -207,6 +207,9 @@ namespace readboard
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.SetColorMode(GetSystemColorMode(Config.ColorMode));
 
+            if (!EnsureSupportedWindowsVersion())
+                return;
+
             using (IReadBoardTransport transport = CreateTransport(options))
             {
                 SessionCoordinatorScope.Run(
@@ -238,6 +241,22 @@ namespace readboard
             configStore.Save(candidate);
             runtimeContext.Config = candidate;
             runtimeContext.HasConfigFile = true;
+        }
+
+        internal static bool EnsureSupportedWindowsVersion()
+        {
+            return SupportedWindowsVersion.EnsureSupported(
+                () => Environment.OSVersion.Version,
+                ShowUnsupportedWindowsPrompt);
+        }
+
+        private static void ShowUnsupportedWindowsPrompt()
+        {
+            MessageBox.Show(
+                GetLangText("UnsupportedWindows_message"),
+                GetLangText("UnsupportedWindows_caption"),
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
 
         private static IReadBoardTransport CreateTransport(LaunchOptions options)
@@ -484,6 +503,8 @@ namespace readboard
             langItems["WebViewRuntime_retry"] = "重试";
             langItems["WebViewRuntime_exit"] = "退出";
             langItems["WebViewRuntime_openDownloadFailed"] = "无法打开 WebView2 Runtime 官方下载页面。";
+            langItems["UnsupportedWindows_caption"] = "ReadBoard 无法启动";
+            langItems["UnsupportedWindows_message"] = "当前版本 ReadBoard 需要 Windows 10.0.17763 或更高版本。当前系统不受支持，请使用兼容版本的 ReadBoard 或升级 Windows。";
             langItems["WebView_initializationFailed"] = "WebView2 初始化失败";
             langItems["WebView_mainPageMissing"] = "找不到 WebView 主页面。";
             langItems["WebView_manualOpenFailedTitle"] = "无法打开说明";
