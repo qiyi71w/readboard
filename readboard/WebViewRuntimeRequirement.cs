@@ -51,7 +51,7 @@ namespace readboard
         internal static WebViewRuntimeProbeResult ProbeInstalled()
         {
             return Probe(
-                CoreWebView2Environment.GetAvailableBrowserVersionString,
+                delegate { return CoreWebView2Environment.GetAvailableBrowserVersionString(); },
                 CoreWebView2Environment.CompareBrowserVersions);
         }
 
