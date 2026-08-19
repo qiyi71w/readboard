@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
@@ -70,31 +71,20 @@ namespace readboard
         internal bool EnsureWebViewRuntimeAvailable()
         {
             return ResolveWebViewRuntimeAvailability(
-                delegate
-                {
-                    try
-                    {
-                        CoreWebView2Environment.GetAvailableBrowserVersionString();
-                        return true;
-                    }
-                    catch (WebView2RuntimeNotFoundException)
-                    {
-                        return false;
-                    }
-                },
-                ShowMissingWebViewRuntimePrompt,
+                WebViewRuntimeRequirement.ProbeInstalled,
+                ShowWebViewRuntimeGatePrompt,
                 OpenWebViewRuntimeDownload,
                 Dispose);
         }
 
         internal static bool ResolveWebViewRuntimeAvailability(
-            Func<bool> isAvailable,
-            Func<WebViewRuntimePromptChoice> chooseAction,
+            Func<WebViewRuntimeProbeResult> probe,
+            Func<WebViewRuntimeProbeResult, WebViewRuntimePromptChoice> chooseAction,
             Action openDownload,
             Action exit)
         {
-            if (isAvailable == null)
-                throw new ArgumentNullException(nameof(isAvailable));
+            if (probe == null)
+                throw new ArgumentNullException(nameof(probe));
             if (chooseAction == null)
                 throw new ArgumentNullException(nameof(chooseAction));
             if (openDownload == null)
@@ -102,9 +92,15 @@ namespace readboard
             if (exit == null)
                 throw new ArgumentNullException(nameof(exit));
 
-            while (!isAvailable())
+            while (true)
             {
-                switch (chooseAction())
+                WebViewRuntimeProbeResult result = probe();
+                if (result == null)
+                    throw new InvalidOperationException("A WebView Runtime probe result is required.");
+                if (result.Availability == WebViewRuntimeAvailability.Available)
+                    return true;
+
+                switch (chooseAction(result))
                 {
                     case WebViewRuntimePromptChoice.OpenDownload:
                         openDownload();
@@ -118,11 +114,38 @@ namespace readboard
                         throw new ArgumentOutOfRangeException(nameof(chooseAction));
                 }
             }
+        }
 
-            return true;
+        private WebViewRuntimePromptChoice ShowWebViewRuntimeGatePrompt(
+            WebViewRuntimeProbeResult result)
+        {
+            if (result.Availability == WebViewRuntimeAvailability.Missing)
+                return ShowMissingWebViewRuntimePrompt();
+            if (result.Availability == WebViewRuntimeAvailability.Outdated)
+                return ShowOutdatedWebViewRuntimePrompt(result.AvailableVersion);
+            throw new ArgumentOutOfRangeException(nameof(result));
         }
 
         private WebViewRuntimePromptChoice ShowMissingWebViewRuntimePrompt()
+        {
+            return ShowWebViewRuntimePrompt(
+                getLangStr("WebViewRuntime_heading"),
+                Program.ResolveSemanticMessage(
+                    SemanticMessage.CreateWithDiagnostic(
+                        "WebViewRuntime_message",
+                        AppReleaseVersion.GetCurrentVersion())));
+        }
+
+        private WebViewRuntimePromptChoice ShowOutdatedWebViewRuntimePrompt(
+            string availableVersion)
+        {
+            return ShowWebViewRuntimePrompt(
+                getLangStr("WebViewRuntime_outdatedHeading"),
+                Program.ResolveSemanticMessage(
+                    WebViewRuntimeRequirement.CreateOutdatedMessage(availableVersion)));
+        }
+
+        private WebViewRuntimePromptChoice ShowWebViewRuntimePrompt(string heading, string text)
         {
             var openDownloadPage = new TaskDialogButton(
                 getLangStr("WebViewRuntime_openDownload"));
@@ -131,11 +154,8 @@ namespace readboard
             var page = new TaskDialogPage
             {
                 Caption = getLangStr("WebViewRuntime_caption"),
-                Heading = getLangStr("WebViewRuntime_heading"),
-                Text = Program.ResolveSemanticMessage(
-                    SemanticMessage.CreateWithDiagnostic(
-                        "WebViewRuntime_message",
-                        AppReleaseVersion.GetCurrentVersion())),
+                Heading = heading,
+                Text = text,
                 Icon = TaskDialogIcon.Error,
                 AllowCancel = false,
                 DefaultButton = retry
@@ -282,7 +302,10 @@ namespace readboard
             core.Settings.AreDefaultContextMenusEnabled = false;
             core.Settings.AreDevToolsEnabled = false;
             core.Settings.IsStatusBarEnabled = false;
-            core.Settings.IsNonClientRegionSupportEnabled = true;
+            TryEnableNonClientRegionSupport(delegate
+            {
+                core.Settings.IsNonClientRegionSupportEnabled = true;
+            });
             core.SetVirtualHostNameToFolderMapping(
                 WebViewHostName,
                 webRoot,
@@ -292,6 +315,50 @@ namespace readboard
             core.WebMessageReceived += CoreWebView2_WebMessageReceived;
             core.NavigationCompleted += CoreWebView2_NavigationCompleted;
             core.Navigate("https://" + WebViewHostName + "/index.html");
+        }
+
+        internal static bool TryEnableNonClientRegionSupport(Action enable)
+        {
+            if (enable == null)
+                throw new ArgumentNullException(nameof(enable));
+
+            try
+            {
+                enable();
+                return true;
+            }
+            catch (Exception exception) when (IsWebViewInterfaceConversionException(exception))
+            {
+                return false;
+            }
+        }
+
+        internal static bool IsWebViewInterfaceConversionException(Exception exception)
+        {
+            while (exception != null)
+            {
+                if (exception is InvalidCastException)
+                    return true;
+
+                COMException comException = exception as COMException;
+                if (comException != null
+                    && unchecked((uint)comException.ErrorCode) == 0x80004002)
+                {
+                    return true;
+                }
+
+                string message = exception.Message;
+                if (!string.IsNullOrEmpty(message)
+                    && (message.IndexOf("ICoreWebView2Settings9", StringComparison.Ordinal) >= 0
+                        || message.IndexOf("Unable to cast COM object", StringComparison.Ordinal) >= 0))
+                {
+                    return true;
+                }
+
+                exception = exception.InnerException;
+            }
+
+            return false;
         }
 
         private void CoreWebView2_NavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)

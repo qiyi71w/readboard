@@ -40,14 +40,21 @@ namespace Readboard.VerificationTests.Host
             int probeCount = 0;
             int openDownloadCount = 0;
             int exitCount = 0;
+            List<WebViewRuntimeAvailability> prompted = new List<WebViewRuntimeAvailability>();
 
             bool available = MainForm.ResolveWebViewRuntimeAvailability(
                 delegate
                 {
                     probeCount++;
-                    return probeCount == 4;
+                    return probeCount == 4
+                        ? WebViewRuntimeProbeResult.Available("123.0.2420.47")
+                        : WebViewRuntimeProbeResult.Missing();
                 },
-                () => choices.Dequeue(),
+                delegate(WebViewRuntimeProbeResult result)
+                {
+                    prompted.Add(result.Availability);
+                    return choices.Dequeue();
+                },
                 delegate { openDownloadCount++; },
                 delegate { exitCount++; });
 
@@ -56,6 +63,14 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(1, openDownloadCount);
             Assert.Equal(0, exitCount);
             Assert.Empty(choices);
+            Assert.Equal(
+                new[]
+                {
+                    WebViewRuntimeAvailability.Missing,
+                    WebViewRuntimeAvailability.Missing,
+                    WebViewRuntimeAvailability.Missing
+                },
+                prompted);
         }
 
         [Fact]
@@ -68,9 +83,9 @@ namespace Readboard.VerificationTests.Host
                 delegate
                 {
                     probeCount++;
-                    return false;
+                    return WebViewRuntimeProbeResult.Missing();
                 },
-                () => MainForm.WebViewRuntimePromptChoice.Exit,
+                delegate { return MainForm.WebViewRuntimePromptChoice.Exit; },
                 delegate { },
                 delegate { exitCount++; });
 
@@ -90,6 +105,8 @@ namespace Readboard.VerificationTests.Host
                 "WebViewRuntime_caption",
                 "WebViewRuntime_heading",
                 "WebViewRuntime_message",
+                "WebViewRuntime_outdatedHeading",
+                "WebViewRuntime_outdatedMessage",
                 "WebViewRuntime_openDownload",
                 "WebViewRuntime_retry",
                 "WebViewRuntime_exit",
