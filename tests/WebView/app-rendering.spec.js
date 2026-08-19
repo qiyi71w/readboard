@@ -379,6 +379,11 @@ test("keeps native type when the resident panel is compact", async ({ page }) =>
     const unitBox = unit.getBoundingClientRect();
     const cardBox = card.getBoundingClientRect();
     const inputLefts = [...document.querySelectorAll(".engine-options input")].map(input => input.getBoundingClientRect().left);
+    const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
+    const sidebarButtons = [...document.querySelectorAll(".nav-item, .quick-actions button")].map(button => {
+      const box = button.getBoundingClientRect();
+      return box.top >= sidebar.top - 0.5 && box.bottom <= sidebar.bottom + 0.5;
+    });
     return {
       scale: window.readboardPreview.getLayoutMetrics().scale,
       dense: root.classList.contains("dense"),
@@ -386,7 +391,9 @@ test("keeps native type when the resident panel is compact", async ({ page }) =>
       fontSize: parseFloat(getComputedStyle(document.body).fontSize),
       labelWidth: labelBox ? labelBox.width : 0,
       unitInsideCard: unitBox.right <= cardBox.right + 0.5,
-      inputLefts
+      inputLefts,
+      sidebarButtonCount: sidebarButtons.length,
+      sidebarButtonsVisible: sidebarButtons.every(Boolean)
     };
   });
 
@@ -398,6 +405,8 @@ test("keeps native type when the resident panel is compact", async ({ page }) =>
   expect(metrics.unitInsideCard).toBe(true);
   expect(metrics.inputLefts).toHaveLength(3);
   expect(Math.max(...metrics.inputLefts) - Math.min(...metrics.inputLefts)).toBeLessThan(1);
+  expect(metrics.sidebarButtonCount).toBe(11);
+  expect(metrics.sidebarButtonsVisible).toBe(true);
 
   await page.locator('[data-page="settings"]').first().click();
   const settingsLayout = await page.evaluate(() => {

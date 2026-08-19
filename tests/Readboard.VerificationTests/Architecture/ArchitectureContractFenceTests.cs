@@ -514,6 +514,8 @@ namespace Readboard.VerificationTests.Architecture
             Assert.Equal(1d, WebViewWindowLayoutPolicy.ResolveScale(new Size(1100, 680)));
             Assert.Equal(1d, WebViewWindowLayoutPolicy.ResolveScale(new Size(700, 433)));
             Assert.Equal(1d, WebViewWindowLayoutPolicy.ResolveScale(new Size(960, 600)));
+            Assert.Equal(48, WebViewWindowLayoutPolicy.ResolveTitleControlExtent(new Size(1100, 680), 96));
+            Assert.Equal(40, WebViewWindowLayoutPolicy.ResolveTitleControlExtent(new Size(700, 433), 96));
             Assert.Equal(new Size(1050, 650), WebViewWindowLayoutPolicy.ScaleLogicalSize(
                 WebViewWindowLayoutPolicy.MinimumLogicalClientSize,
                 144));

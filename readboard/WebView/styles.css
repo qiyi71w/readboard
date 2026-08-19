@@ -441,13 +441,15 @@ html.dense .quick-actions button span {
   white-space: nowrap;
   border: 0;
 }
-html.dense .sidebar-rule { margin: 6px 2px; }
+html.dense .sidebar nav,
+html.dense .quick-actions { gap: 4px; }
+html.dense .sidebar-rule { margin: 4px 2px; }
 html.dense .nav-item,
 html.dense .quick-actions button {
   justify-content: center;
   gap: 0;
-  height: 32px;
-  min-height: 32px;
+  height: 28px;
+  min-height: 28px;
   padding: 0;
 }
 html.dense .nav-item.active::before { top: 6px; bottom: 6px; }

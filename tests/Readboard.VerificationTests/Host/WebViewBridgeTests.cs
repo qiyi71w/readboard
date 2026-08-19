@@ -651,6 +651,43 @@ namespace Readboard.VerificationTests.Host
                     maximized));
         }
 
+        [Theory]
+        [InlineData(1100, 680, 96, 48)]
+        [InlineData(700, 433, 96, 40)]
+        [InlineData(1000, 680, 96, 40)]
+        [InlineData(1100, 500, 96, 40)]
+        [InlineData(700, 433, 144, 60)]
+        public void ResolveTitleControlExtent_MatchesVisibleDenseChrome(
+            int width,
+            int height,
+            int dpi,
+            int expected)
+        {
+            Assert.Equal(
+                expected,
+                WebViewWindowLayoutPolicy.ResolveTitleControlExtent(new Size(width, height), dpi));
+        }
+
+        [Theory]
+        [InlineData(630, 20, MainForm.HtMaxButton)]
+        [InlineData(655, 20, MainForm.HtMaxButton)]
+        [InlineData(610, 20, MainForm.HtClient)]
+        public void ResolveWebViewNonClientHitTest_UsesDenseTitleExtent(
+            int x,
+            int y,
+            int expected)
+        {
+            Assert.Equal(
+                expected,
+                MainForm.ResolveWebViewNonClientHitTest(
+                    new Point(x, y),
+                    new Size(700, 433),
+                    6,
+                    40,
+                    false));
+        }
+
+
         [Fact]
         public void ResolveWebViewWindowStyle_EnablesNativeBorderlessResizeAndWindowCommands()
         {

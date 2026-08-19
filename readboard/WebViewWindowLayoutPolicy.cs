@@ -13,6 +13,14 @@ namespace readboard
             return 1d;
         }
 
+        internal static int ResolveTitleControlExtent(Size logicalClientSize, int dpi)
+        {
+            bool dense = logicalClientSize.Width < BaseLogicalClientSize.Width
+                || logicalClientSize.Height < BaseLogicalClientSize.Height;
+            double logicalExtent = dense ? 40d : 48d;
+            return (int)Math.Round(logicalExtent * Math.Max(96, dpi) / 96d);
+        }
+
         internal static Size ScaleLogicalSize(Size logicalSize, int dpi)
         {
             double scale = Math.Max(96, dpi) / 96d;
