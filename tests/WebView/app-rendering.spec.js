@@ -364,3 +364,71 @@ test("hosted shell waits for a complete backend snapshot", async ({ page }) => {
   expect(initial.shellVisibility).toBe("hidden");
   expect(initial.postedMessageCount).toBe(0);
 });
+
+test("keeps native type when the resident panel is compact", async ({ page }) => {
+  await page.setViewportSize({ width: 700, height: 433 });
+  await page.goto(baseUrl + "/index.html");
+
+  const metrics = await page.evaluate(() => {
+    const root = document.documentElement;
+    const shell = document.querySelector(".app-shell");
+    const label = document.querySelector(".nav-item span");
+    const labelBox = label ? label.getBoundingClientRect() : null;
+    const unit = document.querySelector(".engine-unit");
+    const card = document.querySelector(".sync-card");
+    const unitBox = unit.getBoundingClientRect();
+    const cardBox = card.getBoundingClientRect();
+    const inputLefts = [...document.querySelectorAll(".engine-options input")].map(input => input.getBoundingClientRect().left);
+    const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
+    const sidebarButtons = [...document.querySelectorAll(".nav-item, .quick-actions button")].map(button => {
+      const box = button.getBoundingClientRect();
+      return box.top >= sidebar.top - 0.5 && box.bottom <= sidebar.bottom + 0.5;
+    });
+    return {
+      scale: window.readboardPreview.getLayoutMetrics().scale,
+      dense: root.classList.contains("dense"),
+      transform: getComputedStyle(shell).transform,
+      fontSize: parseFloat(getComputedStyle(document.body).fontSize),
+      labelWidth: labelBox ? labelBox.width : 0,
+      unitInsideCard: unitBox.right <= cardBox.right + 0.5,
+      inputLefts,
+      sidebarButtonCount: sidebarButtons.length,
+      sidebarButtonsVisible: sidebarButtons.every(Boolean)
+    };
+  });
+
+  expect(metrics.scale).toBe(1);
+  expect(metrics.dense).toBe(true);
+  expect(metrics.transform).toBe("none");
+  expect(metrics.fontSize).toBeGreaterThanOrEqual(13);
+  expect(metrics.labelWidth).toBeLessThan(2);
+  expect(metrics.unitInsideCard).toBe(true);
+  expect(metrics.inputLefts).toHaveLength(3);
+  expect(Math.max(...metrics.inputLefts) - Math.min(...metrics.inputLefts)).toBeLessThan(1);
+  expect(metrics.sidebarButtonCount).toBe(11);
+  expect(metrics.sidebarButtonsVisible).toBe(true);
+
+  await page.locator('[data-page="settings"]').first().click();
+  const settingsLayout = await page.evaluate(() => {
+    const bar = document.querySelector(".settings-actions");
+    const status = document.getElementById("settings-dirty");
+    status.textContent = "当前没有未保存的更改";
+    const reset = document.querySelector(".settings-actions > button");
+    const save = document.querySelector(".settings-actions .primary");
+    const overlap = (a, b) => !(a.right <= b.left + 0.5 || b.right <= a.left + 0.5 || a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5);
+    const barBox = bar.getBoundingClientRect();
+    const resetBox = reset.getBoundingClientRect();
+    const saveBox = save.getBoundingClientRect();
+    return {
+      overlapResetStatus: overlap(resetBox, status.getBoundingClientRect()),
+      overlapStatusSave: overlap(status.getBoundingClientRect(), saveBox),
+      resetInsideBar: resetBox.bottom <= barBox.bottom + 0.5 && resetBox.top >= barBox.top - 0.5,
+      saveInsideBar: saveBox.bottom <= barBox.bottom + 0.5
+    };
+  });
+  expect(settingsLayout.overlapResetStatus).toBe(false);
+  expect(settingsLayout.overlapStatusSave).toBe(false);
+  expect(settingsLayout.resetInsideBar).toBe(true);
+  expect(settingsLayout.saveInsideBar).toBe(true);
+});
+

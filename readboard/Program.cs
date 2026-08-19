@@ -558,7 +558,7 @@ namespace readboard
             langItems["noHelpFile"] = "找不到说明文档,请检查Lizzie目录下[readboard]文件夹内的[readme.rtf]文件是否存在";
             langItems["komi65Describe"] = "由于同步时无法获取提子数,日本规则(数目)将变得不准确,需要同步日本规则贴6.5目的棋局时可在Katago中使用[数子+贴目7.0+收后方贴还0.5目]规则模拟";
             langItems["MainForm_rdoFox"] = "野狐";
-            langItems["MainForm_rdoFoxBack"] = "野狐(后台落子)";
+            langItems["MainForm_rdoFoxBack"] = "野狐(后台)";
             langItems["MainForm_rdoYike"] = "弈客";
             langItems["MainForm_rdoTygem"] = "弈城";
             langItems["MainForm_rdoSina"] = "新浪";

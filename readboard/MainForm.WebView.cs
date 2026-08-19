@@ -1046,8 +1046,9 @@ namespace readboard
                 unchecked((short)(coordinates & 0xffff)),
                 unchecked((short)((coordinates >> 16) & 0xffff))));
             Size logicalClientSize = WebViewWindowLayoutPolicy.UnscalePhysicalSize(ClientSize, DeviceDpi);
-            double pageScale = WebViewWindowLayoutPolicy.ResolveScale(logicalClientSize);
-            int titleControlExtent = (int)Math.Round(48d * pageScale * Math.Max(96, DeviceDpi) / 96d);
+            int titleControlExtent = WebViewWindowLayoutPolicy.ResolveTitleControlExtent(
+                logicalClientSize,
+                DeviceDpi);
             int hit = ResolveWebViewNonClientHitTest(
                 clientPoint,
                 ClientSize,

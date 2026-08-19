@@ -6,14 +6,19 @@ namespace readboard
     internal static class WebViewWindowLayoutPolicy
     {
         internal static readonly Size BaseLogicalClientSize = new Size(1100, 680);
-        internal static readonly Size MinimumLogicalClientSize = new Size(960, 600);
+        internal static readonly Size MinimumLogicalClientSize = new Size(700, 433);
 
         internal static double ResolveScale(Size logicalClientSize)
         {
-            double widthScale = logicalClientSize.Width / (double)BaseLogicalClientSize.Width;
-            double heightScale = logicalClientSize.Height / (double)BaseLogicalClientSize.Height;
-            double minimumScale = MinimumLogicalClientSize.Width / (double)BaseLogicalClientSize.Width;
-            return Math.Min(1d, Math.Max(minimumScale, Math.Min(widthScale, heightScale)));
+            return 1d;
+        }
+
+        internal static int ResolveTitleControlExtent(Size logicalClientSize, int dpi)
+        {
+            bool dense = logicalClientSize.Width < BaseLogicalClientSize.Width
+                || logicalClientSize.Height < BaseLogicalClientSize.Height;
+            double logicalExtent = dense ? 40d : 48d;
+            return (int)Math.Round(logicalExtent * Math.Max(96, dpi) / 96d);
         }
 
         internal static Size ScaleLogicalSize(Size logicalSize, int dpi)

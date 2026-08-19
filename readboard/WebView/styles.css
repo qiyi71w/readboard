@@ -165,18 +165,21 @@ button:disabled { color: var(--disabled-text); border-color: var(--disabled-bord
 .dot.bad { background: var(--danger); }
 .card { border: 1px solid var(--border); border-radius: 6px; background: var(--surface-background); }
 
+
 .app-shell {
   position: absolute;
-  inset: 0 auto auto 0;
+  inset: 0;
   display: grid;
   grid-template: 48px minmax(0, 1fr) 44px / 230px minmax(0, 1fr);
-  width: var(--layout-width);
-  height: var(--layout-height);
-  min-width: 1100px;
-  min-height: 680px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   background: var(--surface-background);
-  transform: scale(var(--ui-scale));
-  transform-origin: top left;
+}
+html.emergency .app-shell {
+  min-width: 700px;
+  min-height: 433px;
 }
 .titlebar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: var(--surface-background); -webkit-app-region: drag; }
 .brand { display: flex; min-width: 0; align-items: center; gap: 8px; padding-left: 16px; white-space: nowrap; }
@@ -360,7 +363,8 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .app-shell > footer > span { flex: 1 1 0; min-width: 0; padding: 0 14px; border-right: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app-shell > footer > span:last-child { border-right: 0; }
 
-.modal-layer { position: absolute; inset: 0 auto auto 0; z-index: 20; display: grid; width: var(--layout-width); height: var(--layout-height); place-items: center; background: var(--overlay-background); transform: scale(var(--ui-scale)); transform-origin: top left; }
+.modal-layer { position: absolute; inset: 0; z-index: 20; display: grid; width: 100%; height: 100%; place-items: center; background: var(--overlay-background); }
+html.emergency .modal-layer { min-width: 700px; min-height: 433px; }
 .modal-layer[hidden] { display: none; }
 .modal { display: grid; grid-template-rows: 48px minmax(0, 1fr) 60px; width: min(760px, calc(100% - 36px)); max-height: calc(100% - 36px); border: 1px solid var(--border); border-radius: 7px; background: var(--surface-background); box-shadow: 0 18px 50px var(--modal-shadow); overflow: hidden; }
 .modal > header { display: flex; align-items: center; justify-content: space-between; padding: 0 18px; border-bottom: 1px solid var(--line); }
@@ -409,6 +413,108 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
   scrollbar-color: var(--scrollbar-color) transparent;
 }
 #log-list::-webkit-scrollbar, .candidate-list::-webkit-scrollbar, .modal-body::-webkit-scrollbar { width: 6px; height: 6px; }
+html.dense {
+  --control-center-control-height: 32px;
+  --control-center-section-gap: 4px;
+  --control-center-inner-gap: 2px;
+  --control-center-group-padding: 2px;
+  font-size: 13px;
+}
+html.dense .app-shell { grid-template: 40px minmax(0, 1fr) 32px / 48px minmax(0, 1fr); }
+html.dense .brand { gap: 6px; padding-left: 10px; }
+html.dense .brand img { width: 22px; height: 22px; }
+html.dense .brand strong { font-size: 14px; }
+html.dense .brand strong span:first-child { display: none; }
+html.dense .window-controls { height: 40px; }
+html.dense .window-controls button { width: 40px; }
+html.dense .sidebar { padding: 6px 4px; }
+html.dense .sidebar h2,
+html.dense .nav-item span,
+html.dense .quick-actions button span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+html.dense .sidebar nav,
+html.dense .quick-actions { gap: 4px; }
+html.dense .sidebar-rule { margin: 4px 2px; }
+html.dense .nav-item,
+html.dense .quick-actions button {
+  justify-content: center;
+  gap: 0;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+html.dense .nav-item.active::before { top: 6px; bottom: 6px; }
+html.dense main { grid-template-rows: 32px minmax(0, 1fr); }
+html.dense .top-status { padding: 0 8px; }
+html.dense .top-status > span { padding: 0 6px; }
+html.dense .top-status > span:nth-child(2),
+html.dense .top-status > span:nth-child(4),
+html.dense .top-status > span:nth-child(5) { display: none; }
+html.dense .top-actions button { min-height: 32px; padding: 0 4px; }
+html.dense .top-actions button span { display: none; }
+html.dense .page { padding: 0 8px 4px; }
+html.dense .page[data-page-panel="controlCenter"].active { grid-template-rows: 28px auto auto auto auto minmax(40px, 1fr); }
+html.dense .page:not([data-page-panel="controlCenter"]).active { overflow: auto; }
+html.dense .context-strip > span { padding: 0 8px; }
+html.dense fieldset { padding: 0 8px 2px; }
+html.dense legend { padding: 0 6px; font-size: 13px; }
+html.dense button { min-height: 32px; padding: 0 10px; }
+html.dense .choice-grid { gap: 4px; }
+html.dense .choice-grid.platforms { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+html.dense .choice-grid label { overflow: hidden; padding: 0 4px; font-size: 12px; text-overflow: ellipsis; }
+html.dense .sync-card { grid-template-columns: minmax(0, 1fr) minmax(190px, .75fr); gap: 8px; padding: 0 8px 0; }
+html.dense .sync-options { padding-right: 8px; }
+html.dense .sync-card h3,
+html.dense .color-row > b,
+html.dense .placement-row > b { font-size: 13px; }
+html.dense .segments label { min-height: 32px; padding: 4px 8px; font-size: 13px; }
+html.dense .engine-options label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px 1.25em;
+  justify-content: stretch;
+  gap: 6px;
+  width: 100%;
+}
+html.dense .engine-options label > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+html.dense .engine-options .engine-value { display: contents; }
+html.dense .engine-options input { width: 72px; }
+html.dense .engine-unit { min-width: 1.25em; line-height: 32px; }
+html.dense .board-select-grid { gap: 4px; }
+html.dense .log-card { padding: 2px 8px; }
+html.dense .log-row { min-height: 20px; }
+html.dense .app-shell > footer > span { padding: 0 8px; }
+html.dense .toggle-grid { grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+html.dense .toggle-grid b,
+html.dense .toggle-grid small { white-space: normal; }
+html.dense .appearance-grid,
+html.dense .appearance-language { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+html.dense .appearance-language select { grid-column: auto; }
+html.dense .page[data-page-panel="settings"] .settings-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "status status" "reset actions";
+  align-items: center;
+  align-self: start;
+  gap: 6px 8px;
+  height: auto;
+  min-height: auto;
+  padding-block: 6px;
+  overflow: visible;
+}
+html.dense .settings-actions > span { grid-area: status; flex: none; order: 0; padding-left: 0; min-width: 0; }
+html.dense .settings-actions > button { grid-area: reset; justify-self: start; }
+html.dense .settings-actions > div { grid-area: actions; }
+html.dense .input-grid { grid-template-columns: 1fr 1fr; }
+
 #log-list::-webkit-scrollbar-thumb, .candidate-list::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { border-radius: 4px; background: var(--scrollbar-thumb); }
 #log-list:hover::-webkit-scrollbar-thumb, .candidate-list:hover::-webkit-scrollbar-thumb, .modal-body:hover::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb-hover); }
 

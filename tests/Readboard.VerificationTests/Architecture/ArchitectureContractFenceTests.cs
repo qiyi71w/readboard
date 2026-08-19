@@ -506,18 +506,33 @@ namespace Readboard.VerificationTests.Architecture
         public void DesktopContract_UsesLogicalDpiAndMinimumClientBounds()
         {
             Assert.Equal(new Size(1100, 680), WebViewWindowLayoutPolicy.BaseLogicalClientSize);
-            Assert.Equal(new Size(960, 600), WebViewWindowLayoutPolicy.MinimumLogicalClientSize);
+            Assert.Equal(new Size(700, 433), WebViewWindowLayoutPolicy.MinimumLogicalClientSize);
+            Assert.Equal(1100, AppConfig.DefaultWindowClientWidth);
+            Assert.Equal(680, AppConfig.DefaultWindowClientHeight);
+            Assert.Equal(700, AppConfig.MinimumWindowClientWidth);
+            Assert.Equal(433, AppConfig.MinimumWindowClientHeight);
             Assert.Equal(1d, WebViewWindowLayoutPolicy.ResolveScale(new Size(1100, 680)));
-            Assert.Equal(0.8727272727d, WebViewWindowLayoutPolicy.ResolveScale(new Size(960, 600)), 8);
-            Assert.Equal(new Size(1440, 900), WebViewWindowLayoutPolicy.ScaleLogicalSize(
+            Assert.Equal(1d, WebViewWindowLayoutPolicy.ResolveScale(new Size(700, 433)));
+            Assert.Equal(1d, WebViewWindowLayoutPolicy.ResolveScale(new Size(960, 600)));
+            Assert.Equal(48, WebViewWindowLayoutPolicy.ResolveTitleControlExtent(new Size(1100, 680), 96));
+            Assert.Equal(40, WebViewWindowLayoutPolicy.ResolveTitleControlExtent(new Size(700, 433), 96));
+            Assert.Equal(new Size(1050, 650), WebViewWindowLayoutPolicy.ScaleLogicalSize(
                 WebViewWindowLayoutPolicy.MinimumLogicalClientSize,
                 144));
             Assert.Equal(
-                new Rectangle(0, 0, 960, 600),
+                new Rectangle(0, 0, 700, 433),
                 WebViewWindowLayoutPolicy.ClampBoundsToWorkingArea(
                     new Rectangle(-100, -100, 400, 300),
                     new Rectangle(0, 0, 1920, 1080),
                     WebViewWindowLayoutPolicy.MinimumLogicalClientSize));
+            string appJs = File.ReadAllText(Path.Combine(
+                VerificationFixtureLocator.RepositoryRoot(),
+                "readboard",
+                "WebView",
+                "app.js"));
+            Assert.Contains("width: 1100, height: 680", appJs);
+            Assert.Contains("width: 700, height: 433", appJs);
+
         }
 
         [Fact]
