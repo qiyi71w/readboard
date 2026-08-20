@@ -102,13 +102,18 @@ namespace Readboard.VerificationTests.AutoPlay
                 "live|state=1|room=room-1",
                 "鳕鱼の让子",
                 t0.AddMilliseconds(1000),
-                new FoxMatchBarReading("鳕鱼の让子", "对手乙", Array.Empty<string>()));
+                new FoxMatchBarReading(Array.Empty<FoxPlayerListEntry>()));
             AutoPlayColorResolution nameOnlyInList = live.AcceptSample(
                 window,
                 "live|state=1|room=room-1",
                 "鳕鱼の让子",
                 t0.AddMilliseconds(2000),
-                new FoxMatchBarReading("对手甲", "对手乙", new[] { "对手甲", "对手乙", "鳕鱼の让子" }));
+                new FoxMatchBarReading(new[]
+                {
+                    new FoxPlayerListEntry("对手甲", AutoPlayColorResolution.Known("white", AutoPlayColorStatus.RecognizedWhite)),
+                    new FoxPlayerListEntry("对手乙", AutoPlayColorResolution.Known("black", AutoPlayColorStatus.RecognizedBlack)),
+                    new FoxPlayerListEntry("鳕鱼の让子", AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown))
+                }));
 
             AssertUnknown(Authorize(minimized, "鳕鱼の让子"), AutoPlayColorStatus.NicknameNotMatched);
             AssertUnknown(Authorize(emptyDirectory, "鳕鱼の让子"), AutoPlayColorStatus.NicknameNotMatched);
@@ -145,12 +150,22 @@ namespace Readboard.VerificationTests.AutoPlay
 
         private static FoxMatchBarReading RightSeatReading(string saved)
         {
-            return new FoxMatchBarReading("对手甲", saved, new[] { "对手甲", saved, "观众甲" });
+            return new FoxMatchBarReading(new[]
+            {
+                new FoxPlayerListEntry("对手甲", AutoPlayColorResolution.Known("white", AutoPlayColorStatus.RecognizedWhite)),
+                new FoxPlayerListEntry(saved, AutoPlayColorResolution.Known("black", AutoPlayColorStatus.RecognizedBlack)),
+                new FoxPlayerListEntry("观众甲", AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown))
+            });
         }
 
         private static FoxMatchBarReading LeftSeatReading(string saved)
         {
-            return new FoxMatchBarReading(saved, "对手乙", new[] { saved, "对手乙", "观众甲" });
+            return new FoxMatchBarReading(new[]
+            {
+                new FoxPlayerListEntry(saved, AutoPlayColorResolution.Known("white", AutoPlayColorStatus.RecognizedWhite)),
+                new FoxPlayerListEntry("对手乙", AutoPlayColorResolution.Known("black", AutoPlayColorStatus.RecognizedBlack)),
+                new FoxPlayerListEntry("观众甲", AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown))
+            });
         }
 
         private static AutoPlayColorResolution Authorize(AutoPlayColorResolution detected, string saved)

@@ -3,38 +3,50 @@ using System.Collections.Generic;
 
 namespace readboard
 {
+    internal sealed class FoxPlayerListEntry
+    {
+        public FoxPlayerListEntry(string nickname, AutoPlayColorResolution stone)
+        {
+            Nickname = nickname ?? string.Empty;
+            Stone = stone ?? AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
+        }
+
+        public string Nickname { get; private set; }
+
+        public AutoPlayColorResolution Stone { get; private set; }
+    }
+
     internal sealed class FoxMatchBarReading
     {
         public static FoxMatchBarReading Empty { get; } = new FoxMatchBarReading(
-            string.Empty,
-            string.Empty,
-            Array.Empty<string>());
+            Array.Empty<FoxPlayerListEntry>(),
+            string.Empty);
 
-        public FoxMatchBarReading(
-            string leftOcrFragment,
-            string rightOcrFragment,
-            IEnumerable<string> foxNicknameDirectory)
+        public FoxMatchBarReading(IEnumerable<FoxPlayerListEntry> players)
+            : this(players, string.Empty)
         {
-            LeftOcrFragment = leftOcrFragment ?? string.Empty;
-            RightOcrFragment = rightOcrFragment ?? string.Empty;
-            List<string> directory = new List<string>();
-            if (foxNicknameDirectory != null)
+        }
+
+        public FoxMatchBarReading(IEnumerable<FoxPlayerListEntry> players, string diagnostic)
+        {
+            List<FoxPlayerListEntry> copy = new List<FoxPlayerListEntry>();
+            if (players != null)
             {
-                foreach (string name in foxNicknameDirectory)
+                foreach (FoxPlayerListEntry player in players)
                 {
-                    if (!string.IsNullOrWhiteSpace(name))
-                        directory.Add(name);
+                    if (player == null || string.IsNullOrWhiteSpace(player.Nickname))
+                        continue;
+                    copy.Add(player);
                 }
             }
 
-            Directory = directory;
+            Players = copy;
+            Diagnostic = diagnostic ?? string.Empty;
         }
 
-        public string LeftOcrFragment { get; private set; }
+        public IList<FoxPlayerListEntry> Players { get; private set; }
 
-        public string RightOcrFragment { get; private set; }
-
-        public IList<string> Directory { get; private set; }
+        public string Diagnostic { get; private set; }
     }
 
     internal sealed class FoxMatchBarLiveRecognition
@@ -83,9 +95,7 @@ namespace readboard
             CurrentReading = reading;
             CurrentResolution = FoxMatchBarSeatResolver.Resolve(
                 identitySignature,
-                reading.LeftOcrFragment,
-                reading.RightOcrFragment,
-                reading.Directory);
+                reading.Players);
             lastWindowHandle = windowHandle;
             lastRoomSignature = Normalize(roomSignature);
             lastIdentitySignature = Normalize(identitySignature);

@@ -1,45 +1,32 @@
+using System;
 using System.Collections.Generic;
 
 namespace readboard
 {
     internal static class FoxMatchBarIdentityCandidates
     {
-        public const string LeftSeatId = "left";
-        public const string RightSeatId = "right";
-
-        public static IList<FoxIdentityCandidate> Build(
-            string leftOcrFragment,
-            string rightOcrFragment,
-            IEnumerable<string> foxNicknameDirectory)
+        public static IList<FoxIdentityCandidate> Build(IEnumerable<FoxPlayerListEntry> players)
         {
             List<FoxIdentityCandidate> candidates = new List<FoxIdentityCandidate>();
-            AddSeat(
-                candidates,
-                LeftSeatId,
-                "WebView_candidateLeftSeat",
-                FoxMatchBarSeatResolver.SnapToDirectory(leftOcrFragment, foxNicknameDirectory));
-            AddSeat(
-                candidates,
-                RightSeatId,
-                "WebView_candidateRightSeat",
-                FoxMatchBarSeatResolver.SnapToDirectory(rightOcrFragment, foxNicknameDirectory));
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            if (players == null)
+                return candidates;
+
+            foreach (FoxPlayerListEntry player in players)
+            {
+                if (player == null || !FoxMatchBarSeatResolver.IsPlayerNickname(player.Nickname))
+                    continue;
+                if (!seen.Add(player.Nickname))
+                    continue;
+
+                candidates.Add(new FoxIdentityCandidate(
+                    player.Nickname,
+                    SemanticMessage.Create("WebView_candidateNickname", player.Nickname),
+                    player.Nickname,
+                    null));
+            }
+
             return candidates;
-        }
-
-        private static void AddSeat(
-            List<FoxIdentityCandidate> candidates,
-            string id,
-            string labelKey,
-            string exactName)
-        {
-            if (string.IsNullOrWhiteSpace(exactName))
-                return;
-
-            candidates.Add(new FoxIdentityCandidate(
-                id,
-                SemanticMessage.Create(labelKey, exactName),
-                exactName,
-                null));
         }
     }
 }

@@ -1,21 +1,34 @@
-using System.Drawing;
-using readboard;
+using System.Collections.Generic;
 using Xunit;
-
+using readboard;
 namespace Readboard.VerificationTests.AutoPlay
 {
     public sealed class FoxMatchBarWindowsReaderTests
     {
         [Fact]
-        public void TryGetSeatBounds_SplitsInfoPanelAtPrototypePercents()
+        public void IsPlayerNickname_RejectsRanksAndListChrome()
         {
-            Rectangle left;
-            Rectangle right;
+            Assert.True(FoxMatchBarSeatResolver.IsPlayerNickname("鳕鱼の让子"));
+            Assert.False(FoxMatchBarSeatResolver.IsPlayerNickname("8段"));
+            Assert.False(FoxMatchBarSeatResolver.IsPlayerNickname("18级"));
+            Assert.False(FoxMatchBarSeatResolver.IsPlayerNickname("132"));
+            Assert.False(FoxMatchBarSeatResolver.IsPlayerNickname("用户名(16)"));
+            Assert.False(FoxMatchBarSeatResolver.IsPlayerNickname("Rich Edit Object"));
+        }
 
-            Assert.True(FoxMatchBarWindowsReader.TryGetSeatBounds(new Size(800, 200), out left, out right));
+        [Fact]
+        public void SelectNicknamesFollowedByRank_TakesUsernameColumnFromFlatUiaDump()
+        {
+            IList<string> names = FoxMatchBarSeatResolver.SelectNicknamesFollowedByRank(
+                new[]
+                {
+                    "标题", "用户名(16)", "棋力", "胜", "负", "财富",
+                    "垂直滚动条", "苹果天使", "9段", "132", "56", "布衣",
+                    "阿珐莉娅", "9段", "109", "37", "碉堡",
+                    "鳕鱼の让子", "8段", "62", "14", "月光族"
+                });
 
-            Assert.Equal(new Rectangle(0, 110, 400, 44), left);
-            Assert.Equal(new Rectangle(400, 110, 400, 44), right);
+            Assert.Equal(new[] { "苹果天使", "阿珐莉娅", "鳕鱼の让子" }, names);
         }
     }
 }

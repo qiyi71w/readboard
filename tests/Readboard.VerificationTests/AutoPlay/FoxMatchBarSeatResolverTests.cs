@@ -8,20 +8,20 @@ namespace Readboard.VerificationTests.AutoPlay
     public sealed class FoxMatchBarSeatResolverTests
     {
         [Fact]
-        public void Resolve_SameNicknameMovingFromRightSeatToLeftSeat_RecognizesWhiteAndAuthorizesPlay()
+        public void Resolve_SameNicknameMovingFromBlackStoneToWhiteStone_RecognizesAndAuthorizesPlay()
         {
             const string saved = "鳕鱼の让子";
 
             AutoPlayColorResolution blackRoom = ResolvePlaying(
                 saved,
-                leftOcr: "对手甲",
-                rightOcr: saved,
-                directory: new[] { "对手甲", saved, "观众甲" });
+                Black("对手甲"),
+                Black(saved),
+                Spectator("观众甲"));
             AutoPlayColorResolution whiteRoom = ResolvePlaying(
                 saved,
-                leftOcr: saved,
-                rightOcr: "对手乙",
-                directory: new[] { saved, "对手乙", "观众甲" });
+                White(saved),
+                Black("对手乙"),
+                Spectator("观众甲"));
 
             AssertRecognized(blackRoom, "black", AutoPlayColorStatus.RecognizedBlack);
             AssertRecognized(whiteRoom, "white", AutoPlayColorStatus.RecognizedWhite);
@@ -30,28 +30,26 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
-        public void Resolve_SavedNicknameMissingFromDirectory_StaysUnknownAndDoesNotAuthorizePlay()
+        public void Resolve_SavedNicknameMissingFromList_StaysUnknownAndDoesNotAuthorizePlay()
         {
             const string saved = "鳕鱼の让子";
             AutoPlayColorResolution resolution = ResolvePlaying(
                 saved,
-                leftOcr: saved,
-                rightOcr: "无聊的BX",
-                directory: new[] { "绝艺指导F", "无聊的BX", "观众甲" });
+                White("绝艺指导F"),
+                Black("无聊的BX"),
+                Spectator("观众甲"));
 
             AssertUnknown(resolution, AutoPlayColorStatus.NicknameNotMatched);
             Assert.Empty(IssuePlay(resolution));
         }
 
         [Fact]
-        public void Resolve_WatchingTitleEvenWhenDirectoryContainsNickname_DoesNotAuthorizePlay()
+        public void Resolve_WatchingTitleEvenWhenListContainsNickname_DoesNotAuthorizePlay()
         {
             const string saved = "鳕鱼の让子";
             AutoPlayColorResolution detected = FoxMatchBarSeatResolver.Resolve(
                 saved,
-                "对手甲",
-                saved,
-                new[] { "对手甲", saved, "观众甲" });
+                new[] { White("对手甲"), Black(saved), Spectator("观众甲") });
             AutoPlayColorResolution resolution = Authorize(
                 detected,
                 saved,
@@ -66,69 +64,48 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
-        public void Resolve_EmptyDirectory_StaysUnknownAndDoesNotAuthorizePlay()
+        public void Resolve_EmptyList_StaysUnknownAndDoesNotAuthorizePlay()
+        {
+            AutoPlayColorResolution resolution = ResolvePlaying("鳕鱼の让子");
+
+            AssertUnknown(resolution, AutoPlayColorStatus.NicknameNotMatched);
+            Assert.Empty(IssuePlay(resolution));
+        }
+
+        [Fact]
+        public void Resolve_NicknameInListWithoutStone_StaysUnknownAndDoesNotAuthorizePlay()
         {
             const string saved = "鳕鱼の让子";
             AutoPlayColorResolution resolution = ResolvePlaying(
                 saved,
-                leftOcr: saved,
-                rightOcr: "对手乙",
-                directory: new string[0]);
+                White("苹果天使"),
+                Black("阿珐莉娅"),
+                Spectator(saved));
 
             AssertUnknown(resolution, AutoPlayColorStatus.NicknameNotMatched);
             Assert.Empty(IssuePlay(resolution));
         }
 
         [Fact]
-        public void Resolve_UniqueOcrFragmentForDecoratedDirectoryName_RecognizesAndAuthorizesPlay()
-        {
-            const string saved = "叶落メ让子";
-            AutoPlayColorResolution resolution = ResolvePlaying(
-                saved,
-                leftOcr: "叶落让子",
-                rightOcr: "真的不懂啊",
-                directory: new[] { saved, "真的不懂啊", "观众甲" });
-
-            AssertRecognized(resolution, "white", AutoPlayColorStatus.RecognizedWhite);
-            Assert.Equal(new[] { "play>white>5 1000 0" }, IssuePlay(resolution));
-        }
-
-        [Fact]
-        public void Resolve_TwoDirectoryNamesLookLikeOcrFragment_StaysUnknownAndDoesNotAuthorizePlay()
-        {
-            const string saved = "叶落メ让子";
-            AutoPlayColorResolution resolution = ResolvePlaying(
-                saved,
-                leftOcr: "叶落让子",
-                rightOcr: "真的不懂啊",
-                directory: new[] { saved, "叶落让子", "真的不懂啊" });
-
-            AssertUnknown(resolution, AutoPlayColorStatus.NicknameNotMatched);
-            Assert.Empty(IssuePlay(resolution));
-        }
-
-        [Fact]
-        public void Resolve_CorrectedDirectoryNameDiffersByOneCharacter_StaysUnknownAndDoesNotAuthorizePlay()
+        public void Resolve_TwoPlayersSecondRow_IsBlackRegardlessOfStonePixels()
         {
             const string saved = "鳕鱼の让子";
             AutoPlayColorResolution resolution = ResolvePlaying(
                 saved,
-                leftOcr: "鳕鱼の让于",
-                rightOcr: "对手丙",
-                directory: new[] { "鳕鱼の让于", "对手丙" });
+                Spectator("野狐启蒙级"),
+                Spectator(saved));
 
-            AssertUnknown(resolution, AutoPlayColorStatus.NicknameNotMatched);
-            Assert.Empty(IssuePlay(resolution));
+            AssertRecognized(resolution, "black", AutoPlayColorStatus.RecognizedBlack);
+            Assert.Equal(new[] { "play>black>5 1000 0" }, IssuePlay(resolution));
         }
 
         [Fact]
-        public void Resolve_SavedAndDirectoryEqualAfterStrippingDecorations_RecognizesAndAuthorizesPlay()
+        public void Resolve_SavedAndListEqualAfterStrippingDecorations_RecognizesAndAuthorizesPlay()
         {
             AutoPlayColorResolution resolution = ResolvePlaying(
                 "♟晓舟·让子",
-                leftOcr: "晓舟让子",
-                rightOcr: "对手丁",
-                directory: new[] { "晓舟让子", "对手丁" });
+                White("晓舟让子"),
+                Black("对手丁"));
 
             AssertRecognized(resolution, "white", AutoPlayColorStatus.RecognizedWhite);
             Assert.Equal(new[] { "play>white>5 1000 0" }, IssuePlay(resolution));
@@ -136,12 +113,10 @@ namespace Readboard.VerificationTests.AutoPlay
 
         private static AutoPlayColorResolution ResolvePlaying(
             string savedFoxNickname,
-            string leftOcr,
-            string rightOcr,
-            IEnumerable<string> directory)
+            params FoxPlayerListEntry[] players)
         {
             return Authorize(
-                FoxMatchBarSeatResolver.Resolve(savedFoxNickname, leftOcr, rightOcr, directory),
+                FoxMatchBarSeatResolver.Resolve(savedFoxNickname, players),
                 savedFoxNickname,
                 PlayingContext());
         }
@@ -157,6 +132,27 @@ namespace Readboard.VerificationTests.AutoPlay
                 savedFoxNickname,
                 context,
                 detected);
+        }
+
+        private static FoxPlayerListEntry White(string name)
+        {
+            return new FoxPlayerListEntry(
+                name,
+                AutoPlayColorResolution.Known("white", AutoPlayColorStatus.RecognizedWhite));
+        }
+
+        private static FoxPlayerListEntry Black(string name)
+        {
+            return new FoxPlayerListEntry(
+                name,
+                AutoPlayColorResolution.Known("black", AutoPlayColorStatus.RecognizedBlack));
+        }
+
+        private static FoxPlayerListEntry Spectator(string name)
+        {
+            return new FoxPlayerListEntry(
+                name,
+                AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown));
         }
 
         private static void AssertRecognized(

@@ -8,42 +8,49 @@ namespace Readboard.VerificationTests.AutoPlay
     public sealed class FoxMatchBarIdentityCandidatesTests
     {
         [Fact]
-        public void Build_LeftAndRightSeats_UseDirectoryCorrectedExactNamesNotOcrTypos()
+        public void Build_ListNicknames_ShowsExactNamesIncludingSpectators()
         {
             IList<FoxIdentityCandidate> candidates = FoxMatchBarIdentityCandidates.Build(
-                "叶落让子",
-                "真的不懂啊",
-                new[] { "叶落メ让子", "真的不懂啊", "观众甲" });
+                new[]
+                {
+                    White("苹果天使"),
+                    Black("阿珐莉娅"),
+                    Spectator("鳕鱼の让子")
+                });
+
+            Assert.Equal(3, candidates.Count);
+            AssertNickname(candidates[0], "苹果天使");
+            AssertNickname(candidates[1], "阿珐莉娅");
+            AssertNickname(candidates[2], "鳕鱼の让子");
+        }
+
+        [Fact]
+        public void Build_FiltersChromeAndRanks()
+        {
+            IList<FoxIdentityCandidate> candidates = FoxMatchBarIdentityCandidates.Build(
+                new[]
+                {
+                    Spectator("用户名(16)"),
+                    Spectator("棋力"),
+                    White("苹果天使"),
+                    Spectator("9段"),
+                    Spectator("Rich Edit Object"),
+                    Black("阿珐莉娅")
+                });
 
             Assert.Equal(2, candidates.Count);
-            AssertSeat(candidates[0], "left", "WebView_candidateLeftSeat", "叶落メ让子");
-            AssertSeat(candidates[1], "right", "WebView_candidateRightSeat", "真的不懂啊");
-            Assert.DoesNotContain(candidates, candidate => string.Equals(candidate.Signature, "叶落让子", StringComparison.Ordinal));
+            AssertNickname(candidates[0], "苹果天使");
+            AssertNickname(candidates[1], "阿珐莉娅");
         }
 
         [Fact]
-        public void Build_FailedCorrectionSeat_CannotBeSavedAsFoxNickname()
-        {
-            IList<FoxIdentityCandidate> candidates = FoxMatchBarIdentityCandidates.Build(
-                "叶落让子",
-                "真的不懂啊",
-                new[] { "叶落メ让子", "叶落让子", "真的不懂啊" });
-
-            Assert.Single(candidates);
-            AssertSeat(candidates[0], "right", "WebView_candidateRightSeat", "真的不懂啊");
-        }
-
-        [Fact]
-        public void Build_BothSeatsFailCorrection_CannotSaveIdentityLikeMissingSelection()
+        public void Build_EmptyList_CannotSaveIdentityLikeMissingSelection()
         {
             RecordingPersistence persistence = new RecordingPersistence();
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
             FoxIdentitySelectionSnapshot snapshot = selection.Open(
-                FoxMatchBarIdentityCandidates.Build(
-                    "叶落让子",
-                    "对手甲",
-                    new string[0]),
+                FoxMatchBarIdentityCandidates.Build(Array.Empty<FoxPlayerListEntry>()),
                 true,
                 AutoPlayColorMode.ManualWhite);
 
@@ -56,19 +63,17 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
-        public void UseOnce_MatchBarSeat_KeepsFoxNicknameInProcessOnly()
+        public void UseOnce_ListNickname_KeepsFoxNicknameInProcessOnly()
         {
             RecordingPersistence persistence = new RecordingPersistence();
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
             selection.Open(
                 FoxMatchBarIdentityCandidates.Build(
-                    "叶落让子",
-                    "真的不懂啊",
-                    new[] { "叶落メ让子", "真的不懂啊" }),
+                    new[] { White("叶落メ让子"), Black("真的不懂啊") }),
                 true,
                 AutoPlayColorMode.ManualBlack);
-            selection.Select("left");
+            selection.Select("叶落メ让子");
             FoxIdentitySelectionResult result = selection.UseOnce();
 
             Assert.Equal(FoxIdentitySelectionActionOutcome.Applied, result.Outcome);
@@ -78,8 +83,9 @@ namespace Readboard.VerificationTests.AutoPlay
             Assert.True(result.RequiresAutomaticColorReevaluation);
         }
 
+
         [Fact]
-        public void SaveAndUse_MatchBarSeat_WritesDirectoryCorrectedFoxNickname()
+        public void SaveAndUse_ListNickname_WritesFoxNickname()
         {
             AppConfig config = AppConfig.CreateDefault("p", "machine");
             ConfigBackedPersistence persistence = new ConfigBackedPersistence(config);
@@ -87,12 +93,10 @@ namespace Readboard.VerificationTests.AutoPlay
 
             selection.Open(
                 FoxMatchBarIdentityCandidates.Build(
-                    "对手乙",
-                    "叶落让子",
-                    new[] { "对手乙", "叶落メ让子" }),
+                    new[] { White("对手乙"), Black("叶落メ让子") }),
                 false,
                 AutoPlayColorMode.ManualBlack);
-            selection.Select("right");
+            selection.Select("叶落メ让子");
             FoxIdentitySelectionResult result = selection.SaveAndUse();
 
             Assert.Equal(FoxIdentitySelectionActionOutcome.Applied, result.Outcome);
@@ -103,7 +107,7 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
-        public void ClearSaved_MatchBarSeat_ClearsDiskIdentityOnly()
+        public void ClearSaved_ListNickname_ClearsDiskIdentityOnly()
         {
             AppConfig config = AppConfig.CreateDefault("p", "machine");
             config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
@@ -112,18 +116,14 @@ namespace Readboard.VerificationTests.AutoPlay
 
             selection.Open(
                 FoxMatchBarIdentityCandidates.Build(
-                    "叶落メ让子",
-                    "对手乙",
-                    new[] { "叶落メ让子", "对手乙" }),
+                    new[] { White("叶落メ让子"), Black("对手乙") }),
                 true,
                 AutoPlayColorMode.ManualBlack);
-            selection.Select("left");
+            selection.Select("叶落メ让子");
             selection.SaveAndUse();
             selection.Open(
                 FoxMatchBarIdentityCandidates.Build(
-                    "叶落メ让子",
-                    "对手乙",
-                    new[] { "叶落メ让子", "对手乙" }),
+                    new[] { White("叶落メ让子"), Black("对手乙") }),
                 false,
                 AutoPlayColorMode.ManualBlack);
 
@@ -138,15 +138,13 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
-        public void Cancel_FirstAutomaticMatchBarSelection_RestoresPreviousManualMode()
+        public void Cancel_FirstAutomaticListSelection_RestoresPreviousManualMode()
         {
             FoxIdentitySelection selection = new FoxIdentitySelection(new RecordingPersistence());
 
             selection.Open(
                 FoxMatchBarIdentityCandidates.Build(
-                    "叶落メ让子",
-                    "对手乙",
-                    new[] { "叶落メ让子", "对手乙" }),
+                    new[] { White("叶落メ让子"), Black("对手乙") }),
                 true,
                 AutoPlayColorMode.ManualWhite);
             FoxIdentitySelectionResult result = selection.Cancel();
@@ -158,16 +156,14 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
-        public void Cancel_ManuallyOpenedMatchBarSelection_LeavesIdentityAndModeUnchanged()
+        public void Cancel_ManuallyOpenedListSelection_LeavesIdentityAndModeUnchanged()
         {
             RecordingPersistence persistence = new RecordingPersistence("叶落メ让子");
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
             selection.Open(
                 FoxMatchBarIdentityCandidates.Build(
-                    "叶落メ让子",
-                    "对手乙",
-                    new[] { "叶落メ让子", "对手乙" }),
+                    new[] { White("叶落メ让子"), Black("对手乙") }),
                 false,
                 AutoPlayColorMode.ManualBlack);
             FoxIdentitySelectionResult result = selection.Cancel();
@@ -179,18 +175,36 @@ namespace Readboard.VerificationTests.AutoPlay
             Assert.False(result.CurrentProcessIdentityChanged);
         }
 
-        private static void AssertSeat(
-            FoxIdentityCandidate candidate,
-            string id,
-            string labelKey,
-            string exactName)
+        private static void AssertNickname(FoxIdentityCandidate candidate, string exactName)
         {
-            Assert.Equal(id, candidate.Id);
-            Assert.Equal(labelKey, candidate.LabelMessage.Key);
+            Assert.Equal(exactName, candidate.Id);
+            Assert.Equal("WebView_candidateNickname", candidate.LabelMessage.Key);
             Assert.Equal(exactName, Assert.Single(candidate.LabelMessage.Arguments));
             Assert.Equal(exactName, candidate.Signature);
             Assert.Null(candidate.PreviewUrl);
         }
+
+        private static FoxPlayerListEntry White(string name)
+        {
+            return new FoxPlayerListEntry(
+                name,
+                AutoPlayColorResolution.Known("white", AutoPlayColorStatus.RecognizedWhite));
+        }
+
+        private static FoxPlayerListEntry Black(string name)
+        {
+            return new FoxPlayerListEntry(
+                name,
+                AutoPlayColorResolution.Known("black", AutoPlayColorStatus.RecognizedBlack));
+        }
+
+        private static FoxPlayerListEntry Spectator(string name)
+        {
+            return new FoxPlayerListEntry(
+                name,
+                AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown));
+        }
+
 
         private sealed class ConfigBackedPersistence : IFoxIdentityPersistence
         {

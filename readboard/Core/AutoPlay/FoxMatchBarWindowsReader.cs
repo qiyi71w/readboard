@@ -1,103 +1,193 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Imaging;
-using System.IO;
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Automation;
-using Windows.Globalization;
-using Windows.Graphics.Imaging;
-using Windows.Media.Ocr;
-using Windows.Storage.Streams;
 
 namespace readboard
 {
     internal static class FoxMatchBarWindowsReader
     {
         private const int MaxUiaNodes = 200;
-        private const int MaxUiaDepth = 8;
-        private const string RoomInfoPanelTitle = "CRoomInfoPanel";
         private const string PlayerListPanelTitle = "CRoomPlayerListPanel";
-
-        private static readonly object EngineGate = new object();
-        private static OcrEngine cachedEngine;
-        private static bool engineResolved;
 
         public static FoxMatchBarReading TryRead(IntPtr boardHandle, IBoardCapturePlatform capture)
         {
-            if (boardHandle == IntPtr.Zero || capture == null)
-                return FoxMatchBarReading.Empty;
+            if (capture == null)
+                return DiagnosedEmpty("no-capture");
 
             try
             {
-                if (!IsWindow(boardHandle))
-                    return FoxMatchBarReading.Empty;
+                uint processId = 0;
+                if (boardHandle != IntPtr.Zero)
+                    GetWindowThreadProcessId(boardHandle, out processId);
 
-                IntPtr root = GetRoot(boardHandle);
-                if (root == IntPtr.Zero || IsMinimized(root))
-                    return FoxMatchBarReading.Empty;
+                IntPtr searchRoot = IntPtr.Zero;
+                if (boardHandle != IntPtr.Zero && IsWindow(boardHandle))
+                    searchRoot = ResolveSearchRoot(boardHandle);
 
-                IntPtr infoHandle = FindNamedChild(root, RoomInfoPanelTitle);
-                IntPtr listHandle = FindNamedChild(root, PlayerListPanelTitle);
-                IList<string> directory = ReadDirectory(listHandle);
-                if (infoHandle == IntPtr.Zero)
-                    return new FoxMatchBarReading(string.Empty, string.Empty, directory);
-
-                using (Bitmap info = CapturePanel(infoHandle, capture))
+                IntPtr listHandle = FindNamedOnScreenChild(searchRoot, PlayerListPanelTitle);
+                if (listHandle == IntPtr.Zero)
                 {
-                    if (info == null || info.Width < 4 || info.Height < 20)
-                        return new FoxMatchBarReading(string.Empty, string.Empty, directory);
-
-                    OcrEngine engine = TryGetEngine();
-                    if (engine == null)
-                        return new FoxMatchBarReading(string.Empty, string.Empty, directory);
-
-                    Rectangle leftBounds;
-                    Rectangle rightBounds;
-                    if (!TryGetSeatBounds(info.Size, out leftBounds, out rightBounds))
-                        return new FoxMatchBarReading(string.Empty, string.Empty, directory);
-
-                    using (Bitmap left = Crop(info, leftBounds))
-                    using (Bitmap right = Crop(info, rightBounds))
+                    IntPtr visibleRoot = FindVisibleFoxSearchRoot(processId);
+                    if (visibleRoot != IntPtr.Zero)
                     {
-                        return new FoxMatchBarReading(
-                            Recognize(left, engine),
-                            Recognize(right, engine),
-                            directory);
+                        searchRoot = visibleRoot;
+                        listHandle = FindNamedOnScreenChild(searchRoot, PlayerListPanelTitle);
                     }
                 }
+
+                IList<FoxPlayerListEntry> players = ReadPlayers(listHandle, capture);
+                string diagnostic = "hwnd=" + boardHandle.ToInt64().ToString("X")
+                    + " live=" + (boardHandle != IntPtr.Zero && IsWindow(boardHandle) ? "1" : "0")
+                    + " root=" + searchRoot.ToInt64().ToString("X")
+                    + " list=" + listHandle.ToInt64().ToString("X")
+                    + " players=" + players.Count;
+                return new FoxMatchBarReading(players, diagnostic);
+            }
+            catch (Exception ex)
+            {
+                return DiagnosedEmpty("ex=" + ex.GetType().Name + ":" + ex.Message);
+            }
+        }
+
+        private static IList<FoxPlayerListEntry> ReadPlayers(IntPtr listHandle, IBoardCapturePlatform capture)
+        {
+            List<FoxPlayerListEntry> players = new List<FoxPlayerListEntry>();
+            if (listHandle == IntPtr.Zero)
+                return players;
+
+            AutomationElement root;
+            try
+            {
+                root = AutomationElement.FromHandle(listHandle);
             }
             catch
             {
-                return FoxMatchBarReading.Empty;
+                return players;
+            }
+
+            if (root == null)
+                return players;
+
+            List<AutomationElement> named = new List<AutomationElement>();
+            int count = 0;
+            WalkNamed(root, 0, named, ref count);
+
+            for (int i = 0; i < named.Count && players.Count < MaxUiaNodes; i++)
+            {
+                string name = Safe(() => named[i].Current.Name);
+                if (!FoxMatchBarSeatResolver.IsPlayerNickname(name))
+                    continue;
+                string next = i + 1 < named.Count
+                    ? Safe(() => named[i + 1].Current.Name)
+                    : string.Empty;
+                if (!FoxMatchBarSeatResolver.LooksLikeRankOrStat(next))
+                    continue;
+
+                AutoPlayColorResolution stone = AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
+                if (players.Count == 0)
+                    stone = AutoPlayColorResolution.Known("white", AutoPlayColorStatus.RecognizedWhite);
+                else if (players.Count == 1)
+                    stone = AutoPlayColorResolution.Known("black", AutoPlayColorStatus.RecognizedBlack);
+
+                players.Add(new FoxPlayerListEntry(name, stone));
+            }
+
+            return players;
+        }
+
+        private static void WalkNamed(
+            AutomationElement element,
+            int depth,
+            List<AutomationElement> named,
+            ref int count)
+        {
+            if (element == null || depth > 8 || count >= MaxUiaNodes)
+                return;
+
+            string name = Safe(() => element.Current.Name);
+            if (!string.IsNullOrWhiteSpace(name)
+                && !string.Equals(name, PlayerListPanelTitle, StringComparison.Ordinal))
+            {
+                named.Add(element);
+                count++;
+            }
+
+            AutomationElement child;
+            try
+            {
+                child = TreeWalker.ControlViewWalker.GetFirstChild(element);
+            }
+            catch
+            {
+                return;
+            }
+
+            while (child != null && count < MaxUiaNodes)
+            {
+                WalkNamed(child, depth + 1, named, ref count);
+                try
+                {
+                    child = TreeWalker.ControlViewWalker.GetNextSibling(child);
+                }
+                catch
+                {
+                    break;
+                }
             }
         }
 
-        internal static bool TryGetSeatBounds(Size infoSize, out Rectangle leftBounds, out Rectangle rightBounds)
+        private static bool TryMapRow(
+            AutomationElement item,
+            RECT panelRect,
+            Size bitmapSize,
+            out Rectangle row)
         {
-            leftBounds = Rectangle.Empty;
-            rightBounds = Rectangle.Empty;
-            if (infoSize.Width < 4 || infoSize.Height < 20)
+            row = Rectangle.Empty;
+            System.Windows.Rect screen;
+            try
+            {
+                screen = item.Current.BoundingRectangle;
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (screen.IsEmpty || screen.Width < 8 || screen.Height < 8)
                 return false;
 
-            int y = infoSize.Height * 55 / 100;
-            int h = Math.Max(20, infoSize.Height * 22 / 100);
-            if (y + h > infoSize.Height)
-                h = infoSize.Height - y;
-            if (h < 16)
-                return false;
+            int x = (int)Math.Round(screen.X) - panelRect.Left;
+            int y = (int)Math.Round(screen.Y) - panelRect.Top;
+            int width = (int)Math.Round(screen.Width);
+            int height = (int)Math.Round(screen.Height);
+            if (width < 24)
+                width = Math.Max(24, height * 6);
+            if (x < 0)
+            {
+                width += x;
+                x = 0;
+            }
 
-            int mid = infoSize.Width / 2;
-            if (mid < 2 || infoSize.Width - mid < 2)
-                return false;
+            if (y < 0)
+            {
+                height += y;
+                y = 0;
+            }
 
-            leftBounds = new Rectangle(0, y, mid, h);
-            rightBounds = new Rectangle(mid, y, infoSize.Width - mid, h);
-            return true;
+            if (x >= bitmapSize.Width || y >= bitmapSize.Height || width < 12 || height < 8)
+                return false;
+            if (x + width > bitmapSize.Width)
+                width = bitmapSize.Width - x;
+            if (y + height > bitmapSize.Height)
+                height = bitmapSize.Height - y;
+            row = new Rectangle(x, y, width, height);
+            return row.Width >= 12 && row.Height >= 8;
         }
+
 
         private static Bitmap CapturePanel(IntPtr handle, IBoardCapturePlatform capture)
         {
@@ -139,136 +229,8 @@ namespace readboard
             return total > 0 && dark * 10 >= total * 9;
         }
 
-        private static Bitmap Crop(Bitmap source, Rectangle bounds)
-        {
-            Bitmap bitmap = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
-            using (Graphics graphics = Graphics.FromImage(bitmap))
-            {
-                graphics.DrawImage(
-                    source,
-                    new Rectangle(0, 0, bounds.Width, bounds.Height),
-                    bounds,
-                    GraphicsUnit.Pixel);
-            }
 
-            return bitmap;
-        }
 
-        private static OcrEngine TryGetEngine()
-        {
-            lock (EngineGate)
-            {
-                if (engineResolved)
-                    return cachedEngine;
-
-                cachedEngine = OcrEngine.TryCreateFromLanguage(new Language("zh-Hans"));
-                engineResolved = true;
-                return cachedEngine;
-            }
-        }
-
-        private static string Recognize(Bitmap bitmap, OcrEngine engine)
-        {
-            if (bitmap == null || engine == null)
-                return string.Empty;
-
-            return Task.Run(async () =>
-            {
-                using (MemoryStream stream = new MemoryStream())
-                {
-                    bitmap.Save(stream, ImageFormat.Bmp);
-                    stream.Position = 0;
-                    using (IRandomAccessStream ras = stream.AsRandomAccessStream())
-                    {
-                        BitmapDecoder decoder = await BitmapDecoder.CreateAsync(ras);
-                        SoftwareBitmap softwareBitmap = await decoder.GetSoftwareBitmapAsync();
-                        OcrResult result = await engine.RecognizeAsync(softwareBitmap);
-                        return JoinLines(result);
-                    }
-                }
-            }).GetAwaiter().GetResult();
-        }
-
-        private static string JoinLines(OcrResult result)
-        {
-            if (result == null || result.Lines == null)
-                return string.Empty;
-
-            StringBuilder builder = new StringBuilder();
-            foreach (OcrLine line in result.Lines)
-            {
-                if (line == null || string.IsNullOrWhiteSpace(line.Text))
-                    continue;
-                builder.Append(line.Text.Trim());
-            }
-
-            return builder.ToString();
-        }
-
-        private static IList<string> ReadDirectory(IntPtr listHandle)
-        {
-            List<string> names = new List<string>();
-            if (listHandle == IntPtr.Zero)
-                return names;
-
-            AutomationElement root;
-            try
-            {
-                root = AutomationElement.FromHandle(listHandle);
-            }
-            catch
-            {
-                return names;
-            }
-
-            if (root == null)
-                return names;
-
-            int count = 0;
-            WalkAutomation(root, 0, names, ref count);
-            return names;
-        }
-
-        private static void WalkAutomation(
-            AutomationElement element,
-            int depth,
-            List<string> names,
-            ref int count)
-        {
-            if (element == null || depth > MaxUiaDepth || count >= MaxUiaNodes)
-                return;
-
-            string name = Safe(() => element.Current.Name);
-            if (!string.IsNullOrWhiteSpace(name)
-                && !string.Equals(name, PlayerListPanelTitle, StringComparison.Ordinal))
-            {
-                names.Add(name);
-                count++;
-            }
-
-            AutomationElement child;
-            try
-            {
-                child = TreeWalker.ControlViewWalker.GetFirstChild(element);
-            }
-            catch
-            {
-                return;
-            }
-
-            while (child != null && count < MaxUiaNodes)
-            {
-                WalkAutomation(child, depth + 1, names, ref count);
-                try
-                {
-                    child = TreeWalker.ControlViewWalker.GetNextSibling(child);
-                }
-                catch
-                {
-                    break;
-                }
-            }
-        }
 
         private static string Safe(Func<string> read)
         {
@@ -299,25 +261,28 @@ namespace readboard
                 || height <= 1;
         }
 
-        private static IntPtr GetRoot(IntPtr handle)
+        private static IntPtr ResolveSearchRoot(IntPtr boardHandle)
         {
-            IntPtr root = handle;
-            IntPtr parent = GetParent(root);
-            while (parent != IntPtr.Zero)
+            IntPtr current = boardHandle;
+            while (current != IntPtr.Zero)
             {
-                root = parent;
-                parent = GetParent(root);
+                if (FindNamedOnScreenChild(current, PlayerListPanelTitle) != IntPtr.Zero)
+                    return current;
+                current = GetParent(current);
             }
 
-            return root;
+            return boardHandle;
         }
 
-        private static IntPtr FindNamedChild(IntPtr root, string title)
+        private static IntPtr FindNamedOnScreenChild(IntPtr root, string title)
         {
             IntPtr found = IntPtr.Zero;
+            if (root == IntPtr.Zero)
+                return found;
+
             EnumChildWindows(root, delegate(IntPtr child, IntPtr parameter)
             {
-                if (!IsWindowVisible(child))
+                if (IsMinimized(child))
                     return true;
                 if (!string.Equals(GetWindowTitle(child), title, StringComparison.Ordinal))
                     return true;
@@ -326,6 +291,69 @@ namespace readboard
             }, IntPtr.Zero);
             return found;
         }
+
+        private static IntPtr FindVisibleFoxSearchRoot(uint preferredProcessId)
+        {
+            IntPtr playing = IntPtr.Zero;
+            IntPtr any = IntPtr.Zero;
+            EnumWindows(delegate(IntPtr top, IntPtr parameter)
+            {
+                if (IsMinimized(top))
+                    return true;
+
+                uint processId;
+                GetWindowThreadProcessId(top, out processId);
+                if (preferredProcessId != 0)
+                {
+                    if (processId != preferredProcessId)
+                        return true;
+                }
+                else if (!IsFoxProcess(processId))
+                {
+                    return true;
+                }
+
+                if (FindNamedOnScreenChild(top, PlayerListPanelTitle) == IntPtr.Zero)
+                    return true;
+
+                if (any == IntPtr.Zero)
+                    any = top;
+                if (playing == IntPtr.Zero
+                    && GetWindowTitle(top).IndexOf("对弈中", StringComparison.Ordinal) >= 0)
+                {
+                    playing = top;
+                }
+
+                return true;
+            }, IntPtr.Zero);
+
+            return playing != IntPtr.Zero ? playing : any;
+        }
+
+        private static bool IsFoxProcess(uint processId)
+        {
+            if (processId == 0)
+                return false;
+
+            try
+            {
+                using (Process process = Process.GetProcessById((int)processId))
+                {
+                    string name = process.ProcessName ?? string.Empty;
+                    return name.IndexOf("foxwq", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static FoxMatchBarReading DiagnosedEmpty(string diagnostic)
+        {
+            return new FoxMatchBarReading(Array.Empty<FoxPlayerListEntry>(), diagnostic);
+        }
+
 
         private static string GetWindowTitle(IntPtr handle)
         {
@@ -345,6 +373,7 @@ namespace readboard
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
+
         [DllImport("user32.dll")]
         private static extern bool IsWindowVisible(IntPtr hWnd);
 
@@ -356,6 +385,12 @@ namespace readboard
 
         [DllImport("user32.dll")]
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct RECT
