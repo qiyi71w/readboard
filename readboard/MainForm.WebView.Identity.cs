@@ -97,7 +97,6 @@ namespace readboard
             FoxMatchBarReading reading = foxMatchBarLiveRecognition.CurrentReading;
             IList<FoxIdentityCandidate> candidates = FoxMatchBarIdentityCandidates.Build(
                 reading.Players);
-            AppendFoxMatchBarIdentityLog(reading, candidates);
             FoxIdentitySelectionSnapshot snapshot = foxIdentitySelection.Open(
                 candidates,
                 resumeAutoPlay,
@@ -106,40 +105,6 @@ namespace readboard
             return true;
         }
 
-        private static void AppendFoxMatchBarIdentityLog(
-            FoxMatchBarReading reading,
-            IList<FoxIdentityCandidate> candidates)
-        {
-            try
-            {
-                reading = reading ?? FoxMatchBarReading.Empty;
-                int seatCount = candidates == null ? 0 : candidates.Count;
-                List<string> names = new List<string>();
-                if (reading.Players != null)
-                {
-                    foreach (FoxPlayerListEntry player in reading.Players)
-                    {
-                        string stone = player.Stone == null || !player.Stone.IsKnown
-                            ? "?"
-                            : player.Stone.PlayColor;
-                        names.Add(player.Nickname + ":" + stone);
-                    }
-                }
-
-                File.AppendAllText(
-                    Path.Combine(Path.GetTempPath(), "readboard-fox-match-bar.log"),
-                    DateTime.Now.ToString("o")
-                        + " players=" + names.Count
-                        + " [" + string.Join("|", names)
-                        + "] seats=" + seatCount
-                        + " "
-                        + reading.Diagnostic
-                        + Environment.NewLine);
-            }
-            catch
-            {
-            }
-        }
 
         private static ReadBoardIdentityUiState CreateWebViewIdentityState(
             FoxIdentitySelectionSnapshot snapshot)
