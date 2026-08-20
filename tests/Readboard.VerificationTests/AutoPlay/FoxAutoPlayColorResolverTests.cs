@@ -1,3 +1,4 @@
+using System.Drawing;
 using Xunit;
 using readboard;
 
@@ -77,6 +78,65 @@ namespace Readboard.VerificationTests.AutoPlay
             Assert.Equal(AutoPlayColorStatus.Unconfigured, resolution.Status);
         }
 
+        [Fact]
+        public void Resolve_RejectsLegacyGlyphAsUnconfigured()
+        {
+            string glyph = CreateLegacyGlyphIdentity();
+            AutoPlayColorResolution resolution = ResolveAuto(
+                SyncMode.Fox,
+                glyph,
+                PlayingContext(),
+                Known("black", AutoPlayColorStatus.RecognizedBlack));
+
+            Assert.False(resolution.IsKnown);
+            Assert.Null(resolution.PlayColor);
+            Assert.Equal(AutoPlayColorStatus.Unconfigured, resolution.Status);
+        }
+
+        [Fact]
+        public void Resolve_KeepsFoxNicknameConfiguredWhenDetectorCannotUseIt()
+        {
+            AutoPlayColorResolution resolution = ResolveAuto(
+                SyncMode.Fox,
+                "叶落メ让子",
+                PlayingContext(),
+                AutoPlayColorResolution.Unknown(AutoPlayColorStatus.Unconfigured));
+
+            Assert.False(resolution.IsKnown);
+            Assert.Null(resolution.PlayColor);
+            Assert.Equal(AutoPlayColorStatus.ColorUnknown, resolution.Status);
+        }
+
+        [Fact]
+        public void Resolve_ReturnsManualBlack_WhenLegacyGlyphIsPresent()
+        {
+            AutoPlayColorResolution resolution = FoxAutoPlayColorResolver.Resolve(
+                AutoPlayColorMode.ManualBlack,
+                SyncMode.Fox,
+                CreateLegacyGlyphIdentity(),
+                PlayingContext(),
+                Known("white", AutoPlayColorStatus.RecognizedWhite));
+
+            Assert.True(resolution.IsKnown);
+            Assert.Equal("black", resolution.PlayColor);
+            Assert.Equal(AutoPlayColorStatus.ManualBlack, resolution.Status);
+        }
+
+        [Fact]
+        public void Resolve_ReturnsManualWhite_WhenLegacyGlyphIsPresent()
+        {
+            AutoPlayColorResolution resolution = FoxAutoPlayColorResolver.Resolve(
+                AutoPlayColorMode.ManualWhite,
+                SyncMode.Fox,
+                CreateLegacyGlyphIdentity(),
+                PlayingContext(),
+                Known("black", AutoPlayColorStatus.RecognizedBlack));
+
+            Assert.True(resolution.IsKnown);
+            Assert.Equal("white", resolution.PlayColor);
+            Assert.Equal(AutoPlayColorStatus.ManualWhite, resolution.Status);
+        }
+
         [Theory]
         [InlineData("black", (int)AutoPlayColorStatus.RecognizedBlack)]
         [InlineData("white", (int)AutoPlayColorStatus.RecognizedWhite)]
@@ -130,6 +190,24 @@ namespace Readboard.VerificationTests.AutoPlay
         private static FoxWindowContext PlayingContext()
         {
             return new FoxWindowContext { Kind = FoxWindowKind.LiveRoom, LiveRoomState = FoxLiveRoomState.Playing };
+        }
+
+        private static string CreateLegacyGlyphIdentity()
+        {
+            using (Bitmap bitmap = new Bitmap(96, 24))
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            using (Pen pen = new Pen(Color.FromArgb(20, 20, 20), 2))
+            {
+                graphics.Clear(Color.FromArgb(245, 245, 240));
+                graphics.DrawLine(pen, 8, 6, 72, 6);
+                graphics.DrawLine(pen, 8, 6, 8, 18);
+                graphics.DrawLine(pen, 20, 18, 76, 18);
+                graphics.DrawLine(pen, 42, 4, 54, 20);
+                string glyph = FoxPlayerNicknameSignature.FromBitmap(bitmap).Serialize();
+                Assert.False(string.IsNullOrWhiteSpace(glyph));
+                Assert.True(FoxPlayerNicknameSignature.FromString(glyph).IsValid);
+                return glyph;
+            }
         }
     }
 }
