@@ -180,8 +180,12 @@ test("renders dynamic snapshots, language-switched logs, and accessible controls
 
   await expect(page.locator("#modal-title")).toHaveText("Select Fox identity");
   await expect(page.locator("#modal-body")).toContainText("Player row 1");
+  await expect(page.locator("#modal-body")).not.toContainText("Selected:");
   await expect(page.locator(".candidate input")).toBeChecked();
-  await expect(page.locator(".candidate img")).toHaveAttribute("alt", "Player row 1 screenshot");
+  await expect(page.locator(".candidate img")).toHaveCount(0);
+  await expect(page.locator(".candidate-list")).toHaveAttribute("role", "radiogroup");
+  await expect(page.locator(".saved-pill")).toHaveText("Saved");
+  await expect(page.locator('#modal-actions button[data-command="identity.clearSaved"]')).toHaveClass(/left/);
   await expect(page.locator('#modal-actions button[data-command="identity.saveAndUse"]')).toHaveText("Save and use");
 
   const projectedIdentityAvailability = await page.evaluate(() => {

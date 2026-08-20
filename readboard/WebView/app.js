@@ -537,22 +537,18 @@
   function renderIdentity(identity) {
     const candidates = Array.isArray(identity.candidates) ? identity.candidates : [];
     const selected = identity.selectedId;
-    const body = candidates.length
-      ? `<p class="identity-intro">${escapeHtml(identity.prompt || "")}</p><b>${escapeHtml(identity.detectedNicknamesLabel || "")}</b><div class="candidate-list">${candidates.map(candidate => candidateHtml(candidate, selected, identity.savedId, identity.savedLabel)).join("")}</div>${selected ? `<p class="identity-intro">${escapeHtml(identity.selectedLabel || "")} ${escapeHtml(candidates.find(item => item.id === selected)?.label || "")}</p>` : ""}`
-      : `<p class="identity-intro">${escapeHtml(identity.prompt || "")}</p><b>${escapeHtml(identity.detectedNicknamesLabel || "")}</b><div class="empty-state"><div><i class="icon">&#xE738;</i><h3>${escapeHtml(identity.emptyTitle || "")}</h3><p>${escapeHtml(identity.windowHint || "")}</p></div></div>`;
+    const listLabel = identity.detectedNicknamesLabel || "";
+    const list = candidates.length
+      ? `<div class="candidate-list" role="radiogroup" aria-label="${escapeAttr(listLabel)}">${candidates.map(candidate => candidateHtml(candidate, selected, identity.savedId, identity.savedLabel)).join("")}</div>`
+      : `<div class="empty-state"><div><i class="icon">&#xE738;</i><h3>${escapeHtml(identity.emptyTitle || "")}</h3><p>${escapeHtml(identity.windowHint || "")}</p></div></div>`;
+    const body = `<p class="identity-intro">${escapeHtml(identity.prompt || "")}</p><p class="identity-list-label">${escapeHtml(listLabel)}</p>${list}`;
     const actions = identity.hasSavedIdentity ? button("identity.clearSaved", identity.clearSavedLabel || "", "danger-outline left") : "";
-    openModal("identity", identity.dialogTitle || "", body, actions + button("identity.close", identity.cancelLabel || "") + button("identity.useOnce", identity.useOnceLabel || "", "", !identity.canUseOnce) + button("identity.saveAndUse", identity.saveAndUseLabel || "", "primary", !identity.canSaveAndUse), "min(780px, calc(100vw - 48px))");
+    openModal("identity", identity.dialogTitle || "", body, actions + button("identity.close", identity.cancelLabel || "") + button("identity.useOnce", identity.useOnceLabel || "", "", !identity.canUseOnce) + button("identity.saveAndUse", identity.saveAndUseLabel || "", "primary", !identity.canSaveAndUse), "min(480px, calc(100vw - 48px))");
   }
 
   function candidateHtml(candidate, selectedId, savedId, savedLabel) {
     const selected = candidate.id === selectedId;
-    const previewUrl = safeImageUrl(candidate.previewUrl);
-    return `<label class="candidate${selected ? " selected" : ""}"><input type="radio" name="candidate" value="${escapeAttr(candidate.id)}"${selected ? " checked" : ""}><b>${escapeHtml(candidate.label || "")}</b>${candidate.id === savedId ? `<span class="saved-pill">${escapeHtml(savedLabel || "")}</span>` : ""}${previewUrl ? `<img src="${escapeAttr(previewUrl)}" alt="${escapeAttr(candidate.previewAlt || "")}">` : ""}</label>`;
-  }
-
-  function safeImageUrl(value) {
-    if (typeof value !== "string") return "";
-    return /^(data:image\/(?:png|jpeg|webp);base64,|https:\/\/app\.readboard\/)/i.test(value) ? value : "";
+    return `<label class="candidate${selected ? " selected" : ""}"><input type="radio" name="candidate" value="${escapeAttr(candidate.id)}"${selected ? " checked" : ""}><b>${escapeHtml(candidate.label || "")}</b>${candidate.id === savedId ? `<span class="saved-pill">${escapeHtml(savedLabel || "")}</span>` : ""}</label>`;
   }
 
   function renderDialog(dialog) {
