@@ -89,11 +89,17 @@ namespace readboard
             if (!IsFoxSyncType(CurrentSyncType))
                 return true;
 
+            SampleFoxMatchBar(
+                hwnd,
+                ResolveFoxWindowContext(),
+                foxIdentitySelection.EffectiveIdentitySignature,
+                true);
+            FoxMatchBarReading reading = foxMatchBarLiveRecognition.CurrentReading;
             FoxIdentitySelectionSnapshot snapshot = foxIdentitySelection.Open(
                 FoxMatchBarIdentityCandidates.Build(
-                    foxMatchBarLeftOcrFragment,
-                    foxMatchBarRightOcrFragment,
-                    foxNicknameDirectory),
+                    reading.LeftOcrFragment,
+                    reading.RightOcrFragment,
+                    reading.Directory),
                 resumeAutoPlay,
                 lastManualAutoPlayColorMode);
             webViewIdentityState = CreateWebViewIdentityState(snapshot);
