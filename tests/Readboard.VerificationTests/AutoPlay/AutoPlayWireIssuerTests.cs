@@ -22,7 +22,7 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
-        public void IssueIfAuthorized_KeepSyncOffAfterFoxAutoPlay_RevokesOnceWithoutAnotherPlay()
+        public void IssueIfAuthorized_KeepSyncOffAfterFoxAutoPlay_DoesNotRevokeOrEmitPlay()
         {
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
@@ -35,8 +35,26 @@ namespace Readboard.VerificationTests.AutoPlay
             AutoPlayWireIssuer.IssueIfAuthorized(snapshot, keepSync: true, coordinator);
             AutoPlayWireIssuer.IssueIfAuthorized(snapshot, keepSync: false, coordinator);
 
+            Assert.Equal(new[] { "play>black>5 1000 0" }, transport.SentLines);
+        }
+
+        [Fact]
+        public void IssueIfAuthorized_KeepSyncJitterAfterFoxAutoPlay_AllowsNextQualifiedPlayWithoutStop()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            ControlCenterRuntimeSnapshot snapshot = CreateSnapshot(
+                keepTwoWay: true,
+                autoPlayEnabled: true,
+                colorKnown: true,
+                AutoPlayColorMode.FoxAuto);
+
+            AutoPlayWireIssuer.IssueIfAuthorized(snapshot, keepSync: true, coordinator);
+            AutoPlayWireIssuer.IssueIfAuthorized(snapshot, keepSync: false, coordinator);
+            AutoPlayWireIssuer.IssueIfAuthorized(snapshot, keepSync: true, coordinator);
+
             Assert.Equal(
-                new[] { "play>black>5 1000 0", "stopAutoPlay" },
+                new[] { "play>black>5 1000 0", "play>black>5 1000 0" },
                 transport.SentLines);
         }
 
@@ -52,6 +70,34 @@ namespace Readboard.VerificationTests.AutoPlay
                 coordinator);
 
             Assert.Empty(transport.SentLines);
+        }
+
+        [Fact]
+        public void IssueIfAuthorized_TwoWaySyncOffAfterFoxAutoPlay_RevokesWithoutAnotherPlay()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+
+            AutoPlayWireIssuer.IssueIfAuthorized(
+                CreateSnapshot(
+                    keepTwoWay: true,
+                    autoPlayEnabled: true,
+                    colorKnown: true,
+                    AutoPlayColorMode.FoxAuto),
+                keepSync: true,
+                coordinator);
+            AutoPlayWireIssuer.IssueIfAuthorized(
+                CreateSnapshot(
+                    keepTwoWay: false,
+                    autoPlayEnabled: true,
+                    colorKnown: true,
+                    AutoPlayColorMode.FoxAuto),
+                keepSync: true,
+                coordinator);
+
+            Assert.Equal(
+                new[] { "play>black>5 1000 0", "stopAutoPlay" },
+                transport.SentLines);
         }
 
         [Fact]
@@ -97,7 +143,7 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
-        public void IssueIfAuthorized_UnknownColor_DoesNotEmitPlayAndRevokesAuthorization()
+        public void IssueIfAuthorized_UnknownColor_DoesNotEmitPlayOrRevokeAuthorization()
         {
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
@@ -119,8 +165,58 @@ namespace Readboard.VerificationTests.AutoPlay
                 keepSync: true,
                 coordinator);
 
+            Assert.Equal(new[] { "play>black>5 1000 0" }, transport.SentLines);
+        }
+
+        [Fact]
+        public void IssueIfAuthorized_UnknownColorAfterFoxAutoPlay_AllowsNextQualifiedPlayWithoutStop()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            ControlCenterRuntimeSnapshot known = CreateSnapshot(
+                keepTwoWay: true,
+                autoPlayEnabled: true,
+                colorKnown: true,
+                AutoPlayColorMode.FoxAuto);
+            ControlCenterRuntimeSnapshot unknown = CreateSnapshot(
+                keepTwoWay: true,
+                autoPlayEnabled: true,
+                colorKnown: false,
+                AutoPlayColorMode.FoxAuto);
+
+            AutoPlayWireIssuer.IssueIfAuthorized(known, keepSync: true, coordinator);
+            AutoPlayWireIssuer.IssueIfAuthorized(unknown, keepSync: true, coordinator);
+            AutoPlayWireIssuer.IssueIfAuthorized(known, keepSync: true, coordinator);
+
             Assert.Equal(
-                new[] { "play>black>5 1000 0", "stopAutoPlay" },
+                new[] { "play>black>5 1000 0", "play>black>5 1000 0" },
+                transport.SentLines);
+        }
+
+        [Fact]
+        public void IssueIfAuthorized_NullColorResolutionAfterFoxAutoPlay_AllowsNextQualifiedPlayWithoutStop()
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            ControlCenterRuntimeSnapshot known = CreateSnapshot(
+                keepTwoWay: true,
+                autoPlayEnabled: true,
+                colorKnown: true,
+                AutoPlayColorMode.FoxAuto);
+            ControlCenterRuntimeSnapshot unresolved = CreateSnapshot(
+                keepTwoWay: true,
+                autoPlayEnabled: true,
+                colorKnown: true,
+                AutoPlayColorMode.FoxAuto);
+            unresolved.AutoPlayColorResolution = null;
+            unresolved.PlayColor = null;
+
+            AutoPlayWireIssuer.IssueIfAuthorized(known, keepSync: true, coordinator);
+            AutoPlayWireIssuer.IssueIfAuthorized(unresolved, keepSync: true, coordinator);
+            AutoPlayWireIssuer.IssueIfAuthorized(known, keepSync: true, coordinator);
+
+            Assert.Equal(
+                new[] { "play>black>5 1000 0", "play>black>5 1000 0" },
                 transport.SentLines);
         }
 

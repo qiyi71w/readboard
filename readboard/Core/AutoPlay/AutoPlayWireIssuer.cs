@@ -14,18 +14,17 @@ namespace readboard
             if (coordinator == null)
                 throw new ArgumentNullException("coordinator");
 
-            if (!snapshot.CanSendAutoPlayCommand(keepSync))
-            {
-                if (snapshot.AutoPlayColorMode == AutoPlayColorMode.FoxAuto)
-                    coordinator.RevokeAutoPlayIfAuthorized();
-                return;
-            }
-
-            if (snapshot.AutoPlayColorResolution == null || !snapshot.AutoPlayColorResolution.IsKnown)
+            if (ShouldRevokeFoxAutoPlayAuthorization(snapshot))
             {
                 coordinator.RevokeAutoPlayIfAuthorized();
                 return;
             }
+
+            if (!snapshot.CanSendAutoPlayCommand(keepSync))
+                return;
+
+            if (snapshot.AutoPlayColorResolution == null || !snapshot.AutoPlayColorResolution.IsKnown)
+                return;
 
             coordinator.SendPlay(
                 snapshot.PlayColor,
@@ -34,6 +33,14 @@ namespace readboard
                 ToProtocolNumericValue(snapshot.PlayoutsValue),
                 ToProtocolNumericValue(snapshot.FirstPolicyValue),
                 snapshot.AutoPlayMoveMode);
+        }
+
+        private static bool ShouldRevokeFoxAutoPlayAuthorization(ControlCenterRuntimeSnapshot snapshot)
+        {
+            if (snapshot.AutoPlayColorMode != AutoPlayColorMode.FoxAuto)
+                return false;
+
+            return !snapshot.AutoPlayEnabled || !snapshot.TwoWaySync;
         }
 
         internal static string ToProtocolNumericValue(string value)
