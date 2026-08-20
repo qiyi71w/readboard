@@ -13,27 +13,66 @@ namespace readboard
         void ClearSavedIdentity();
     }
 
+    internal static class FoxNicknameIdentity
+    {
+        public static string Normalize(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            string trimmed = value.Trim();
+            return FoxPlayerNicknameSignature.FromString(trimmed).IsValid
+                ? string.Empty
+                : trimmed;
+        }
+
+        public static bool IsConfigured(string value)
+        {
+            return Normalize(value).Length > 0;
+        }
+    }
+
     internal sealed class AppConfigFoxIdentityPersistence : IFoxIdentityPersistence
     {
+        public static string ReadSavedFoxNickname(AppConfig config)
+        {
+            return config == null ? string.Empty : FoxNicknameIdentity.Normalize(config.FoxAutoPlayNickname);
+        }
+
+        public static void WriteSavedFoxNickname(AppConfig config, string nickname)
+        {
+            if (config == null)
+                throw new ArgumentNullException("config");
+
+            config.FoxAutoPlayNickname = FoxNicknameIdentity.Normalize(nickname);
+            config.FoxAutoPlayNicknameSignature = string.Empty;
+        }
+
+        public static void ClearSavedFoxNickname(AppConfig config)
+        {
+            if (config == null)
+                throw new ArgumentNullException("config");
+
+            config.FoxAutoPlayNickname = string.Empty;
+            config.FoxAutoPlayNicknameSignature = string.Empty;
+        }
+
         public string LoadSavedIdentitySignature()
         {
-            AppConfig config = Program.CurrentConfig;
-            return config == null ? string.Empty : config.FoxAutoPlayNicknameSignature ?? string.Empty;
+            return ReadSavedFoxNickname(Program.CurrentConfig);
         }
 
         public void SaveIdentitySignature(string signature)
         {
             AppConfig updatedConfig = RequireCurrentConfig().Clone();
-            updatedConfig.FoxAutoPlayNickname = string.Empty;
-            updatedConfig.FoxAutoPlayNicknameSignature = signature ?? string.Empty;
+            WriteSavedFoxNickname(updatedConfig, signature);
             Program.SaveAppConfig(updatedConfig);
         }
 
         public void ClearSavedIdentity()
         {
             AppConfig updatedConfig = RequireCurrentConfig().Clone();
-            updatedConfig.FoxAutoPlayNickname = string.Empty;
-            updatedConfig.FoxAutoPlayNicknameSignature = string.Empty;
+            ClearSavedFoxNickname(updatedConfig);
             Program.SaveAppConfig(updatedConfig);
         }
 
@@ -644,7 +683,7 @@ namespace readboard
 
         private static string NormalizeSignature(string signature)
         {
-            return string.IsNullOrWhiteSpace(signature) ? string.Empty : signature.Trim();
+            return FoxNicknameIdentity.Normalize(signature);
         }
 
         private static AutoPlayColorMode NormalizeManualMode(AutoPlayColorMode mode)

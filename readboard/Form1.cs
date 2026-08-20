@@ -58,13 +58,7 @@ namespace readboard
         private bool hasRetainedFoxTitleSnapshot = false;
         private MainWindowTitleTurn lastMainWindowTitleTurn = MainWindowTitleTurn.None;
         private string lastAppliedMainWindowTitle = string.Empty;
-        private readonly IBoardCapturePlatform foxAutoPlayCapturePlatform = new Win32BoardCapturePlatform();
-        private AutoPlayColorResolution lastFoxAutoPlayColorDetection = null;
-        private IntPtr lastFoxAutoPlayColorDetectionWindowHandle = IntPtr.Zero;
-        private string lastFoxAutoPlayColorDetectionContextSignature = string.Empty;
-        private string lastFoxAutoPlayColorDetectionNicknameSignature = string.Empty;
-        private DateTime lastFoxAutoPlayColorDetectionTimestampUtc = DateTime.MinValue;
-        private const int FoxAutoPlayColorDetectionCacheMs = 1000;
+        private readonly FoxMatchBarLiveRecognition foxMatchBarLiveRecognition = new FoxMatchBarLiveRecognition();
 
         int posX = -1;
         int posY = -1;
@@ -368,39 +362,11 @@ namespace readboard
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
             }
 
-            IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(hwnd);
-            AutoPlayColorResolution detection;
-            if (captureHandle == IntPtr.Zero)
-            {
-                detection = AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
-            }
-            else
-            {
-                string contextSignature = BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext);
-                DateTime now = DateTime.UtcNow;
-                if (lastFoxAutoPlayColorDetection != null
-                    && lastFoxAutoPlayColorDetectionWindowHandle == captureHandle
-                    && string.Equals(lastFoxAutoPlayColorDetectionContextSignature, contextSignature, StringComparison.Ordinal)
-                    && string.Equals(lastFoxAutoPlayColorDetectionNicknameSignature, nicknameSignature, StringComparison.Ordinal)
-                    && (now - lastFoxAutoPlayColorDetectionTimestampUtc).TotalMilliseconds < FoxAutoPlayColorDetectionCacheMs)
-                {
-                    detection = lastFoxAutoPlayColorDetection;
-                }
-                else
-                {
-                    using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(captureHandle))
-                    {
-                        detection = FoxAutoPlayColorDetector.DetectPlayerListPanel(bitmap, nicknameSignature);
-                    }
-
-                    lastFoxAutoPlayColorDetection = detection;
-                    lastFoxAutoPlayColorDetectionWindowHandle = captureHandle;
-                    lastFoxAutoPlayColorDetectionContextSignature = contextSignature;
-                    lastFoxAutoPlayColorDetectionNicknameSignature = nicknameSignature;
-                    lastFoxAutoPlayColorDetectionTimestampUtc = now;
-                }
-            }
-
+            AutoPlayColorResolution detection = SampleFoxMatchBar(
+                hwnd,
+                foxWindowContext,
+                nicknameSignature,
+                false);
             FoxIdentityRecognitionResult recognition = foxIdentitySelection.ApplyRoomRecognition(
                 operationGeneration,
                 foxWindowContext,
@@ -409,6 +375,33 @@ namespace readboard
                 detection);
             recognitionResult = recognition;
             return recognition.Snapshot.DerivedAuthorization;
+        }
+
+        private AutoPlayColorResolution SampleFoxMatchBar(
+            IntPtr windowHandle,
+            FoxWindowContext foxWindowContext,
+            string identitySignature,
+            bool forceResample)
+        {
+            string contextSignature = BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext);
+            DateTime now = DateTime.UtcNow;
+            if (!foxMatchBarLiveRecognition.NeedsSample(
+                windowHandle,
+                contextSignature,
+                identitySignature,
+                now,
+                forceResample))
+            {
+                return foxMatchBarLiveRecognition.CurrentResolution;
+            }
+
+            FoxMatchBarReading reading = FoxMatchBarWindowsReader.TryRead(windowHandle);
+            return foxMatchBarLiveRecognition.AcceptSample(
+                windowHandle,
+                contextSignature,
+                identitySignature,
+                now,
+                reading);
         }
 
         private static bool IsUniqueFoxIdentityMatch(AutoPlayColorResolution detection)
@@ -463,78 +456,9 @@ namespace readboard
             return result;
         }
 
-        private IntPtr ResolveFoxAutoPlayIdentityBoardHandle()
-        {
-            if (!IsFoxSyncType(CurrentSyncType))
-                return IntPtr.Zero;
-            if (hwnd != IntPtr.Zero && IsWindow(hwnd))
-                return hwnd;
-            return new LegacySyncWindowLocator().FindWindowHandle(GetCurrentSyncMode());
-        }
-
-        private IntPtr ResolveFoxAutoPlayCaptureHandle(IntPtr boardHandle)
-        {
-            return FindFoxPlayerListPanelHandle(boardHandle);
-        }
-
-        private static IntPtr FindFoxPlayerListPanelHandle(IntPtr boardHandle)
-        {
-            if (boardHandle == IntPtr.Zero || !IsWindow(boardHandle))
-                return IntPtr.Zero;
-
-            IntPtr rootHandle = boardHandle;
-            IntPtr parent = GetParent(rootHandle);
-            while (parent != IntPtr.Zero)
-            {
-                rootHandle = parent;
-                parent = GetParent(rootHandle);
-            }
-
-            IntPtr playerListHandle = IntPtr.Zero;
-            EnumChildWindows(rootHandle, delegate(IntPtr childHandle, IntPtr parameter)
-            {
-                if (!IsWindowVisible(childHandle))
-                    return true;
-                if (!string.Equals(GetWindowText(childHandle), "CRoomPlayerListPanel", StringComparison.Ordinal))
-                    return true;
-
-                playerListHandle = childHandle;
-                return false;
-            }, IntPtr.Zero);
-            return playerListHandle;
-        }
-
-        private static string GetWindowText(IntPtr handle)
-        {
-            StringBuilder builder = new StringBuilder(256);
-            GetWindowText(handle, builder, builder.Capacity);
-            return builder.ToString();
-        }
-
-        private static Bitmap CropBitmap(Bitmap source, PixelRect bounds)
-        {
-            if (source == null || bounds == null || bounds.IsEmpty)
-                return null;
-
-            Bitmap bitmap = new Bitmap(bounds.Width, bounds.Height);
-            using (Graphics graphics = Graphics.FromImage(bitmap))
-            {
-                graphics.DrawImage(
-                    source,
-                    new Rectangle(0, 0, bounds.Width, bounds.Height),
-                    new Rectangle(bounds.X, bounds.Y, bounds.Width, bounds.Height),
-                    GraphicsUnit.Pixel);
-            }
-            return bitmap;
-        }
-
         private void ClearFoxAutoPlayColorDetectionState()
         {
-            lastFoxAutoPlayColorDetection = null;
-            lastFoxAutoPlayColorDetectionWindowHandle = IntPtr.Zero;
-            lastFoxAutoPlayColorDetectionContextSignature = string.Empty;
-            lastFoxAutoPlayColorDetectionNicknameSignature = string.Empty;
-            lastFoxAutoPlayColorDetectionTimestampUtc = DateTime.MinValue;
+            foxMatchBarLiveRecognition.Invalidate();
             if (foxIdentitySelection != null)
                 foxIdentitySelection.ClearRoomRecognition();
             if (controlCenterRuntime != null)
@@ -1655,16 +1579,6 @@ namespace readboard
         [DllImport("USER32.DLL")]
         public static extern IntPtr GetParent(IntPtr hwnd);
 
-        private delegate bool EnumChildWindowProc(IntPtr handle, IntPtr parameter);
-
-        [DllImport("user32.dll")]
-        private static extern bool EnumChildWindows(IntPtr window, EnumChildWindowProc callback, IntPtr parameter);
-
-        [DllImport("user32.dll")]
-        private static extern bool IsWindowVisible(IntPtr handle);
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern int GetWindowText(IntPtr handle, StringBuilder title, int maxCount);
 
         public void placeMove(int x, int y)
         {

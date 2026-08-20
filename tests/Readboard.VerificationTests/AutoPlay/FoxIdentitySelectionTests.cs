@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using readboard;
 using Xunit;
@@ -85,6 +86,91 @@ namespace Readboard.VerificationTests.AutoPlay
             Assert.Equal("new-signature", selection.EffectiveIdentitySignature);
             Assert.Equal("new-signature", persistence.CurrentSignature);
             Assert.Single(persistence.SavedSignatures);
+        }
+
+        [Fact]
+        public void SaveAndUse_RestartReadsSameFoxNickname()
+        {
+            AppConfig config = AppConfig.CreateDefault("p", "machine");
+            ConfigBackedPersistence persistence = new ConfigBackedPersistence(config);
+            FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
+
+            selection.Open(new[] { Candidate("me", "叶落メ让子") }, true, AutoPlayColorMode.ManualBlack);
+            selection.Select("me");
+            FoxIdentitySelectionResult result = selection.SaveAndUse();
+
+            Assert.Equal(FoxIdentitySelectionActionOutcome.Applied, result.Outcome);
+            Assert.Equal("叶落メ让子", config.FoxAutoPlayNickname);
+            Assert.Equal(string.Empty, config.FoxAutoPlayNicknameSignature);
+
+            FoxIdentitySelection restarted = new FoxIdentitySelection(new ConfigBackedPersistence(config));
+
+            Assert.Equal("叶落メ让子", restarted.SavedIdentitySignature);
+            Assert.Equal("叶落メ让子", restarted.EffectiveIdentitySignature);
+            Assert.True(restarted.Snapshot.HasSavedIdentity);
+        }
+
+        [Fact]
+        public void Load_LegacyGlyphOnly_LeavesIdentityUnconfigured()
+        {
+            string glyph = CreateLegacyGlyphIdentity();
+            AppConfig config = AppConfig.CreateDefault("p", "machine");
+            config.FoxAutoPlayNicknameSignature = glyph;
+            config.FoxAutoPlayNickname = string.Empty;
+
+            FoxIdentitySelection selection = new FoxIdentitySelection(new ConfigBackedPersistence(config));
+
+            Assert.Equal(string.Empty, selection.SavedIdentitySignature);
+            Assert.Equal(string.Empty, selection.EffectiveIdentitySignature);
+            Assert.False(selection.Snapshot.HasSavedIdentity);
+
+            AutoPlayColorResolution resolution = FoxAutoPlayColorResolver.Resolve(
+                AutoPlayColorMode.FoxAuto,
+                SyncMode.Fox,
+                selection.EffectiveIdentitySignature,
+                PlayingRoom("room-1"),
+                AutoPlayColorResolution.Known("black", AutoPlayColorStatus.RecognizedBlack));
+
+            Assert.False(resolution.IsKnown);
+            Assert.Equal(AutoPlayColorStatus.Unconfigured, resolution.Status);
+        }
+
+        [Fact]
+        public void WriteSavedFoxNickname_LegacyGlyph_DoesNotConfigureIdentity()
+        {
+            string glyph = CreateLegacyGlyphIdentity();
+            AppConfig config = AppConfig.CreateDefault("p", "machine");
+            config.FoxAutoPlayNicknameSignature = glyph;
+
+            AppConfigFoxIdentityPersistence.WriteSavedFoxNickname(config, glyph);
+
+            Assert.Equal(string.Empty, config.FoxAutoPlayNickname);
+            Assert.Equal(string.Empty, config.FoxAutoPlayNicknameSignature);
+            Assert.Equal(string.Empty, AppConfigFoxIdentityPersistence.ReadSavedFoxNickname(config));
+        }
+
+        [Fact]
+        public void ClearSaved_DropsDiskFoxNicknameOnly()
+        {
+            AppConfig config = AppConfig.CreateDefault("p", "machine");
+            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
+            ConfigBackedPersistence persistence = new ConfigBackedPersistence(config);
+            FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
+
+            selection.Open(new[] { Candidate("me", "叶落メ让子") }, true, AutoPlayColorMode.ManualBlack);
+            selection.Select("me");
+            selection.SaveAndUse();
+            selection.Open(new[] { Candidate("me", "叶落メ让子") }, false, AutoPlayColorMode.ManualBlack);
+
+            FoxIdentitySelectionResult result = selection.ClearSaved();
+
+            Assert.Equal(FoxIdentitySelectionActionOutcome.Applied, result.Outcome);
+            Assert.Equal(string.Empty, config.FoxAutoPlayNickname);
+            Assert.Equal(string.Empty, config.FoxAutoPlayNicknameSignature);
+            Assert.Equal(AutoPlayColorMode.FoxAuto, config.AutoPlayColorMode);
+            Assert.Equal("叶落メ让子", selection.CurrentProcessIdentitySignature);
+            Assert.Equal("叶落メ让子", selection.EffectiveIdentitySignature);
+            Assert.False(result.RequiresAutomaticColorReevaluation);
         }
 
         [Fact]
@@ -379,6 +465,49 @@ namespace Readboard.VerificationTests.AutoPlay
         private static FoxIdentityCandidate Candidate(string id, string signature)
         {
             return new FoxIdentityCandidate(id, SemanticMessage.Create("WebView_candidateRowNumber", id), signature, null);
+        }
+
+        private static string CreateLegacyGlyphIdentity()
+        {
+            using (Bitmap bitmap = new Bitmap(96, 24))
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            using (Pen pen = new Pen(Color.FromArgb(20, 20, 20), 2))
+            {
+                graphics.Clear(Color.FromArgb(245, 245, 240));
+                graphics.DrawLine(pen, 8, 6, 72, 6);
+                graphics.DrawLine(pen, 8, 6, 8, 18);
+                graphics.DrawLine(pen, 20, 18, 76, 18);
+                graphics.DrawLine(pen, 42, 4, 54, 20);
+                string glyph = FoxPlayerNicknameSignature.FromBitmap(bitmap).Serialize();
+                Assert.False(string.IsNullOrWhiteSpace(glyph));
+                Assert.True(FoxPlayerNicknameSignature.FromString(glyph).IsValid);
+                return glyph;
+            }
+        }
+
+        private sealed class ConfigBackedPersistence : IFoxIdentityPersistence
+        {
+            private readonly AppConfig config;
+
+            public ConfigBackedPersistence(AppConfig config)
+            {
+                this.config = config;
+            }
+
+            public string LoadSavedIdentitySignature()
+            {
+                return AppConfigFoxIdentityPersistence.ReadSavedFoxNickname(config);
+            }
+
+            public void SaveIdentitySignature(string signature)
+            {
+                AppConfigFoxIdentityPersistence.WriteSavedFoxNickname(config, signature);
+            }
+
+            public void ClearSavedIdentity()
+            {
+                AppConfigFoxIdentityPersistence.ClearSavedFoxNickname(config);
+            }
         }
 
         private sealed class RecordingPersistence : IFoxIdentityPersistence

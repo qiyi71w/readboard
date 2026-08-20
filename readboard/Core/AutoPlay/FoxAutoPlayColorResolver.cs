@@ -19,10 +19,12 @@ namespace readboard
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.Spectating);
             if (!IsPlaying(foxWindowContext))
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
-            if (string.IsNullOrWhiteSpace(savedNicknameSignature))
+            if (!FoxNicknameIdentity.IsConfigured(savedNicknameSignature))
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.Unconfigured);
+            if (detected == null || detected.Status == AutoPlayColorStatus.Unconfigured)
+                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
 
-            return detected ?? AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
+            return detected;
         }
 
         private static bool IsFoxMode(SyncMode syncMode)

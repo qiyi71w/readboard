@@ -89,34 +89,14 @@ namespace readboard
             if (!IsFoxSyncType(CurrentSyncType))
                 return true;
 
-            List<FoxIdentityCandidate> candidates = new List<FoxIdentityCandidate>();
-            IntPtr boardHandle = ResolveFoxAutoPlayIdentityBoardHandle();
-            IntPtr captureHandle = ResolveFoxAutoPlayCaptureHandle(boardHandle);
-            if (captureHandle != IntPtr.Zero)
-            {
-                using (Bitmap bitmap = foxAutoPlayCapturePlatform.CaptureWindow(captureHandle))
-                {
-                    IList<FoxPlayerRowCandidate> rows = FoxPlayerRowLocator.LocatePlayerListPanel(bitmap);
-                    for (int i = 0; i < rows.Count; i++)
-                    {
-                        string signature;
-                        using (Bitmap nicknameSnippet = CropBitmap(bitmap, rows[i].NicknameBounds))
-                            signature = FoxPlayerNicknameSignature.FromBitmap(nicknameSnippet).Serialize();
-                        if (string.IsNullOrWhiteSpace(signature))
-                            continue;
-
-                        string previewUrl;
-                        using (Bitmap rowPreview = CropBitmap(bitmap, rows[i].RowBounds))
-                            previewUrl = EncodeIdentityPreview(rowPreview);
-                        candidates.Add(new FoxIdentityCandidate(
-                            "candidate-" + (candidates.Count + 1),
-                            SemanticMessage.Create("WebView_candidateRowNumber", i + 1),
-                            signature,
-                            previewUrl));
-                    }
-                }
-            }
-
+            SampleFoxMatchBar(
+                hwnd,
+                ResolveFoxWindowContext(),
+                foxIdentitySelection.EffectiveIdentitySignature,
+                true);
+            FoxMatchBarReading reading = foxMatchBarLiveRecognition.CurrentReading;
+            IList<FoxIdentityCandidate> candidates = FoxMatchBarIdentityCandidates.Build(
+                reading.Players);
             FoxIdentitySelectionSnapshot snapshot = foxIdentitySelection.Open(
                 candidates,
                 resumeAutoPlay,
@@ -124,6 +104,7 @@ namespace readboard
             webViewIdentityState = CreateWebViewIdentityState(snapshot);
             return true;
         }
+
 
         private static ReadBoardIdentityUiState CreateWebViewIdentityState(
             FoxIdentitySelectionSnapshot snapshot)

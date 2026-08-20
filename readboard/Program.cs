@@ -492,7 +492,7 @@ namespace readboard
             langItems["WebView_selectIdentity"] = "选择野狐身份";
             langItems["WebView_unnamedCandidate"] = "未命名候选";
             langItems["WebView_saved"] = "已保存";
-            langItems["WebView_candidateRow"] = "候选玩家行";
+            langItems["WebView_candidateRow"] = "候选座位";
             langItems["WebView_screenshot"] = "截图";
             langItems["SettingsForm_chkDisableShowInBoardShortcut"] = "关闭显示选点快捷键";
             langItems["connectLizzieFailed"] = "棋盘同步工具与Lizzie连接失败";
@@ -525,6 +525,9 @@ namespace readboard
             langItems["WebView_updateStepNotifyHost"] = "通知宿主";
             langItems["WebView_updateStepHostInstall"] = "宿主安装";
             langItems["WebView_candidateRowNumber"] = "玩家行 {0}";
+            langItems["WebView_candidateLeftSeat"] = "左座 {0}";
+            langItems["WebView_candidateRightSeat"] = "右座 {0}";
+            langItems["WebView_candidateNickname"] = "{0}";
             langItems["WebView_integerAtLeast"] = "请输入不小于 {0} 的整数";
             langItems["WebView_integerRange"] = "请输入 {0}–{1} 之间的整数";
             langItems["WebView_continuousSyncLabel"] = "持续同步 ({0}ms)";
@@ -708,14 +711,14 @@ namespace readboard
             langItems["SettingsForm_rdoColorLight"] = "浅色";
             langItems["SettingsForm_colorModeRestartTip"] = "颜色模式已更改，重启后生效。";
             langItems["FoxAutoPlayIdentityDialog_title"] = "野狐自动模式";
-            langItems["FoxAutoPlayIdentityDialog_lblPrompt"] = "请选择你在野狐当前房间里的玩家行。";
-            langItems["FoxAutoPlayIdentityDialog_lblDetectedNicknames"] = "可选玩家行";
+            langItems["FoxAutoPlayIdentityDialog_lblPrompt"] = "请选择你在当前房间玩家列表里的昵称。";
+            langItems["FoxAutoPlayIdentityDialog_lblDetectedNicknames"] = "可选昵称";
             langItems["FoxAutoPlayIdentityDialog_btnUseOnce"] = "本次使用";
             langItems["FoxAutoPlayIdentityDialog_btnSaveAndUse"] = "保存并使用";
             langItems["FoxAutoPlayIdentityDialog_btnClearSavedIdentity"] = "清除保存";
             langItems["FoxAutoPlayIdentityDialog_btnCancel"] = "取消";
-            langItems["FoxAutoPlayIdentityDialog_noDetectedNicknames"] = "暂未识别到可选玩家行";
-            langItems["FoxAutoPlayIdentityDialog_noSelectedPlayerRow"] = "请先选择你的玩家行。";
+            langItems["FoxAutoPlayIdentityDialog_noDetectedNicknames"] = "暂未识别到可选昵称";
+            langItems["FoxAutoPlayIdentityDialog_noSelectedPlayerRow"] = "请先选择你的昵称。";
             langItems["SettingsForm_mustBeInteger"] = "必须输入整数";
             langItems["SettingsForm_outOfRange"] = "输入的值超过范围";
             langItems["SettingsForm_resetDefaultTip"] = "已恢复默认设置,请重新打开";

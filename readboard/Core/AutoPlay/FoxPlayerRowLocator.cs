@@ -118,6 +118,7 @@ namespace readboard
             return rows;
         }
 
+
         private static bool IsFoxMode(SyncMode syncMode)
         {
             return syncMode == SyncMode.Fox || syncMode == SyncMode.FoxBackgroundPlace;
