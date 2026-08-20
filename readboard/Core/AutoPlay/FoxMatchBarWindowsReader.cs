@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Automation;
@@ -13,11 +12,8 @@ namespace readboard
         private const int MaxUiaNodes = 200;
         private const string PlayerListPanelTitle = "CRoomPlayerListPanel";
 
-        public static FoxMatchBarReading TryRead(IntPtr boardHandle, IBoardCapturePlatform capture)
+        public static FoxMatchBarReading TryRead(IntPtr boardHandle)
         {
-            if (capture == null)
-                return DiagnosedEmpty("no-capture");
-
             try
             {
                 uint processId = 0;
@@ -39,7 +35,7 @@ namespace readboard
                     }
                 }
 
-                IList<FoxPlayerListEntry> players = ReadPlayers(listHandle, capture);
+                IList<FoxPlayerListEntry> players = ReadPlayers(listHandle);
                 string diagnostic = "hwnd=" + boardHandle.ToInt64().ToString("X")
                     + " live=" + (boardHandle != IntPtr.Zero && IsWindow(boardHandle) ? "1" : "0")
                     + " root=" + searchRoot.ToInt64().ToString("X")
@@ -53,7 +49,7 @@ namespace readboard
             }
         }
 
-        private static IList<FoxPlayerListEntry> ReadPlayers(IntPtr listHandle, IBoardCapturePlatform capture)
+        private static IList<FoxPlayerListEntry> ReadPlayers(IntPtr listHandle)
         {
             List<FoxPlayerListEntry> players = new List<FoxPlayerListEntry>();
             if (listHandle == IntPtr.Zero)
@@ -140,94 +136,6 @@ namespace readboard
             }
         }
 
-        private static bool TryMapRow(
-            AutomationElement item,
-            RECT panelRect,
-            Size bitmapSize,
-            out Rectangle row)
-        {
-            row = Rectangle.Empty;
-            System.Windows.Rect screen;
-            try
-            {
-                screen = item.Current.BoundingRectangle;
-            }
-            catch
-            {
-                return false;
-            }
-
-            if (screen.IsEmpty || screen.Width < 8 || screen.Height < 8)
-                return false;
-
-            int x = (int)Math.Round(screen.X) - panelRect.Left;
-            int y = (int)Math.Round(screen.Y) - panelRect.Top;
-            int width = (int)Math.Round(screen.Width);
-            int height = (int)Math.Round(screen.Height);
-            if (width < 24)
-                width = Math.Max(24, height * 6);
-            if (x < 0)
-            {
-                width += x;
-                x = 0;
-            }
-
-            if (y < 0)
-            {
-                height += y;
-                y = 0;
-            }
-
-            if (x >= bitmapSize.Width || y >= bitmapSize.Height || width < 12 || height < 8)
-                return false;
-            if (x + width > bitmapSize.Width)
-                width = bitmapSize.Width - x;
-            if (y + height > bitmapSize.Height)
-                height = bitmapSize.Height - y;
-            row = new Rectangle(x, y, width, height);
-            return row.Width >= 12 && row.Height >= 8;
-        }
-
-
-        private static Bitmap CapturePanel(IntPtr handle, IBoardCapturePlatform capture)
-        {
-            Bitmap bitmap = capture.CaptureWindow(handle);
-            if (bitmap != null && !IsMostlyBlack(bitmap))
-                return bitmap;
-
-            Bitmap printed = capture.CapturePrintWindow(handle);
-            if (printed != null)
-            {
-                if (bitmap != null)
-                    bitmap.Dispose();
-                return printed;
-            }
-
-            return bitmap;
-        }
-
-        private static bool IsMostlyBlack(Bitmap bitmap)
-        {
-            if (bitmap == null)
-                return true;
-
-            int stepX = Math.Max(1, bitmap.Width / 20);
-            int stepY = Math.Max(1, bitmap.Height / 20);
-            int dark = 0;
-            int total = 0;
-            for (int y = 0; y < bitmap.Height; y += stepY)
-            {
-                for (int x = 0; x < bitmap.Width; x += stepX)
-                {
-                    Color pixel = bitmap.GetPixel(x, y);
-                    total++;
-                    if (pixel.R < 24 && pixel.G < 24 && pixel.B < 24)
-                        dark++;
-                }
-            }
-
-            return total > 0 && dark * 10 >= total * 9;
-        }
 
 
 

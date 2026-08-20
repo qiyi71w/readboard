@@ -94,6 +94,21 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
+        public void Resolve_ReturnsColorUnknownWhenNicknameConfiguredButDetectorIsNull()
+        {
+            AutoPlayColorResolution resolution = ResolveAuto(
+                SyncMode.Fox,
+                "叶落メ让子",
+                PlayingContext(),
+                null);
+
+            Assert.False(resolution.IsKnown);
+            Assert.Null(resolution.PlayColor);
+            Assert.Equal(AutoPlayColorStatus.ColorUnknown, resolution.Status);
+        }
+
+
+        [Fact]
         public void Resolve_KeepsFoxNicknameConfiguredWhenDetectorCannotUseIt()
         {
             AutoPlayColorResolution resolution = ResolveAuto(

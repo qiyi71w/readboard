@@ -58,7 +58,6 @@ namespace readboard
         private bool hasRetainedFoxTitleSnapshot = false;
         private MainWindowTitleTurn lastMainWindowTitleTurn = MainWindowTitleTurn.None;
         private string lastAppliedMainWindowTitle = string.Empty;
-        private readonly IBoardCapturePlatform foxAutoPlayCapturePlatform = new Win32BoardCapturePlatform();
         private readonly FoxMatchBarLiveRecognition foxMatchBarLiveRecognition = new FoxMatchBarLiveRecognition();
 
         int posX = -1;
@@ -396,9 +395,7 @@ namespace readboard
                 return foxMatchBarLiveRecognition.CurrentResolution;
             }
 
-            FoxMatchBarReading reading = FoxMatchBarWindowsReader.TryRead(
-                windowHandle,
-                foxAutoPlayCapturePlatform);
+            FoxMatchBarReading reading = FoxMatchBarWindowsReader.TryRead(windowHandle);
             return foxMatchBarLiveRecognition.AcceptSample(
                 windowHandle,
                 contextSignature,

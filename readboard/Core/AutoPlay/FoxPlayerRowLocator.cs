@@ -118,37 +118,6 @@ namespace readboard
             return rows;
         }
 
-        public static AutoPlayColorResolution DetectStoneInRow(Bitmap bitmap, Rectangle rowBounds)
-        {
-            if (bitmap == null || rowBounds.Width < 16 || rowBounds.Height < 12)
-                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
-
-            int iconSize = Math.Max(14, Math.Min(rowBounds.Height - 2, rowBounds.Width / 3));
-            int scanLeft = rowBounds.X + Math.Max(0, rowBounds.Width * 35 / 100);
-            int scanRight = rowBounds.X + rowBounds.Width - iconSize;
-            int scanTop = rowBounds.Y + Math.Max(0, (rowBounds.Height - iconSize) / 2);
-            int scanBottom = Math.Min(rowBounds.Y + rowBounds.Height - iconSize, scanTop + 2);
-            if (scanRight < scanLeft)
-                scanRight = scanLeft;
-
-            AutoPlayColorResolution found = AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
-            for (int y = scanTop; y <= scanBottom; y++)
-            {
-                for (int x = scanLeft; x <= scanRight; x++)
-                {
-                    PixelRect bounds = new PixelRect(x, y, iconSize, iconSize);
-                    using (Bitmap icon = Crop(bitmap, bounds))
-                    {
-                        AutoPlayColorResolution resolution = FoxPlayerStoneIconDetector.Detect(icon);
-                        if (resolution != null && resolution.IsKnown)
-                            found = resolution;
-                    }
-                }
-            }
-
-            return found;
-        }
-
 
         private static bool IsFoxMode(SyncMode syncMode)
         {
