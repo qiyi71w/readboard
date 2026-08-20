@@ -65,6 +65,9 @@ namespace readboard
         private string lastFoxAutoPlayColorDetectionNicknameSignature = string.Empty;
         private DateTime lastFoxAutoPlayColorDetectionTimestampUtc = DateTime.MinValue;
         private const int FoxAutoPlayColorDetectionCacheMs = 1000;
+        private string foxMatchBarLeftOcrFragment = string.Empty;
+        private string foxMatchBarRightOcrFragment = string.Empty;
+        private IList<string> foxNicknameDirectory = Array.Empty<string>();
 
         int posX = -1;
         int posY = -1;
@@ -463,15 +466,6 @@ namespace readboard
             return result;
         }
 
-        private IntPtr ResolveFoxAutoPlayIdentityBoardHandle()
-        {
-            if (!IsFoxSyncType(CurrentSyncType))
-                return IntPtr.Zero;
-            if (hwnd != IntPtr.Zero && IsWindow(hwnd))
-                return hwnd;
-            return new LegacySyncWindowLocator().FindWindowHandle(GetCurrentSyncMode());
-        }
-
         private IntPtr ResolveFoxAutoPlayCaptureHandle(IntPtr boardHandle)
         {
             return FindFoxPlayerListPanelHandle(boardHandle);
@@ -509,23 +503,6 @@ namespace readboard
             StringBuilder builder = new StringBuilder(256);
             GetWindowText(handle, builder, builder.Capacity);
             return builder.ToString();
-        }
-
-        private static Bitmap CropBitmap(Bitmap source, PixelRect bounds)
-        {
-            if (source == null || bounds == null || bounds.IsEmpty)
-                return null;
-
-            Bitmap bitmap = new Bitmap(bounds.Width, bounds.Height);
-            using (Graphics graphics = Graphics.FromImage(bitmap))
-            {
-                graphics.DrawImage(
-                    source,
-                    new Rectangle(0, 0, bounds.Width, bounds.Height),
-                    new Rectangle(bounds.X, bounds.Y, bounds.Width, bounds.Height),
-                    GraphicsUnit.Pixel);
-            }
-            return bitmap;
         }
 
         private void ClearFoxAutoPlayColorDetectionState()

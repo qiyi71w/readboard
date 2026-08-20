@@ -27,6 +27,11 @@ namespace readboard
             return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched);
         }
 
+        public static string SnapToDirectory(string ocrFragment, IEnumerable<string> foxNicknameDirectory)
+        {
+            return UniqueDirectoryName(ocrFragment, CopyDirectory(foxNicknameDirectory));
+        }
+
         private static List<string> CopyDirectory(IEnumerable<string> foxNicknameDirectory)
         {
             List<string> directory = new List<string>();
