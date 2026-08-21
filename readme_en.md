@@ -19,6 +19,13 @@ A Windows Go board synchronization tool for [LizzieYzy-Next](https://github.com/
 
 </div>
 
+<details>
+<summary>v3.0 WinForms screenshot</summary>
+
+![v3.0 demo](assets/demo.png)
+
+</details>
+
 > [!IMPORTANT]
 > **This project may no longer be compatible with the original [LizzieYzy](https://github.com/yzyray/lizzieyzy).**
 > Active development, protocol changes, and packaging all target [LizzieYzy-Next](https://github.com/wimi321/lizzieyzy-next); compatibility with the original LizzieYzy is no longer guaranteed. Original-LizzieYzy users should keep using its bundled readboard or migrate to LizzieYzy-Next.
@@ -103,10 +110,3 @@ lizzieyzy-next/src/main/java/featurecat/lizzie/analysis/ReadBoard.java
 ```
 
 Any change to launch arguments, protocol text, release layout, or packaged contents must be cross-checked against LizzieYzy-Next.
-
-<details>
-<summary>v3.0 WinForms screenshot</summary>
-
-![v3.0 demo](assets/demo.png)
-
-</details>
