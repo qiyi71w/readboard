@@ -1,25 +1,46 @@
-# readboard 开发说明
+# ReadBoard 开发说明
 
-面向 readboard 维护者：本地开发、代码结构、验证流程、宿主集成边界。
+面向 ReadBoard 维护者，覆盖开发环境、运行时边界、代码结构、验证策略、宿主集成和发布流程。当前源码与测试是最终依据；`docs/specs/` 和 `docs/plans/` 中的历史设计文档可能早于当前实现。
 
-## 项目定位
+## 项目与分支
 
-readboard 是 LizzieYzy / LizzieYzy-Next 调用的 Windows 棋盘同步工具，负责截图、识别棋盘，并通过旧文本协议把棋盘状态和同步命令发回宿主。
+ReadBoard 是 [LizzieYzy-Next](https://github.com/wimi321/lizzieyzy-next) 启动的 Windows 外接程序。它从第三方围棋客户端捕获棋盘、识别棋子，将状态通过逐行文本协议发送给宿主，并把宿主下发的落子转换为前台或后台点击。
 
-当前维护版本是本仓库的 .NET 10 WinForms 版本；简易版 readboard 已停止维护。
+仓库维护两条发布线：
+
+| 分支 | 可见 UI | 版本线 | 支持系统 |
+| --- | --- | --- | --- |
+| `main` | WebView2 | v3.1.x | Windows 10 version 1809（build 17763）及以上 |
+| `legacy/winforms` | WinForms | v3.0.x | 更早的 Windows |
+
+本开发说明描述 `main`。简易版已经停止维护；WebView2 新功能不要回填到旧 WinForms 线，跨线修复应先在 `main` 落地，再按需移植。
+
+## 核心边界
+
+- 进程仍是 .NET 10 WinForms `WinExe`，WinForms 提供 HWND、消息循环、原生选择框和 WebView2 宿主；用户看到的主界面是 `readboard/WebView/` 中的 HTML/CSS/JavaScript。
+- 截图、识别、同步、落子、配置、更新状态机和宿主协议都在 C#。JavaScript 只发送意图并渲染 C# 发布的权威快照。
+- `Form1.Designer.cs` 只保留窗口 chrome。不要恢复隐藏 WinForms 业务控件，也不要把它们当状态源。
+- 宿主协议的精确 wire 文本是兼容边界；C# 常量名不是协议。
+- `readboard/Properties/AssemblyInfo.cs` 中的 `AssemblyInformationalVersion` 是发布版本源。
+- 无有效宿主参数时程序直接退出，不显示 UI。
 
 ## 开发环境
 
-- Windows
-- .NET 10 SDK
-- PowerShell 7（命令用 `pwsh.exe`）
-- Visual Studio 或 Rider 可选；命令行构建不依赖 IDE
+必需环境：
 
-从 WSL 或 Codex 调用 Windows 工具时，Windows 程序传 Windows 路径。把 `/mnt/...` 转成 Windows 路径，或在 `pwsh.exe -NoProfile` 里从 Windows 路径进入仓库。
+- Windows 10 version 1809+ 或 Windows 11
+- `.NET SDK 10.0.104`；`global.json` 固定该 SDK，并允许 `latestFeature` roll-forward
+- PowerShell 7（命令使用 `pwsh.exe`）
+- WebView2 Evergreen Runtime
+- Node.js 20+ 与 npm，仅用于 WebView Playwright 测试
 
-## 常用命令
+Visual Studio 或 Rider 可选，命令行流程不依赖 IDE。
 
-以下命令都在仓库根目录执行。
+可以在 WSL 编辑源码和运行纯 DOM 测试，但 Windows 应用构建、xUnit 验证、真实 WebView2 宿主 E2E、打包和桌面验收应在原生 Windows checkout 中执行。调用 Windows 工具时传 Windows 路径，不要让 `npm.cmd` 从 WSL UNC 工作目录启动真实宿主测试。
+
+## 首次构建
+
+以下命令在仓库根目录执行：
 
 ```powershell
 dotnet restore readboard.sln --configfile NuGet.Config
@@ -27,76 +48,69 @@ dotnet build readboard.sln -c Debug
 dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --no-build
 ```
 
-WebView DOM rendering test（WSL/Node.js 20+）：
+WebView DOM 测试：
 
 ```bash
 npm ci
 npm run test:webview
 ```
 
-脚本会自动准备 Chromium，并验证 snapshot 动态文本、语言切换日志、校验错误和 accessibility 文本。
+`npm run test:webview` 会安装 Chromium，直接加载静态 WebView 文件，验证权威 snapshot 的动态文本、语言切换、设置校验、弹层和 accessibility 行为；它不启动 `readboard.exe`。
 
-真实 WebView2 宿主 E2E（仅原生 Windows checkout；需 Evergreen WebView2 Runtime、.NET 10 和上述 Node 依赖）：
+## 启动与调试
 
-```powershell
-$env:DOTNET_EXE = "C:\Users\admin\.dotnet\dotnet.exe"
-npm run test:webview:host
+### 宿主启动参数
+
+入口是 `readboard/Program.cs`，解析器是 `readboard/Core/Models/LaunchOptions.cs`：
+
+```text
+readboard.exe yzy <aiTime> <playouts> <firstPolicy> <transport> <language> <tcpPort>
 ```
 
-该测试每次从当前源码 fresh publish `readboard.exe`，为每个场景创建独立应用目录和 WebView2 profile，通过动态 TCP fake host 与 CDP 驱动真实 Evergreen WebView2。它串行、零 retry，验证首个权威快照与生产 shell close 的 shutdown wire、配置、进程和 CDP target 退出；不要在 WSL 的 UNC 工作目录中通过 `npm.cmd` 运行。
+| 位置 | 示例 | 含义 |
+| --- | --- | --- |
+| 0 | `yzy` | 固定启动标记；缺失或不同则直接退出 |
+| 1 | `30` 或 `" "` | 自动落子每手用时 |
+| 2 | `1000` 或 `" "` | 最大计算量 |
+| 3 | `200` 或 `" "` | 首选计算量 |
+| 4 | `0` / `1` | `0` 为标准输入输出 pipe，`1` 为 TCP |
+| 5 | `cn` / `en` / `jp` / `kr` | 语言后缀；空值默认 `cn` |
+| 6 | `-1` 或端口 | pipe 模式通常为 `-1`，TCP 模式为宿主监听端口 |
 
-CI 将真实 host E2E 分为两个非 required Windows jobs：build job 只 publish 一次 Release artifact；core job 运行首快照、Control Center bridge 和 Settings Save/restart；extended job 在 core 后运行 Cancel、完整 analysis actions 和 shell close。两个 job 均使用 Evergreen WebView2 Runtime、单 worker、零 retry。失败产物位于 GitHub Actions artifact，包含 semantic DOM、截图、console/page errors、TCP wire、进程输出、配置、Runtime 版本和 cleanup 状态。
+持久化的 Settings 语言可以在初始化时覆盖宿主语言参数；这不改变参数格式。
 
-本地按 job 分组运行（原生 Windows checkout）：
+### 启动顺序
 
-```powershell
-npm run test:webview:host:core
-npm run test:webview:host:extended
-```
+`Program.Main` 的关键顺序：
 
-CI 已构建 Release artifact 时，可通过 `READBOARD_PUBLISH_DIRECTORY` 指向该目录，避免测试 job 重复 publish；不设置时，host suite 保持本地 fresh publish fallback。
+1. `LaunchOptions.TryParse` 校验宿主参数。
+2. 从可执行文件目录加载配置和语言资源，创建 `RuntimeContext`。
+3. 启用 `HighDpiMode.PerMonitorV2`，检查 Windows 最低版本。
+4. 创建 pipe 或 TCP transport，以及 `SyncSessionCoordinator`。
+5. `MainFormRuntimeComposer` 装配捕获、识别、落子、overlay 和诊断依赖。
+6. 检查 WebView2 Evergreen Runtime；缺失或过旧时显示原生下载/重试/退出对话框，不静默安装，也不回退到旧 UI。
+7. `StartupProtocolHandshake` 启动会话、排空启动命令、发送 `ready`、重放启动状态。
+8. 进入 `Application.Run(mainForm)`。
 
-只跑一组测试：
+修改启动、握手或关闭顺序时，重点查看：
 
-```powershell
-dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --filter "FullyQualifiedName~Protocol"
-```
+- `readboard/Core/Protocol/StartupProtocolHandshake.cs`
+- `readboard/Core/Protocol/MainFormShutdownCoordinator.cs`
+- `readboard/Core/Protocol/SessionCoordinatorScope.cs`
+- `tests/Readboard.VerificationTests/Architecture/`
 
-跑性能和验收基准：
+### 单独调 UI
 
-```powershell
-dotnet run --project benchmarks/Readboard.ProtocolConfigBenchmarks/Readboard.ProtocolConfigBenchmarks.csproj
-```
-
-生成发布目录（不打 zip）：
-
-```powershell
-pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-readboard-release.local.ps1 -SkipZip
-```
-
-生成 GitHub release 用的 zip：
-
-```powershell
-pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-readboard-release.local.ps1
-```
-
-## 调 UI
-
-`readboard.exe` 正常由 LizzieYzy-Next 带参数启动，无参数启动不会显示窗口。调 UI 时用脚本模拟宿主启动：
+无参数启动不会显示窗口。使用脚本模拟 pipe 模式宿主参数：
 
 ```powershell
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-readboard-ui-debug.ps1
 ```
 
-指定构建配置和语言：
+指定构建配置、语言或发布包中的程序：
 
 ```powershell
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-readboard-ui-debug.ps1 -Configuration Release -Language en
-```
-
-指定某个 release 包里的 `readboard.exe`：
-
-```powershell
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-readboard-ui-debug.ps1 -ExePath "D:\path\to\readboard.exe"
 ```
 
@@ -106,188 +120,298 @@ pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-readboard-ui-debug
 scripts\run-readboard-ui-debug.cmd Debug cn "D:\path\to\readboard.exe"
 ```
 
-脚本使用 pipe 模式参数：
+脚本实际传入：
 
 ```text
 readboard.exe yzy " " " " " " 0 cn -1
 ```
 
-走的是接近宿主的启动路径。完整的协议闭环调试需要从宿主项目启动。
-
-## 启动参数
-
-入口在 `readboard/Program.cs`，参数解析在 `readboard/Core/Models/LaunchOptions.cs`。
-
-宿主启动参数格式：
-
-```text
-readboard.exe yzy <aiTime> <playouts> <firstPolicy> <transport> <language> <tcpPort>
-```
-
-参数含义：
-
-| 位置 | 示例 | 含义 |
-| --- | --- | --- |
-| 0 | `yzy` | 固定启动标记 |
-| 1 | `30` 或 `" "` | 自动落子每手用时 |
-| 2 | `1000` 或 `" "` | 最大计算量 |
-| 3 | `200` 或 `" "` | 首选计算量 |
-| 4 | `0` / `1` | `0` 为标准输入输出 pipe，`1` 为 TCP |
-| 5 | `cn` | 语言文件后缀 |
-| 6 | `-1` 或端口 | pipe 模式传 `-1`，TCP 模式传端口 |
-
-LizzieYzy-Next 的 native readboard 启动逻辑在宿主仓库 `src/main/java/featurecat/lizzie/analysis/ReadBoard.java`。
+这个模式能检查窗口壳，但没有宿主对端。协议闭环使用真实 LizzieYzy-Next，或运行原生 Windows 的 fake-host E2E。
 
 ## 代码地图
 
-主要目录：
+| 路径 | 职责 |
+| --- | --- |
+| `readboard/Program.cs` | 入口、配置/语言初始化、系统与 WebView2 gate、transport 选择 |
+| `readboard/Form1.cs`、`readboard/MainForm.*.cs` | 薄 WinForms 宿主、WebView bridge、协议和各 journey adapter |
+| `readboard/Form1.Designer.cs` | 仅窗口 chrome；没有业务控件 |
+| `readboard/Form2.cs`、`readboard/Form5.cs` | 原生棋盘选择 overlay 和放大镜 |
+| `readboard/WebView/` | 随包发布的静态 UI；没有前端构建步骤 |
+| `readboard/Core/ControlCenter/` | 实时偏好、session 投影、动作 enablement |
+| `readboard/Core/Configuration/` | Settings Draft、JSON/legacy 双格式持久化 |
+| `readboard/Core/Protocol/` | 同步状态机、握手/关闭、wire adapter、出站顺序 |
+| `readboard/Core/Capture/` | 屏幕/窗口/PrintWindow 捕获和坐标投影 |
+| `readboard/Core/Recognition/` | 棋盘定位、棋子分类、末手推断和 payload 复用 |
+| `readboard/Core/Placement/` | 前台、后台、野狐和弈客落子 |
+| `readboard/Core/AutoPlay/` | 自动落子授权、野狐身份与棋色识别 |
+| `readboard/Core/WebView/` | snapshot 发布、窗口命令和更新检查 journey |
+| `readboard/Core/Transport/` | pipe 与 `127.0.0.1` TCP 逐行传输 |
+| `tests/Readboard.VerificationTests/` | xUnit 模块、wire、编排、fixture replay 和打包测试 |
+| `tests/WebView/` | DOM Playwright 与真实 WebView2 host E2E |
+| `fixtures/` | config、protocol、recognition、Yike 回放数据 |
+| `benchmarks/` | 协议、配置和识别 release acceptance |
+| `scripts/` | UI 调试与发布打包 |
 
-- `readboard/`：WinForms 应用和核心代码
-- `readboard/Core/`：同步、协议、截图、识别、落子、配置等可测试逻辑
-- `tests/Readboard.VerificationTests/`：xUnit 验证测试
-- `benchmarks/Readboard.ProtocolConfigBenchmarks/`：协议、配置、识别和持续同步验收基准
-- `fixtures/`：协议、配置、识别回放测试数据
-- `scripts/`：本地调试和发布打包脚本
-- `.github/workflows/package-release.yml`：GitHub release 打包流程
+`bin/`、`obj/`、`release/`、`release-runs/`、`temp-*`、根目录日志和 `debug-diagnostics/` 是生成物或诊断证据，不应作为源码提交，除非任务明确要求 fixture。
 
-关键文件：
+## WebView2 UI 契约
 
-- `Program.cs`：程序入口、运行时初始化、语言加载、传输选择
-- `Form1.cs` / `MainForm.*.cs`：主窗体、UI 事件、协议宿主实现
-- `MainFormRuntimeComposer.cs`：把主窗体、协调器和运行时依赖装配到一起
-- `SyncSessionCoordinator*.cs`：同步状态机、协议收发、持续同步编排
-- `LegacyProtocolAdapter.cs` / `ProtocolKeywords.cs`：旧文本协议解析和生成
-- `PipeTransport.cs` / `TcpTransport.cs`：宿主通信
-- `DualFormatAppConfigStore.cs`：JSON 配置和旧配置文件的双格式读写
-- `IBoardCaptureService.cs`：截图和窗口坐标处理
-- `IBoardRecognitionService.cs`：棋盘识别
-- `IMovePlacementService.cs`：自动落子
-- `IOverlayService.cs`：原棋盘选点显示
+### JSON bridge 与 snapshot
 
-## 协议边界
+主要入口：
 
-readboard 与 LizzieYzy-Next 之间是逐行文本协议。`ProtocolKeywords` 是仓库内部常量，wire 文本本身才是兼容边界。
+- `readboard/MainForm.WebView.cs`
+- `readboard/ReadBoardUiModels.cs`
+- `readboard/Core/WebView/WebViewStatePublisher.cs`
+- `readboard/WebView/app.js`
+- `tests/Readboard.VerificationTests/Architecture/ArchitectureContractFenceTests.cs`
 
-改协议时同步处理：
+WebView 通过虚拟主机 `https://app.readboard/index.html` 加载静态资源。JavaScript 向 C# 发送 `{ type, payload }` 意图；C# 发布 `{ "type": "state", "payload": ReadBoardUiState }`。
 
-1. 保持旧 wire 文本逐字兼容，或同步改宿主解析。
-2. 更新 `ProtocolKeywords` 和 `LegacyProtocolAdapter`。
-3. 更新协议 fixture 或协议契约测试。
-4. 到 LizzieYzy-Next 核对 `ReadBoard.java` 的解析逻辑。
-5. 跑协议相关测试。
+必须保持以下规则：
 
-```powershell
-dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --filter "FullyQualifiedName~Protocol"
-```
+- 每个语义事件最多发布一份完整 `ReadBoardUiState`，不用增量 patch。
+- 无效 JSON 直接忽略；合法但被当前状态拒绝的意图返回一份未变的权威 snapshot；真正 no-op 不发布。
+- 控件 enablement、持久化结果、协议状态和动态文本由 C# 计算。`app.js` 不从多个字段重新推导业务规则。
+- 新 snapshot 字段必须同时进入 C# model/投影、`ArchitectureContractFenceTests` 和 `app.js` 渲染。
+- 静态标签可由 JavaScript `t()` 处理；动态错误和日志使用 Semantic Message，由 C# 按当前语言解析。
 
-## 配置文件
+### Control Center
 
-运行目录下使用三类配置文件：
+`ControlCenterRuntime` 是平台、棋盘尺寸、双向同步、原棋盘显示、自动落子、棋色、落子方式和引擎条件的实时状态源。
 
-- `config.readboard.json`：当前主配置
-- `config_readboard.txt`：旧主配置镜像
-- `config_readboard_others.txt`：旧扩展配置镜像
+实时偏好的持久化顺序：
 
-`DualFormatAppConfigStore` 优先读 JSON；没有 JSON 时尝试导入旧格式。保存时先在同一运行目录的临时事务目录中写完 JSON 和两份 legacy 内容，再逐个替换三个目标文件。普通进程内的替换失败会尝试用旧文件集合回滚；回滚失败或事务目录清理失败会抛出 `DurableConfigurationException`，其中包含应人工诊断的事务目录路径，并保留该目录作为有界证据。成功或可恢复失败会清理事务目录。
+1. 合法 intent 立即更新当前进程值。
+2. 调用持久化一次。
+3. 持久化失败不回滚进程值；snapshot 标记未保存并带错误。
+4. 不自动重试，后续偏好修改或正常退出可以再次保存。
 
-这不是跨文件的文件系统事务：每个目标文件的替换具备单文件语义，但进程崩溃或操作系统故障可能仍留下混合集合。不要把该实现描述为跨文件原子提交；事务目录前缀为 `.readboard-config-transaction-`，残留目录应作为故障证据处理。
+一次性动作通过 `ControlCenterActionAdapter` 调用 coordinator。不要从 DOM 或 `MainForm` 增加第二套 enablement/动作状态机。
 
-改配置字段时：
+### Settings Draft
 
-- 给 `AppConfig.CreateDefault` 加默认值。
-- 更新 JSON 读写和 legacy 镜像读写。
-- 保持 machine key 和 protocol version 校验语义。
-- 补配置读写测试。
+`SettingsDraftRuntime` 拥有设置页草稿。Update 和 Reset 只改草稿；Cancel 从最新活动配置重建；只有 Save 才提交。
 
-## UI 和 DPI
+Save 的顺序固定为：校验 → overlay 到最新活动配置 → 持久化 → 替换活动配置 → 应用 language/theme/background-analysis effect → 发布。校验或持久化失败时不能执行 effect。Settings Save 不得改变主窗口 client size，也不得重新引入旧 `ApplyMainFormUi` 布局路径。
 
-UI 是 WinForms，主窗口逻辑主要在 `Form1.cs`。项目启用了 `HighDpiMode.PerMonitorV2`，UI 改动需覆盖 100% 以外的缩放和多屏场景。
+### 窗口、DPI 与原生 surface
 
-改窗口、控件、字体、弹窗位置或截图坐标时，检查：
+主窗口使用 Per-Monitor V2 DPI。改窗口尺寸、chrome、弹层、选框、截图或点击坐标时检查：
 
-- 不同 DPI 缩放
-- 不同分辨率
-- 多屏或跨屏
-- 窗口坐标保存和恢复
-- 截图坐标与屏幕坐标转换
+- 100% 以外缩放；
+- 多屏、跨屏和负坐标；
+- 保存/恢复窗口位置；
+- logical/client/screen/window 坐标转换；
+- `Form2` / `Form5` 原生选择 surface；
+- Settings Save 前后 client size 不变。
 
-相关测试集中在 `tests/Readboard.VerificationTests/Host`、`Display`、`Capture`。
+自动化覆盖集中在 `Host/HighDpiSourceRegressionTests.cs`、`Display/`、`Capture/`、`Placement/`；真实客户端窗口和多屏 DPI 仍需要桌面验收。
 
-## 打包和版本
+## 同步、识别与自动落子
 
-发布版本来自 `readboard/Properties/AssemblyInfo.cs`：
-
-```csharp
-[assembly: AssemblyInformationalVersion("v3.0.0")]
-```
-
-打包脚本用这个版本按产品线生成目录和 ZIP 名：
+共享管线是：
 
 ```text
-v3.0.x: release/readboard-github-release-v3.0.9.zip
-v3.1.0+: release/readboard-webview2-v3.1.0.zip
+Capture -> Recognition -> BoardSnapshot -> OutboundBoardSnapshotEmitter
 ```
 
-生成 ZIP 时还会写出同名 `.zip.sha256` 文件，并打印 `PackageSha256` 和
-`PackageChecksumFile`，供后续通道晋升核对。使用 `-SkipZip` 时不会保留 ZIP
-或 checksum 文件。
+`SyncSessionCoordinator` 管 transport 生命周期、锁保护的 session state、出站 dispatcher 和 payload 去重；`SyncSessionCoordinator.Orchestration.cs` 管一次同步、持续同步、落子、停止/清盘和诊断。
 
-默认发布脚本构建 Release 并复制：
+关键不变量：
 
-- `readboard.exe`
-- `readboard.dll`
-- `readboard.runtimeconfig.json`
-- `readboard.deps.json`
-- OpenCvSharp 相关 dll/pdb
-- `language_*.txt`
-- `readme*.rtf`
-- `OpenCvSharpExtern.dll`
+- `StopSyncSessionAndClearBoard` 是停止同步并清盘的单一协调操作，避免旧 worker 在清盘后继续发送 snapshot。
+- 全黑或全白识别结果无效，不发送棋盘 payload，也不授权自动落子。
+- 棋盘未变化时通常抑制重复 payload；窗口 context、`forceRebuild`、Fox move number 或 `lastMoveSource` 变化仍可触发发送。
+- `lastMoveSource` 的视觉可信来源只有 `redBlueMarker` 和 `foxCornerFlip`；不要把启发式 `deviation` / `stoneCount` 当作 GMA 回合真值。
+- 弈客的 host geometry 用于落子和像素尺寸，不替代从截图定位棋盘。
+- `play>` 只能由 `AutoPlayWireIssuer` 在 keep-sync、双向同步、自动落子和已知棋色都满足时发送；未知身份、观战或歧义必须 fail closed。
 
-发布包不包含旧的 `lw.dll`、`Interop.lw.dll`、`MouseKeyboardActivityMonitor.dll` 或 `readboard.exe.config`。
+线程包括 UI thread、transport reader、持续同步 worker、串行落子队列和诊断 writer。新异步观察应携带 generation，并忽略过期结果；不要用 `Thread.Sleep` 固化时序。
 
-每个正式版本必须在 `docs/releases/<tag>.md` 保留独立、非空的手写 Release
-描述，首个非空行固定为 `# <tag>`。GitHub Actions 在 tag `v*` 上会校验 tag、
-`AssemblyInformationalVersion`、changelog 文件名和预期资产名一致，然后跑测试、
-benchmark acceptance、打包并发布 ZIP 与 SHA-256 sidecar。tag Release 直接使用
-对应 changelog 作为正文，并可追加自动生成的提交列表。手动 dispatch 只上传
-Actions artifact，不创建正式 Release。
+## 宿主协议边界
 
-## 改动前后的检查
+`readboard/Core/Protocol/ProtocolKeywords.cs` 集中 wire 字符串，`LegacyProtocolAdapter.cs` 负责解析和生成。传输是 UTF-8 逐行文本。
 
-小改动可以只跑相关测试；协议、配置、截图、识别、打包、UI 启动路径的改动跑完整验证。
+修改协议、参数、包名、通道 schema 或发布目录时：
 
-常用顺序：
+1. 保持 wire 文本逐字兼容，或同步修改 LizzieYzy-Next。
+2. 更新 `ProtocolKeywords`、adapter、dispatcher/emitter。
+3. 更新 `tests/Readboard.VerificationTests/Protocol/` 和必要的 `fixtures/protocol/`。
+4. 核对宿主仓库 `src/main/java/featurecat/lizzie/analysis/ReadBoard.java`。
+5. 跑协议与 transport focused tests。
 
 ```powershell
-dotnet build readboard.sln -c Debug
-dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --no-build
+dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --filter "FullyQualifiedName~Protocol|FullyQualifiedName~Transport"
+```
+
+棋盘 snapshot 出站顺序不可随意调整：窗口 context → 可选 `forceRebuild` → 可选 `foxMoveNumber` → `lastMoveSource` → 棋盘行 → `end`。
+
+WebView2 托管更新还要求宿主声明 `readboardUpdatePackageV2Supported`。ReadBoard 只负责检查、下载、SHA-256/ZIP 校验并发送 `readboardUpdateReady`；收到该 handoff 后，替换、回滚和重启归宿主所有。
+
+## 配置
+
+运行目录有三份配置：
+
+- `config.readboard.json`：主配置；
+- `config_readboard.txt`：旧主配置镜像；
+- `config_readboard_others.txt`：旧扩展配置镜像。
+
+`DualFormatAppConfigStore` 优先读 JSON；无可用 JSON 时导入匹配 machine key/protocol version 的旧配置。损坏 JSON 会隔离为 `.corrupt.<guid>`。
+
+保存流程：
+
+1. 在 `.readboard-config-transaction-*` 目录写完 JSON 和两份 legacy 内容。
+2. 备份现有目标，再逐个替换三份文件。
+3. 普通进程内替换失败时尝试恢复旧集合。
+4. 成功或可恢复失败清理事务目录。
+5. 回滚失败或事务目录清理失败抛出 `DurableConfigurationException`，并保留目录供诊断。
+
+这不是跨文件的文件系统原子事务；进程崩溃仍可能留下混合集合。新增配置字段时必须明确由 Control Center 还是 Settings Draft 拥有，并更新 `AppConfig.CreateDefault`、JSON/legacy 映射和配置测试。
+
+## 验证策略
+
+先用最便宜、最贴近变更契约的层级：
+
+| 层级 | 位置 | 适用范围 |
+| --- | --- | --- |
+| 模块测试 | `tests/Readboard.VerificationTests/Host`、`AutoPlay`、`Configuration` | intent、observation、effect、失败语义 |
+| Wire/架构 fence | `Protocol/`、`ArchitectureContractFenceTests` | 精确协议文本、snapshot envelope |
+| Coordinator 编排 | `Protocol/SyncSessionCoordinator*Tests` | transport、并发、停止/清盘、出站顺序 |
+| Fixture replay | `Capture/`、`Recognition/`、`Placement/` | 像素、识别、平台落子路径 |
+| DOM Playwright | `tests/WebView/app-rendering.spec.js` | HTML/CSS/JS snapshot 渲染 |
+| 真实 host smoke | `tests/WebView/real-webview2-host.spec.js` | `readboard.exe`、Evergreen、TCP fake host、CDP 生命周期 |
+| Release acceptance | `benchmarks/Readboard.ProtocolConfigBenchmarks` | tag/打包与识别性能门槛 |
+
+常用 focused tests：
+
+```powershell
+# 启动、握手、关闭
+dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --filter "FullyQualifiedName~Launch|FullyQualifiedName~StartupProtocolHandshake|FullyQualifiedName~MainFormShutdown"
+
+# WebView bridge、Control Center、Settings Draft
+dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --filter "FullyQualifiedName~WebViewBridge|FullyQualifiedName~ControlCenter|FullyQualifiedName~SettingsDraft|FullyQualifiedName~ArchitectureContractFence"
+
+# 捕获、识别、落子
+dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --filter "FullyQualifiedName~Capture|FullyQualifiedName~Recognition|FullyQualifiedName~Placement"
+
+# 自动落子与野狐身份
+dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --filter "FullyQualifiedName~AutoPlay"
+
+# 更新、配置、打包
+dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --filter "FullyQualifiedName~HostedUpdate|FullyQualifiedName~GitHubUpdate|FullyQualifiedName~Configuration|FullyQualifiedName~Packaging"
+```
+
+异步测试使用 `VerificationCompletion` 的有界等待，不要增加 `Thread.Sleep`。
+
+### 真实 WebView2 host E2E
+
+仅在原生 Windows checkout 运行，需要 Evergreen Runtime 和 Node 依赖：
+
+```powershell
+$env:DOTNET_EXE = "C:\path\to\dotnet.exe" # PATH 中的 dotnet 正确时可省略
+npm run test:webview:host:core
+npm run test:webview:host:extended
+```
+
+- `core`：首个权威 snapshot、version/platform 交互、Settings Save 后重启持久化。
+- `extended`：Settings Cancel、analysis 权威观察、shell close 和有序 shutdown。
+- 两组测试串行、单 worker、零 retry。
+- `READBOARD_PUBLISH_DIRECTORY` 可指向已经 publish 的目录，避免重复构建；未设置时会 fresh publish。
+- 失败产物在 `test-results` / `playwright-report`，包含 DOM、截图、console/page errors、TCP wire、进程输出、配置和 cleanup 状态。
+
+只有首 snapshot、Settings save/restart、analysis observation、shell close 或真实 WebView2 生命周期变化才需要这层；不要把它扩成完整按钮矩阵。
+
+### Benchmark acceptance
+
+识别阈值、识别分配/性能、协议/配置 release acceptance 或正式发布时运行：
+
+```powershell
 dotnet run --project benchmarks/Readboard.ProtocolConfigBenchmarks/Readboard.ProtocolConfigBenchmarks.csproj
 ```
 
-打包改动再跑：
+## CI
+
+| Workflow | 触发 | 内容 |
+| --- | --- | --- |
+| `.github/workflows/ci.yml` | PR、匹配路径的 push、手动 | Windows 2022；完整 VerificationTests；WebView DOM Playwright |
+| `.github/workflows/webview2-host-e2e.yml` | PR、手动 | 一次 Release publish；core 后运行 extended；Evergreen、单 worker、零 retry |
+| `.github/workflows/package-release.yml` | `v*` tag、手动 | VerificationTests、benchmark、打包；tag 时发布 GitHub Release |
+
+真实 host E2E 不在普通 `ci.yml` 中。tag release workflow 也不代替 host E2E。
+
+## 打包与发布
+
+唯一打包入口是 `scripts/package-readboard-release.local.ps1`，不要手写 publish/copy/zip 流程。
+
+只生成 release 目录：
 
 ```powershell
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-readboard-release.local.ps1 -SkipZip
 ```
 
-打包后检查：
+生成 GitHub Release 用 ZIP：
 
-- `readboard.exe` 存在
-- release 目录存在
-- 未要求 zip 时没有新 zip
-- `PackageVersion` 与源码版本一致
-- 产物修改时间是本次打包产生的
+```powershell
+pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-readboard-release.local.ps1
+```
+
+脚本执行 self-contained `win-x64` Release publish。v3.1.0+ 资产名为：
+
+```text
+release/readboard-webview2-vX.Y.Z.zip
+release/readboard-webview2-vX.Y.Z.zip.sha256
+```
+
+发布目录内的应用位于 `readboard/` 子目录。必需内容包括 .NET 应用文件、四份语言文件、RTF 说明、OpenCvSharp native 依赖、WebView2 assemblies/loader 和完整 `WebView/` 静态资源。发布包不得携带 WebView2 Fixed Version Runtime（`msedgewebview2.exe`）；运行时使用系统 Evergreen。
+
+脚本会打印：
+
+- `PackageDir`
+- `PackageZip`
+- `PackageVersion`
+- `PackageSha256`
+- `PackageChecksumFile`
+
+`-SkipZip` 会删除同名旧 ZIP 和 checksum，避免误用旧产物。
+
+正式发布前：
+
+1. 同步 `AssemblyVersion`、`AssemblyFileVersion`、`AssemblyInformationalVersion("vX.Y.Z")`。
+2. 新增非空 `docs/releases/vX.Y.Z.md`，首个非空行必须是 `# vX.Y.Z`。
+3. 运行 VerificationTests 和 benchmark acceptance。
+4. 用打包脚本生成 ZIP，核对版本、资产名、`PackageDir`、SHA-256 和本次时间戳。
+5. 推送同名 `vX.Y.Z` tag；workflow 校验 tag、informational version、changelog 和资产前缀一致。
+6. Release 发布后，另开 PR 更新 `update-channels.json` 的 `latestTag`、`assetName` 和 `sha256`。客户端只读通道 manifest，不使用 GitHub `/releases/latest` 回退。
 
 ## 与 LizzieYzy-Next 对接
 
-本仓库是 LizzieYzy-Next 的外接程序。涉及接口、参数、目录结构、发布产物或启动方式时，同步检查宿主。
-
-宿主侧重点文件（相对宿主仓库根目录）：
+宿主侧入口：
 
 ```text
 src/main/java/featurecat/lizzie/analysis/ReadBoard.java
 ```
 
-本地常用的 LizzieYzy-Next 工作副本示例路径：`D:\dev\weiqi\lizzieyzy-next`。实际路径以自己的检出位置为准。
+以下改动必须同步核对宿主：
 
-宿主默认在工作目录下找 `readboard/readboard.exe` 或 `readboard/readboard.bat`。release 结构、文件名或启动参数变化时，宿主侧同步调整。
+- 启动参数或 transport 选择；
+- wire token、字段顺序或 capability handshake；
+- `play>` / GMA 语义；
+- Hosted Update handoff、包名前缀或通道 schema；
+- release 目录结构、可执行文件名或必需文件。
+
+宿主默认在工作目录的 `readboard/readboard.exe` 或 `readboard/readboard.bat` 查找外接程序。ReadBoard 与宿主跨仓库变化应先明确 wire 和包结构契约，再分别验证。
+
+## 变更检查表
+
+提交前只跑与改动对应的最窄验证；跨共享边界再扩大：
+
+- UI snapshot/command：C# model + bridge + architecture fence + `app.js`；静态渲染变化加 DOM Playwright。
+- Control Center：intent、snapshot、enablement、持久化失败语义和 adapter effect。
+- Settings：Update/Reset/Cancel/Save、validation、persist failure、effect order、client size。
+- 协议：精确 wire、fixture、出站顺序、宿主 `ReadBoard.java`。
+- 捕获/识别/落子：平台 fixture、DPI/坐标、无效 snapshot、payload reuse；算法性能变化加 benchmark。
+- 自动落子：`CanSendAutoPlayCommand` / `AutoPlayWireIssuer` 授权矩阵，未知身份和棋色必须不发 `play>`。
+- 配置：默认值、JSON、legacy mirrors、Control Center 或 Settings 唯一所有权、失败/回滚测试。
+- 打包/更新：脚本与 workflow 同步、WebView2Loader、无 Fixed Runtime、资产名、SHA-256、宿主 v2 capability。
+- 窗口与桌面行为：非 100% DPI、多屏、真实目标客户端和宿主启动的人工验收。
