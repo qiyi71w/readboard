@@ -57,7 +57,7 @@ ReadBoard 通过截屏方式从外部围棋客户端窗口抓取棋盘画面，�
 
 ## 使用
 
-正常使用时 `readboard.exe` 由 LizzieYzy-Next 启动，通过 TCP 或命名管道与宿主通信。无参数启动不会显示窗口。
+正常使用时 `readboard.exe` 由 LizzieYzy-Next 启动，通过 TCP 或标准输入输出与宿主通信。无参数启动不会显示窗口。
 
 需要单独打开 UI 调试时，用脚本模拟宿主启动：
 

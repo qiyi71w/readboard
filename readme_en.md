@@ -1,13 +1,21 @@
 <div align="center">
 
-# readboard
+# ReadBoard
 
-A Windows board synchronization helper for [LizzieYzy-Next](https://github.com/wimi321/lizzieyzy-next): captures Go boards from third-party clients, recognizes stones, streams board state to the host, and simulates placements.
+A Windows Go board synchronization tool for [LizzieYzy-Next](https://github.com/wimi321/lizzieyzy-next), providing board capture, stone recognition, board-state reporting, and simulated move placement.
+
+<p>
+  <img alt=".NET" src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white" />
+  <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white" />
+  <img alt="UI" src="https://img.shields.io/badge/UI-WebView2-0C7CD5" />
+  <img alt="Release" src="https://img.shields.io/github/v/release/qiyi71w/readboard?label=Release" />
+  <img alt="Downloads" src="https://img.shields.io/github/downloads/qiyi71w/readboard/total?label=Downloads" />
+</p>
 
 <a href="readme.md">简体中文</a> ｜
 <a href="readme_en.md">English</a>
 
-![demo](assets/demo.png)
+![screenshot](assets/screenshot-v3.1.png)
 
 </div>
 
@@ -17,26 +25,39 @@ A Windows board synchronization helper for [LizzieYzy-Next](https://github.com/w
 
 ## Overview
 
-readboard captures Go board screenshots from external Go clients, recognizes stones via color thresholding, and streams the board state to the host (LizzieYzy-Next) over TCP or named pipes. It also receives placement commands from the host and executes them through simulated clicks.
-
-The .NET 10 WinForms version in this repository is the only actively maintained version. The legacy "simple readboard" is no longer maintained — all production changes, packaging, and host integration are done here.
+ReadBoard captures board images from external Go clients, recognizes stones with OpenCV color thresholds, and streams board state to the host (LizzieYzy-Next) over TCP or standard input/output. It also receives placement commands from the host and executes them through simulated clicks.
 
 ## Features
 
-- External board window capture, including Fox / YeHu window binding and title parsing
-- Stone recognition with real-time board state sync to the host
-- Move placement via simulated input; Fox supports background placement (window must not be minimized)
-- Classic / Optimized themes with Light / Dark / Follow-System color modes
+- External board-window capture, including Fox / YeHu and Yike window binding and title parsing
+- OpenCV stone recognition with real-time board-state reporting to the host
+- Move placement through simulated input; Fox supports background placement (the window must not be minimized)
+- Fox identity recognition: determines the local player's nickname and stone color from the player list and match bar
+- Hosted updates: check → download → verify, then hand off installation and replacement to the host
+- Light / Dark / Follow-System color modes
 - Localized in Simplified Chinese, English, Japanese, and Korean
+
+## Maintained Branches
+
+This repository maintains two release lines. Update checks automatically select a channel for the current Windows version:
+
+| Branch | UI framework | Version line | System requirement |
+| --- | --- | --- | --- |
+| `main` | WebView2 | v3.1.x | Windows 10 version 1809 (build 17763)+ |
+| `legacy/winforms` | WinForms | v3.0.x | Earlier Windows releases |
+
+> [!NOTE]
+> The channels are independent. The WebView2 mainline is not merged wholesale into `legacy/winforms`; older systems continue to receive selected fixes through the legacy channel.
 
 ## Requirements
 
-- Windows 10 / 11
-- .NET 10 runtime; .NET 10 SDK for development
+- Windows 10 version 1809 (build 17763) or later, or Windows 11
+- [WebView2 Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (shared system runtime; startup offers an installation link when it is missing)
+- Official releases are self-contained and do not require a separate .NET Runtime; development requires the .NET 10 SDK
 
 ## Usage
 
-In normal use, `readboard.exe` is launched by LizzieYzy-Next and talks to the host over TCP or named pipes. Launching without arguments does not show a window.
+In normal use, LizzieYzy-Next launches `readboard.exe`, which communicates with the host over TCP or standard input/output. Launching without arguments does not show a window.
 
 To open the UI for debugging, simulate the host launch:
 
@@ -44,7 +65,7 @@ To open the UI for debugging, simulate the host launch:
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-readboard-ui-debug.ps1
 ```
 
-Or point at a packaged exe:
+Or point at an executable from a release package:
 
 ```powershell
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-readboard-ui-debug.ps1 -ExePath "D:\path\to\readboard.exe"
@@ -63,24 +84,29 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for more.
 ## Packaging
 
 > [!TIP]
-> Always use `scripts/package-readboard-release.local.ps1` — do not hand-roll build / copy / compress commands. Default to `-SkipZip` (folder only); produce a zip only when distributing.
+> Always use `scripts/package-readboard-release.local.ps1`; do not hand-roll build, copy, or compression commands. Use `-SkipZip` by default to produce only a directory, and create a ZIP only when distributing a release.
 
 ```powershell
-# Folder only, no zip
+# Release directory only
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-readboard-release.local.ps1 -SkipZip
 
-# Release zip
+# Distribution ZIP
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-readboard-release.local.ps1
 ```
 
-The version is read from `AssemblyInformationalVersion` in `readboard/Properties/AssemblyInfo.cs` (currently `v3.0.2`).
-
 ## Relationship with LizzieYzy-Next
 
-This project is an external companion to LizzieYzy-Next. The host-side launcher lives at:
+ReadBoard is an external companion to LizzieYzy-Next. The host-side launcher lives at:
 
 ```text
 lizzieyzy-next/src/main/java/featurecat/lizzie/analysis/ReadBoard.java
 ```
 
 Any change to launch arguments, protocol text, release layout, or packaged contents must be cross-checked against LizzieYzy-Next.
+
+<details>
+<summary>v3.0 WinForms screenshot</summary>
+
+![v3.0 demo](assets/demo.png)
+
+</details>
