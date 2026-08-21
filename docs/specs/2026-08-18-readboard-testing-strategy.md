@@ -17,7 +17,7 @@ ReadBoard 已经有相当厚的验证层，但它们被一概叫成“单测”�
 - `ArchitectureContractFenceTests` 已经钉住 wire token、WebView state envelope、双格式配置、GMA 下一帧、Fox fail-closed、打包边界。
 - Control Center、Settings Draft、Fox Identity Selection、Hosted Update 已是可测 module，不是隐藏 WinForms 控件仓库。
 - `package-release.yml` 在 tag / dispatch 上跑完整 VerificationTests + benchmark。普通 PR **不跑** xUnit，也不跑 DOM Playwright。
-- `webview2-host-e2e.yml` 在 PR（路径过滤）和 6 小时 cron 上跑真实 host E2E，不跑 VerificationTests。
+- `webview2-host-e2e.yml` 在 PR 和手动 dispatch 上跑真实 host E2E，不跑 VerificationTests。
 - 识别 replay 只到 `PPM -> LegacyBoardRecognitionService -> re=` 棋盘行。没有一条测试把「识别结果 + 会话门闩 + 发出的 `play>`」串在同一条 transport 上。
 - `CanSendAutoPlayCommand = keepSync && TwoWaySync && AutoPlayEnabled` 已有 8 格布尔测试。生产路径 `SendPlayCommandIfSelected()` 会查这个门闩，但 **transport 上从未断言**：自动落子开着、持续同步未开时不得出现 `play>`。
 
@@ -160,7 +160,7 @@ Source-slice        HighDpi / Title / WebViewUiPolish / 部分 Packaging
 | 本地小改 | 相关 `FullyQualifiedName~` 过滤 | host E2E、benchmark |
 | 普通 PR | Windows：`dotnet test` 全部 VerificationTests；`npm run test:webview`（DOM）。两项都跑且挡合并 | benchmark；不要把 host E2E 塞进同一 job |
 | PR host E2E | `webview2-host-e2e` Core 每条 PR 必跑且挡合并；Extended 继续在 PR/dispatch 跑，不挡合并 | 不要把 Extended 标成 required |
-| 定时 | 已有 6 小时 host E2E | 不必再加 GUI 矩阵 |
+| 定时 | 无。需要时 `workflow_dispatch` | 不要加回 cron |
 | tag / 正式打包 | 已有 VerificationTests + benchmark + `package-readboard-release.local.ps1` | 不要用 host E2E 挡打包，除非 host smoke 当时是红的且改的是 shell 生命周期 |
 
 新增的 PR 工作流只做 restore / build / test，不 publish、不打包、不上传 release 资产。`pull_request` 不再用路径过滤跳过 Verification Tests 和 Host E2E Core，避免 required check 缺失而卡住无关 PR。`push` 仍可按路径过滤。
