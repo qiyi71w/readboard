@@ -19,6 +19,13 @@ Windows 棋盘同步工具，为 [LizzieYzy-Next](https://github.com/wimi321/liz
 
 </div>
 
+<details>
+<summary>v3.0 WinForms 版本截图</summary>
+
+![v3.0 demo](assets/demo.png)
+
+</details>
+
 > [!IMPORTANT]
 > **本项目可能已不再适配原版 [LizzieYzy](https://github.com/yzyray/lizzieyzy)。**
 > 当前所有维护、协议演进与打包流程都围绕 [LizzieYzy-Next](https://github.com/wimi321/lizzieyzy-next) 进行，与原版 LizzieYzy 的兼容性不再保证。如果你使用的是原版 LizzieYzy，请使用其自带的 readboard，或切换到 LizzieYzy-Next。
@@ -103,10 +110,3 @@ lizzieyzy-next/src/main/java/featurecat/lizzie/analysis/ReadBoard.java
 ```
 
 涉及启动参数、协议文本、发布目录结构或打包内容的改动，需要同步检查 LizzieYzy-Next。
-
-<details>
-<summary>v3.0 WinForms 版本截图</summary>
-
-![v3.0 demo](assets/demo.png)
-
-</details>
