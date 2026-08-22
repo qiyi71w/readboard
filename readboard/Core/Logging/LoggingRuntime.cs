@@ -96,6 +96,11 @@ namespace readboard
             get { return logRoot; }
         }
 
+        public string CaptureDirectory
+        {
+            get { return BoardDebugDiagnosticsPaths.GetCaptureDirectory(logRoot); }
+        }
+
         public static LoggingRuntime Start(LaunchOptions options)
         {
             return Start(new LoggingRuntimeOptions
@@ -126,6 +131,30 @@ namespace readboard
         public ILogger CreateLogger(string module)
         {
             return loggerFactory.CreateLogger(string.IsNullOrEmpty(module) ? "runtime" : module);
+        }
+
+        public BoardDebugDiagnosticsWriter CreateCaptureWriter(Func<bool> legacyEnabled)
+        {
+            if (legacyEnabled == null)
+                throw new ArgumentNullException("legacyEnabled");
+
+            LoggingLaunchKind kind = launchOptions == null
+                ? LoggingLaunchKind.Unavailable
+                : launchOptions.LoggingKind;
+            return new BoardDebugDiagnosticsWriter(new BoardDebugDiagnosticsWriterOptions
+            {
+                RootDirectory = CaptureDirectory,
+                IsEnabled = delegate
+                {
+                    if (kind == LoggingLaunchKind.Legacy)
+                        return legacyEnabled();
+                    lock (sync)
+                        return capture == LoggingToggle.On;
+                },
+                Clock = clock,
+                FileSystem = fileSystem,
+                ReportHealth = SetCaptureHealth
+            });
         }
 
         public void SetCaptureHealth(LoggingPersistenceHealth health)
@@ -409,6 +438,7 @@ namespace readboard
             }
 
             logRoot = null;
+            captureHealth = LoggingPersistenceHealth.Unavailable;
             LoggingPersistenceHealth unavailable = LoggingPersistenceHealth.Unavailable;
             appSink = new RollingFileSink(LoggingStreams.App, null, clock, fileSystem, unavailable);
             traceSink = new RollingFileSink(LoggingStreams.Trace, null, clock, fileSystem, unavailable);

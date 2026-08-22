@@ -12,6 +12,9 @@ namespace readboard
         public const long ClassTotalBytes = 100L * 1024L * 1024L;
         public const int MaxExceptionChars = 2048;
         public const int MaxFieldChars = 1024;
+        public const long CaptureMaxPngBytes = 32L * 1024L * 1024L;
+        public const long CaptureClassTotalBytes = 500L * 1024L * 1024L;
+        public const int CaptureRetentionDays = 7;
     }
 
     internal static class LoggingStreams

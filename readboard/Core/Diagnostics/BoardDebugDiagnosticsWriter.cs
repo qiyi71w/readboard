@@ -29,10 +29,30 @@ namespace readboard
         public string FailureReason { get; set; }
     }
 
+    internal sealed class BoardDebugDiagnosticsWriterOptions
+    {
+        public string RootDirectory { get; set; }
+        public Func<bool> IsEnabled { get; set; }
+        public ILoggingClock Clock { get; set; }
+        public ILoggingFileSystem FileSystem { get; set; }
+        public Action<LoggingPersistenceHealth> ReportHealth { get; set; }
+        public long? MaxPngBytes { get; set; }
+        public int? RetentionDays { get; set; }
+        public long? MaxTotalBytes { get; set; }
+    }
+
     internal sealed class BoardDebugDiagnosticsWriter : IDisposable
     {
+        public const string PngSizeCapReason = "png-size-cap";
+
         private readonly string rootDirectory;
         private readonly Func<bool> isEnabled;
+        private readonly ILoggingClock clock;
+        private readonly ILoggingFileSystem fileSystem;
+        private readonly Action<LoggingPersistenceHealth> reportHealth;
+        private readonly long maxPngBytes;
+        private readonly int retentionDays;
+        private readonly long maxTotalBytes;
         private readonly object syncRoot = new object();
         private readonly Queue<PendingWrite> pendingWrites = new Queue<PendingWrite>();
         private readonly AutoResetEvent pendingWriteSignal = new AutoResetEvent(false);
@@ -45,14 +65,29 @@ namespace readboard
         private bool disposed;
 
         public BoardDebugDiagnosticsWriter(string rootDirectory, Func<bool> isEnabled)
+            : this(new BoardDebugDiagnosticsWriterOptions
+            {
+                RootDirectory = rootDirectory,
+                IsEnabled = isEnabled
+            })
         {
-            if (string.IsNullOrWhiteSpace(rootDirectory))
-                throw new ArgumentException("Debug diagnostics directory is required.", "rootDirectory");
-            if (isEnabled == null)
+        }
+
+        internal BoardDebugDiagnosticsWriter(BoardDebugDiagnosticsWriterOptions options)
+        {
+            if (options == null)
+                throw new ArgumentNullException("options");
+            if (options.IsEnabled == null)
                 throw new ArgumentNullException("isEnabled");
 
-            this.rootDirectory = rootDirectory;
-            this.isEnabled = isEnabled;
+            rootDirectory = options.RootDirectory;
+            isEnabled = options.IsEnabled;
+            clock = options.Clock ?? new SystemLoggingClock();
+            fileSystem = options.FileSystem ?? new RealLoggingFileSystem();
+            reportHealth = options.ReportHealth;
+            maxPngBytes = options.MaxPngBytes ?? LoggingLimits.CaptureMaxPngBytes;
+            retentionDays = options.RetentionDays ?? LoggingLimits.CaptureRetentionDays;
+            maxTotalBytes = options.MaxTotalBytes ?? LoggingLimits.CaptureClassTotalBytes;
         }
 
         public void RecordCaptureFailure(BoardDebugDiagnosticRecord record)
@@ -147,12 +182,12 @@ namespace readboard
 
         private bool EnqueueEvent(string eventName, BoardDebugDiagnosticRecord record, bool includeFrame)
         {
-            if (disposeRequested || !isEnabled())
+            if (disposeRequested || !isEnabled() || string.IsNullOrWhiteSpace(rootDirectory))
                 return false;
 
             try
             {
-                DateTime timestampUtc = DateTime.UtcNow;
+                DateTime timestampUtc = clock.UtcNow;
                 PendingWrite pendingWrite = CreatePendingWrite(eventName, timestampUtc, record, includeFrame);
                 EnsureWorkerStarted();
                 pendingWrites.Enqueue(pendingWrite);
@@ -223,6 +258,7 @@ namespace readboard
                 catch (Exception ex)
                 {
                     Trace.WriteLine("Failed to write readboard debug diagnostics: " + ex);
+                    ReportHealth(LoggingPersistenceHealth.Degraded);
                 }
                 finally
                 {
@@ -233,27 +269,226 @@ namespace readboard
 
         private void WritePendingWrite(PendingWrite pendingWrite)
         {
-            Directory.CreateDirectory(rootDirectory);
-            string eventDirectory = Path.Combine(rootDirectory, pendingWrite.EventDirectoryName);
-            Directory.CreateDirectory(eventDirectory);
-
-            if (pendingWrite.Frame != null)
-                SaveFrame(pendingWrite.Frame, Path.Combine(eventDirectory, "frame.png"));
-
-            File.WriteAllText(
-                Path.Combine(eventDirectory, "metadata.json"),
-                pendingWrite.MetadataJson,
-                Encoding.UTF8);
-
-            if (!string.IsNullOrWhiteSpace(pendingWrite.RecognitionText))
+            if (string.IsNullOrWhiteSpace(rootDirectory))
             {
-                File.WriteAllText(
-                    Path.Combine(eventDirectory, "recognition.txt"),
-                    pendingWrite.RecognitionText,
-                    Encoding.UTF8);
+                ReportHealth(LoggingPersistenceHealth.Unavailable);
+                return;
             }
 
-            File.AppendAllText(Path.Combine(rootDirectory, "debug.log"), pendingWrite.LogLine, Encoding.UTF8);
+            if (!fileSystem.TryCreateDirectory(rootDirectory))
+            {
+                ReportHealth(LoggingPersistenceHealth.Degraded);
+                return;
+            }
+
+            string eventDirectory = Path.Combine(rootDirectory, pendingWrite.EventDirectoryName);
+            if (!fileSystem.TryCreateDirectory(eventDirectory))
+            {
+                ReportHealth(LoggingPersistenceHealth.Degraded);
+                return;
+            }
+
+            string metadataJson = pendingWrite.MetadataJson;
+            if (pendingWrite.Frame != null)
+            {
+                byte[] png = EncodePng(pendingWrite.Frame);
+                if (png != null)
+                {
+                    if (png.Length > maxPngBytes)
+                    {
+                        metadataJson = WithFrameOmittedReason(metadataJson);
+                    }
+                    else if (!fileSystem.TryWriteAllBytes(Path.Combine(eventDirectory, "frame.png"), png))
+                    {
+                        ReportHealth(LoggingPersistenceHealth.Degraded);
+                    }
+                }
+            }
+
+            if (!fileSystem.TryWriteAllBytes(
+                Path.Combine(eventDirectory, "metadata.json"),
+                EncodeUtf8(metadataJson)))
+            {
+                ReportHealth(LoggingPersistenceHealth.Degraded);
+            }
+
+            if (!string.IsNullOrWhiteSpace(pendingWrite.RecognitionText)
+                && !fileSystem.TryWriteAllBytes(
+                    Path.Combine(eventDirectory, "recognition.txt"),
+                    EncodeUtf8(pendingWrite.RecognitionText)))
+            {
+                ReportHealth(LoggingPersistenceHealth.Degraded);
+            }
+
+            if (!fileSystem.TryAppend(Path.Combine(rootDirectory, "debug.log"), EncodeUtf8(pendingWrite.LogLine)))
+                ReportHealth(LoggingPersistenceHealth.Degraded);
+
+            CleanupQuota();
+        }
+
+        private void ReportHealth(LoggingPersistenceHealth health)
+        {
+            if (reportHealth != null)
+                reportHealth(health);
+        }
+
+        private static byte[] EncodeUtf8(string text)
+        {
+            return Encoding.UTF8.GetBytes(text ?? string.Empty);
+        }
+
+        private static string WithFrameOmittedReason(string metadataJson)
+        {
+            if (string.IsNullOrEmpty(metadataJson))
+                return "{\"FrameOmittedReason\":\"" + PngSizeCapReason + "\"}";
+
+            int closer = metadataJson.LastIndexOf('}');
+            if (closer < 0)
+                return metadataJson;
+
+            string prefix = metadataJson.Substring(0, closer).TrimEnd();
+            if (prefix.EndsWith("{", StringComparison.Ordinal))
+                return prefix + "\"FrameOmittedReason\":\"" + PngSizeCapReason + "\"}";
+            return prefix + ",\"FrameOmittedReason\":\"" + PngSizeCapReason + "\"}";
+        }
+
+        private void CleanupQuota()
+        {
+            try
+            {
+                IList<string> directories;
+                if (!fileSystem.TryListDirectories(rootDirectory, out directories))
+                {
+                    ReportHealth(LoggingPersistenceHealth.Degraded);
+                    return;
+                }
+
+                DateTime cutoff = clock.UtcNow.ToUniversalTime().AddDays(-retentionDays);
+                List<CaptureRetentionEntry> kept = new List<CaptureRetentionEntry>();
+                bool sizingFailed = false;
+                for (int i = 0; i < directories.Count; i++)
+                {
+                    string directory = directories[i];
+                    DateTime timestamp = ResolveEventTimestamp(directory);
+                    long size;
+                    if (!TrySumDirectoryFiles(directory, out size))
+                    {
+                        sizingFailed = true;
+                        size = 0;
+                    }
+
+                    if (timestamp <= cutoff)
+                    {
+                        if (!fileSystem.TryDeleteDirectory(directory))
+                            ReportHealth(LoggingPersistenceHealth.Degraded);
+                        continue;
+                    }
+
+                    CaptureRetentionEntry entry = new CaptureRetentionEntry();
+                    entry.Path = directory;
+                    entry.TimestampUtc = timestamp;
+                    entry.Size = size;
+                    kept.Add(entry);
+                }
+
+                long rootSize;
+                if (!TrySumDirectoryFiles(rootDirectory, out rootSize))
+                    sizingFailed = true;
+                if (sizingFailed)
+                {
+                    ReportHealth(LoggingPersistenceHealth.Degraded);
+                    return;
+                }
+
+                long total = rootSize;
+                for (int i = 0; i < kept.Count; i++)
+                    total += kept[i].Size;
+
+                kept.Sort(CompareOldestFirst);
+                int index = 0;
+                while (total > maxTotalBytes && index < kept.Count - 1)
+                {
+                    if (!fileSystem.TryDeleteDirectory(kept[index].Path))
+                    {
+                        ReportHealth(LoggingPersistenceHealth.Degraded);
+                        index++;
+                        continue;
+                    }
+
+                    total -= kept[index].Size;
+                    index++;
+                }
+
+                if (total > maxTotalBytes)
+                    ReportHealth(LoggingPersistenceHealth.Degraded);
+            }
+            catch
+            {
+                ReportHealth(LoggingPersistenceHealth.Degraded);
+            }
+        }
+
+        private DateTime ResolveEventTimestamp(string directory)
+        {
+            DateTime parsed;
+            if (TryParseEventDirectoryTimestamp(Path.GetFileName(directory), out parsed))
+                return parsed;
+
+            IList<string> files;
+            DateTime latest = DateTime.MinValue;
+            if (fileSystem.TryListFiles(directory, out files) && files != null)
+            {
+                for (int i = 0; i < files.Count; i++)
+                {
+                    DateTime write = fileSystem.GetLastWriteUtc(files[i]);
+                    if (write > latest)
+                        latest = write;
+                }
+            }
+
+            if (latest == DateTime.MinValue)
+                return clock.UtcNow.ToUniversalTime();
+            return latest;
+        }
+
+        private static bool TryParseEventDirectoryTimestamp(string directoryName, out DateTime timestampUtc)
+        {
+            timestampUtc = DateTime.MinValue;
+            if (string.IsNullOrEmpty(directoryName) || directoryName.Length < 19)
+                return false;
+            return DateTime.TryParseExact(
+                directoryName.Substring(0, 19),
+                "yyyyMMdd-HHmmss-fff",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out timestampUtc);
+        }
+
+        private bool TrySumDirectoryFiles(string directory, out long total)
+        {
+            total = 0;
+            IList<string> files;
+            if (!fileSystem.TryListFiles(directory, out files) || files == null)
+                return false;
+
+            for (int i = 0; i < files.Count; i++)
+                total += fileSystem.GetLength(files[i]);
+            return true;
+        }
+
+        private static int CompareOldestFirst(CaptureRetentionEntry left, CaptureRetentionEntry right)
+        {
+            int compared = left.TimestampUtc.CompareTo(right.TimestampUtc);
+            if (compared != 0)
+                return compared;
+            return string.Compare(left.Path, right.Path, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private sealed class CaptureRetentionEntry
+        {
+            public string Path;
+            public DateTime TimestampUtc;
+            public long Size;
         }
 
         private string CreateEventDirectoryName(string eventName, DateTime timestampUtc)
@@ -408,15 +643,17 @@ namespace readboard
             return PendingFrame.FromPixelBuffer(buffer.Width, buffer.Height, buffer.Stride, copiedPixels);
         }
 
-        private static void SaveFrame(PendingFrame frame, string path)
+        private static byte[] EncodePng(PendingFrame frame)
         {
             Bitmap bitmap = CreateBitmap(frame);
             if (bitmap == null)
-                return;
+                return null;
 
             using (bitmap)
+            using (MemoryStream stream = new MemoryStream())
             {
-                bitmap.Save(path, ImageFormat.Png);
+                bitmap.Save(stream, ImageFormat.Png);
+                return stream.ToArray();
             }
         }
 

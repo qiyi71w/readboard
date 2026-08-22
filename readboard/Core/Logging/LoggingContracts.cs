@@ -94,6 +94,8 @@ namespace readboard
         bool TryDelete(string path);
         bool TryCreateGzip(string sourcePath, string destinationPath);
         bool TryListFiles(string directory, out IList<string> files);
+        bool TryListDirectories(string directory, out IList<string> directories);
+        bool TryDeleteDirectory(string path);
     }
 
     internal sealed class RealLoggingFileSystem : ILoggingFileSystem
@@ -287,6 +289,40 @@ namespace readboard
                 for (int i = 0; i < found.Length; i++)
                     files.Add(found[i]);
                 return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public bool TryListDirectories(string directory, out IList<string> directories)
+        {
+            directories = new List<string>();
+            try
+            {
+                if (!Directory.Exists(directory))
+                    return true;
+                string[] found = Directory.GetDirectories(directory);
+                for (int i = 0; i < found.Length; i++)
+                    directories.Add(found[i]);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public bool TryDeleteDirectory(string path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    return false;
+                if (Directory.Exists(path))
+                    Directory.Delete(path, true);
+                return !Directory.Exists(path);
             }
             catch
             {

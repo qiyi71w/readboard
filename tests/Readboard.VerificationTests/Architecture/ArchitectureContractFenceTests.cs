@@ -493,6 +493,36 @@ namespace Readboard.VerificationTests.Architecture
             Assert.Contains("logging.InstallCrashHandlers()", main);
         }
 
+        [Fact]
+        public void HostControlledCapture_DoesNotWriteDebugDiagnosticsEnabledOrUseLegacyDirectory()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string composer = File.ReadAllText(Path.Combine(
+                repositoryRoot,
+                "readboard",
+                "Core",
+                "Protocol",
+                "MainFormRuntimeComposer.cs"));
+            string settings = File.ReadAllText(Path.Combine(
+                repositoryRoot,
+                "readboard",
+                "MainForm.WebView.Settings.cs"));
+            string loggingRoot = Path.Combine(repositoryRoot, "readboard", "Core", "Logging");
+            string[] loggingFiles = Directory.GetFiles(loggingRoot, "*.cs", SearchOption.AllDirectories);
+            for (int i = 0; i < loggingFiles.Length; i++)
+            {
+                string text = File.ReadAllText(loggingFiles[i]);
+                Assert.DoesNotContain("DebugDiagnosticsEnabled", text);
+                Assert.DoesNotContain("debug-diagnostics", text);
+            }
+
+            Assert.Contains("CreateCaptureWriter", composer);
+            Assert.DoesNotContain("GetRootDirectory(AppDomain.CurrentDomain.BaseDirectory)", composer);
+            Assert.DoesNotContain("debug-diagnostics", composer);
+            Assert.Contains("CaptureDirectory", settings);
+            Assert.DoesNotContain("GetRootDirectory(AppDomain.CurrentDomain.BaseDirectory)", settings);
+        }
+
 
 
         [Fact]

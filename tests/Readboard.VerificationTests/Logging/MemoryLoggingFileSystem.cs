@@ -27,6 +27,10 @@ namespace Readboard.VerificationTests.Logging
         public bool FailGzip { get; set; }
         public bool FailDelete { get; set; }
         public bool FailListFiles { get; set; }
+        public bool FailListDirectories { get; set; }
+        public bool FailDeleteDirectory { get; set; }
+        public bool FailWriteAllBytes { get; set; }
+        public bool FailWritePng { get; set; }
         public ManualResetEventSlim BlockAppend { get; set; }
 
         public bool TryCreateDirectory(string path)
@@ -91,7 +95,9 @@ namespace Readboard.VerificationTests.Logging
 
         public bool TryWriteAllBytes(string path, byte[] bytes)
         {
-            if (bytes == null)
+            if (bytes == null || FailWriteAllBytes)
+                return false;
+            if (FailWritePng && path != null && path.EndsWith("frame.png", StringComparison.OrdinalIgnoreCase))
                 return false;
             lock (sync)
             {
@@ -202,6 +208,69 @@ namespace Readboard.VerificationTests.Logging
                         matches.Add(path);
                 }
                 listed = matches;
+                return true;
+            }
+        }
+
+        public bool TryListDirectories(string directory, out IList<string> listed)
+        {
+            if (FailListDirectories)
+            {
+                listed = new List<string>();
+                return false;
+            }
+
+            lock (sync)
+            {
+                string parent = Normalize(directory);
+                List<string> matches = new List<string>();
+                foreach (string path in directories)
+                {
+                    if (string.Equals(Parent(path), parent, StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(path, parent, StringComparison.OrdinalIgnoreCase))
+                    {
+                        matches.Add(path);
+                    }
+                }
+                listed = matches;
+                return true;
+            }
+        }
+
+        public bool TryDeleteDirectory(string path)
+        {
+            if (FailDeleteDirectory)
+                return false;
+
+            lock (sync)
+            {
+                string prefix = Normalize(path);
+                if (string.IsNullOrEmpty(prefix))
+                    return false;
+                string prefixSlash = prefix + "\\";
+                List<string> fileKeys = new List<string>();
+                foreach (string filePath in files.Keys)
+                {
+                    if (string.Equals(filePath, prefix, StringComparison.OrdinalIgnoreCase)
+                        || filePath.StartsWith(prefixSlash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        fileKeys.Add(filePath);
+                    }
+                }
+                for (int i = 0; i < fileKeys.Count; i++)
+                    files.Remove(fileKeys[i]);
+
+                List<string> directoryKeys = new List<string>();
+                foreach (string directoryPath in directories)
+                {
+                    if (string.Equals(directoryPath, prefix, StringComparison.OrdinalIgnoreCase)
+                        || directoryPath.StartsWith(prefixSlash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        directoryKeys.Add(directoryPath);
+                    }
+                }
+                for (int i = 0; i < directoryKeys.Count; i++)
+                    directories.Remove(directoryKeys[i]);
                 return true;
             }
         }

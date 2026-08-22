@@ -433,7 +433,11 @@ namespace readboard
 
         private static void OpenWebViewDiagnosticsDirectory()
         {
-            string directory = BoardDebugDiagnosticsPaths.GetRootDirectory(AppDomain.CurrentDomain.BaseDirectory);
+            string directory = Program.CurrentContext != null && Program.CurrentContext.Logging != null
+                ? Program.CurrentContext.Logging.CaptureDirectory
+                : null;
+            if (string.IsNullOrWhiteSpace(directory))
+                return;
             Directory.CreateDirectory(directory);
             Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
         }
