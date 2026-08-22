@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -438,17 +439,25 @@ namespace readboard
 
         private void InitializePersistence()
         {
-            bool canPersist = pathResolution != null
+            bool canPrepareRoot = pathResolution != null
                 && pathResolution.AllowsPersistence
                 && !string.IsNullOrWhiteSpace(pathResolution.CandidateRoot)
                 && fileSystem.TryCreateDirectory(pathResolution.CandidateRoot);
-            if (canPersist)
+            if (canPrepareRoot)
             {
                 logRoot = pathResolution.CandidateRoot;
-                LoggingPersistenceHealth healthy = LoggingPersistenceHealth.Healthy;
-                appSink = new RollingFileSink(LoggingStreams.App, logRoot, clock, fileSystem, healthy);
-                traceSink = new RollingFileSink(LoggingStreams.Trace, logRoot, clock, fileSystem, healthy);
-                crashSink = new RollingFileSink(LoggingStreams.Crash, logRoot, clock, fileSystem, healthy);
+                LoggingPersistenceHealth initialHealth = ProbePersistence(logRoot);
+                appSink = new RollingFileSink(LoggingStreams.App, logRoot, clock, fileSystem, initialHealth);
+                traceSink = new RollingFileSink(LoggingStreams.Trace, logRoot, clock, fileSystem, initialHealth);
+                crashSink = new RollingFileSink(LoggingStreams.Crash, logRoot, clock, fileSystem, initialHealth);
+                if (initialHealth == LoggingPersistenceHealth.Unavailable)
+                {
+                    captureHealth = LoggingPersistenceHealth.Unavailable;
+                    if (launchReason == LoggingFailureReason.Applied)
+                        launchReason = LoggingFailureReason.PathUnavailable;
+                    return;
+                }
+
                 appSink.Cleanup();
                 traceSink.Cleanup();
                 crashSink.Cleanup();
@@ -467,6 +476,20 @@ namespace readboard
             {
                 launchReason = LoggingFailureReason.PathUnavailable;
             }
+        }
+
+        private LoggingPersistenceHealth ProbePersistence(string root)
+        {
+            string probePath = Path.Combine(
+                root,
+                ".readboard-write-probe-" + (ProcessSessionId ?? "startup") + ".tmp");
+            bool wrote = fileSystem.TryWriteAllBytes(probePath, Array.Empty<byte>());
+            bool removed = fileSystem.TryDelete(probePath);
+            if (!wrote)
+                return LoggingPersistenceHealth.Unavailable;
+            return removed
+                ? LoggingPersistenceHealth.Healthy
+                : LoggingPersistenceHealth.Degraded;
         }
 
         private void StartWorkers()

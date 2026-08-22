@@ -92,6 +92,43 @@ namespace Readboard.VerificationTests.Logging
         }
 
         [Fact]
+        public void EmitCapability_ExistingButUnwritableRootReportsUnavailableBeforeFirstEvent()
+        {
+            MemoryLoggingFileSystem fileSystem = new MemoryLoggingFileSystem
+            {
+                FailWriteAllBytes = true
+            };
+            using (LoggingRuntime runtime = LoggingHarness.Start(LoggingHarness.Contract(), fileSystem))
+            {
+                List<string> sent = new List<string>();
+                LoggingHandshakeController handshake = new LoggingHandshakeController(
+                    LoggingHarness.Contract(),
+                    runtime,
+                    sent.Add);
+
+                handshake.EmitCapability();
+
+                Assert.Single(sent);
+                LoggingCapability capability;
+                Assert.True(LoggingWireContract.TryParseCapability(sent[0], out capability));
+                Assert.Equal(LoggingHarness.ContractRoot, runtime.LogRoot);
+                Assert.Equal(LoggingPersistenceHealth.Unavailable, capability.Persistence);
+                Assert.Equal(LoggingFailureReason.PathUnavailable, runtime.Observe().Reason);
+                Assert.True(fileSystem.DirectoryExists(LoggingHarness.ContractRoot));
+                Assert.False(fileSystem.HasPathPrefix(LoggingHarness.LocalAppData));
+
+                Assert.True(handshake.TryHandleInbound(
+                    "readboardLoggingSet " + RequestOne + " on off off"));
+                Assert.Equal(2, sent.Count);
+                LoggingObserved observed;
+                Assert.True(LoggingWireContract.TryParseObserved(sent[1], out observed));
+                Assert.Equal(LoggingToggle.On, observed.Diagnostics);
+                Assert.Equal(LoggingPersistenceHealth.Unavailable, observed.Persistence);
+                Assert.Equal(LoggingFailureReason.PathUnavailable, observed.Reason);
+            }
+        }
+
+        [Fact]
         public void TryHandleInbound_AppliesTogglesIndependentlyAndAcknowledgesRequestId()
         {
             MemoryLoggingFileSystem fileSystem = new MemoryLoggingFileSystem();
