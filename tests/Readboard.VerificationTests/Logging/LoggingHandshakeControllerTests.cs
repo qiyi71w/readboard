@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
 using readboard;
 using Xunit;
 
@@ -126,6 +129,83 @@ namespace Readboard.VerificationTests.Logging
                 Assert.Equal(LoggingPersistenceHealth.Unavailable, observed.Persistence);
                 Assert.Equal(LoggingFailureReason.PathUnavailable, observed.Reason);
             }
+        }
+
+        [Fact]
+        public void OpenWebViewDiagnosticsDirectory_ExistingButUnwritableRootDoesNotCreateOrOpen()
+        {
+            MemoryLoggingFileSystem fileSystem = new MemoryLoggingFileSystem
+            {
+                FailWriteAllBytes = true
+            };
+            using (LoggingRuntime runtime = LoggingHarness.Start(LoggingHarness.Contract(), fileSystem))
+            {
+                List<string> created = new List<string>();
+                List<string> opened = new List<string>();
+
+                bool openedDirectory = MainForm.TryOpenWebViewDiagnosticsDirectory(
+                    runtime,
+                    created.Add,
+                    opened.Add);
+
+                Assert.Equal(LoggingPersistenceHealth.Unavailable, runtime.Observe().Persistence);
+                Assert.False(openedDirectory);
+                Assert.Empty(created);
+                Assert.Empty(opened);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(DiagnosticsOpenFailureCases))]
+        public void OpenWebViewDiagnosticsDirectory_CreateOrOpenFailure_ReturnsFalseWithoutThrowing(
+            bool failCreate,
+            Exception failure)
+        {
+            MemoryLoggingFileSystem fileSystem = new MemoryLoggingFileSystem();
+            using (LoggingRuntime runtime = LoggingHarness.Start(LoggingHarness.Contract(), fileSystem))
+            {
+                List<string> created = new List<string>();
+                List<string> opened = new List<string>();
+
+                bool openedDirectory = MainForm.TryOpenWebViewDiagnosticsDirectory(
+                    runtime,
+                    delegate(string path)
+                    {
+                        created.Add(path);
+                        if (failCreate)
+                            throw failure;
+                    },
+                    delegate(string path)
+                    {
+                        opened.Add(path);
+                        if (!failCreate)
+                            throw failure;
+                    });
+
+                Assert.False(openedDirectory);
+                Assert.Single(created);
+                Assert.Equal(runtime.CaptureDirectory, created[0]);
+                if (failCreate)
+                    Assert.Empty(opened);
+                else
+                {
+                    Assert.Single(opened);
+                    Assert.Equal(runtime.CaptureDirectory, opened[0]);
+                }
+            }
+        }
+
+        public static IEnumerable<object[]> DiagnosticsOpenFailureCases()
+        {
+            return new object[][]
+            {
+                new object[] { true, new IOException() },
+                new object[] { true, new UnauthorizedAccessException() },
+                new object[] { true, new Win32Exception() },
+                new object[] { false, new IOException() },
+                new object[] { false, new UnauthorizedAccessException() },
+                new object[] { false, new Win32Exception() }
+            };
         }
 
         [Fact]
