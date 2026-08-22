@@ -304,6 +304,40 @@ namespace readboard
             return true;
         }
 
+        public static LoggingCapability ToCapability(LoggingObservedSnapshot snapshot)
+        {
+            if (snapshot == null)
+                throw new ArgumentNullException("snapshot");
+
+            return new LoggingCapability
+            {
+                ProcessSessionId = snapshot.ProcessSessionId,
+                Diagnostics = snapshot.Diagnostics == LoggingToggle.On ? LoggingToggle.On : LoggingToggle.Off,
+                Capture = snapshot.Capture == LoggingToggle.On ? LoggingToggle.On : LoggingToggle.Off,
+                Trace = snapshot.Trace == LoggingToggle.On ? LoggingToggle.On : LoggingToggle.Off,
+                Persistence = snapshot.Persistence,
+                DropCount = snapshot.DropCount
+            };
+        }
+
+        public static LoggingObserved ToObserved(string requestId, LoggingObservedSnapshot snapshot)
+        {
+            if (snapshot == null)
+                throw new ArgumentNullException("snapshot");
+
+            return new LoggingObserved
+            {
+                RequestId = requestId,
+                ProcessSessionId = snapshot.ProcessSessionId,
+                Diagnostics = snapshot.Diagnostics,
+                Capture = snapshot.Capture,
+                Trace = snapshot.Trace,
+                Persistence = snapshot.Persistence,
+                DropCount = snapshot.DropCount,
+                Reason = snapshot.Reason
+            };
+        }
+
         public static LoggingPersistenceHealth WorstPersistence(
             LoggingPersistenceHealth app,
             LoggingPersistenceHealth trace,

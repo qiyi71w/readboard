@@ -203,6 +203,24 @@ namespace readboard
             }
         }
 
+        public LoggingObserved ApplySet(LoggingSetRequest request)
+        {
+            if (request == null)
+                throw new ArgumentNullException("request");
+
+            lock (sync)
+            {
+                if (request.Diagnostics != LoggingToggle.Unknown)
+                    diagnostics = request.Diagnostics;
+                if (request.Capture != LoggingToggle.Unknown)
+                    capture = request.Capture;
+                if (request.Trace != LoggingToggle.Unknown)
+                    trace = request.Trace;
+            }
+
+            return LoggingWireContract.ToObserved(request.RequestId, Observe());
+        }
+
         public void Write(LoggingRecord record)
         {
             if (record == null || disposed)

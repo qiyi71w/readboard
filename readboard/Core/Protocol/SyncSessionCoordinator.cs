@@ -35,6 +35,7 @@ namespace readboard
         private int autoPlayAuthorizationGeneration;
         private SessionState sessionState;
         private IProtocolCommandHost host;
+        private LoggingHandshakeController loggingHandshake;
 
         public SyncSessionCoordinator(IReadBoardTransport transport, IReadBoardProtocolAdapter protocolAdapter)
         {
@@ -86,6 +87,11 @@ namespace readboard
             if (host == null)
                 throw new ArgumentNullException("host");
             this.host = host;
+        }
+
+        public void AttachLoggingHandshake(LoggingHandshakeController handshake)
+        {
+            loggingHandshake = handshake;
         }
 
         public void BindSessionState(SessionState state)
@@ -468,6 +474,8 @@ namespace readboard
         {
             SendProtocolMessage(protocolAdapter.CreateReadyMessage());
             SendPonderStatus(playPonderEnabled);
+            if (loggingHandshake != null)
+                loggingHandshake.EmitCapability();
         }
 
         public void SendPonderStatus(bool playPonderEnabled)
@@ -721,6 +729,8 @@ namespace readboard
         private void OnMessageReceived(object sender, string rawLine)
         {
             if (!acceptingInboundProtocolMessages)
+                return;
+            if (loggingHandshake != null && loggingHandshake.TryHandleInbound(rawLine))
                 return;
             int receivedGeneration = Volatile.Read(ref inboundProtocolGeneration);
             ProtocolMessage message = protocolAdapter.ParseInbound(rawLine);

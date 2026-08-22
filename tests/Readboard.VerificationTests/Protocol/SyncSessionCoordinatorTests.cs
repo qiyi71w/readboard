@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using Xunit;
 using readboard;
+using Readboard.VerificationTests.Logging;
 
 namespace Readboard.VerificationTests
 {
@@ -17,6 +18,58 @@ namespace Readboard.VerificationTests
             coordinator.NotifyReady(true);
 
             Assert.Equal(new[] { "ready", "playponder on" }, transport.SentLines);
+        }
+
+        [Fact]
+        public void NotifyReady_ContractHandshakeEmitsCapabilityAfterReadyAndPonder()
+        {
+            FakeTransport transport = new FakeTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            MemoryLoggingFileSystem fileSystem = new MemoryLoggingFileSystem();
+            using (LoggingRuntime runtime = LoggingHarness.Start(LoggingHarness.Contract(), fileSystem))
+            {
+                coordinator.AttachLoggingHandshake(new LoggingHandshakeController(
+                    LoggingHarness.Contract(),
+                    runtime,
+                    coordinator.SendLine));
+
+                coordinator.NotifyReady(true);
+
+                Assert.Equal(3, transport.SentLines.Count);
+                Assert.Equal("ready", transport.SentLines[0]);
+                Assert.Equal("playponder on", transport.SentLines[1]);
+                LoggingCapability capability;
+                Assert.True(LoggingWireContract.TryParseCapability(transport.SentLines[2], out capability));
+                Assert.Equal(LoggingHarness.ProcessSessionId, capability.ProcessSessionId);
+            }
+        }
+
+        [Fact]
+        public void Start_LoggingSetDoesNotDispatchSyncAndEmitsObserved()
+        {
+            FakeTransport transport = new FakeTransport();
+            CapturingHost host = new CapturingHost();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.AttachHost(host);
+            MemoryLoggingFileSystem fileSystem = new MemoryLoggingFileSystem();
+            using (LoggingRuntime runtime = LoggingHarness.Start(LoggingHarness.Contract(), fileSystem))
+            {
+                coordinator.AttachLoggingHandshake(new LoggingHandshakeController(
+                    LoggingHarness.Contract(),
+                    runtime,
+                    coordinator.SendLine));
+
+                coordinator.Start();
+                transport.Emit("readboardLoggingSet cmVxdWVzdDE on off off");
+                transport.Emit("place 3 4");
+
+                Assert.Equal(1, host.DispatchCount);
+                Assert.NotNull(host.LastMoveRequest);
+                Assert.Equal(3, host.LastMoveRequest.X);
+                Assert.Contains(
+                    transport.SentLines,
+                    line => line.StartsWith("readboardLoggingObserved cmVxdWVzdDE ", System.StringComparison.Ordinal));
+            }
         }
 
         [Fact]

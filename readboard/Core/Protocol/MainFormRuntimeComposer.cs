@@ -22,6 +22,14 @@ namespace readboard
                 throw new ArgumentNullException("coordinator");
 
             coordinator.BindSessionState(sessionState);
+            LoggingRuntime logging = Program.CurrentContext == null ? null : Program.CurrentContext.Logging;
+            if (logging != null)
+            {
+                coordinator.AttachLoggingHandshake(new LoggingHandshakeController(
+                    launchOptions,
+                    logging,
+                    coordinator.SendLine));
+            }
             MainForm host = new MainForm(
                 launchOptions,
                 coordinator,

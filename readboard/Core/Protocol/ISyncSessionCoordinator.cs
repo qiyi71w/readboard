@@ -6,6 +6,7 @@ namespace readboard
     {
         void AttachHost(IProtocolCommandHost host);
         void AttachRuntime(SyncSessionRuntimeDependencies runtimeDependencies);
+        void AttachLoggingHandshake(LoggingHandshakeController handshake);
         void BindSessionState(SessionState state);
         void Start();
         void Stop();
