@@ -350,6 +350,182 @@ namespace Readboard.VerificationTests.Architecture
         }
 
         [Fact]
+        public void LoggingWireContract_TokensAndFieldOrderMatchAdr0014()
+        {
+            Assert.Equal("readboardLoggingV1", ProtocolKeywords.LoggingCapability);
+            Assert.Equal("readboardLoggingSet", ProtocolKeywords.LoggingSet);
+            Assert.Equal("readboardLoggingObserved", ProtocolKeywords.LoggingObserved);
+            Assert.Equal("on", ProtocolKeywords.LoggingOn);
+            Assert.Equal("off", ProtocolKeywords.LoggingOff);
+            Assert.Equal("unknown", ProtocolKeywords.LoggingUnknown);
+            Assert.Equal("healthy", ProtocolKeywords.LoggingHealthy);
+            Assert.Equal("degraded", ProtocolKeywords.LoggingDegraded);
+            Assert.Equal("unavailable", ProtocolKeywords.LoggingUnavailable);
+            Assert.Equal("legacy-helper", ProtocolKeywords.LoggingReasonLegacyHelper);
+            Assert.Equal("capability-timeout", ProtocolKeywords.LoggingReasonCapabilityTimeout);
+            Assert.Equal("path-unavailable", ProtocolKeywords.LoggingReasonPathUnavailable);
+            Assert.Equal("writer-fault", ProtocolKeywords.LoggingReasonWriterFault);
+            Assert.Equal("invalid-request", ProtocolKeywords.LoggingReasonInvalidRequest);
+            Assert.Equal("safe", ProtocolKeywords.LoggingPrivacySafe);
+            Assert.Equal("localPath", ProtocolKeywords.LoggingPrivacyLocalPath);
+            Assert.Equal("localUrl", ProtocolKeywords.LoggingPrivacyLocalUrl);
+            Assert.Equal("userText", ProtocolKeywords.LoggingPrivacyUserText);
+            Assert.Equal("sessionId", ProtocolKeywords.LoggingPrivacySessionId);
+            Assert.Equal("secret", ProtocolKeywords.LoggingPrivacySecret);
+
+
+            string capability = LoggingWireContract.FormatCapability(new LoggingCapability
+            {
+                ProcessSessionId = "dGVzdFByb2Nlc3NJRA",
+                Diagnostics = LoggingToggle.Off,
+                Capture = LoggingToggle.Off,
+                Trace = LoggingToggle.Off,
+                Persistence = LoggingPersistenceHealth.Healthy,
+                DropCount = 0
+            });
+            string set = LoggingWireContract.FormatSet(new LoggingSetRequest
+            {
+                RequestId = "cmVxdWVzdDE",
+                Diagnostics = LoggingToggle.On,
+                Capture = LoggingToggle.Off,
+                Trace = LoggingToggle.On
+            });
+            string observed = LoggingWireContract.FormatObserved(new LoggingObserved
+            {
+                RequestId = "cmVxdWVzdDE",
+                ProcessSessionId = "dGVzdFByb2Nlc3NJRA",
+                Diagnostics = LoggingToggle.On,
+                Capture = LoggingToggle.Off,
+                Trace = LoggingToggle.Unknown,
+                Persistence = LoggingPersistenceHealth.Degraded,
+                DropCount = 4,
+                Reason = LoggingFailureReason.WriterFault
+            });
+
+            Assert.Equal("readboardLoggingV1 dGVzdFByb2Nlc3NJRA off off off healthy 0", capability);
+            Assert.Equal("readboardLoggingSet cmVxdWVzdDE on off on", set);
+            Assert.Equal(
+                "readboardLoggingObserved cmVxdWVzdDE dGVzdFByb2Nlc3NJRA on off unknown degraded 4 writer-fault",
+                observed);
+        }
+
+        [Fact]
+        public void LoggingWireContract_LegacyLaunchEmitsNoCapabilityOrObservedStdout()
+        {
+            LaunchOptions options;
+            Assert.True(LaunchOptions.TryParse(
+                new[] { "yzy", " ", " ", " ", "0", "cn", "-1" },
+                () => "dGVzdFByb2Nlc3NJRA",
+                out options));
+
+            string capability;
+            string observed;
+            Assert.False(LoggingWireContract.TryFormatCapability(options, out capability));
+            Assert.False(LoggingWireContract.TryFormatObserved(
+                options,
+                new LoggingObserved
+                {
+                    RequestId = "cmVxdWVzdDE",
+                    ProcessSessionId = "dGVzdFByb2Nlc3NJRA",
+                    Reason = LoggingFailureReason.LegacyHelper
+                },
+                out observed));
+            Assert.Null(capability);
+            Assert.Null(observed);
+        }
+        [Fact]
+        public void ProductionLogging_DoesNotWriteOrdinaryEventsToStdoutOrStderr()
+        {
+            string root = Path.Combine(VerificationFixtureLocator.RepositoryRoot(), "readboard");
+            string[] files = Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories);
+            List<string> violations = new List<string>();
+            for (int i = 0; i < files.Length; i++)
+            {
+                string path = files[i];
+                string relative = path.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    .Replace('\\', '/');
+                string text = File.ReadAllText(path);
+                if (string.Equals(relative, "Core/Transport/PipeTransport.cs", StringComparison.OrdinalIgnoreCase))
+                {
+                    Assert.Contains("Console.WriteLine(line);", text);
+                    Assert.Contains("Console.Error.WriteLine(\"error: \" + message);", text);
+                    continue;
+                }
+                if (text.Contains("Console.Write")
+                    || text.Contains("Console.Out")
+                    || text.Contains("Console.Error"))
+                {
+                    violations.Add(relative);
+                }
+            }
+
+            Assert.True(violations.Count == 0, "Ordinary production logging wrote Console: " + string.Join(", ", violations));
+        }
+
+        [Fact]
+        public void LoggingRuntime_DoesNotUseBaseDirectoryOrDebugDiagnosticsEnabled()
+        {
+            string loggingRoot = Path.Combine(
+                VerificationFixtureLocator.RepositoryRoot(),
+                "readboard",
+                "Core",
+                "Logging");
+            string[] files = Directory.GetFiles(loggingRoot, "*.cs", SearchOption.AllDirectories);
+            for (int i = 0; i < files.Length; i++)
+            {
+                string text = File.ReadAllText(files[i]);
+                Assert.DoesNotContain("BaseDirectory", text);
+                Assert.DoesNotContain("DebugDiagnosticsEnabled", text);
+                Assert.DoesNotContain("CreateProcessSessionId", text);
+            }
+
+            string main = File.ReadAllText(Path.Combine(
+                VerificationFixtureLocator.RepositoryRoot(),
+                "readboard",
+                "Program.cs"));
+            Assert.Contains("LoggingRuntime.Start(options)", main);
+            Assert.True(
+                main.IndexOf("LaunchOptions.TryParse(args, out options)", StringComparison.Ordinal)
+                < main.IndexOf("LoggingRuntime.Start(options)", StringComparison.Ordinal));
+            Assert.True(
+                main.IndexOf("LoggingRuntime.Start(options)", StringComparison.Ordinal)
+                < main.IndexOf("InitializeRuntime(options)", StringComparison.Ordinal));
+            Assert.Contains("logging.InstallCrashHandlers()", main);
+        }
+
+        [Fact]
+        public void HostControlledCapture_DoesNotWriteDebugDiagnosticsEnabledOrUseLegacyDirectory()
+        {
+            string repositoryRoot = VerificationFixtureLocator.RepositoryRoot();
+            string composer = File.ReadAllText(Path.Combine(
+                repositoryRoot,
+                "readboard",
+                "Core",
+                "Protocol",
+                "MainFormRuntimeComposer.cs"));
+            string settings = File.ReadAllText(Path.Combine(
+                repositoryRoot,
+                "readboard",
+                "MainForm.WebView.Settings.cs"));
+            string loggingRoot = Path.Combine(repositoryRoot, "readboard", "Core", "Logging");
+            string[] loggingFiles = Directory.GetFiles(loggingRoot, "*.cs", SearchOption.AllDirectories);
+            for (int i = 0; i < loggingFiles.Length; i++)
+            {
+                string text = File.ReadAllText(loggingFiles[i]);
+                Assert.DoesNotContain("DebugDiagnosticsEnabled", text);
+                Assert.DoesNotContain("debug-diagnostics", text);
+            }
+
+            Assert.Contains("CreateCaptureWriter", composer);
+            Assert.DoesNotContain("GetRootDirectory(AppDomain.CurrentDomain.BaseDirectory)", composer);
+            Assert.DoesNotContain("debug-diagnostics", composer);
+            Assert.Contains("CaptureDirectory", settings);
+            Assert.DoesNotContain("GetRootDirectory(AppDomain.CurrentDomain.BaseDirectory)", settings);
+        }
+
+
+
+        [Fact]
         public void ConfigurationContract_SaveWritesBothLegacyMirrorsAndJsonThatReloads()
         {
             using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())

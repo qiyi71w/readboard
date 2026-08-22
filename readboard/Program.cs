@@ -201,34 +201,39 @@ namespace readboard
             if (!LaunchOptions.TryParse(args, out options))
                 return;
 
-            InitializeRuntime(options);
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-            Application.SetColorMode(GetSystemColorMode(Config.ColorMode));
-
-            if (!EnsureSupportedWindowsVersion())
-                return;
-
-            using (IReadBoardTransport transport = CreateTransport(options))
+            using (LoggingRuntime logging = LoggingRuntime.Start(options))
             {
-                SessionCoordinatorScope.Run(
-                    new SyncSessionCoordinator(transport, new LegacyProtocolAdapter()),
-                    coordinator => sessionCoordinator = coordinator,
-                    activeSessionCoordinator =>
-                    {
-                        MainForm mainForm = CreateMainForm(options, activeSessionCoordinator);
-                        if (!mainForm.EnsureWebViewRuntimeAvailable())
-                            return;
-                        if (!StartupProtocolHandshake.Run(
-                            () => TryStartSession(mainForm),
-                            () => mainForm.IsShutdownRequested,
-                            mainForm.DrainStartupProtocolCommands,
-                            mainForm.NotifyProtocolReady,
-                            mainForm.ReplayStartupProtocolState))
-                            return;
-                        Application.Run(mainForm);
-                    });
+                logging.InstallCrashHandlers();
+                InitializeRuntime(options);
+                runtimeContext.Logging = logging;
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+                Application.SetColorMode(GetSystemColorMode(Config.ColorMode));
+
+                if (!EnsureSupportedWindowsVersion())
+                    return;
+
+                using (IReadBoardTransport transport = CreateTransport(options))
+                {
+                    SessionCoordinatorScope.Run(
+                        new SyncSessionCoordinator(transport, new LegacyProtocolAdapter()),
+                        coordinator => sessionCoordinator = coordinator,
+                        activeSessionCoordinator =>
+                        {
+                            MainForm mainForm = CreateMainForm(options, activeSessionCoordinator);
+                            if (!mainForm.EnsureWebViewRuntimeAvailable())
+                                return;
+                            if (!StartupProtocolHandshake.Run(
+                                () => TryStartSession(mainForm),
+                                () => mainForm.IsShutdownRequested,
+                                mainForm.DrainStartupProtocolCommands,
+                                mainForm.NotifyProtocolReady,
+                                mainForm.ReplayStartupProtocolState))
+                                return;
+                            Application.Run(mainForm);
+                        });
+                }
             }
         }
 

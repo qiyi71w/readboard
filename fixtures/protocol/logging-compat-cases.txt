@@ -1,0 +1,4 @@
+# pairing|helper|hostArgs|kind|emitCapability|emitObserved
+old-new|new|yzy 10 20 policy 1 en 9527|Legacy|false|false
+new-new|new|yzy 10 20 policy 1 en 9527 --log-dir C:\work\logs\readboard --host-session-id dGVzdEhvc3RTZXNzaW9u --logging-contract 1 --diagnostics off --capture off|Contract|true|true
+new-old|old|yzy 10 20 policy 1 en 9527 --log-dir C:\work\logs\readboard --host-session-id dGVzdEhvc3RTZXNzaW9u --logging-contract 1 --diagnostics off --capture off|Legacy|false|false

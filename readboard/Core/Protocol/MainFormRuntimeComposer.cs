@@ -22,6 +22,14 @@ namespace readboard
                 throw new ArgumentNullException("coordinator");
 
             coordinator.BindSessionState(sessionState);
+            LoggingRuntime logging = Program.CurrentContext == null ? null : Program.CurrentContext.Logging;
+            if (logging != null)
+            {
+                coordinator.AttachLoggingHandshake(new LoggingHandshakeController(
+                    launchOptions,
+                    logging,
+                    coordinator.SendLine));
+            }
             MainForm host = new MainForm(
                 launchOptions,
                 coordinator,
@@ -33,6 +41,7 @@ namespace readboard
 
         private static SyncSessionRuntimeDependencies CreateRuntimeDependencies(ISyncCoordinatorHost host)
         {
+            LoggingRuntime logging = Program.CurrentContext == null ? null : Program.CurrentContext.Logging;
             return new SyncSessionRuntimeDependencies
             {
                 Host = host,
@@ -40,9 +49,18 @@ namespace readboard
                 RecognitionService = new LegacyBoardRecognitionService(),
                 PlacementService = LegacyMovePlacementService.CreateDefault(),
                 OverlayService = new LegacyOverlayService(),
-                DebugDiagnostics = new BoardDebugDiagnosticsWriter(
-                    BoardDebugDiagnosticsPaths.GetRootDirectory(AppDomain.CurrentDomain.BaseDirectory),
-                    delegate { return Program.CurrentConfig.DebugDiagnosticsEnabled; })
+                DebugDiagnostics = logging == null
+                    ? new BoardDebugDiagnosticsWriter(
+                        (string)null,
+                        delegate
+                        {
+                            return Program.CurrentConfig != null && Program.CurrentConfig.DebugDiagnosticsEnabled;
+                        })
+                    : logging.CreateCaptureWriter(
+                        delegate
+                        {
+                            return Program.CurrentConfig != null && Program.CurrentConfig.DebugDiagnosticsEnabled;
+                        })
             };
         }
     }

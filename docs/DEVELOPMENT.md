@@ -64,7 +64,7 @@ npm run test:webview
 入口是 `readboard/Program.cs`，解析器是 `readboard/Core/Models/LaunchOptions.cs`：
 
 ```text
-readboard.exe yzy <aiTime> <playouts> <firstPolicy> <transport> <language> <tcpPort>
+readboard.exe yzy <aiTime> <playouts> <firstPolicy> <transport> <language> <tcpPort> [--log-dir <abs>] [--host-session-id <id>] [--logging-contract 1] [--diagnostics on|off] [--capture on|off]
 ```
 
 | 位置 | 示例 | 含义 |
@@ -76,6 +76,8 @@ readboard.exe yzy <aiTime> <playouts> <firstPolicy> <transport> <language> <tcpP
 | 4 | `0` / `1` | `0` 为标准输入输出 pipe，`1` 为 TCP |
 | 5 | `cn` / `en` / `jp` / `kr` | 语言后缀；空值默认 `cn` |
 | 6 | `-1` 或端口 | pipe 模式通常为 `-1`，TCP 模式为宿主监听端口 |
+
+新宿主在 7 个位置参数后追加 named 日志参数。完整 contract launch 要求同时有 `--logging-contract 1`、绝对 `--log-dir`（ReadBoard 自有根，正常为 `WORK_DIR/logs/readboard`）和 `--host-session-id`。任何 present-but-incomplete、malformed 或相对路径都是 explicit unavailable，不走 LocalAppData fallback；legacy launch 只表示完全没有这些新参数。wire 文本见 `ProtocolKeywords` 的 `readboardLoggingV1` / `readboardLoggingSet` / `readboardLoggingObserved`。
 
 持久化的 Settings 语言可以在初始化时覆盖宿主语言参数；这不改变参数格式。
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -433,9 +434,46 @@ namespace readboard
 
         private static void OpenWebViewDiagnosticsDirectory()
         {
-            string directory = BoardDebugDiagnosticsPaths.GetRootDirectory(AppDomain.CurrentDomain.BaseDirectory);
-            Directory.CreateDirectory(directory);
-            Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
+            TryOpenWebViewDiagnosticsDirectory(
+                Program.CurrentContext != null ? Program.CurrentContext.Logging : null,
+                delegate(string path) { Directory.CreateDirectory(path); },
+                delegate(string path)
+                {
+                    Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                });
+        }
+
+        internal static bool TryOpenWebViewDiagnosticsDirectory(
+            LoggingRuntime runtime,
+            Action<string> createDirectory,
+            Action<string> openDirectory)
+        {
+            if (runtime == null)
+                return false;
+
+            string directory = runtime.CaptureDirectory;
+            if (string.IsNullOrWhiteSpace(directory)
+                || runtime.Observe().Persistence == LoggingPersistenceHealth.Unavailable)
+                return false;
+
+            try
+            {
+                createDirectory(directory);
+                openDirectory(directory);
+                return true;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+            catch (Win32Exception)
+            {
+                return false;
+            }
         }
 
         internal sealed class MainFormSettingsDraftPersistence : ISettingsDraftPersistence
