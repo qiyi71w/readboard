@@ -433,6 +433,66 @@ namespace Readboard.VerificationTests.Architecture
             Assert.Null(capability);
             Assert.Null(observed);
         }
+        [Fact]
+        public void ProductionLogging_DoesNotWriteOrdinaryEventsToStdoutOrStderr()
+        {
+            string root = Path.Combine(VerificationFixtureLocator.RepositoryRoot(), "readboard");
+            string[] files = Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories);
+            List<string> violations = new List<string>();
+            for (int i = 0; i < files.Length; i++)
+            {
+                string path = files[i];
+                string relative = path.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    .Replace('\\', '/');
+                string text = File.ReadAllText(path);
+                if (string.Equals(relative, "Core/Transport/PipeTransport.cs", StringComparison.OrdinalIgnoreCase))
+                {
+                    Assert.Contains("Console.WriteLine(line);", text);
+                    Assert.Contains("Console.Error.WriteLine(\"error: \" + message);", text);
+                    continue;
+                }
+                if (text.Contains("Console.Write")
+                    || text.Contains("Console.Out")
+                    || text.Contains("Console.Error"))
+                {
+                    violations.Add(relative);
+                }
+            }
+
+            Assert.True(violations.Count == 0, "Ordinary production logging wrote Console: " + string.Join(", ", violations));
+        }
+
+        [Fact]
+        public void LoggingRuntime_DoesNotUseBaseDirectoryOrDebugDiagnosticsEnabled()
+        {
+            string loggingRoot = Path.Combine(
+                VerificationFixtureLocator.RepositoryRoot(),
+                "readboard",
+                "Core",
+                "Logging");
+            string[] files = Directory.GetFiles(loggingRoot, "*.cs", SearchOption.AllDirectories);
+            for (int i = 0; i < files.Length; i++)
+            {
+                string text = File.ReadAllText(files[i]);
+                Assert.DoesNotContain("BaseDirectory", text);
+                Assert.DoesNotContain("DebugDiagnosticsEnabled", text);
+                Assert.DoesNotContain("CreateProcessSessionId", text);
+            }
+
+            string main = File.ReadAllText(Path.Combine(
+                VerificationFixtureLocator.RepositoryRoot(),
+                "readboard",
+                "Program.cs"));
+            Assert.Contains("LoggingRuntime.Start(options)", main);
+            Assert.True(
+                main.IndexOf("LaunchOptions.TryParse(args, out options)", StringComparison.Ordinal)
+                < main.IndexOf("LoggingRuntime.Start(options)", StringComparison.Ordinal));
+            Assert.True(
+                main.IndexOf("LoggingRuntime.Start(options)", StringComparison.Ordinal)
+                < main.IndexOf("InitializeRuntime(options)", StringComparison.Ordinal));
+            Assert.Contains("logging.InstallCrashHandlers()", main);
+        }
+
 
 
         [Fact]

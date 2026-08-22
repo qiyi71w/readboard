@@ -23,6 +23,8 @@ namespace readboard
         public string Language { get; set; }
         public bool HasConfigFile { get; set; }
         public bool IsScaled { get; set; }
+        public LoggingRuntime Logging { get; set; }
+
 
         public Bitmap BoardBitmap
         {

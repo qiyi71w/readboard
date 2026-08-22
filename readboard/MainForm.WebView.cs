@@ -1497,6 +1497,13 @@ namespace readboard
                 Arguments = message.Arguments,
                 DiagnosticDetail = message.DiagnosticDetail
             });
+
+            if (!string.IsNullOrEmpty(message.Level))
+            {
+                RuntimeContext context = Program.CurrentContext;
+                if (context != null && context.Logging != null)
+                    context.Logging.WriteSemantic(message, "ui");
+            }
         }
     }
 }
