@@ -68,5 +68,26 @@ namespace readboard
         internal const string YikeSyncStart = "yikeSyncStart";
         internal const string YikeSyncStop = "yikeSyncStop";
         internal const string YikeBrowserSyncStop = "yikeBrowserSyncStop";
+        internal const string LoggingCapability = "readboardLoggingV1";
+        internal const string LoggingSet = "readboardLoggingSet";
+        internal const string LoggingObserved = "readboardLoggingObserved";
+        internal const string LoggingOn = "on";
+        internal const string LoggingOff = "off";
+        internal const string LoggingUnknown = "unknown";
+        internal const string LoggingHealthy = "healthy";
+        internal const string LoggingDegraded = "degraded";
+        internal const string LoggingUnavailable = "unavailable";
+        internal const string LoggingReasonApplied = "applied";
+        internal const string LoggingReasonLegacyHelper = "legacy-helper";
+        internal const string LoggingReasonCapabilityTimeout = "capability-timeout";
+        internal const string LoggingReasonPathUnavailable = "path-unavailable";
+        internal const string LoggingReasonWriterFault = "writer-fault";
+        internal const string LoggingReasonInvalidRequest = "invalid-request";
+        internal const string LoggingPrivacySafe = "safe";
+        internal const string LoggingPrivacyLocalPath = "localPath";
+        internal const string LoggingPrivacyLocalUrl = "localUrl";
+        internal const string LoggingPrivacyUserText = "userText";
+        internal const string LoggingPrivacySessionId = "sessionId";
+        internal const string LoggingPrivacySecret = "secret";
     }
 }

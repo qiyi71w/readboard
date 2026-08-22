@@ -17,6 +17,10 @@ namespace Readboard.VerificationTests
                 "Expected outbound protocol fixture catalog to exist.");
 
             Assert.True(
+                File.Exists(VerificationFixtureLocator.FixturePath(Path.Combine("protocol", "logging-compat-cases.txt"))),
+                "Expected logging compatibility fixture catalog to exist.");
+
+            Assert.True(
                 File.Exists(VerificationFixtureLocator.FixturePath(Path.Combine("config", "legacy", "config_readboard.txt"))),
                 "Expected legacy main config fixture to exist.");
 
