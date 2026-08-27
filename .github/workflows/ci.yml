@@ -64,7 +64,7 @@ jobs:
           run_heavy=false
           while IFS= read -r path; do
             case "$path" in
-              docs/*|README.md|README_*.md|update-channels.json|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md)
+              docs/*|readme.md|readme_*.md|update-channels.json|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md)
                 ;;
               *)
                 echo "Relevant change requires verification: $path"
