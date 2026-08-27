@@ -8,8 +8,62 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Detect Relevant Changes
+    runs-on: ubuntu-latest
+    outputs:
+      run_heavy: ${{ steps.filter.outputs.run_heavy }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether host E2E is required
+        id: filter
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "run_heavy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! changed_files="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"; then
+            echo "Unable to determine changed files; running host E2E as a safe fallback."
+            echo "run_heavy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -z "$changed_files" ]]; then
+            echo "No changed files detected; running host E2E as a safe fallback."
+            echo "run_heavy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          run_heavy=false
+          while IFS= read -r path; do
+            case "$path" in
+              docs/*|readme.md|readme_*.md|update-channels.json|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md)
+                ;;
+              *)
+                echo "Relevant change requires host E2E: $path"
+                run_heavy=true
+                break
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          echo "run_heavy=$run_heavy" >> "$GITHUB_OUTPUT"
+
   build:
     name: WebView2 Host E2E Build
+    needs: changes
+    if: needs.changes.outputs.run_heavy == 'true'
     runs-on: windows-2022
     timeout-minutes: 20
 
@@ -43,9 +97,12 @@ jobs:
           path: artifacts/readboard-publish
           if-no-files-found: error
 
-  core:
-    name: WebView2 Host E2E Core
-    needs: build
+  core_run:
+    name: WebView2 Host E2E Core Execution
+    needs:
+      - changes
+      - build
+    if: needs.changes.outputs.run_heavy == 'true' && needs.build.result == 'success'
     runs-on: windows-2022
     timeout-minutes: 30
 
@@ -104,12 +161,53 @@ jobs:
             ${{ runner.temp }}\webview2-runtime-version.txt
           if-no-files-found: warn
 
+  core:
+    name: WebView2 Host E2E Core
+    needs:
+      - changes
+      - build
+      - core_run
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Report core E2E result
+        shell: bash
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_HEAVY: ${{ needs.changes.outputs.run_heavy }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          CORE_RESULT: ${{ needs.core_run.result }}
+        run: |
+          if [[ "$CHANGES_RESULT" != "success" ]]; then
+            echo "Change detection failed."
+            exit 1
+          fi
+
+          if [[ "$RUN_HEAVY" != "true" ]]; then
+            echo "Only documentation, templates, or update-channel metadata changed; host E2E was intentionally skipped."
+            exit 0
+          fi
+
+          if [[ "$BUILD_RESULT" != "success" ]]; then
+            echo "WebView2 host build did not succeed: $BUILD_RESULT"
+            exit 1
+          fi
+
+          if [[ "$CORE_RESULT" != "success" ]]; then
+            echo "WebView2 Host E2E Core execution did not succeed: $CORE_RESULT"
+            exit 1
+          fi
+
+          echo "WebView2 Host E2E Core execution succeeded."
+
   extended:
     name: WebView2 Host E2E Extended
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     needs:
+      - changes
       - build
-      - core
+      - core_run
+    if: needs.changes.outputs.run_heavy == 'true' && needs.build.result == 'success' && needs.core_run.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     runs-on: windows-2022
     timeout-minutes: 30
 

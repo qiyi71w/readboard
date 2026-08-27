@@ -24,8 +24,62 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: Verification Tests
+  changes:
+    name: Detect Relevant Changes
+    runs-on: ubuntu-latest
+    outputs:
+      run_heavy: ${{ steps.filter.outputs.run_heavy }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether verification is required
+        id: filter
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "run_heavy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! changed_files="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"; then
+            echo "Unable to determine changed files; running verification as a safe fallback."
+            echo "run_heavy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -z "$changed_files" ]]; then
+            echo "No changed files detected; running verification as a safe fallback."
+            echo "run_heavy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          run_heavy=false
+          while IFS= read -r path; do
+            case "$path" in
+              docs/*|readme.md|readme_*.md|update-channels.json|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md)
+                ;;
+              *)
+                echo "Relevant change requires verification: $path"
+                run_heavy=true
+                break
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          echo "run_heavy=$run_heavy" >> "$GITHUB_OUTPUT"
+
+  verify_run:
+    name: Verification Test Execution
+    needs: changes
+    if: needs.changes.outputs.run_heavy == 'true'
     runs-on: windows-2022
     timeout-minutes: 30
 
@@ -53,3 +107,36 @@ jobs:
       - name: Run WebView DOM tests
         shell: pwsh
         run: npm run test:webview
+
+  verify:
+    name: Verification Tests
+    needs:
+      - changes
+      - verify_run
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Report verification result
+        shell: bash
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_HEAVY: ${{ needs.changes.outputs.run_heavy }}
+          VERIFY_RESULT: ${{ needs.verify_run.result }}
+        run: |
+          if [[ "$CHANGES_RESULT" != "success" ]]; then
+            echo "Change detection failed."
+            exit 1
+          fi
+
+          if [[ "$RUN_HEAVY" != "true" ]]; then
+            echo "Only documentation, templates, or update-channel metadata changed; heavy verification was intentionally skipped."
+            exit 0
+          fi
+
+          if [[ "$VERIFY_RESULT" != "success" ]]; then
+            echo "Verification execution did not succeed: $VERIFY_RESULT"
+            exit 1
+          fi
+
+          echo "Verification execution succeeded."
