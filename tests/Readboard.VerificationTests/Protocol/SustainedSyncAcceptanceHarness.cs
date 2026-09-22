@@ -693,7 +693,8 @@ namespace Readboard.VerificationTests.Protocol
 
             lastPayload = snapshot.Payload;
             PayloadTransitionCount++;
-            dynamicOutboundLineCount += snapshot.ProtocolLines.Count + 3;
+            // Every fixture segment lasts at least four ticks: initial frame plus one confirmation.
+            dynamicOutboundLineCount += 2 * (snapshot.ProtocolLines.Count + 3);
             if (PayloadTransitionCount == 1)
                 dynamicOutboundLineCount += 2;
         }

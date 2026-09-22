@@ -693,6 +693,7 @@ namespace readboard
             {
                 if (!IsOperationCurrent(isOperationCurrent))
                     return false;
+                sample.AllowConfirmation = true;
 
                 dispatch = BuildRecognizedSampleProtocolDispatch(
                     snapshot,
@@ -815,6 +816,9 @@ namespace readboard
                 if (!IsOperationCurrent(isOperationCurrent))
                     return false;
 
+                long cacheGeneration;
+                lock (stateLock)
+                    cacheGeneration = snapshotCacheGeneration;
                 Stopwatch sampleStopwatch = Stopwatch.StartNew();
                 BoardFrame frame = CaptureFrame(runtime, snapshot, isOperationCurrent);
                 if (frame == null)
@@ -832,6 +836,14 @@ namespace readboard
                         DisposeBoardFrame(frame);
                         return false;
                     }
+                    lock (stateLock)
+                    {
+                        if (cacheGeneration != snapshotCacheGeneration)
+                        {
+                            DisposeBoardFrame(frame);
+                            return false;
+                        }
+                    }
 
                     sample = CompleteRecognizedSample(
                         runtime,
@@ -840,6 +852,7 @@ namespace readboard
                         recognition,
                         sampleStopwatch.Elapsed,
                         observationGeneration);
+                    sample.CacheGeneration = cacheGeneration;
                 }
                 if (!NeedsBlackRetry(sample, allowBlackRetry))
                     return true;
@@ -1106,6 +1119,8 @@ namespace readboard
             {
                 ResetSyncCaches(false);
                 NotifySyncCachesReset(observationGeneration);
+                lock (stateLock)
+                    sample.CacheGeneration = snapshotCacheGeneration;
                 dispatch.ShouldSendClear = true;
             }
             dispatch.OverlayProtocolLine = ReserveOverlayProtocolLine(BuildOverlayProtocolLineIfNeeded(snapshot, sample.Frame));
@@ -1120,9 +1135,7 @@ namespace readboard
             ResolvePendingMove(sample.Snapshot, snapshot.BoardWidth);
             if (sample.Snapshot != null && sample.Snapshot.IsValid)
             {
-                dispatch.BoardSnapshotBatch = TryBuildOutboundBoardSnapshotBatch(sample.Snapshot);
-                if (dispatch.BoardSnapshotBatch != null)
-                    dispatch.SentSnapshot = sample.Snapshot;
+                dispatch.Sample = sample;
             }
             return dispatch;
         }
@@ -1141,16 +1154,26 @@ namespace readboard
             {
                 if (isOperationCurrent != null && !IsOperationCurrent(isOperationCurrent))
                     return;
+                lock (stateLock)
+                {
+                    if (dispatch.Sample != null && dispatch.Sample.CacheGeneration != snapshotCacheGeneration)
+                        return;
+                }
                 if (dispatch.ShouldSendClear)
                     outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateClearMessage());
                 if (!string.IsNullOrWhiteSpace(dispatch.OverlayProtocolLine))
                     outboundProtocolDispatcher.SendLegacyLineWhileSynchronized(dispatch.OverlayProtocolLine);
                 if (dispatch.StartMessage != null)
                     outboundProtocolDispatcher.SendMessageWhileSynchronized(dispatch.StartMessage);
-                if (dispatch.BoardSnapshotBatch != null)
+                if (dispatch.Sample != null)
                 {
-                    outboundBoardSnapshotEmitter.EmitWhileSynchronized(dispatch.BoardSnapshotBatch);
-                    boardSnapshotSent = true;
+                    OutboundBoardSnapshotBatch batch = TryBuildOutboundBoardSnapshotBatch(
+                        dispatch.Sample.Snapshot, dispatch.Sample);
+                    if (batch != null)
+                    {
+                        outboundBoardSnapshotEmitter.EmitWhileSynchronized(batch);
+                        boardSnapshotSent = true;
+                    }
                 }
                 ApplyAutoPlaySnapshotWhileSynchronized(
                     dispatch.AutoPlaySnapshot,
@@ -1162,7 +1185,7 @@ namespace readboard
                 IWebViewSyncCoordinatorHost webViewHost = GetRuntimeDependencies().Host as IWebViewSyncCoordinatorHost;
                 if (webViewHost != null)
                     webViewHost.OnBoardSnapshotSent(
-                        dispatch.SentSnapshot,
+                        dispatch.Sample.Snapshot,
                         observationGeneration);
             }
         }
@@ -1481,9 +1504,8 @@ namespace readboard
             {
                 if (keepSyncThread != null)
                     return;
+                CompleteStopCleanup();
             }
-
-            CompleteStopCleanup();
         }
 
         private static void CompleteWorkerStop(Thread worker, bool waitForWorker)
@@ -1821,6 +1843,9 @@ namespace readboard
             public int PreviousArea { get; private set; }
             public BoardFrame Frame { get; private set; }
             public BoardSnapshot Snapshot { get; private set; }
+            public long CacheGeneration { get; set; }
+            public bool AllowConfirmation { get; set; }
+            public bool OutboundConsumed { get; set; }
         }
 
         private sealed class RecognizedSampleProtocolDispatch
@@ -1828,8 +1853,7 @@ namespace readboard
             public bool ShouldSendClear { get; set; }
             public string OverlayProtocolLine { get; set; }
             public ProtocolMessage StartMessage { get; set; }
-            public OutboundBoardSnapshotBatch BoardSnapshotBatch { get; set; }
-            public BoardSnapshot SentSnapshot { get; set; }
+            public RecognizedSyncSample Sample { get; set; }
             public SyncCoordinatorHostSnapshot AutoPlaySnapshot { get; set; }
             public bool AllowAutoPlay { get; set; }
         }

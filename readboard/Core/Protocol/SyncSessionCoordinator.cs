@@ -34,6 +34,8 @@ namespace readboard
         private int? lastSentBoardFoxMoveNumber;
         private LastMoveSource lastSentBoardLastMoveSource;
         private string lastSentWindowContextSignature;
+        private long snapshotCacheGeneration;
+        private bool stableSnapshotConfirmed;
         private string lastSentPlayStateSignature;
         private AutoPlayColorMode? lastSentAutoPlayColorMode;
         private int autoPlayAuthorizationGeneration;
@@ -134,7 +136,12 @@ namespace readboard
         {
             lock (stateLock)
             {
-                syncPlatform = NormalizeSyncPlatform(platform);
+                string normalizedPlatform = NormalizeSyncPlatform(platform);
+                if (!string.Equals(syncPlatform, normalizedPlatform, StringComparison.Ordinal))
+                {
+                    syncPlatform = normalizedPlatform;
+                    ResetSyncCachesCore();
+                }
             }
         }
 
@@ -498,11 +505,12 @@ namespace readboard
 
         public void SendBoardSnapshot(BoardSnapshot snapshot)
         {
-            OutboundBoardSnapshotBatch batch = TryBuildOutboundBoardSnapshotBatch(snapshot);
-            if (batch == null)
-                return;
-
-            outboundBoardSnapshotEmitter.Emit(batch);
+            outboundProtocolDispatcher.ExecuteBatch(delegate
+            {
+                OutboundBoardSnapshotBatch batch = TryBuildOutboundBoardSnapshotBatch(snapshot);
+                if (batch != null)
+                    outboundBoardSnapshotEmitter.EmitWhileSynchronized(batch);
+            });
         }
 
         public void NotifyReady(bool playPonderEnabled)
@@ -872,7 +880,9 @@ namespace readboard
             }
         }
 
-        private OutboundBoardSnapshotBatch TryBuildOutboundBoardSnapshotBatch(BoardSnapshot snapshot)
+        private OutboundBoardSnapshotBatch TryBuildOutboundBoardSnapshotBatch(
+            BoardSnapshot snapshot,
+            RecognizedSyncSample sample = null)
         {
             if (snapshot == null || string.IsNullOrWhiteSpace(snapshot.Payload))
                 return null;
@@ -885,16 +895,26 @@ namespace readboard
             OutboundWindowContext outboundContext;
             lock (stateLock)
             {
-                outboundContext = BuildOutboundWindowContextUnsafe();
-                if (string.Equals(sessionState.LastBoardPayload, snapshot.Payload, StringComparison.Ordinal)
-                    && lastSentBoardFoxMoveNumber == effectiveFoxMoveNumber
-                    && lastSentBoardLastMoveSource == snapshot.LastMoveSource)
+                if (sample != null)
                 {
-                    if (string.Equals(lastSentWindowContextSignature, outboundContext.Signature, StringComparison.Ordinal)
-                        && !outboundContext.ShouldForceRebuild)
-                    {
+                    if (sample.OutboundConsumed || sample.CacheGeneration != snapshotCacheGeneration)
                         return null;
-                    }
+                    sample.OutboundConsumed = true;
+                }
+                outboundContext = BuildOutboundWindowContextUnsafe();
+                bool sameResult = string.Equals(sessionState.LastBoardPayload, snapshot.Payload, StringComparison.Ordinal)
+                    && lastSentBoardFoxMoveNumber == effectiveFoxMoveNumber
+                    && lastSentBoardLastMoveSource == snapshot.LastMoveSource
+                    && string.Equals(lastSentWindowContextSignature, outboundContext.Signature, StringComparison.Ordinal);
+                if (sameResult && !outboundContext.ShouldForceRebuild)
+                {
+                    if (sample == null || !sample.AllowConfirmation || stableSnapshotConfirmed)
+                        return null;
+                    stableSnapshotConfirmed = true;
+                }
+                else
+                {
+                    stableSnapshotConfirmed = false;
                 }
 
                 sessionState.LastBoardPayload = snapshot.Payload;
@@ -915,6 +935,8 @@ namespace readboard
 
         private void ResetSyncCachesCore()
         {
+            snapshotCacheGeneration++;
+            stableSnapshotConfirmed = false;
             sessionState.LastBoardPayload = null;
             sessionState.LastOverlayProtocolLine = null;
             lastSentBoardFoxMoveNumber = null;
