@@ -31,6 +31,8 @@ namespace readboard
         public bool Succeeded { get; set; }
         public bool VerifyMove { get; set; }
         public bool PlacementInProgress { get; set; }
+        public long QueuedTimestamp { get; set; }
+        public long? VerificationStartedTimestamp { get; set; }
 
         public void Reset()
         {
@@ -42,6 +44,8 @@ namespace readboard
             Succeeded = false;
             VerifyMove = false;
             PlacementInProgress = false;
+            QueuedTimestamp = 0;
+            VerificationStartedTimestamp = null;
         }
     }
 }

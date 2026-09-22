@@ -74,8 +74,30 @@ namespace Readboard.VerificationTests.Protocol
                 transport.SentLines);
         }
 
+        [Theory]
+        [InlineData(1)]
+        [InlineData(2)]
+        public void VerifiedPendingMove_WaitsForDelayedSnapshotWithoutAnotherClick(int maxAttempts)
+        {
+            ManualTimeProvider clock = new ManualTimeProvider();
+            using SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator(clock);
+            MoveRequest move = CreateMove(19, 19);
+            move.MoveVerifyMaxAttempts = maxAttempts;
+            Assert.True(coordinator.TryQueuePendingMove(move, 19, 19));
+            Assert.True(coordinator.TryTakePendingMove(out _));
+            coordinator.HandlePendingMovePlacementResult(true);
+
+            coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
+            Assert.False(coordinator.TryTakePendingMove(out _));
+            clock.AdvanceMilliseconds(250);
+            coordinator.ResolvePendingMove(CreateSnapshot(19, 19, move), 19);
+
+            Assert.True(coordinator.WaitForPendingMoveResult());
+            Assert.False(coordinator.TryTakePendingMove(out _));
+        }
+
         [Fact]
-        public async Task VerifiedPendingMove_WithOneConfiguredMaxAttemptFailsAfterInitialUnconfirmedSnapshot()
+        public async Task VerifiedPendingMove_WithOneConfiguredMaxAttemptFailsAfterConfirmationWindow()
         {
             await AssertVerifiedPendingMoveFailsAfterTotalPlacementAttempts(1, 1);
         }
@@ -87,11 +109,123 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
-        public async Task VerifiedPendingMove_WithoutConfiguredMaxAttemptsUsesDefaultTotalAttemptsBeforeFailing()
+        public void VerifiedPendingMove_RetriesOnlyAfterAnUnconfirmedObservationWindow()
         {
-            await AssertVerifiedPendingMoveFailsAfterTotalPlacementAttempts(
-                null,
-                AppConfig.DefaultMoveVerifyMaxAttempts);
+            ManualTimeProvider clock = new ManualTimeProvider();
+            using SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator(clock);
+            MoveRequest move = CreateMove(19, 19);
+            move.MoveVerifyMaxAttempts = 2;
+            Assert.True(coordinator.TryQueuePendingMove(move, 19, 19));
+            Assert.True(coordinator.TryTakePendingMove(out _));
+            coordinator.HandlePendingMovePlacementResult(true);
+
+            clock.AdvanceMilliseconds(499);
+            coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
+            Assert.False(coordinator.TryTakePendingMove(out _));
+            clock.AdvanceMilliseconds(1);
+            Assert.False(coordinator.TryTakePendingMove(out _));
+            coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
+            Assert.True(coordinator.TryTakePendingMove(out _));
+            coordinator.HandlePendingMovePlacementResult(true);
+
+            coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
+            clock.AdvanceMilliseconds(500);
+            coordinator.ResolvePendingMove(CreateSnapshot(19, 19, move), 19);
+            Assert.True(coordinator.WaitForPendingMoveResult());
+            Assert.False(coordinator.TryTakePendingMove(out _));
+        }
+
+        [Fact]
+        public void VerifiedPendingMove_WithoutUsableSnapshotsDoesNotRetryAndStillTimesOut()
+        {
+            ManualTimeProvider clock = new ManualTimeProvider();
+            using SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator(clock);
+            MoveRequest move = CreateMove(19, 19);
+            move.MoveVerifyMaxAttempts = 10;
+            Assert.True(coordinator.TryQueuePendingMove(move, 19, 19));
+            Assert.True(coordinator.TryTakePendingMove(out _));
+            coordinator.HandlePendingMovePlacementResult(true);
+
+            clock.AdvanceMilliseconds(500);
+            coordinator.ResolvePendingMove(new BoardSnapshot { IsValid = false }, 19);
+            Assert.False(coordinator.TryTakePendingMove(out _));
+            clock.AdvanceMilliseconds(1500);
+            Assert.False(coordinator.WaitForPendingMoveResult());
+            Assert.False(coordinator.TryTakePendingMove(out _));
+        }
+
+        [Fact]
+        public void VerifiedPendingMove_TotalDeadlineBoundsRepeatedUnconfirmedClicks()
+        {
+            ManualTimeProvider clock = new ManualTimeProvider();
+            using SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator(clock);
+            MoveRequest move = CreateMove(19, 19);
+            move.MoveVerifyMaxAttempts = 10;
+            Assert.True(coordinator.TryQueuePendingMove(move, 19, 19));
+
+            for (int attempt = 0; attempt < 4; attempt++)
+            {
+                Assert.True(coordinator.TryTakePendingMove(out _));
+                coordinator.HandlePendingMovePlacementResult(true);
+                clock.AdvanceMilliseconds(500);
+                coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
+            }
+
+            Assert.False(coordinator.TryTakePendingMove(out _));
+            Assert.False(coordinator.WaitForPendingMoveResult());
+        }
+
+        [Theory]
+        [InlineData(1999, false, true)]
+        [InlineData(2000, false, false)]
+        [InlineData(2000, true, false)]
+        public void VerifiedPendingMove_OverallDeadlinePrecedesVisibleSnapshot(
+            int elapsedMilliseconds,
+            bool placementFinishesAtSnapshot,
+            bool expectedSuccess)
+        {
+            ManualTimeProvider clock = new ManualTimeProvider();
+            using SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator(clock);
+            MoveRequest move = CreateMove(19, 19);
+            Assert.True(coordinator.TryQueuePendingMove(move, 19, 19));
+            Assert.True(coordinator.TryTakePendingMove(out _));
+            if (!placementFinishesAtSnapshot)
+                coordinator.HandlePendingMovePlacementResult(true);
+
+            clock.AdvanceMilliseconds(elapsedMilliseconds);
+            if (placementFinishesAtSnapshot)
+                coordinator.HandlePendingMovePlacementResult(true);
+            coordinator.ResolvePendingMove(CreateSnapshot(19, 19, move), 19);
+
+            Assert.Equal(expectedSuccess, coordinator.WaitForPendingMoveResult());
+            Assert.False(coordinator.TryTakePendingMove(out _));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void VerifiedPendingMove_StopOrCancelRetiresObservationBeforeNextRequest(bool stopSync)
+        {
+            ManualTimeProvider clock = new ManualTimeProvider();
+            using SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator(clock);
+            MoveRequest move = CreateMove(19, 19);
+            Assert.True(coordinator.TryQueuePendingMove(move, 19, 19));
+            Assert.True(coordinator.TryTakePendingMove(out _));
+            coordinator.HandlePendingMovePlacementResult(true);
+            if (stopSync)
+                coordinator.EndKeepSync();
+            else
+                coordinator.CancelPendingMove();
+            coordinator.ResolvePendingMove(CreateSnapshot(19, 19, move), 19);
+            Assert.False(coordinator.WaitForPendingMoveResult());
+
+            clock.AdvanceMilliseconds(3000);
+            coordinator.BeginKeepSync();
+            Assert.True(coordinator.TryQueuePendingMove(move, 19, 19));
+            Assert.True(coordinator.TryTakePendingMove(out _));
+            coordinator.HandlePendingMovePlacementResult(true);
+            coordinator.ResolvePendingMove(CreateSnapshot(19, 19, move), 19);
+            Assert.True(coordinator.WaitForPendingMoveResult());
         }
 
         [Fact]
@@ -173,7 +307,8 @@ namespace Readboard.VerificationTests.Protocol
             int? configuredMaxAttempts,
             int expectedPlacementAttempts)
         {
-            SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator();
+            ManualTimeProvider clock = new ManualTimeProvider();
+            using SyncSessionCoordinator coordinator = CreateActiveBidirectionalCoordinator(clock);
 
             Assert.True(coordinator.TryQueuePendingMove(
                 new MoveRequest
@@ -194,6 +329,9 @@ namespace Readboard.VerificationTests.Protocol
                 Assert.Equal(1, attempt.Y);
                 coordinator.HandlePendingMovePlacementResult(true);
                 coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
+                Assert.False(coordinator.TryTakePendingMove(out _));
+                clock.AdvanceMilliseconds(500);
+                coordinator.ResolvePendingMove(CreateEmptySnapshot(19, 19), 19);
             }
 
             bool result = await VerificationCompletion.WaitAsync(
@@ -204,9 +342,10 @@ namespace Readboard.VerificationTests.Protocol
             Assert.False(coordinator.TryTakePendingMove(out _));
         }
 
-        private static SyncSessionCoordinator CreateActiveBidirectionalCoordinator()
+        private static SyncSessionCoordinator CreateActiveBidirectionalCoordinator(TimeProvider clock = null)
         {
-            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(new RecordingTransport(), new LegacyProtocolAdapter());
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(
+                new RecordingTransport(), new LegacyProtocolAdapter(), clock ?? TimeProvider.System);
             coordinator.BeginKeepSync();
             coordinator.SetSyncBoth(true);
             return coordinator;
@@ -247,6 +386,20 @@ namespace Readboard.VerificationTests.Protocol
                 Payload = "empty-matrix-payload",
                 ProtocolLines = new[] { "re=empty" }
             };
+        }
+
+        private sealed class ManualTimeProvider : TimeProvider
+        {
+            private long timestamp;
+
+            public override long TimestampFrequency => 1000;
+
+            public override long GetTimestamp() => Interlocked.Read(ref timestamp);
+
+            public void AdvanceMilliseconds(long milliseconds)
+            {
+                Interlocked.Add(ref timestamp, milliseconds);
+            }
         }
 
         private sealed class RecordingTransport : IReadBoardTransport

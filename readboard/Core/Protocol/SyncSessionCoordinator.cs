@@ -8,11 +8,15 @@ namespace readboard
     internal sealed partial class SyncSessionCoordinator : ISyncSessionCoordinator
     {
         private const int PendingMoveWaitTimeoutMs = 250;
+        private static readonly TimeSpan PendingMoveVerificationWindow = TimeSpan.FromMilliseconds(500);
+        // Finish before the host's three-second ACK timeout, even when captures keep failing.
+        private static readonly TimeSpan PendingMoveConfirmationTimeout = TimeSpan.FromSeconds(2);
         internal const string YikeGeometryUnavailableFailureReason = "Yike geometry unavailable.";
         private const int DisposeStateDisposed = 1;
 
         private readonly IReadBoardTransport transport;
         private readonly IReadBoardProtocolAdapter protocolAdapter;
+        private readonly TimeProvider timeProvider;
         private readonly object stateLock = new object();
         private readonly OutboundProtocolDispatcher outboundProtocolDispatcher;
         private readonly OutboundBoardSnapshotEmitter outboundBoardSnapshotEmitter;
@@ -38,14 +42,25 @@ namespace readboard
         private LoggingHandshakeController loggingHandshake;
 
         public SyncSessionCoordinator(IReadBoardTransport transport, IReadBoardProtocolAdapter protocolAdapter)
+            : this(transport, protocolAdapter, TimeProvider.System)
+        {
+        }
+
+        internal SyncSessionCoordinator(
+            IReadBoardTransport transport,
+            IReadBoardProtocolAdapter protocolAdapter,
+            TimeProvider timeProvider)
         {
             if (transport == null)
                 throw new ArgumentNullException("transport");
             if (protocolAdapter == null)
                 throw new ArgumentNullException("protocolAdapter");
+            if (timeProvider == null)
+                throw new ArgumentNullException(nameof(timeProvider));
 
             this.transport = transport;
             this.protocolAdapter = protocolAdapter;
+            this.timeProvider = timeProvider;
             outboundProtocolDispatcher = new OutboundProtocolDispatcher(transport, protocolAdapter);
             outboundBoardSnapshotEmitter = new OutboundBoardSnapshotEmitter(outboundProtocolDispatcher, protocolAdapter);
             sessionState = new SessionState();
@@ -299,6 +314,7 @@ namespace readboard
                     ? AppConfig.ResolveMoveVerifyTotalPlacementAttempts(request.MoveVerifyMaxAttempts)
                     : 1;
                 pendingMove.VerifyMove = request.VerifyMove;
+                pendingMove.QueuedTimestamp = timeProvider.GetTimestamp();
                 pendingMove.Active = true;
                 UpdatePendingMoveAvailableEventUnsafe();
                 return true;
@@ -315,10 +331,10 @@ namespace readboard
                 PendingMoveState pendingMove = sessionState.PendingMove;
                 if (pendingMove == null || !pendingMove.Active || pendingMove.Completed)
                     return false;
-                if (pendingMove.PlacementInProgress)
+                if (pendingMove.PlacementInProgress || pendingMove.VerificationStartedTimestamp.HasValue)
                     return false;
 
-                if (pendingMove.AttemptsRemaining <= 0)
+                if (pendingMove.AttemptsRemaining <= 0 || HasPendingMoveConfirmationTimedOut(pendingMove))
                 {
                     shouldSignal = TryCompletePendingMove(false);
                 }
@@ -352,10 +368,16 @@ namespace readboard
                     return;
 
                 pendingMove.PlacementInProgress = false;
+                pendingMove.VerificationStartedTimestamp = null;
                 if (pendingMove.VerifyMove && success && sessionState.KeepSync)
                 {
-                    UpdatePendingMoveAvailableEventUnsafe();
-                    return;
+                    if (!HasPendingMoveConfirmationTimedOut(pendingMove))
+                    {
+                        pendingMove.VerificationStartedTimestamp = timeProvider.GetTimestamp();
+                        UpdatePendingMoveAvailableEventUnsafe();
+                        return;
+                    }
+                    success = false;
                 }
 
                 shouldSignal = TryCompletePendingMove(success);
@@ -372,6 +394,9 @@ namespace readboard
                 lock (stateLock)
                 {
                     PendingMoveState pendingMove = sessionState.PendingMove;
+                    if (pendingMove != null && pendingMove.Active && !pendingMove.PlacementInProgress
+                        && HasPendingMoveConfirmationTimedOut(pendingMove))
+                        TryCompletePendingMove(false);
                     if (pendingMove != null && pendingMove.Completed)
                     {
                         bool result = pendingMove.Succeeded;
@@ -402,16 +427,26 @@ namespace readboard
             lock (stateLock)
             {
                 PendingMoveState pendingMove = sessionState.PendingMove;
-                if (pendingMove == null || !pendingMove.Active || pendingMove.Completed || !pendingMove.VerifyMove)
+                if (pendingMove == null || !pendingMove.Active || pendingMove.Completed || !pendingMove.VerifyMove
+                    || pendingMove.PlacementInProgress || !pendingMove.VerificationStartedTimestamp.HasValue)
                     return;
 
-                if (IsPendingMoveVisible(snapshot, effectiveBoardWidth, pendingMove))
+                if (HasPendingMoveConfirmationTimedOut(pendingMove))
+                {
+                    shouldSignal = TryCompletePendingMove(false);
+                }
+                else if (IsPendingMoveVisible(snapshot, effectiveBoardWidth, pendingMove))
                 {
                     shouldSignal = TryCompletePendingMove(true);
                 }
-                else if (pendingMove.AttemptsRemaining <= 0)
+                else if (snapshot != null && snapshot.IsValid
+                    && timeProvider.GetElapsedTime(pendingMove.VerificationStartedTimestamp.Value)
+                        >= PendingMoveVerificationWindow)
                 {
-                    shouldSignal = TryCompletePendingMove(false);
+                    // Only a post-click observation may authorize another physical attempt.
+                    pendingMove.VerificationStartedTimestamp = null;
+                    if (pendingMove.AttemptsRemaining <= 0)
+                        shouldSignal = TryCompletePendingMove(false);
                 }
 
                 if (!pendingMove.Completed)
@@ -932,6 +967,12 @@ namespace readboard
             runtime.Host.OnSyncCachesReset(observationGeneration);
         }
 
+        private bool HasPendingMoveConfirmationTimedOut(PendingMoveState pendingMove)
+        {
+            return pendingMove.VerifyMove
+                && timeProvider.GetElapsedTime(pendingMove.QueuedTimestamp) >= PendingMoveConfirmationTimeout;
+        }
+
         private bool TryCompletePendingMove(bool success)
         {
             PendingMoveState pendingMove = sessionState.PendingMove;
@@ -939,6 +980,7 @@ namespace readboard
                 return false;
 
             pendingMove.PlacementInProgress = false;
+            pendingMove.VerificationStartedTimestamp = null;
             pendingMove.Active = false;
             pendingMove.Completed = true;
             pendingMove.Succeeded = success;
@@ -977,7 +1019,8 @@ namespace readboard
             if (pendingMove != null
                 && pendingMove.Active
                 && !pendingMove.Completed
-                && !pendingMove.PlacementInProgress)
+                && !pendingMove.PlacementInProgress
+                && !pendingMove.VerificationStartedTimestamp.HasValue)
             {
                 pendingMoveAvailableEvent.Set();
                 return;

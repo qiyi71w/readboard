@@ -231,6 +231,17 @@ Capture -> Recognition -> BoardSnapshot -> OutboundBoardSnapshotEmitter
 
 线程包括 UI thread、transport reader、持续同步 worker、串行落子队列和诊断 writer。新异步观察应携带 generation，并忽略过期结果；不要用 `Thread.Sleep` 固化时序。
 
+### 双向落子的截图确认
+
+`MoveVerifyMaxAttempts` 是物理点击的总次数上限：`1` 不重试，`2` 最多初次点击加一次重试；`0` 归一化为 `1`。它不代表截图观察次数。
+
+- 开启落子验证时，每次成功发出点击后保留 500 毫秒的截图确认窗口。窗口内持续采样；看到目标交叉点已有棋子即可成功，旧盘面不立即判失败，也不再次点击。
+- 窗口到期后，只有有效截图仍未看到目标棋子，才允许消耗剩余点击次数；次数耗尽则报告失败。截图或识别不可用不授权重试。
+- 整次请求从入队起有 2 秒的确认期限，由单调时钟计时；等待结果的一方也检查期限，避免没有截图时无限等待。正在执行的系统点击仍遵守原有完成／停止边界。
+- 关闭验证时仍以点击执行结果结清；原生点击失败、停止同步或取消请求沿用既有失败处理。协议文本及宿主“匹配棋盘帧才是 ACK”的规则不变。
+
+时序回归集中在 `SyncSessionCoordinatorAcceptanceMatrixTests`，使用可控单调时钟覆盖延迟显子、重试边界、无有效截图超时和停止／取消后新请求，不用 `Thread.Sleep` 等待目标时序。
+
 ## 宿主协议边界
 
 `readboard/Core/Protocol/ProtocolKeywords.cs` 集中 wire 字符串，`LegacyProtocolAdapter.cs` 负责解析和生成。传输是 UTF-8 逐行文本。
