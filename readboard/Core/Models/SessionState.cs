@@ -1,3 +1,5 @@
+using System;
+
 namespace readboard
 {
     internal sealed class SessionState
@@ -16,36 +18,145 @@ namespace readboard
         public PendingMoveState PendingMove { get; private set; }
     }
 
+    // The coordinator serializes every transition under its state lock.
     internal sealed class PendingMoveState
     {
-        public PendingMoveState()
+        private static readonly TimeSpan VerificationWindow = TimeSpan.FromMilliseconds(500);
+        // Finish before the host's three-second ACK timeout, even without usable captures.
+        private static readonly TimeSpan ConfirmationTimeout = TimeSpan.FromSeconds(2);
+
+        private enum Phase { Idle, Ready, Placing, Confirming, Completed }
+
+        private Phase phase;
+        private TimeProvider clock;
+        private int x;
+        private int y;
+        private int attemptsRemaining;
+        private bool verifyMove;
+        private bool succeeded;
+        private long queuedTimestamp;
+        private long verificationStartedTimestamp;
+
+        public bool IsPlacementAvailable => phase == Phase.Ready;
+        public bool HasCompletedResult => phase == Phase.Completed;
+
+        public bool TryQueue(MoveRequest request, TimeProvider timeProvider)
         {
-            Reset();
+            if (request == null || phase != Phase.Idle)
+                return false;
+
+            clock = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+            x = request.X;
+            y = request.Y;
+            verifyMove = request.VerifyMove;
+            attemptsRemaining = verifyMove
+                ? AppConfig.ResolveMoveVerifyTotalPlacementAttempts(request.MoveVerifyMaxAttempts)
+                : 1;
+            queuedTimestamp = clock.GetTimestamp();
+            phase = Phase.Ready;
+            return true;
         }
 
-        public int X { get; set; }
-        public int Y { get; set; }
-        public int AttemptsRemaining { get; set; }
-        public bool Active { get; set; }
-        public bool Completed { get; set; }
-        public bool Succeeded { get; set; }
-        public bool VerifyMove { get; set; }
-        public bool PlacementInProgress { get; set; }
-        public long QueuedTimestamp { get; set; }
-        public long? VerificationStartedTimestamp { get; set; }
-
-        public void Reset()
+        public bool TryBeginPlacement(out MoveRequest request)
         {
-            X = -1;
-            Y = -1;
-            AttemptsRemaining = 0;
-            Active = false;
-            Completed = false;
-            Succeeded = false;
-            VerifyMove = false;
-            PlacementInProgress = false;
-            QueuedTimestamp = 0;
-            VerificationStartedTimestamp = null;
+            request = null;
+            if (!IsPlacementAvailable)
+                return false;
+            if (attemptsRemaining <= 0 || HasTimedOut())
+            {
+                Complete(false);
+                return false;
+            }
+
+            attemptsRemaining--;
+            phase = Phase.Placing;
+            request = new MoveRequest { X = x, Y = y, VerifyMove = verifyMove };
+            return true;
+        }
+
+        public void CompletePlacement(bool success, bool keepSync)
+        {
+            if (phase != Phase.Placing)
+                return;
+            if (verifyMove && success && keepSync)
+            {
+                if (!HasTimedOut())
+                {
+                    verificationStartedTimestamp = clock.GetTimestamp();
+                    phase = Phase.Confirming;
+                    return;
+                }
+                success = false;
+            }
+            Complete(success);
+        }
+
+        public void Observe(BoardSnapshot snapshot, int boardWidth)
+        {
+            if (phase != Phase.Confirming)
+                return;
+            if (HasTimedOut())
+                Complete(false);
+            else if (IsMoveVisible(snapshot, boardWidth))
+                Complete(true);
+            else if (snapshot != null && snapshot.IsValid
+                && clock.GetElapsedTime(verificationStartedTimestamp) >= VerificationWindow)
+            {
+                // Elapsed time alone never authorizes another physical attempt.
+                if (attemptsRemaining <= 0)
+                    Complete(false);
+                else
+                    phase = Phase.Ready;
+            }
+        }
+
+        public void Cancel()
+        {
+            // An in-flight physical operation must report its own outcome.
+            if (phase == Phase.Ready || phase == Phase.Confirming)
+                Complete(false);
+        }
+
+        public bool TryConsumeResult(bool keepSync, out bool success)
+        {
+            if ((phase == Phase.Ready || phase == Phase.Confirming) && HasTimedOut())
+                Complete(false);
+            if (HasCompletedResult)
+            {
+                success = succeeded;
+                phase = Phase.Idle;
+                return true;
+            }
+            success = false;
+            if (!keepSync && phase != Phase.Placing)
+            {
+                phase = Phase.Idle;
+                return true;
+            }
+            return false;
+        }
+
+        private bool HasTimedOut()
+        {
+            return verifyMove && clock.GetElapsedTime(queuedTimestamp) >= ConfirmationTimeout;
+        }
+
+        private bool IsMoveVisible(BoardSnapshot snapshot, int boardWidth)
+        {
+            if (snapshot == null || !snapshot.IsValid || snapshot.BoardState == null)
+                return false;
+            int width = boardWidth > 0 ? boardWidth : snapshot.Width;
+            if (x < 0 || y < 0 || width <= 0)
+                return false;
+            int index = (y * width) + x;
+            return index >= 0 && index < snapshot.BoardState.Length
+                && snapshot.BoardState[index] != BoardCellState.Empty;
+        }
+
+        private void Complete(bool success)
+        {
+            succeeded = success;
+            phase = Phase.Completed;
         }
     }
 }

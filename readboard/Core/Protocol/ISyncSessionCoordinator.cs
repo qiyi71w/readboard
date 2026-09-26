@@ -28,12 +28,6 @@ namespace readboard
         void EndKeepSync();
         bool WaitForContinuousSyncStop(int millisecondsTimeout);
         bool WaitForSyncIdle(int millisecondsTimeout);
-        bool TryQueuePendingMove(MoveRequest request, int boardPixelWidth, int boardWidth);
-        bool TryTakePendingMove(out MoveRequest request);
-        void HandlePendingMovePlacementResult(bool success);
-        bool WaitForPendingMoveResult();
-        void ResolvePendingMove(BoardSnapshot snapshot, int boardWidth);
-        void CancelPendingMove();
         void ResetSyncCaches();
         void SendClear();
         void SendClearBoard();
