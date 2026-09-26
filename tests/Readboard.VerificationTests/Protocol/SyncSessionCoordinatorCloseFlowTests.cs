@@ -29,23 +29,16 @@ namespace Readboard.VerificationTests.Protocol
         [Fact]
         public async Task Stop_CancelsPendingMoveWaiters()
         {
-            RecordingTransport transport = new RecordingTransport();
-            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
-            coordinator.BeginKeepSync();
-            coordinator.SetSyncBoth(true);
-            coordinator.TryQueuePendingMove(new MoveRequest { X = 1, Y = 1 }, 19, 19);
+            using PendingMoveRequestHarness harness = new PendingMoveRequestHarness();
+            harness.Start();
+            Task<PlaceRequestExecutionResult> request = harness.Request();
+            harness.WaitForObservation();
+            harness.Coordinator.Stop();
 
-            Task<bool> waitTask = Task.Factory.StartNew(
-                () => coordinator.WaitForPendingMoveResult(),
-                CancellationToken.None,
-                TaskCreationOptions.LongRunning,
-                TaskScheduler.Default);
-            coordinator.Stop();
-
-            bool result = await VerificationCompletion.WaitAsync(
-                waitTask,
-                "Stop did not resolve the pending move waiter.");
-            Assert.False(result);
+            PlaceRequestExecutionResult result = await VerificationCompletion.WaitAsync(
+                request, "Stop did not resolve the pending move waiter.");
+            Assert.False(result.ShouldSendResponse);
+            Assert.Equal(1, harness.PlacementCount);
         }
 
         [Fact]

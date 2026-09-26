@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Threading;
 
 namespace readboard
@@ -8,9 +7,6 @@ namespace readboard
     internal sealed partial class SyncSessionCoordinator : ISyncSessionCoordinator
     {
         private const int PendingMoveWaitTimeoutMs = 250;
-        private static readonly TimeSpan PendingMoveVerificationWindow = TimeSpan.FromMilliseconds(500);
-        // Finish before the host's three-second ACK timeout, even when captures keep failing.
-        private static readonly TimeSpan PendingMoveConfirmationTimeout = TimeSpan.FromSeconds(2);
         internal const string YikeGeometryUnavailableFailureReason = "Yike geometry unavailable.";
         private const int DisposeStateDisposed = 1;
 
@@ -21,7 +17,6 @@ namespace readboard
         private readonly OutboundProtocolDispatcher outboundProtocolDispatcher;
         private readonly OutboundBoardSnapshotEmitter outboundBoardSnapshotEmitter;
         private readonly AutoResetEvent pendingMoveEvent = new AutoResetEvent(false);
-        private readonly ManualResetEventSlim pendingMoveAvailableEvent = new ManualResetEventSlim(false);
         private readonly ManualResetEventSlim continuousSyncStoppedEvent = new ManualResetEventSlim(true);
         private readonly ManualResetEventSlim syncIdleEvent = new ManualResetEventSlim(true);
         private int disposeState;
@@ -275,7 +270,8 @@ namespace readboard
             bool shouldSignal = false;
             lock (stateLock)
             {
-                shouldSignal = TryFailPendingMoveOnKeepSyncStop();
+                sessionState.PendingMove.Cancel();
+                shouldSignal = sessionState.PendingMove.HasCompletedResult;
                 sessionState.StartedSync = false;
                 sessionState.KeepSync = false;
                 ResetSyncCachesCore();
@@ -295,184 +291,80 @@ namespace readboard
             return syncIdleEvent.Wait(millisecondsTimeout);
         }
 
-        internal bool WaitForPendingMoveAvailability(TimeSpan timeout)
-        {
-            return pendingMoveAvailableEvent.Wait(timeout);
-        }
 
-        public bool TryQueuePendingMove(MoveRequest request, int boardPixelWidth, int boardWidth)
+        private bool TryQueuePendingMove(MoveRequest request, int boardPixelWidth, int boardWidth)
         {
-            if (request == null)
-                return false;
-
             lock (stateLock)
             {
                 if (!sessionState.KeepSync || !sessionState.SyncBoth || boardPixelWidth < boardWidth)
                     return false;
-
-                PendingMoveState pendingMove = sessionState.PendingMove;
-                if (pendingMove.Active || pendingMove.Completed)
+                if (!sessionState.PendingMove.TryQueue(request, timeProvider))
                     return false;
-
-                pendingMove.Reset();
-                pendingMove.X = request.X;
-                pendingMove.Y = request.Y;
-                pendingMove.AttemptsRemaining = request.VerifyMove
-                    ? AppConfig.ResolveMoveVerifyTotalPlacementAttempts(request.MoveVerifyMaxAttempts)
-                    : 1;
-                pendingMove.VerifyMove = request.VerifyMove;
-                pendingMove.QueuedTimestamp = timeProvider.GetTimestamp();
-                pendingMove.Active = true;
-                UpdatePendingMoveAvailableEventUnsafe();
                 return true;
             }
         }
 
-        public bool TryTakePendingMove(out MoveRequest request)
+        private bool TryTakePendingMove(out MoveRequest request)
         {
-            request = null;
-            bool shouldSignal = false;
-
+            bool taken;
+            bool shouldSignal;
             lock (stateLock)
             {
-                PendingMoveState pendingMove = sessionState.PendingMove;
-                if (pendingMove == null || !pendingMove.Active || pendingMove.Completed)
-                    return false;
-                if (pendingMove.PlacementInProgress || pendingMove.VerificationStartedTimestamp.HasValue)
-                    return false;
-
-                if (pendingMove.AttemptsRemaining <= 0 || HasPendingMoveConfirmationTimedOut(pendingMove))
-                {
-                    shouldSignal = TryCompletePendingMove(false);
-                }
-                else
-                {
-                    pendingMove.AttemptsRemaining--;
-                    pendingMove.PlacementInProgress = true;
-                    request = new MoveRequest
-                    {
-                        X = pendingMove.X,
-                        Y = pendingMove.Y,
-                        VerifyMove = pendingMove.VerifyMove
-                    };
-                    UpdatePendingMoveAvailableEventUnsafe();
-                }
+                taken = sessionState.PendingMove.TryBeginPlacement(out request);
+                shouldSignal = sessionState.PendingMove.HasCompletedResult;
             }
-
             if (shouldSignal)
                 pendingMoveEvent.Set();
-            return request != null;
+            return taken;
         }
 
-        public void HandlePendingMovePlacementResult(bool success)
+        private void HandlePendingMovePlacementResult(bool success)
         {
-            bool shouldSignal = false;
-
+            bool shouldSignal;
             lock (stateLock)
             {
-                PendingMoveState pendingMove = sessionState.PendingMove;
-                if (pendingMove == null || !pendingMove.Active || pendingMove.Completed)
-                    return;
-
-                pendingMove.PlacementInProgress = false;
-                pendingMove.VerificationStartedTimestamp = null;
-                if (pendingMove.VerifyMove && success && sessionState.KeepSync)
-                {
-                    if (!HasPendingMoveConfirmationTimedOut(pendingMove))
-                    {
-                        pendingMove.VerificationStartedTimestamp = timeProvider.GetTimestamp();
-                        UpdatePendingMoveAvailableEventUnsafe();
-                        return;
-                    }
-                    success = false;
-                }
-
-                shouldSignal = TryCompletePendingMove(success);
+                sessionState.PendingMove.CompletePlacement(success, sessionState.KeepSync);
+                shouldSignal = sessionState.PendingMove.HasCompletedResult;
             }
-
             if (shouldSignal)
                 pendingMoveEvent.Set();
         }
 
-        public bool WaitForPendingMoveResult()
+        private PlaceRequestExecutionResult WaitForPendingMoveResult()
         {
             while (true)
             {
                 lock (stateLock)
                 {
-                    PendingMoveState pendingMove = sessionState.PendingMove;
-                    if (pendingMove != null && pendingMove.Active && !pendingMove.PlacementInProgress
-                        && HasPendingMoveConfirmationTimedOut(pendingMove))
-                        TryCompletePendingMove(false);
-                    if (pendingMove != null && pendingMove.Completed)
-                    {
-                        bool result = pendingMove.Succeeded;
-                        pendingMove.Reset();
-                        UpdatePendingMoveAvailableEventUnsafe();
+                    bool completed = sessionState.PendingMove.TryConsumeResult(
+                        sessionState.KeepSync, out PlaceRequestExecutionResult result);
+                    if (completed)
                         return result;
-                    }
-                    if (!sessionState.KeepSync && !IsPendingMoveAwaitingPlacementResult(pendingMove))
-                    {
-                        if (pendingMove != null)
-                            pendingMove.Reset();
-                        UpdatePendingMoveAvailableEventUnsafe();
-                        return false;
-                    }
                 }
-
                 pendingMoveEvent.WaitOne(PendingMoveWaitTimeoutMs);
             }
         }
 
-        public void ResolvePendingMove(BoardSnapshot snapshot, int boardWidth)
+        private void ResolvePendingMove(BoardSnapshot snapshot, int boardWidth)
         {
-            bool shouldSignal = false;
-            int effectiveBoardWidth = boardWidth > 0
-                ? boardWidth
-                : snapshot == null ? 0 : snapshot.Width;
-
+            bool shouldSignal;
             lock (stateLock)
             {
-                PendingMoveState pendingMove = sessionState.PendingMove;
-                if (pendingMove == null || !pendingMove.Active || pendingMove.Completed || !pendingMove.VerifyMove
-                    || pendingMove.PlacementInProgress || !pendingMove.VerificationStartedTimestamp.HasValue)
-                    return;
-
-                if (HasPendingMoveConfirmationTimedOut(pendingMove))
-                {
-                    shouldSignal = TryCompletePendingMove(false);
-                }
-                else if (IsPendingMoveVisible(snapshot, effectiveBoardWidth, pendingMove))
-                {
-                    shouldSignal = TryCompletePendingMove(true);
-                }
-                else if (snapshot != null && snapshot.IsValid
-                    && timeProvider.GetElapsedTime(pendingMove.VerificationStartedTimestamp.Value)
-                        >= PendingMoveVerificationWindow)
-                {
-                    // Only a post-click observation may authorize another physical attempt.
-                    pendingMove.VerificationStartedTimestamp = null;
-                    if (pendingMove.AttemptsRemaining <= 0)
-                        shouldSignal = TryCompletePendingMove(false);
-                }
-
-                if (!pendingMove.Completed)
-                    UpdatePendingMoveAvailableEventUnsafe();
+                sessionState.PendingMove.Observe(snapshot, boardWidth);
+                shouldSignal = sessionState.PendingMove.HasCompletedResult;
             }
-
             if (shouldSignal)
                 pendingMoveEvent.Set();
         }
 
-        public void CancelPendingMove()
+        private void CancelPendingMove()
         {
-            bool shouldSignal = false;
-
+            bool shouldSignal;
             lock (stateLock)
             {
-                shouldSignal = TryCancelPendingMove();
+                sessionState.PendingMove.Cancel();
+                shouldSignal = sessionState.PendingMove.HasCompletedResult;
             }
-
             if (shouldSignal)
                 pendingMoveEvent.Set();
         }
@@ -842,18 +734,6 @@ namespace readboard
             }
         }
 
-        private bool IsPendingMoveVisible(BoardSnapshot snapshot, int boardWidth, PendingMoveState pendingMove)
-        {
-            if (snapshot == null || !snapshot.IsValid || snapshot.BoardState == null)
-                return false;
-            if (pendingMove == null || pendingMove.X < 0 || pendingMove.Y < 0 || boardWidth <= 0)
-                return false;
-
-            int index = (pendingMove.Y * boardWidth) + pendingMove.X;
-            return index >= 0
-                && index < snapshot.BoardState.Length
-                && snapshot.BoardState[index] != BoardCellState.Empty;
-        }
 
         private int? ResolveEffectiveFoxMoveNumber(int? foxMoveNumber)
         {
@@ -989,72 +869,11 @@ namespace readboard
             runtime.Host.OnSyncCachesReset(observationGeneration);
         }
 
-        private bool HasPendingMoveConfirmationTimedOut(PendingMoveState pendingMove)
-        {
-            return pendingMove.VerifyMove
-                && timeProvider.GetElapsedTime(pendingMove.QueuedTimestamp) >= PendingMoveConfirmationTimeout;
-        }
 
-        private bool TryCompletePendingMove(bool success)
-        {
-            PendingMoveState pendingMove = sessionState.PendingMove;
-            if (pendingMove == null || pendingMove.Completed || !pendingMove.Active)
-                return false;
-
-            pendingMove.PlacementInProgress = false;
-            pendingMove.VerificationStartedTimestamp = null;
-            pendingMove.Active = false;
-            pendingMove.Completed = true;
-            pendingMove.Succeeded = success;
-            UpdatePendingMoveAvailableEventUnsafe();
-            return true;
-        }
-
-        private bool TryFailPendingMoveOnKeepSyncStop()
-        {
-            PendingMoveState pendingMove = sessionState.PendingMove;
-            if (pendingMove == null || pendingMove.PlacementInProgress)
-                return false;
-
-            return TryCompletePendingMove(false);
-        }
-
-        private bool TryCancelPendingMove()
-        {
-            PendingMoveState pendingMove = sessionState.PendingMove;
-            if (pendingMove == null || pendingMove.PlacementInProgress || pendingMove.Completed)
-                return false;
-
-            if (TryCompletePendingMove(false))
-                return true;
-
-            pendingMove.Reset();
-            UpdatePendingMoveAvailableEventUnsafe();
-            return false;
-        }
-
-        private void UpdatePendingMoveAvailableEventUnsafe()
-        {
-            // Callers recalculate availability while holding the coordinator state lock.
-            Debug.Assert(Monitor.IsEntered(stateLock), "stateLock must be held when updating pending move availability.");
-            PendingMoveState pendingMove = sessionState.PendingMove;
-            if (pendingMove != null
-                && pendingMove.Active
-                && !pendingMove.Completed
-                && !pendingMove.PlacementInProgress
-                && !pendingMove.VerificationStartedTimestamp.HasValue)
-            {
-                pendingMoveAvailableEvent.Set();
-                return;
-            }
-
-            pendingMoveAvailableEvent.Reset();
-        }
 
         private void DisposeWaitHandles()
         {
             pendingMoveEvent.Dispose();
-            pendingMoveAvailableEvent.Dispose();
             continuousSyncStoppedEvent.Dispose();
             syncIdleEvent.Dispose();
             keepSyncStopRequestedEvent.Dispose();
@@ -1070,12 +889,6 @@ namespace readboard
             runtime.DebugDiagnostics = null;
         }
 
-        private static bool IsPendingMoveAwaitingPlacementResult(PendingMoveState pendingMove)
-        {
-            return pendingMove != null
-                && pendingMove.Active
-                && pendingMove.PlacementInProgress;
-        }
 
         private void UpdateSyncIdleEvent()
         {

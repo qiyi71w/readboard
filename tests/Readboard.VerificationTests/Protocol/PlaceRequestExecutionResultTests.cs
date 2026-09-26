@@ -1,7 +1,3 @@
-using System;
-using System.Reflection;
-using System.Runtime.ExceptionServices;
-using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using Readboard.VerificationTests.Support;
@@ -14,241 +10,140 @@ namespace Readboard.VerificationTests.Protocol
         [Fact]
         public void HandlePlaceRequest_NullRequestReturnsNoResponse()
         {
-            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(new RecordingTransport(), new LegacyProtocolAdapter());
-            Type resultType = ResolveResultType();
-            MethodInfo method = ResolveHandlePlaceRequestMethod(resultType);
-
-            object result = method.Invoke(coordinator, new object[] { null });
-
-            Assert.NotNull(result);
-            Assert.False(ReadBool(result, "ShouldSendResponse"));
+            using PendingMoveRequestHarness harness = new PendingMoveRequestHarness();
+            Assert.False(harness.Coordinator.HandlePlaceRequest(null).ShouldSendResponse);
+            Assert.Equal(0, harness.PlacementCount);
         }
 
         [Fact]
         public void HandlePlaceRequest_WithoutActiveSyncReturnsNoResponse()
         {
-            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(new RecordingTransport(), new LegacyProtocolAdapter());
-            Type resultType = ResolveResultType();
-            MethodInfo method = ResolveHandlePlaceRequestMethod(resultType);
-            AttachRuntime(coordinator, CreateSnapshot(19, 19));
+            using PendingMoveRequestHarness harness = new PendingMoveRequestHarness();
+            PlaceRequestExecutionResult result = harness.Coordinator.HandlePlaceRequest(
+                new MoveRequest { X = 1, Y = 1, VerifyMove = false });
+            Assert.False(result.ShouldSendResponse);
+            Assert.Equal(0, harness.PlacementCount);
+        }
 
-            object result = method.Invoke(coordinator, new object[] { new MoveRequest { X = 1, Y = 1, VerifyMove = false } });
-
-            Assert.NotNull(result);
-            Assert.False(ReadBool(result, "ShouldSendResponse"));
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task HandlePlaceRequest_UnverifiedMoveReturnsPhysicalOutcome(bool success)
+        {
+            using PendingMoveRequestHarness harness = new PendingMoveRequestHarness();
+            harness.PlacementSuccess = success;
+            harness.Start();
+            PlaceRequestExecutionResult result = await VerificationCompletion.WaitAsync(
+                harness.Request(verify: false, maxAttempts: 5), "Physical placement did not complete.");
+            Assert.True(result.ShouldSendResponse);
+            Assert.Equal(success, result.Success);
+            Assert.Equal(1, harness.PlacementCount);
+            Assert.Equal(1, harness.LastMove.X);
+            Assert.Equal(1, harness.LastMove.Y);
         }
 
         [Fact]
-        public async Task HandlePlaceRequest_WhenPendingMoveSucceedsReturnsResponseAndSuccess()
+        public async Task HandlePlaceRequest_DelayedVisibleSnapshotConfirmsWithoutAnotherClick()
         {
-            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(new RecordingTransport(), new LegacyProtocolAdapter());
-            Type resultType = ResolveResultType();
-            MethodInfo method = ResolveHandlePlaceRequestMethod(resultType);
-            AttachRuntime(coordinator, CreateSnapshot(19, 19));
-            coordinator.BeginKeepSync();
-            coordinator.SetSyncBoth(true);
-            SetRuntimeBoardPixelWidth(coordinator, 19);
+            using PendingMoveRequestHarness harness = new PendingMoveRequestHarness();
+            harness.Start();
+            Task<PlaceRequestExecutionResult> request = harness.Request(maxAttempts: 2);
+            harness.WaitForObservation();
+            Assert.False(request.IsCompleted);
+            harness.Observe(occupied: false);
+            harness.WaitForObservation();
+            Assert.False(request.IsCompleted);
+            Assert.Equal(1, harness.PlacementCount);
 
-            TaskCompletionSource<object> resultCompletion =
-                new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
-            Thread placeRequestThread = new Thread(delegate()
-            {
-                try
-                {
-                    resultCompletion.SetResult(
-                        method.Invoke(coordinator, new object[]
-                        {
-                            new MoveRequest { X = 1, Y = 1, VerifyMove = false }
-                        }));
-                }
-                catch (TargetInvocationException ex) when (ex.InnerException != null)
-                {
-                    resultCompletion.SetException(ExceptionDispatchInfo.Capture(ex.InnerException).SourceException);
-                }
-                catch (Exception ex)
-                {
-                    resultCompletion.SetException(ex);
-                }
-            });
-            placeRequestThread.IsBackground = true;
-            placeRequestThread.Name = "PlaceRequestExecutionResultTests.HandlePlaceRequest";
-            placeRequestThread.Start();
-
-            Assert.True(
-                coordinator.WaitForPendingMoveAvailability(VerificationCompletion.WatchdogTimeout),
-                "Pending move did not become available.");
-            Assert.True(coordinator.TryTakePendingMove(out MoveRequest move));
-            Assert.NotNull(move);
-            Assert.Equal(1, move.X);
-            Assert.Equal(1, move.Y);
-
-            coordinator.HandlePendingMovePlacementResult(true);
-
-            object result = await VerificationCompletion.WaitAsync(
-                resultCompletion.Task,
-                "Pending move result did not complete.");
-            VerificationCompletion.Join(
-                placeRequestThread,
-                "Place request worker did not exit.");
-
-            Assert.NotNull(result);
-            Assert.True(ReadBool(result, "ShouldSendResponse"));
-            Assert.True(ReadBool(result, "Success"));
+            harness.AdvanceMilliseconds(250);
+            harness.Observe(occupied: true);
+            PlaceRequestExecutionResult result = await VerificationCompletion.WaitAsync(
+                request, "Visible stone did not complete the request.");
+            Assert.True(result.ShouldSendResponse);
+            Assert.True(result.Success);
+            Assert.Equal(1, harness.PlacementCount);
         }
 
-        private static void AttachRuntime(SyncSessionCoordinator coordinator, object snapshot)
+        [Fact]
+        public async Task HandlePlaceRequest_UnconfirmedObservationEnablesNextPhysicalAttempt()
         {
-            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
-            Type runtimeType = assembly.GetType("readboard.SyncSessionRuntimeDependencies");
-            Type hostType = assembly.GetType("readboard.ISyncCoordinatorHost");
-            Type captureServiceType = assembly.GetType("readboard.IBoardCaptureService");
-            Type recognitionServiceType = assembly.GetType("readboard.IBoardRecognitionService");
-            Type placementServiceType = assembly.GetType("readboard.IMovePlacementService");
-            Type overlayServiceType = assembly.GetType("readboard.IOverlayService");
-            Assert.True(runtimeType != null, "Missing runtime type: readboard.SyncSessionRuntimeDependencies");
-            Assert.True(hostType != null, "Missing host type: readboard.ISyncCoordinatorHost");
-            Assert.True(captureServiceType != null, "Missing runtime type: readboard.IBoardCaptureService");
-            Assert.True(recognitionServiceType != null, "Missing runtime type: readboard.IBoardRecognitionService");
-            Assert.True(placementServiceType != null, "Missing runtime type: readboard.IMovePlacementService");
-            Assert.True(overlayServiceType != null, "Missing runtime type: readboard.IOverlayService");
+            using PendingMoveRequestHarness harness = new PendingMoveRequestHarness();
+            harness.Start();
+            Task<PlaceRequestExecutionResult> request = harness.Request(maxAttempts: 2);
+            harness.WaitForObservation();
+            harness.AdvanceMilliseconds(500);
+            harness.Observe(occupied: false);
+            harness.WaitForObservation();
+            Assert.False(request.IsCompleted);
+            Assert.Equal(2, harness.PlacementCount);
 
-            object runtime = Activator.CreateInstance(runtimeType);
-            object host = CreateProxy(hostType, delegate(MethodInfo targetMethod, object[] args)
-            {
-                if (targetMethod.Name == "CaptureSnapshot")
-                    return snapshot;
-                return GetDefault(targetMethod.ReturnType);
-            });
-
-            SetProperty(runtime, "Host", host);
-            SetProperty(runtime, "CaptureService", CreateProxy(captureServiceType, DefaultProxyHandler));
-            SetProperty(runtime, "RecognitionService", CreateProxy(recognitionServiceType, DefaultProxyHandler));
-            SetProperty(runtime, "PlacementService", CreateProxy(placementServiceType, DefaultProxyHandler));
-            SetProperty(runtime, "OverlayService", CreateProxy(overlayServiceType, DefaultProxyHandler));
-            typeof(SyncSessionCoordinator)
-                .GetMethod("AttachRuntime", BindingFlags.Instance | BindingFlags.Public)
-                .Invoke(coordinator, new[] { runtime });
+            harness.Observe(occupied: true);
+            PlaceRequestExecutionResult result = await VerificationCompletion.WaitAsync(
+                request, "Second attempt was not confirmed.");
+            Assert.True(result.ShouldSendResponse);
+            Assert.True(result.Success);
+            Assert.Equal(2, harness.PlacementCount);
         }
 
-        private static object CreateSnapshot(int boardWidth, int boardHeight)
+        [Fact]
+        public async Task HandlePlaceRequest_InvalidSnapshotsDoNotRetryAndWaiterTimesOut()
         {
-            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
-            Type snapshotType = assembly.GetType("readboard.SyncCoordinatorHostSnapshot");
-            Assert.True(snapshotType != null, "Missing snapshot type: readboard.SyncCoordinatorHostSnapshot");
-            object snapshot = Activator.CreateInstance(snapshotType);
-            SetProperty(snapshot, "BoardWidth", boardWidth);
-            SetProperty(snapshot, "BoardHeight", boardHeight);
-            return snapshot;
+            using PendingMoveRequestHarness harness = new PendingMoveRequestHarness();
+            harness.Start();
+            Task<PlaceRequestExecutionResult> request = harness.Request(maxAttempts: 10);
+            harness.WaitForObservation();
+            harness.AdvanceMilliseconds(500);
+            harness.Observe(occupied: false, valid: false);
+            harness.WaitForObservation();
+            Assert.False(request.IsCompleted);
+            Assert.Equal(1, harness.PlacementCount);
+
+            harness.AdvanceMilliseconds(1500);
+            // Leave capture blocked: the request waiter must enforce the total deadline itself.
+            PlaceRequestExecutionResult result = await VerificationCompletion.WaitAsync(
+                request, "Missing snapshots left the request waiting after its deadline.");
+            Assert.True(result.ShouldSendResponse);
+            Assert.False(result.Success);
+            Assert.Equal(1, harness.PlacementCount);
         }
 
-        private static Type ResolveResultType()
+        [Fact]
+        public async Task HandlePlaceRequest_StopWhileAwaitingObservationRetiresWithoutFailureResponse()
         {
-            Type resultType = typeof(SyncSessionCoordinator).Assembly.GetType("readboard.PlaceRequestExecutionResult");
-            Assert.True(resultType != null, "Missing result type: readboard.PlaceRequestExecutionResult");
-            return resultType;
+            using PendingMoveRequestHarness harness = new PendingMoveRequestHarness();
+            harness.Start();
+            Task<PlaceRequestExecutionResult> request = harness.Request();
+            harness.WaitForObservation();
+
+            // Capture remains blocked, so the worker cannot emit its deferred stopsync yet.
+            harness.Coordinator.StopSyncSession();
+
+            PlaceRequestExecutionResult result = await VerificationCompletion.WaitAsync(
+                request, "Stop did not retire the pending confirmation.");
+            Assert.False(result.ShouldSendResponse);
+            Assert.Equal(1, harness.PlacementCount);
         }
 
-        private static MethodInfo ResolveHandlePlaceRequestMethod(Type resultType)
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task HandlePlaceRequest_StopDuringPlacementWaitsForPhysicalOutcome(bool success)
         {
-            MethodInfo method = typeof(SyncSessionCoordinator).GetMethod("HandlePlaceRequest", BindingFlags.Instance | BindingFlags.Public);
-            Assert.True(method != null, "Missing coordinator method: HandlePlaceRequest");
-            Assert.Equal(resultType, method.ReturnType);
-            return method;
-        }
+            using PendingMoveRequestHarness harness = new PendingMoveRequestHarness();
+            harness.PlacementSuccess = success;
+            harness.BlockPlacement();
+            harness.Start();
+            Task<PlaceRequestExecutionResult> request = harness.Request();
+            harness.WaitForPlacement();
+            harness.Coordinator.Stop();
+            Assert.False(request.IsCompleted);
+            harness.ReleasePlacement();
 
-        private static void SetRuntimeBoardPixelWidth(SyncSessionCoordinator coordinator, int boardPixelWidth)
-        {
-            FieldInfo runtimeStateField = typeof(SyncSessionCoordinator).GetField("runtimeState", BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.True(runtimeStateField != null, "Missing coordinator field: runtimeState");
-            object runtimeState = runtimeStateField.GetValue(coordinator);
-            Assert.NotNull(runtimeState);
-            SetProperty(runtimeState, "CurrentBoardPixelWidth", boardPixelWidth);
-        }
-
-        private static bool ReadBool(object instance, string propertyName)
-        {
-            PropertyInfo property = instance.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            Assert.True(property != null, "Missing property: " + propertyName);
-            return (bool)property.GetValue(instance, null);
-        }
-
-        private static object CreateProxy(Type interfaceType, Func<MethodInfo, object[], object> handler)
-        {
-            MethodInfo createMethod = null;
-            MethodInfo[] methods = typeof(DispatchProxy).GetMethods(BindingFlags.Public | BindingFlags.Static);
-            for (int i = 0; i < methods.Length; i++)
-            {
-                MethodInfo candidate = methods[i];
-                if (candidate.Name != "Create" || !candidate.IsGenericMethodDefinition)
-                    continue;
-                if (candidate.GetParameters().Length != 0)
-                    continue;
-                createMethod = candidate.MakeGenericMethod(interfaceType, typeof(ReflectionProxy));
-                break;
-            }
-
-            Assert.True(createMethod != null, "DispatchProxy.Create<T,TProxy>() is required.");
-            object proxy = createMethod.Invoke(null, null);
-            ((ReflectionProxy)proxy).Handler = handler;
-            return proxy;
-        }
-
-        private static void SetProperty(object target, string propertyName, object value)
-        {
-            PropertyInfo property = target.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            Assert.True(property != null, "Missing property: " + propertyName);
-            property.SetValue(target, value, null);
-        }
-
-        private static object GetDefault(Type returnType)
-        {
-            if (returnType == typeof(void))
-                return null;
-            return returnType.IsValueType ? Activator.CreateInstance(returnType) : null;
-        }
-
-        private static object DefaultProxyHandler(MethodInfo targetMethod, object[] args)
-        {
-            return GetDefault(targetMethod.ReturnType);
-        }
-
-        private sealed class RecordingTransport : IReadBoardTransport
-        {
-            public event EventHandler<string> MessageReceived;
-
-            public bool IsConnected { get; private set; }
-
-            public void Dispose()
-            {
-            }
-
-            public void Send(string line)
-            {
-            }
-
-            public void SendError(string message)
-            {
-            }
-
-            public void Start()
-            {
-                IsConnected = true;
-            }
-
-            public void Stop()
-            {
-                IsConnected = false;
-            }
-        }
-
-        private class ReflectionProxy : DispatchProxy
-        {
-            public Func<MethodInfo, object[], object> Handler { get; set; }
-
-            protected override object Invoke(MethodInfo targetMethod, object[] args)
-            {
-                return Handler == null ? GetDefault(targetMethod.ReturnType) : Handler(targetMethod, args);
-            }
+            PlaceRequestExecutionResult result = await VerificationCompletion.WaitAsync(
+                request, "Stopped request did not receive its in-flight placement outcome.");
+            Assert.True(result.ShouldSendResponse);
+            Assert.Equal(success, result.Success);
+            Assert.Equal(1, harness.PlacementCount);
         }
     }
 }

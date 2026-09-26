@@ -181,8 +181,8 @@ namespace Readboard.VerificationTests.Protocol
             }
             finally
             {
-                recognitionService.Release();
                 Invoke(coordinator, "StopSyncSession");
+                recognitionService.Release();
             }
 
             VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
@@ -573,6 +573,91 @@ namespace Readboard.VerificationTests.Protocol
             Assert.False(coordinator.StartedSync);
             Assert.Contains("yikeSyncStop", transport.SentLines);
             Assert.Contains("stopsync", transport.SentLines);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ContinuousDiscovery_AfterFailedPrimeKeepsWindowObservationCurrent(bool restartDuringDiscovery)
+        {
+            var coordinator = new SyncSessionCoordinator(new RecordingTransport(), new LegacyProtocolAdapter());
+            var controlCenter = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(AppConfig.CreateDefault("220430", "TEST")),
+                (IControlCenterSessionAdapter)CreateProxy(typeof(IControlCenterSessionAdapter),
+                    (method, args) => GetDefault(method.ReturnType)),
+                (IControlCenterPreferencePersistence)CreateProxy(typeof(IControlCenterPreferencePersistence),
+                    (method, args) => GetDefault(method.ReturnType)),
+                new Readboard.VerificationTests.Host.RejectingControlCenterActionAdapter());
+            var snapshot = (SyncCoordinatorHostSnapshot)CreateSnapshot(
+                typeof(SyncCoordinatorHostSnapshot), SyncMode.Fox, IntPtr.Zero);
+            IntPtr discoveredWindow = new IntPtr(100);
+            var outcomes = new List<ControlCenterSessionObservationApplyOutcome>();
+            var runtime = new SyncSessionRuntimeDependencies
+            {
+                Host = (ISyncCoordinatorHost)CreateProxy(typeof(ISyncCoordinatorHost), (method, args) =>
+                {
+                    if (method.Name == "AllocateSessionObservationGeneration")
+                        return controlCenter.BeginSessionObservationGeneration();
+                    if (method.Name == "CaptureSnapshot")
+                        return snapshot;
+                    if (method.Name == "UpdateSelectedWindowHandle")
+                    {
+                        var result = controlCenter.ApplyObservation(
+                            new ControlCenterSessionObservation((long)args[1]).WithTargetWindowValid(true));
+                        outcomes.Add(result.Outcome);
+                        if (!result.IsStale)
+                            snapshot.SelectedWindowHandle = (IntPtr)args[0];
+                    }
+                    return GetDefault(method.ReturnType);
+                }),
+                CaptureService = new SequencedCaptureService(CreateFrame()),
+                RecognitionService = new SequencedRecognitionService(CreateResult("re=fox")),
+                PlacementService = new PassivePlacementService(),
+                OverlayService = new PassiveOverlayService(),
+                WindowLocator = (ISyncWindowLocator)CreateProxy(typeof(ISyncWindowLocator), (method, args) =>
+                {
+                    if (restartDuringDiscovery && discoveredWindow != new IntPtr(100))
+                    {
+                        // A stopped worker must not borrow the replacement session's authority.
+                        coordinator.EndContinuousSync();
+                        SetField(coordinator, "syncLifecycleGeneration", 1);
+                        coordinator.BeginContinuousSync();
+                        SetField(coordinator, "activeContinuousSyncSessionId", 2);
+                        SetField(coordinator, "activeContinuousObservationGeneration",
+                            controlCenter.BeginSessionObservationGeneration());
+                    }
+                    return discoveredWindow;
+                }),
+                WindowDescriptorFactory = (IWindowDescriptorFactory)CreateProxy(
+                    typeof(IWindowDescriptorFactory), (method, args) => false)
+            };
+            coordinator.AttachRuntime(runtime);
+            coordinator.BeginContinuousSync();
+            SetField(coordinator, "activeContinuousSyncSessionId", 1);
+            SetField(coordinator, "activeContinuousObservationGeneration",
+                controlCenter.BeginSessionObservationGeneration());
+            try
+            {
+                Invoke(coordinator, "TryStartDiscoveredKeepSync", runtime, snapshot, 0, 1);
+                Assert.False(coordinator.StartedSync);
+                Assert.Equal(new IntPtr(100), snapshot.SelectedWindowHandle);
+
+                discoveredWindow = new IntPtr(200);
+                Invoke(coordinator, "TryStartDiscoveredKeepSync", runtime, snapshot, 0, 1);
+
+                IntPtr expectedWindow = new IntPtr(restartDuringDiscovery ? 100 : 200);
+                Assert.Equal(expectedWindow, snapshot.SelectedWindowHandle);
+                Assert.Equal(expectedWindow, (IntPtr)Invoke(coordinator, "ResolveSelectedWindowHandle", snapshot));
+                Assert.Equal(restartDuringDiscovery
+                    ? new[] { ControlCenterSessionObservationApplyOutcome.Applied }
+                    : new[] { ControlCenterSessionObservationApplyOutcome.Applied,
+                        ControlCenterSessionObservationApplyOutcome.NoOp }, outcomes);
+                Assert.False(coordinator.StartedSync);
+            }
+            finally
+            {
+                coordinator.EndContinuousSync();
+            }
         }
 
         [Fact]
@@ -1219,27 +1304,44 @@ namespace Readboard.VerificationTests.Protocol
             Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
             VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
             coordinator.SetSyncBoth(true);
-            Assert.True(coordinator.TryQueuePendingMove(new MoveRequest { X = 1, Y = 1, VerifyMove = false }, 190, 19));
-            VerificationCompletion.Wait(placementService.BlockedPlacementStarted, "Placement did not block as expected.");
 
-            Task stopTask = StartDedicatedThread(
-                () => coordinator.Stop(),
-                "SyncSessionCoordinatorOrchestrationTests.StopDuringPlacement");
+            Task<PlaceRequestExecutionResult> placeTask = StartDedicatedThread(
+                () => coordinator.HandlePlaceRequest(
+                    new MoveRequest { X = 1, Y = 1, VerifyMove = false }),
+                "SyncSessionCoordinatorOrchestrationTests.StopDuringPlacement.HandlePlaceRequest");
+
+            Task stopTask = null;
+            PlaceRequestExecutionResult placeResult;
             try
             {
+                VerificationCompletion.Wait(placementService.BlockedPlacementStarted, "Placement did not block as expected.");
+
+                stopTask = StartDedicatedThread(
+                    () => coordinator.Stop(),
+                    "SyncSessionCoordinatorOrchestrationTests.StopDuringPlacement");
+
                 AssertCompletes(
                     stopTask,
                     "Stop must return while placement is blocked.");
             }
             finally
             {
+                coordinator.Stop();
                 placementService.Release();
-                await VerificationCompletion.WaitAsync(
-                    stopTask,
-                    "Stop did not complete after placement release.");
+                if (stopTask != null)
+                {
+                    await VerificationCompletion.WaitAsync(
+                        stopTask,
+                        "Stop did not complete after placement release.");
+                }
+                placeResult = await VerificationCompletion.WaitAsync(
+                    placeTask,
+                    "Place request did not complete after placement release.");
             }
 
             VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
+            Assert.True(placeResult.ShouldSendResponse);
+            Assert.False(placeResult.Success);
             Assert.Equal(1, placementService.PlaceCallCount);
             Assert.Equal(0, placementService.ActualPlacementCount);
         }
@@ -1434,7 +1536,7 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
-        public void StopSyncSession_ThenRestartKeepSync_PreservesLifecycleThroughStopAndRestart()
+        public async Task StopSyncSession_ThenRestartKeepSync_PreservesLifecycleThroughStopAndRestart()
         {
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
@@ -1448,8 +1550,9 @@ namespace Readboard.VerificationTests.Protocol
             object snapshot = CreateSnapshot(snapshotType, SyncMode.Fox, firstHandle);
             LightweightBindingRestartHostRecorder hostRecorder = new LightweightBindingRestartHostRecorder(snapshot, coordinator);
             object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
-            ScriptedBlockingCaptureService captureService = new ScriptedBlockingCaptureService(CreateFrame(), 2, true);
             SingleLightweightPlacementService placementService = new SingleLightweightPlacementService();
+            ScriptedBlockingCaptureService captureService = new ScriptedBlockingCaptureService(
+                CreateFrame(), 2, true, () => placementService.PlaceCalled.IsSet);
             DescriptorFactoryRecorder descriptorFactory = new DescriptorFactoryRecorder();
             object runtime = Activator.CreateInstance(runtimeType);
             SetProperty(runtime, "Host", host);
@@ -1461,29 +1564,53 @@ namespace Readboard.VerificationTests.Protocol
             Invoke(coordinator, "AttachRuntime", runtime);
             coordinator.SetSyncBoth(true);
 
-            Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
-            Assert.True(hostRecorder.InitialMoveQueued);
-            VerificationCompletion.Wait(placementService.PlaceCalled, "Initial move was not placed.");
-            Thread staleWorker = ReadWorkerThread(coordinator, "keepSyncThread");
-            VerificationCompletion.Wait(captureService.BlockedCaptureStarted, "Capture did not block as expected.");
+            Thread staleWorker = null;
+            try
+            {
+                Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+                VerificationCompletion.Wait(hostRecorder.KeepStarted, "Keep sync did not start.");
+                VerificationCompletion.Wait(placementService.PlaceCalled, "Initial move was not placed.");
+                PlaceRequestExecutionResult placeResult = await VerificationCompletion.WaitAsync(
+                    hostRecorder.InitialPlaceTask,
+                    "Initial move request did not complete.");
+                Assert.True(placeResult.ShouldSendResponse);
+                Assert.True(placeResult.Success);
 
-            Invoke(coordinator, "StopSyncSession");
-            SetProperty(snapshot, "SelectedWindowHandle", secondHandle);
-            hostRecorder.KeepStarted.Reset();
-            Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
-            VerificationCompletion.Wait(hostRecorder.KeepStarted, "Restarted keep sync did not start.");
+                staleWorker = ReadWorkerThread(coordinator, "keepSyncThread");
+                VerificationCompletion.Wait(captureService.BlockedCaptureStarted, "Capture did not block as expected.");
 
-            captureService.Release();
+                Invoke(coordinator, "StopSyncSession");
+                SetProperty(snapshot, "SelectedWindowHandle", secondHandle);
+                hostRecorder.KeepStarted.Reset();
+                Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+                VerificationCompletion.Wait(hostRecorder.KeepStarted, "Restarted keep sync did not start.");
 
-            VerificationCompletion.Join(staleWorker, "Stale keep-sync worker did not exit.");
-            Assert.True(coordinator.StartedSync);
-            Assert.Equal(0, hostRecorder.KeepStoppedCount);
+                captureService.Release();
 
-            hostRecorder.KeepStopped.Reset();
-            Invoke(coordinator, "StopSyncSession");
+                VerificationCompletion.Join(staleWorker, "Stale keep-sync worker did not exit.");
+                Assert.True(coordinator.StartedSync);
+                Assert.Equal(0, hostRecorder.KeepStoppedCount);
 
-            VerificationCompletion.Wait(hostRecorder.KeepStopped, "Restarted keep sync did not stop.");
+                hostRecorder.KeepStopped.Reset();
+                Invoke(coordinator, "StopSyncSession");
+
+                VerificationCompletion.Wait(hostRecorder.KeepStopped, "Restarted keep sync did not stop.");
+            }
+            finally
+            {
+                coordinator.StopSyncSession();
+                captureService.Release();
+                if (staleWorker != null)
+                {
+                    VerificationCompletion.Join(staleWorker, "Stale keep-sync worker did not exit during cleanup.");
+                }
+                if (hostRecorder.InitialPlaceTask != null)
+                {
+                    await VerificationCompletion.WaitAsync(
+                        hostRecorder.InitialPlaceTask,
+                        "Initial place request task did not complete during cleanup.");
+                }
+            }
         }
 
         [Fact]
@@ -2527,7 +2654,7 @@ namespace Readboard.VerificationTests.Protocol
             public ManualResetEventSlim KeepStopped { get; } = new ManualResetEventSlim(false);
             public int KeepStartedCount { get; private set; }
             public int KeepStoppedCount { get; private set; }
-            public bool InitialMoveQueued { get; private set; }
+            public Task<PlaceRequestExecutionResult> InitialPlaceTask { get; private set; }
 
             public object HandleCall(MethodInfo method, object[] args)
             {
@@ -2543,10 +2670,10 @@ namespace Readboard.VerificationTests.Protocol
                         if (!queuedInitialMove)
                         {
                             queuedInitialMove = true;
-                            InitialMoveQueued = coordinator.TryQueuePendingMove(
-                                new MoveRequest { X = 1, Y = 1, VerifyMove = false },
-                                190,
-                                19);
+                            InitialPlaceTask = StartDedicatedThread(
+                                () => coordinator.HandlePlaceRequest(
+                                    new MoveRequest { X = 1, Y = 1, VerifyMove = false }),
+                                "SyncSessionCoordinatorOrchestrationTests.LightweightBindingRestart.HandlePlaceRequest");
                         }
                         KeepStarted.Set();
                         return null;
@@ -2902,14 +3029,17 @@ namespace Readboard.VerificationTests.Protocol
             private readonly BoardFrame frame;
             private readonly int blockedCallNumber;
             private readonly bool failAfterRelease;
+            private readonly Func<bool> blockWhen;
+            private int blocked;
             private readonly ManualResetEventSlim releaseEvent = new ManualResetEventSlim(false);
             private int captureCount;
 
-            public ScriptedBlockingCaptureService(BoardFrame frame, int blockedCallNumber, bool failAfterRelease)
+            public ScriptedBlockingCaptureService(BoardFrame frame, int blockedCallNumber, bool failAfterRelease, Func<bool> blockWhen = null)
             {
                 this.frame = frame;
                 this.blockedCallNumber = blockedCallNumber;
                 this.failAfterRelease = failAfterRelease;
+                this.blockWhen = blockWhen;
             }
 
             public ManualResetEventSlim BlockedCaptureStarted { get; } = new ManualResetEventSlim(false);
@@ -2917,7 +3047,9 @@ namespace Readboard.VerificationTests.Protocol
             public BoardCaptureResult Capture(BoardCaptureRequest request)
             {
                 int callNumber = Interlocked.Increment(ref captureCount);
-                if (callNumber == blockedCallNumber)
+                if (blockWhen == null
+                    ? callNumber == blockedCallNumber
+                    : blockWhen() && Interlocked.CompareExchange(ref blocked, 1, 0) == 0)
                 {
                     BlockedCaptureStarted.Set();
                     releaseEvent.Wait();

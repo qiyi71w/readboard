@@ -833,7 +833,8 @@ namespace readboard
                 {
                     ControlCenterSessionObservationApplyResult result =
                         ApplyControlCenterSessionObservation(observation);
-                    if (result.Outcome != ControlCenterSessionObservationApplyOutcome.Applied)
+                    // NoOp only describes the UI projection; the native window may still have changed.
+                    if (result.Outcome == ControlCenterSessionObservationApplyOutcome.Stale)
                         return;
                     SetSelectedWindowHandle(handle);
                     hasRetainedFoxTitleSnapshot = false;
