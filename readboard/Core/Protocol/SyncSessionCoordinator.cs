@@ -330,15 +330,16 @@ namespace readboard
                 pendingMoveEvent.Set();
         }
 
-        private bool WaitForPendingMoveResult()
+        private PlaceRequestExecutionResult WaitForPendingMoveResult()
         {
             while (true)
             {
                 lock (stateLock)
                 {
-                    bool completed = sessionState.PendingMove.TryConsumeResult(sessionState.KeepSync, out bool success);
+                    bool completed = sessionState.PendingMove.TryConsumeResult(
+                        sessionState.KeepSync, out PlaceRequestExecutionResult result);
                     if (completed)
-                        return success;
+                        return result;
                 }
                 pendingMoveEvent.WaitOne(PendingMoveWaitTimeoutMs);
             }

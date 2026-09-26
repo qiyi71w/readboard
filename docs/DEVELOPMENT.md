@@ -231,6 +231,10 @@ Capture -> Recognition -> BoardSnapshot -> OutboundBoardSnapshotEmitter
 
 线程包括 UI thread、transport reader、持续同步 worker、串行落子队列和诊断 writer。新异步观察应携带 generation，并忽略过期结果；不要用 `Thread.Sleep` 固化时序。
 
+连续发现窗口的 worker 必须沿用自己的生命周期与 session ID；启动棋盘采样分配新观察代际时，同一连续发现生命周期也推进到该代际，准备失败后的重新发现不能继续提交旧代际。读取代际与更新截图侧选定 HWND 必须在 worker 锁内完成有效性检查，不能让停止前的回调借用重启后的代际。
+
+`MainForm.UpdateSelectedWindowHandle` 的 `NoOp` 只表示 Control Center 投影未变，不表示 HWND 未变；当前有效观察仍须切换实际窗口并清除旧标题绑定，`Stale` 仍拒绝。标题读取与截图必须指向同一选定窗口。
+
 ### 双向落子的截图确认
 
 `PendingMoveState`（`readboard/Core/Models/SessionState.cs`）拥有请求入队、点击次数、截图观察窗口、整体期限及结果消费的状态转换。已完成但未消费的结果仍占用请求槽位。`SyncSessionCoordinator` 保留锁、worker、等待信号、几何准入及实际点击调用，协议响应仍通过 `HandlePlaceRequest` 返回。
@@ -240,7 +244,8 @@ Capture -> Recognition -> BoardSnapshot -> OutboundBoardSnapshotEmitter
 - 开启落子验证时，每次成功发出点击后保留 500 毫秒的截图确认窗口。窗口内持续采样；看到目标交叉点已有棋子即可成功，旧盘面不立即判失败，也不再次点击。
 - 窗口到期后，只有有效截图仍未看到目标棋子，才允许消耗剩余点击次数；次数耗尽则报告失败。截图或识别不可用不授权重试。
 - 整次请求从入队起有 2 秒的确认期限，由单调时钟计时；等待结果的一方也检查期限，避免没有截图时无限等待。到达期限时优先判超时，即使同一时刻截图已看到目标棋子。
-- 关闭验证时以点击执行结果结清。停止同步或取消请求会终止排队／等待截图的请求，但不提前结清正在执行的系统点击；该点击返回后按原有执行结果结清。协议文本及宿主“匹配棋盘帧才是 ACK”的规则不变。
+- 关闭验证时以点击执行结果结清。停止同步或取消请求会将排队／等待截图的请求结清为 `NoResponse`，不发送 `error place failed` 或 `placeComplete`；宿主通过 `stopsync` 退役确认权限，避免取消产生的失败回包先于停止通知删除本地棋子。取消结果在消费前仍占用请求槽位，也不会因晚到截图或期限到达而变成成功／失败。
+- 已完成的真实成功、失败及超时结果不被后来的取消覆盖。正在执行的系统点击不提前结清；该点击返回后按原有执行结果结清。协议文本及宿主“匹配棋盘帧才是 ACK”的规则不变，重连仍以实际远端盘面为准。
 
 时序回归集中在 `PendingMoveStateTests`，使用可控单调时钟覆盖延迟显子、重试边界、无有效截图超时、结果消费和停止／取消，不用 `Thread.Sleep` 等待目标时序。`PlaceRequestExecutionResultTests` 使用受控截图与点击适配器，经真实 `HandlePlaceRequest` 和 worker 验证响应、重试及停止边界；coordinator 编排测试保留会话停止／重启覆盖。这些验证不替代原生窗口点击验收。
 

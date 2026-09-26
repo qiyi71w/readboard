@@ -37,8 +37,7 @@ namespace Readboard.VerificationTests.Protocol
 
             PlaceRequestExecutionResult result = await VerificationCompletion.WaitAsync(
                 request, "Stop did not resolve the pending move waiter.");
-            Assert.True(result.ShouldSendResponse);
-            Assert.False(result.Success);
+            Assert.False(result.ShouldSendResponse);
             Assert.Equal(1, harness.PlacementCount);
         }
 

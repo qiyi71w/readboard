@@ -259,7 +259,7 @@ namespace readboard
             }
             if (!TryQueuePendingMove(request, boardPixelWidth, boardWidth))
                 return PlaceRequestExecutionResult.NoResponse;
-            return PlaceRequestExecutionResult.CreateResponse(WaitForPendingMoveResult());
+            return WaitForPendingMoveResult();
         }
 
         private static void TrySendPlaceProtocolError(SyncSessionRuntimeDependencies runtime, string message)
@@ -348,7 +348,7 @@ namespace readboard
                         return;
                     if (snapshot.ShowInBoard)
                         SendNoInBoard();
-                    TryStartDiscoveredKeepSync(runtime, snapshot);
+                    TryStartDiscoveredKeepSync(runtime, snapshot, lifecycleGeneration, continuousSyncSessionId);
                     if (!IsOperationCurrent(isOperationCurrent))
                         return;
                     if (WaitForContinuousSyncStop(ContinuousSyncPollIntervalMs))
@@ -390,13 +390,15 @@ namespace readboard
 
         private void TryStartDiscoveredKeepSync(
             SyncSessionRuntimeDependencies runtime,
-            SyncCoordinatorHostSnapshot snapshot)
+            SyncCoordinatorHostSnapshot snapshot,
+            int lifecycleGeneration,
+            int continuousSyncSessionId)
         {
-            int lifecycleGeneration = CaptureSyncLifecycleGeneration();
             int autoPlayGeneration = CaptureAutoPlayAuthorizationGeneration();
             Func<bool> isOperationCurrent = delegate
             {
-                return IsKeepSyncStartCurrent(lifecycleGeneration, true);
+                return IsContinuousSyncWorkerCurrent(lifecycleGeneration, continuousSyncSessionId)
+                    && IsKeepSyncStartCurrent(lifecycleGeneration, true);
             };
             IntPtr handle = runtime.WindowLocator.FindWindowHandle(snapshot.SyncMode);
             if (handle == IntPtr.Zero)
@@ -404,13 +406,15 @@ namespace readboard
                 DispatchAutoPlaySnapshotFailure(snapshot, autoPlayGeneration, isOperationCurrent);
                 return;
             }
-            if (!IsOperationCurrent(isOperationCurrent))
-                return;
-
-            runtimeState.SelectedWindowHandle = handle;
-            runtime.Host.UpdateSelectedWindowHandle(
-                handle,
-                Volatile.Read(ref activeContinuousObservationGeneration));
+            long observationGeneration;
+            lock (workerLock)
+            {
+                if (!IsOperationCurrent(isOperationCurrent))
+                    return;
+                observationGeneration = Volatile.Read(ref activeContinuousObservationGeneration);
+                runtimeState.SelectedWindowHandle = handle;
+            }
+            runtime.Host.UpdateSelectedWindowHandle(handle, observationGeneration);
             SyncCoordinatorHostSnapshot refreshedSnapshot;
             if (!TryCaptureSnapshotOrRevoke(
                 runtime,
@@ -436,6 +440,9 @@ namespace readboard
                 if (!IsKeepSyncStartCurrent(lifecycleGeneration, requireContinuousSync))
                     return false;
                 observationGeneration = runtime.Host.AllocateSessionObservationGeneration();
+                // Discovery retries belong to this same continuous lifecycle, including failed primes.
+                if (requireContinuousSync)
+                    Volatile.Write(ref activeContinuousObservationGeneration, observationGeneration);
                 Volatile.Write(ref latestStopObservationGeneration, 0L);
             }
             runtimeState.ResetProbeState();

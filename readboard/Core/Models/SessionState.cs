@@ -25,7 +25,7 @@ namespace readboard
         // Finish before the host's three-second ACK timeout, even without usable captures.
         private static readonly TimeSpan ConfirmationTimeout = TimeSpan.FromSeconds(2);
 
-        private enum Phase { Idle, Ready, Placing, Confirming, Completed }
+        private enum Phase { Idle, Ready, Placing, Confirming, Completed, Cancelled }
 
         private Phase phase;
         private TimeProvider clock;
@@ -38,7 +38,7 @@ namespace readboard
         private long verificationStartedTimestamp;
 
         public bool IsPlacementAvailable => phase == Phase.Ready;
-        public bool HasCompletedResult => phase == Phase.Completed;
+        public bool HasCompletedResult => phase == Phase.Completed || phase == Phase.Cancelled;
 
         public bool TryQueue(MoveRequest request, TimeProvider timeProvider)
         {
@@ -114,20 +114,24 @@ namespace readboard
         {
             // An in-flight physical operation must report its own outcome.
             if (phase == Phase.Ready || phase == Phase.Confirming)
-                Complete(false);
+                phase = Phase.Cancelled;
         }
 
-        public bool TryConsumeResult(bool keepSync, out bool success)
+        public bool TryConsumeResult(bool keepSync, out PlaceRequestExecutionResult result)
         {
+            if (!keepSync)
+                Cancel();
             if ((phase == Phase.Ready || phase == Phase.Confirming) && HasTimedOut())
                 Complete(false);
             if (HasCompletedResult)
             {
-                success = succeeded;
+                result = phase == Phase.Cancelled
+                    ? PlaceRequestExecutionResult.NoResponse
+                    : PlaceRequestExecutionResult.CreateResponse(succeeded);
                 phase = Phase.Idle;
                 return true;
             }
-            success = false;
+            result = PlaceRequestExecutionResult.NoResponse;
             if (!keepSync && phase != Phase.Placing)
             {
                 phase = Phase.Idle;

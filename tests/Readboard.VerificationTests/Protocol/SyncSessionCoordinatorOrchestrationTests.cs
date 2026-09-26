@@ -575,6 +575,91 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Contains("stopsync", transport.SentLines);
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ContinuousDiscovery_AfterFailedPrimeKeepsWindowObservationCurrent(bool restartDuringDiscovery)
+        {
+            var coordinator = new SyncSessionCoordinator(new RecordingTransport(), new LegacyProtocolAdapter());
+            var controlCenter = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(AppConfig.CreateDefault("220430", "TEST")),
+                (IControlCenterSessionAdapter)CreateProxy(typeof(IControlCenterSessionAdapter),
+                    (method, args) => GetDefault(method.ReturnType)),
+                (IControlCenterPreferencePersistence)CreateProxy(typeof(IControlCenterPreferencePersistence),
+                    (method, args) => GetDefault(method.ReturnType)),
+                new Readboard.VerificationTests.Host.RejectingControlCenterActionAdapter());
+            var snapshot = (SyncCoordinatorHostSnapshot)CreateSnapshot(
+                typeof(SyncCoordinatorHostSnapshot), SyncMode.Fox, IntPtr.Zero);
+            IntPtr discoveredWindow = new IntPtr(100);
+            var outcomes = new List<ControlCenterSessionObservationApplyOutcome>();
+            var runtime = new SyncSessionRuntimeDependencies
+            {
+                Host = (ISyncCoordinatorHost)CreateProxy(typeof(ISyncCoordinatorHost), (method, args) =>
+                {
+                    if (method.Name == "AllocateSessionObservationGeneration")
+                        return controlCenter.BeginSessionObservationGeneration();
+                    if (method.Name == "CaptureSnapshot")
+                        return snapshot;
+                    if (method.Name == "UpdateSelectedWindowHandle")
+                    {
+                        var result = controlCenter.ApplyObservation(
+                            new ControlCenterSessionObservation((long)args[1]).WithTargetWindowValid(true));
+                        outcomes.Add(result.Outcome);
+                        if (!result.IsStale)
+                            snapshot.SelectedWindowHandle = (IntPtr)args[0];
+                    }
+                    return GetDefault(method.ReturnType);
+                }),
+                CaptureService = new SequencedCaptureService(CreateFrame()),
+                RecognitionService = new SequencedRecognitionService(CreateResult("re=fox")),
+                PlacementService = new PassivePlacementService(),
+                OverlayService = new PassiveOverlayService(),
+                WindowLocator = (ISyncWindowLocator)CreateProxy(typeof(ISyncWindowLocator), (method, args) =>
+                {
+                    if (restartDuringDiscovery && discoveredWindow != new IntPtr(100))
+                    {
+                        // A stopped worker must not borrow the replacement session's authority.
+                        coordinator.EndContinuousSync();
+                        SetField(coordinator, "syncLifecycleGeneration", 1);
+                        coordinator.BeginContinuousSync();
+                        SetField(coordinator, "activeContinuousSyncSessionId", 2);
+                        SetField(coordinator, "activeContinuousObservationGeneration",
+                            controlCenter.BeginSessionObservationGeneration());
+                    }
+                    return discoveredWindow;
+                }),
+                WindowDescriptorFactory = (IWindowDescriptorFactory)CreateProxy(
+                    typeof(IWindowDescriptorFactory), (method, args) => false)
+            };
+            coordinator.AttachRuntime(runtime);
+            coordinator.BeginContinuousSync();
+            SetField(coordinator, "activeContinuousSyncSessionId", 1);
+            SetField(coordinator, "activeContinuousObservationGeneration",
+                controlCenter.BeginSessionObservationGeneration());
+            try
+            {
+                Invoke(coordinator, "TryStartDiscoveredKeepSync", runtime, snapshot, 0, 1);
+                Assert.False(coordinator.StartedSync);
+                Assert.Equal(new IntPtr(100), snapshot.SelectedWindowHandle);
+
+                discoveredWindow = new IntPtr(200);
+                Invoke(coordinator, "TryStartDiscoveredKeepSync", runtime, snapshot, 0, 1);
+
+                IntPtr expectedWindow = new IntPtr(restartDuringDiscovery ? 100 : 200);
+                Assert.Equal(expectedWindow, snapshot.SelectedWindowHandle);
+                Assert.Equal(expectedWindow, (IntPtr)Invoke(coordinator, "ResolveSelectedWindowHandle", snapshot));
+                Assert.Equal(restartDuringDiscovery
+                    ? new[] { ControlCenterSessionObservationApplyOutcome.Applied }
+                    : new[] { ControlCenterSessionObservationApplyOutcome.Applied,
+                        ControlCenterSessionObservationApplyOutcome.NoOp }, outcomes);
+                Assert.False(coordinator.StartedSync);
+            }
+            finally
+            {
+                coordinator.EndContinuousSync();
+            }
+        }
+
         [Fact]
         public void TryStartContinuousSync_UsesWindowLocatorAndCoreDescriptorFactory()
         {

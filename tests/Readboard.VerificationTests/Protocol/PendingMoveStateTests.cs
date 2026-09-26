@@ -17,6 +17,26 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Cancel_AfterOutcomeCompletedPreservesRealResult(bool success)
+        {
+            PendingMoveState state = new PendingMoveState();
+            MoveRequest move = CreateMove(19, 19);
+            Assert.True(state.TryQueue(move, new ManualTimeProvider()));
+            Assert.True(state.TryBeginPlacement(out _));
+            state.CompletePlacement(success, keepSync: true);
+            if (success)
+                state.Observe(CreateSnapshot(19, 19, move), 19);
+
+            state.Cancel();
+
+            Assert.True(state.TryConsumeResult(keepSync: false, out PlaceRequestExecutionResult result));
+            Assert.True(result.ShouldSendResponse);
+            Assert.Equal(success, result.Success);
+        }
+
+        [Theory]
         [MemberData(nameof(BoardSizeCases))]
         public void PendingMove_PreservesRectangularCoordinatesAndConfirmsDimensions(
             int boardWidth,
@@ -36,8 +56,9 @@ namespace Readboard.VerificationTests.Protocol
             state.Observe(CreateSnapshot(boardWidth, boardHeight, move), boardWidth);
 
             Assert.True(state.HasCompletedResult);
-            Assert.True(state.TryConsumeResult(keepSync: true, out bool success));
-            Assert.True(success);
+            Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult result));
+            Assert.True(result.ShouldSendResponse);
+            Assert.True(result.Success);
         }
 
         [Theory]
@@ -62,8 +83,9 @@ namespace Readboard.VerificationTests.Protocol
             state.Observe(CreateSnapshot(19, 19, move), 19);
 
             Assert.True(state.HasCompletedResult);
-            Assert.True(state.TryConsumeResult(keepSync: true, out bool success));
-            Assert.True(success);
+            Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult result));
+            Assert.True(result.ShouldSendResponse);
+            Assert.True(result.Success);
             Assert.False(state.IsPlacementAvailable);
         }
 
@@ -101,8 +123,9 @@ namespace Readboard.VerificationTests.Protocol
             Assert.False(state.IsPlacementAvailable);
             Assert.False(state.TryBeginPlacement(out _));
             Assert.True(state.HasCompletedResult);
-            Assert.True(state.TryConsumeResult(keepSync: true, out bool success));
-            Assert.False(success);
+            Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult result));
+            Assert.True(result.ShouldSendResponse);
+            Assert.False(result.Success);
         }
 
         [Fact]
@@ -134,8 +157,9 @@ namespace Readboard.VerificationTests.Protocol
             state.Observe(CreateSnapshot(19, 19, move), 19);
 
             Assert.True(state.HasCompletedResult);
-            Assert.True(state.TryConsumeResult(keepSync: true, out bool success));
-            Assert.True(success);
+            Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult result));
+            Assert.True(result.ShouldSendResponse);
+            Assert.True(result.Success);
             Assert.False(state.IsPlacementAvailable);
         }
 
@@ -158,8 +182,9 @@ namespace Readboard.VerificationTests.Protocol
 
             clock.AdvanceMilliseconds(1500);
             Assert.False(state.IsPlacementAvailable);
-            Assert.True(state.TryConsumeResult(keepSync: true, out bool success));
-            Assert.False(success);
+            Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult result));
+            Assert.True(result.ShouldSendResponse);
+            Assert.False(result.Success);
             Assert.False(state.IsPlacementAvailable);
         }
 
@@ -184,8 +209,9 @@ namespace Readboard.VerificationTests.Protocol
             Assert.False(state.IsPlacementAvailable);
             Assert.False(state.TryBeginPlacement(out _));
             Assert.True(state.HasCompletedResult);
-            Assert.True(state.TryConsumeResult(keepSync: true, out bool success));
-            Assert.False(success);
+            Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult result));
+            Assert.True(result.ShouldSendResponse);
+            Assert.False(result.Success);
         }
 
         [Theory]
@@ -212,46 +238,52 @@ namespace Readboard.VerificationTests.Protocol
 
             state.Observe(CreateSnapshot(19, 19, move), 19);
 
-            Assert.True(state.TryConsumeResult(keepSync: true, out bool success));
-            Assert.Equal(expectedSuccess, success);
+            Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult result));
+            Assert.True(result.ShouldSendResponse);
+            Assert.Equal(expectedSuccess, result.Success);
             Assert.False(state.IsPlacementAvailable);
         }
 
         [Theory]
-        [InlineData(false)]
-        [InlineData(true)]
-        public void VerifiedPendingMove_StopOrCancelRetiresObservationBeforeNextRequest(bool stopSync)
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void PendingMove_StopOrCancelRetiresWithoutResponseBeforeNextRequest(
+            bool stopSync, bool awaitingObservation)
         {
             ManualTimeProvider clock = new ManualTimeProvider();
             PendingMoveState state = new PendingMoveState();
             MoveRequest move = CreateMove(19, 19);
 
             Assert.True(state.TryQueue(move, clock));
-            Assert.True(state.TryBeginPlacement(out _));
-            state.CompletePlacement(success: true, keepSync: true);
-
-            if (stopSync)
+            if (awaitingObservation)
             {
-                Assert.True(state.TryConsumeResult(keepSync: false, out bool earlySuccess));
-                Assert.False(earlySuccess);
+                Assert.True(state.TryBeginPlacement(out _));
+                state.CompletePlacement(success: true, keepSync: true);
             }
-            else
+
+            if (!stopSync)
             {
                 state.Cancel();
-                Assert.True(state.TryConsumeResult(keepSync: true, out bool earlySuccess));
-                Assert.False(earlySuccess);
+                Assert.True(state.HasCompletedResult);
             }
+            // A cancelled result still owns its slot and cannot become a timeout failure.
+            Assert.False(state.TryQueue(move, clock));
+            clock.AdvanceMilliseconds(3000);
+            Assert.True(state.TryConsumeResult(keepSync: !stopSync, out PlaceRequestExecutionResult cancelled));
+            Assert.False(cancelled.ShouldSendResponse);
 
             state.Observe(CreateSnapshot(19, 19, move), 19);
             Assert.False(state.HasCompletedResult);
 
-            clock.AdvanceMilliseconds(3000);
             Assert.True(state.TryQueue(move, clock));
             Assert.True(state.TryBeginPlacement(out _));
             state.CompletePlacement(success: true, keepSync: true);
             state.Observe(CreateSnapshot(19, 19, move), 19);
-            Assert.True(state.TryConsumeResult(keepSync: true, out bool nextSuccess));
-            Assert.True(nextSuccess);
+            Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult next));
+            Assert.True(next.ShouldSendResponse);
+            Assert.True(next.Success);
         }
 
         [Theory]
@@ -281,8 +313,9 @@ namespace Readboard.VerificationTests.Protocol
             Assert.False(state.IsPlacementAvailable);
             Assert.False(state.TryBeginPlacement(out _));
 
-            Assert.True(state.TryConsumeResult(keepSync: true, out bool success));
-            Assert.Equal(physicalPlacementSuccess, success);
+            Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult result));
+            Assert.True(result.ShouldSendResponse);
+            Assert.Equal(physicalPlacementSuccess, result.Success);
             Assert.False(state.IsPlacementAvailable);
         }
 
@@ -304,8 +337,9 @@ namespace Readboard.VerificationTests.Protocol
             Assert.False(state.TryQueue(secondMove, clock));
 
             // Consume completed result
-            Assert.True(state.TryConsumeResult(keepSync: true, out bool firstSuccess));
-            Assert.True(firstSuccess);
+            Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult firstResult));
+            Assert.True(firstResult.ShouldSendResponse);
+            Assert.True(firstResult.Success);
             Assert.False(state.HasCompletedResult);
 
             // Now second move can be queued
@@ -342,14 +376,16 @@ namespace Readboard.VerificationTests.Protocol
             {
                 state.Observe(CreateSnapshot(19, 19, move), 19);
                 Assert.True(state.HasCompletedResult);
-                Assert.True(state.TryConsumeResult(keepSync: true, out bool success));
-                Assert.True(success);
+                Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult result));
+                Assert.True(result.ShouldSendResponse);
+                Assert.True(result.Success);
             }
             else
             {
                 Assert.True(state.HasCompletedResult);
-                Assert.True(state.TryConsumeResult(keepSync: true, out bool success));
-                Assert.False(success);
+                Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult result));
+                Assert.True(result.ShouldSendResponse);
+                Assert.False(result.Success);
             }
         }
 
@@ -367,8 +403,9 @@ namespace Readboard.VerificationTests.Protocol
             state.CompletePlacement(success: true, keepSync: false);
 
             Assert.True(state.HasCompletedResult);
-            Assert.True(state.TryConsumeResult(keepSync: false, out bool success));
-            Assert.True(success);
+            Assert.True(state.TryConsumeResult(keepSync: false, out PlaceRequestExecutionResult result));
+            Assert.True(result.ShouldSendResponse);
+            Assert.True(result.Success);
         }
 
         [Fact]
@@ -404,8 +441,9 @@ namespace Readboard.VerificationTests.Protocol
             state.Observe(CreateEmptySnapshot(19, 19), 19);
 
             Assert.True(state.HasCompletedResult);
-            Assert.True(state.TryConsumeResult(keepSync: true, out bool success));
-            Assert.True(success);
+            Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult result));
+            Assert.True(result.ShouldSendResponse);
+            Assert.True(result.Success);
         }
 
         [Theory]
@@ -441,8 +479,9 @@ namespace Readboard.VerificationTests.Protocol
             if (expectedConfirmed)
             {
                 Assert.True(state.HasCompletedResult);
-                Assert.True(state.TryConsumeResult(keepSync: true, out bool success));
-                Assert.True(success);
+                Assert.True(state.TryConsumeResult(keepSync: true, out PlaceRequestExecutionResult result));
+                Assert.True(result.ShouldSendResponse);
+                Assert.True(result.Success);
             }
             else
             {

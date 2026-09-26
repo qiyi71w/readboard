@@ -107,6 +107,23 @@ namespace Readboard.VerificationTests.Protocol
             Assert.Equal(1, harness.PlacementCount);
         }
 
+        [Fact]
+        public async Task HandlePlaceRequest_StopWhileAwaitingObservationRetiresWithoutFailureResponse()
+        {
+            using PendingMoveRequestHarness harness = new PendingMoveRequestHarness();
+            harness.Start();
+            Task<PlaceRequestExecutionResult> request = harness.Request();
+            harness.WaitForObservation();
+
+            // Capture remains blocked, so the worker cannot emit its deferred stopsync yet.
+            harness.Coordinator.StopSyncSession();
+
+            PlaceRequestExecutionResult result = await VerificationCompletion.WaitAsync(
+                request, "Stop did not retire the pending confirmation.");
+            Assert.False(result.ShouldSendResponse);
+            Assert.Equal(1, harness.PlacementCount);
+        }
+
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
