@@ -440,11 +440,16 @@ namespace readboard
 
         public void SendStopSync()
         {
+            outboundProtocolDispatcher.ExecuteBatch(SendStopSyncWhileSynchronized);
+        }
+
+        private void SendStopSyncWhileSynchronized()
+        {
             if (IsYikeSyncPlatform())
-            {
-                SendYikeSyncStop();
-            }
-            SendProtocolMessage(protocolAdapter.CreateStopSyncMessage());
+                outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateYikeSyncStopMessage());
+            outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateStopSyncMessage());
+            // The host revokes play authorization on stopsync, even when the UI remains enabled.
+            ClearSentAutoPlayAuthorization();
         }
 
         public void SendYikeSyncStart()
@@ -630,6 +635,11 @@ namespace readboard
                 outboundProtocolDispatcher.SendMessageWhileSynchronized(
                     protocolAdapter.CreateStopAutoPlayMessage());
             }
+            ClearSentAutoPlayAuthorization();
+        }
+
+        private void ClearSentAutoPlayAuthorization()
+        {
             lock (stateLock)
             {
                 autoPlayAuthorizationGeneration++;

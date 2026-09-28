@@ -179,14 +179,11 @@ namespace readboard
             }
 
             bool sendStopSync = StopSyncSessionCore(false, true);
-            bool stopYikeSync = sendStopSync && IsYikeSyncPlatform();
             ResetSyncCaches();
             outboundProtocolDispatcher.ExecuteBatch(delegate
             {
-                if (stopYikeSync)
-                    outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateYikeSyncStopMessage());
                 if (sendStopSync)
-                    outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateStopSyncMessage());
+                    SendStopSyncWhileSynchronized();
                 outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateClearBoardMessage());
             });
         }
@@ -627,7 +624,6 @@ namespace readboard
 
         private void SendDeferredStopSync(int keepSyncSessionId)
         {
-            bool stopYikeSync = IsYikeSyncPlatform();
             bool pendingConsumed = false;
             try
             {
@@ -644,9 +640,7 @@ namespace readboard
 
                     if (suppressed)
                         return;
-                    if (stopYikeSync)
-                        outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateYikeSyncStopMessage());
-                    outboundProtocolDispatcher.SendMessageWhileSynchronized(protocolAdapter.CreateStopSyncMessage());
+                    SendStopSyncWhileSynchronized();
                 });
             }
             finally
