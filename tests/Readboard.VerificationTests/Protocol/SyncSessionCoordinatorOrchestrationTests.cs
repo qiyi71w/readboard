@@ -259,6 +259,68 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Theory]
+        [InlineData(0, false, true)]
+        [InlineData(0, true, true)]
+        [InlineData(1, false, true)]
+        [InlineData(1, true, true)]
+        [InlineData(0, false, false)]
+        [InlineData(1, false, false)]
+        public void KeepSync_RestartReauthorizesOnlyCurrentlyEnabledAutoPlay(
+            int moveModeValue, bool clearBoard, bool enabledAfterRestart)
+        {
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncBoth(true);
+            object snapshot = CreateSnapshot(typeof(SyncCoordinatorHostSnapshot), SyncMode.Foreground, IntPtr.Zero);
+            SetProperty(snapshot, "PlayColor", "white");
+            SetProperty(snapshot, "AutoPlayColorMode", AutoPlayColorMode.ManualWhite);
+            SetProperty(snapshot, "AutoPlayMoveMode", (AutoPlayMoveMode)moveModeValue);
+            HostRecorder host = new HostRecorder(snapshot);
+            SyncSessionRuntimeDependencies runtime = new SyncSessionRuntimeDependencies
+            {
+                Host = (ISyncCoordinatorHost)CreateProxy(typeof(ISyncCoordinatorHost), host.HandleCall),
+                CaptureService = new SequencedCaptureService(CreateFrame()),
+                PlacementService = new PassivePlacementService(),
+                OverlayService = new PassiveOverlayService()
+            };
+            string playLine = "play>white>0 0 0" + (moveModeValue == 1 ? " gma" : string.Empty);
+
+            for (int cycle = 0; cycle < 2; cycle++)
+            {
+                if (cycle == 1 && !enabledAfterRestart)
+                    SetProperty(snapshot, "PlayColor", string.Empty);
+                ScriptedBlockingRecognitionService recognition = new ScriptedBlockingRecognitionService(
+                    CreateResult("re=stable"), 5);
+                runtime.RecognitionService = recognition;
+                coordinator.AttachRuntime(runtime);
+                host.KeepStopped.Reset();
+                Assert.True(coordinator.TryStartKeepSync());
+                try
+                {
+                    VerificationCompletion.Wait(recognition.BlockedRecognizeStarted, "Stable worker samples did not settle.");
+                    Assert.Equal(cycle == 1 && enabledAfterRestart ? 2 : 1, transport.CountLines(playLine));
+                    if (cycle == 1 && enabledAfterRestart)
+                    {
+                        int stopIndex = transport.SentLines.IndexOf("stopsync");
+                        int playIndex = transport.SentLines.IndexOf(playLine, stopIndex + 1);
+                        Assert.True(stopIndex >= 0 && playIndex > stopIndex);
+                        Assert.True(transport.SentLines.IndexOf("re=stable", playIndex + 1) > playIndex);
+                    }
+                }
+                finally
+                {
+                    if (clearBoard)
+                        coordinator.StopSyncSessionAndClearBoard();
+                    else
+                        coordinator.StopSyncSession();
+                    recognition.Release();
+                    VerificationCompletion.Wait(host.KeepStopped, "Keep sync did not stop.");
+                }
+                Assert.Equal(cycle + 1, transport.CountLines("stopsync"));
+            }
+        }
+
+        [Theory]
         [InlineData(0, "play>black>0 0 0")]
         [InlineData(1, "play>black>0 0 0 gma")]
         public void KeepSync_RearmsUnchangedPlayAfterStopAutoPlay(

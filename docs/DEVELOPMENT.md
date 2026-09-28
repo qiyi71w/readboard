@@ -228,6 +228,7 @@ Capture -> Recognition -> BoardSnapshot -> OutboundBoardSnapshotEmitter
 - `lastMoveSource` 的视觉可信来源只有 `redBlueMarker` 和 `foxCornerFlip`；不要把启发式 `deviation` / `stoneCount` 当作 GMA 回合真值。
 - 弈客的 host geometry 用于落子和像素尺寸，不替代从截图定位棋盘。
 - `play>` 只能由 `AutoPlayWireIssuer` 在 keep-sync、双向同步、自动落子和已知棋色都满足时发送；未知身份、观战或歧义必须 fail closed。
+- 实际发送 `stopsync` 时，在同一出站串行边界撤销已发送的自动落子授权缓存并推进授权代际；界面勾选状态不是宿主仍有授权的证据。重启同步后，只有当前快照仍满足授权条件才重新发送一次 `play>`；稳定帧不重复授权，已关闭的自动落子不因重启而恢复。普通落子与 GMA 使用同一授权缓存生命周期，不改变各自的 wire 格式。
 
 线程包括 UI thread、transport reader、持续同步 worker、串行落子队列和诊断 writer。新异步观察应携带 generation，并忽略过期结果；不要用 `Thread.Sleep` 固化时序。
 
