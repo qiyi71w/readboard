@@ -150,6 +150,7 @@ namespace readboard
     internal sealed class ControlCenterSessionState
     {
         public bool AutoPlayEnabled { get; set; }
+        public AutoPlayColorMode? SelectedAutoPlayColorMode { get; set; }
         public string AiTimeValue { get; set; }
         public string PlayoutsValue { get; set; }
         public string FirstPolicyValue { get; set; }
@@ -187,6 +188,7 @@ namespace readboard
             return new ControlCenterSessionState
             {
                 AutoPlayEnabled = AutoPlayEnabled,
+                SelectedAutoPlayColorMode = SelectedAutoPlayColorMode,
                 AiTimeValue = AiTimeValue,
                 PlayoutsValue = PlayoutsValue,
                 FirstPolicyValue = FirstPolicyValue,
@@ -460,6 +462,7 @@ namespace readboard
         public bool ShowOnBoard { get; set; }
         public bool AutoPlayEnabled { get; set; }
         public AutoPlayColorMode AutoPlayColorMode { get; set; }
+        public AutoPlayColorMode? SelectedAutoPlayColorMode { get; set; }
         public AutoPlayMoveMode AutoPlayMoveMode { get; set; }
         public AutoPlayColorResolution AutoPlayColorResolution { get; set; }
         public string PlayColor { get; set; }
@@ -719,6 +722,9 @@ namespace readboard
                 sessionState.DetectedAutoPlayColor = null;
             }
             preferences.AutoPlayColorMode = AppConfig.NormalizeAutoPlayColorMode(preferences.AutoPlayColorMode);
+            sessionState.SelectedAutoPlayColorMode = preferences.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
+                ? AutoPlayColorMode.FoxAuto
+                : (AutoPlayColorMode?)null;
             preferences.AutoPlayMoveMode = AppConfig.NormalizeAutoPlayMoveMode(preferences.AutoPlayMoveMode);
             this.sessionAdapter = sessionAdapter ?? throw new ArgumentNullException("sessionAdapter");
             this.persistence = persistence ?? throw new ArgumentNullException("persistence");
@@ -1236,6 +1242,8 @@ namespace readboard
                     if (!intent.Enabled)
                     {
                         sessionCandidate.AutoPlayEnabled = false;
+                        if (sessionCandidate.SelectedAutoPlayColorMode != AutoPlayColorMode.FoxAuto)
+                            sessionCandidate.SelectedAutoPlayColorMode = null;
                         sessionCandidate.FoxWindowContext = FoxWindowContext.Unknown();
                         sessionCandidate.DetectedAutoPlayColor = null;
                     }
@@ -1249,8 +1257,10 @@ namespace readboard
                     if (intent.Enabled && !candidate.TwoWaySync)
                         return false;
                     sessionCandidate.AutoPlayEnabled = intent.Enabled;
-                    if (!intent.Enabled)
+                    if (!intent.Enabled || !sessionState.AutoPlayEnabled)
                     {
+                        if (sessionCandidate.SelectedAutoPlayColorMode != AutoPlayColorMode.FoxAuto)
+                            sessionCandidate.SelectedAutoPlayColorMode = null;
                         sessionCandidate.FoxWindowContext = FoxWindowContext.Unknown();
                         sessionCandidate.DetectedAutoPlayColor = null;
                     }
@@ -1259,6 +1269,7 @@ namespace readboard
                     if (!IsDefinedAutoPlayColorMode(intent.AutoPlayColorMode))
                         return false;
                     candidate.AutoPlayColorMode = intent.AutoPlayColorMode;
+                    sessionCandidate.SelectedAutoPlayColorMode = intent.AutoPlayColorMode;
                     return true;
                 case ControlCenterIntentKind.SetAutoPlayMoveMode:
                     if (!IsDefinedAutoPlayMoveMode(intent.AutoPlayMoveMode))
@@ -1380,6 +1391,7 @@ namespace readboard
                 ShowOnBoard = preferences.ShowOnBoard,
                 AutoPlayEnabled = autoPlayEnabled,
                 AutoPlayColorMode = preferences.AutoPlayColorMode,
+                SelectedAutoPlayColorMode = sessionState.SelectedAutoPlayColorMode,
                 AutoPlayMoveMode = preferences.AutoPlayMoveMode,
                 AutoPlayColorResolution = autoPlayColor,
                 FoxWindowContext = global::readboard.FoxWindowContext.CopyOf(sessionState.FoxWindowContext),
@@ -1536,11 +1548,11 @@ namespace readboard
 
         private AutoPlayColorResolution ResolveAutoPlayColor()
         {
-            if (!sessionState.AutoPlayEnabled)
+            if (!sessionState.AutoPlayEnabled || !sessionState.SelectedAutoPlayColorMode.HasValue)
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
 
             return FoxAutoPlayColorResolver.Resolve(
-                preferences.AutoPlayColorMode,
+                sessionState.SelectedAutoPlayColorMode.Value,
                 preferences.Platform,
                 sessionState.FoxAutoPlayNicknameSignature,
                 sessionState.FoxWindowContext,
@@ -1552,6 +1564,7 @@ namespace readboard
             ControlCenterSessionState right)
         {
             return left.AutoPlayEnabled == right.AutoPlayEnabled
+                && left.SelectedAutoPlayColorMode == right.SelectedAutoPlayColorMode
                 && string.Equals(left.AiTimeValue, right.AiTimeValue, StringComparison.Ordinal)
                 && string.Equals(left.PlayoutsValue, right.PlayoutsValue, StringComparison.Ordinal)
                 && string.Equals(left.FirstPolicyValue, right.FirstPolicyValue, StringComparison.Ordinal)

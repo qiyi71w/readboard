@@ -169,8 +169,6 @@ namespace readboard
             bool currentProcessIdentityChanged,
             bool persistedIdentityChanged,
             bool requiresAutomaticColorReevaluation,
-            bool restorePreviousManualMode,
-            AutoPlayColorMode restoredManualMode,
             bool persistenceAttempted,
             Exception persistenceError)
         {
@@ -179,8 +177,6 @@ namespace readboard
             CurrentProcessIdentityChanged = currentProcessIdentityChanged;
             PersistedIdentityChanged = persistedIdentityChanged;
             RequiresAutomaticColorReevaluation = requiresAutomaticColorReevaluation;
-            RestorePreviousManualMode = restorePreviousManualMode;
-            RestoredManualMode = restoredManualMode;
             PersistenceAttempted = persistenceAttempted;
             PersistenceError = persistenceError;
         }
@@ -190,8 +186,6 @@ namespace readboard
         public bool CurrentProcessIdentityChanged { get; private set; }
         public bool PersistedIdentityChanged { get; private set; }
         public bool RequiresAutomaticColorReevaluation { get; private set; }
-        public bool RestorePreviousManualMode { get; private set; }
-        public AutoPlayColorMode RestoredManualMode { get; private set; }
         public bool PersistenceAttempted { get; private set; }
         public Exception PersistenceError { get; private set; }
 
@@ -260,8 +254,7 @@ namespace readboard
         private string currentProcessIdentitySignature = string.Empty;
         private string selectedCandidateId;
         private bool open;
-        private bool restorePreviousManualModeOnCancel;
-        private AutoPlayColorMode previousManualMode = AutoPlayColorMode.ManualBlack;
+        private bool firstAutomaticSelectionPending;
 
         private string roomContextSignature = string.Empty;
         private long roomOperationGeneration;
@@ -302,7 +295,7 @@ namespace readboard
 
         public bool IsFirstAutomaticSelectionPending
         {
-            get { return open && restorePreviousManualModeOnCancel; }
+            get { return open && firstAutomaticSelectionPending; }
         }
         public FoxIdentityRoomSnapshot RoomSnapshot
         {
@@ -373,8 +366,7 @@ namespace readboard
 
         public FoxIdentitySelectionSnapshot Open(
             IEnumerable<FoxIdentityCandidate> availableCandidates,
-            bool firstAutomaticSelection,
-            AutoPlayColorMode previousManualMode)
+            bool firstAutomaticSelection)
         {
             candidates.Clear();
             if (availableCandidates != null)
@@ -392,10 +384,9 @@ namespace readboard
 
             open = true;
             selectedCandidateId = FindPreferredCandidateId();
-            restorePreviousManualModeOnCancel = firstAutomaticSelection
+            firstAutomaticSelectionPending = firstAutomaticSelection
                 && string.IsNullOrWhiteSpace(currentProcessIdentitySignature)
                 && string.IsNullOrWhiteSpace(savedIdentitySignature);
-            this.previousManualMode = NormalizeManualMode(previousManualMode);
             return CreateSnapshot();
         }
 
@@ -436,7 +427,6 @@ namespace readboard
                     false,
                     false,
                     false,
-                    false,
                     exception,
                     true);
             }
@@ -449,7 +439,6 @@ namespace readboard
                 false,
                 true,
                 false,
-                false,
                 null,
                 true);
         }
@@ -459,19 +448,8 @@ namespace readboard
             if (!open)
                 return CreateResult(FoxIdentitySelectionActionOutcome.NoOp);
 
-            bool restore = restorePreviousManualModeOnCancel;
-            AutoPlayColorMode restoreMode = previousManualMode;
             CloseSelection();
-            return new FoxIdentitySelectionResult(
-                FoxIdentitySelectionActionOutcome.Applied,
-                CreateSnapshot(),
-                false,
-                false,
-                false,
-                restore,
-                restoreMode,
-                false,
-                null);
+            return CreateResult(FoxIdentitySelectionActionOutcome.Applied);
         }
 
         private FoxIdentitySelectionResult UseSelectedCandidate(bool save)
@@ -518,15 +496,13 @@ namespace readboard
                 currentChanged,
                 persistedChanged,
                 true,
-                false,
-                previousManualMode,
                 persistenceAttempted,
                 persistenceError);
         }
 
         private FoxIdentitySelectionResult CreateResult(FoxIdentitySelectionActionOutcome outcome)
         {
-            return CreateResult(outcome, false, false, false, false, null);
+            return CreateResult(outcome, false, false, false, null);
         }
 
         private FoxIdentitySelectionResult CreateResult(
@@ -534,7 +510,6 @@ namespace readboard
             bool currentChanged,
             bool persistedChanged,
             bool requiresAutomaticColorReevaluation,
-            bool restorePreviousManualMode,
             Exception persistenceError,
             bool persistenceAttempted = false)
         {
@@ -544,8 +519,6 @@ namespace readboard
                 currentChanged,
                 persistedChanged,
                 requiresAutomaticColorReevaluation,
-                restorePreviousManualMode,
-                previousManualMode,
                 persistenceAttempted,
                 persistenceError);
         }
@@ -678,7 +651,7 @@ namespace readboard
             open = false;
             candidates.Clear();
             selectedCandidateId = null;
-            restorePreviousManualModeOnCancel = false;
+            firstAutomaticSelectionPending = false;
         }
 
         private static string NormalizeSignature(string signature)
@@ -686,11 +659,5 @@ namespace readboard
             return FoxNicknameIdentity.Normalize(signature);
         }
 
-        private static AutoPlayColorMode NormalizeManualMode(AutoPlayColorMode mode)
-        {
-            return mode == AutoPlayColorMode.ManualWhite
-                ? AutoPlayColorMode.ManualWhite
-                : AutoPlayColorMode.ManualBlack;
-        }
     }
 }

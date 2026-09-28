@@ -116,6 +116,68 @@ test("real Control Center waits for host analysis observations after pause", asy
     await expect(analysis).toHaveAttribute("aria-pressed", "false");
   });
 });
+
+test("real Control Center manual autoplay color requires explicit selection per enablement cycle", async ({}, testInfo) => {
+  await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
+    const state = () => readBoard.page.evaluate(() => window.readboardPreview.getState().controlCenter);
+    const expectColor = async (color) => {
+      await expect.poll(async () => {
+        const control = await state();
+        return { color: control.color, known: control.playColorKnown };
+      }).toEqual({ color, known: color !== "" });
+      const checked = readBoard.page.locator('input[name="color"]:checked');
+      if (color) await expect(checked).toHaveValue(color);
+      else await expect(checked).toHaveCount(0);
+    };
+    const setToggle = async (id, key, value) => {
+      if ((await state())[key] !== value)
+        await readBoard.page.locator(`label:has(#${id})`).click();
+      await expect.poll(async () => (await state())[key]).toBe(value);
+    };
+    const chooseColor = async (color) => {
+      await readBoard.page.locator(`label:has(input[name="color"][value="${color}"])`).click();
+      await expectColor(color);
+    };
+    const cancelAutomaticSelection = async () => {
+      await readBoard.page.locator('label:has(input[name="color"][value="auto"])').click();
+      await expect(readBoard.page.locator('[data-command="identity.close"]')).toBeVisible();
+      await readBoard.page.locator('[data-command="identity.close"]').click();
+      await expect(readBoard.page.locator("#modal-layer")).toBeHidden();
+    };
+
+    await readBoard.host.waitForExactLine("ready");
+    await readBoard.page.waitForFunction(() => window.readboardPreview?.getState()?.controlCenter);
+    await setToggle("two-way", "twoWaySync", true);
+    await setToggle("auto-play", "autoPlay", true);
+    await expectColor("");
+    await cancelAutomaticSelection();
+    await expectColor("");
+    await chooseColor("black");
+    await chooseColor("white");
+    await cancelAutomaticSelection();
+    await expectColor("white");
+    await setToggle("auto-play", "autoPlay", false);
+    await setToggle("auto-play", "autoPlay", true);
+    await expectColor("");
+    await chooseColor("white");
+    await setToggle("two-way", "twoWaySync", false);
+    await expect.poll(async () => (await state()).autoPlay).toBe(false);
+    await setToggle("two-way", "twoWaySync", true);
+    await setToggle("auto-play", "autoPlay", true);
+    await expectColor("");
+    await chooseColor("black");
+
+    await readBoard.restartWithFreshProfile();
+    await readBoard.host.waitForExactLine("ready");
+    await readBoard.page.waitForFunction(() => window.readboardPreview?.getState()?.controlCenter);
+    await expect.poll(async () => (await state()).autoPlay).toBe(false);
+    await setToggle("two-way", "twoWaySync", true);
+    await setToggle("auto-play", "autoPlay", true);
+    await expectColor("");
+    await readBoard.page.screenshot({ path: testInfo.outputPath("manual-color-unselected.png") });
+  });
+});
+
 test("real Settings Cancel discards its draft and leaves persisted configuration unchanged", async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");

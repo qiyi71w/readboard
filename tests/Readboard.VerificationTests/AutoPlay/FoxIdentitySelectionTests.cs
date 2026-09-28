@@ -10,16 +10,17 @@ namespace Readboard.VerificationTests.AutoPlay
     public sealed class FoxIdentitySelectionTests
     {
         [Fact]
-        public void Cancel_FirstAutomaticSelection_RestoresPreviousManualModeWithoutPlayReevaluation()
+        public void Cancel_FirstAutomaticSelection_EndsPendingSelectionWithoutPlayReevaluation()
         {
             RecordingPersistence persistence = new RecordingPersistence();
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(Array.Empty<FoxIdentityCandidate>(), true, AutoPlayColorMode.ManualWhite);
+            selection.Open(Array.Empty<FoxIdentityCandidate>(), true);
+            Assert.True(selection.IsFirstAutomaticSelectionPending);
             FoxIdentitySelectionResult result = selection.Cancel();
 
-            Assert.True(result.RestorePreviousManualMode);
-            Assert.Equal(AutoPlayColorMode.ManualWhite, result.RestoredManualMode);
+            Assert.False(selection.IsFirstAutomaticSelectionPending);
+            Assert.False(result.Snapshot.Open);
             Assert.False(result.RequiresAutomaticColorReevaluation);
             Assert.False(result.CurrentProcessIdentityChanged);
             Assert.Equal(string.Empty, selection.EffectiveIdentitySignature);
@@ -32,13 +33,9 @@ namespace Readboard.VerificationTests.AutoPlay
             RecordingPersistence persistence = new RecordingPersistence("saved-signature");
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(
-                new[] { Candidate("saved", "saved-signature") },
-                false,
-                AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("saved", "saved-signature") }, false);
             FoxIdentitySelectionResult result = selection.Cancel();
 
-            Assert.False(result.RestorePreviousManualMode);
             Assert.False(result.RequiresAutomaticColorReevaluation);
             Assert.Equal("saved-signature", selection.EffectiveIdentitySignature);
             Assert.Equal("saved-signature", persistence.CurrentSignature);
@@ -51,7 +48,7 @@ namespace Readboard.VerificationTests.AutoPlay
             RecordingPersistence persistence = new RecordingPersistence("saved-signature");
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(new[] { Candidate("first", "temporary-signature") }, true, AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("first", "temporary-signature") }, true);
             selection.Select("first");
             FoxIdentitySelectionResult result = selection.UseOnce();
 
@@ -61,10 +58,7 @@ namespace Readboard.VerificationTests.AutoPlay
             Assert.Empty(persistence.SavedSignatures);
             Assert.True(result.RequiresAutomaticColorReevaluation);
 
-            FoxIdentitySelectionSnapshot roomTwo = selection.Open(
-                new[] { Candidate("room-two", "temporary-signature") },
-                false,
-                AutoPlayColorMode.ManualBlack);
+            FoxIdentitySelectionSnapshot roomTwo = selection.Open(new[] { Candidate("room-two", "temporary-signature") }, false);
 
             Assert.Equal("room-two", roomTwo.SelectedCandidateId);
             Assert.Equal("temporary-signature", selection.EffectiveIdentitySignature);
@@ -76,7 +70,7 @@ namespace Readboard.VerificationTests.AutoPlay
             RecordingPersistence persistence = new RecordingPersistence("old-signature");
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(new[] { Candidate("new", "new-signature") }, false, AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("new", "new-signature") }, false);
             selection.Select("new");
             FoxIdentitySelectionResult result = selection.SaveAndUse();
 
@@ -95,7 +89,7 @@ namespace Readboard.VerificationTests.AutoPlay
             ConfigBackedPersistence persistence = new ConfigBackedPersistence(config);
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(new[] { Candidate("me", "叶落メ让子") }, true, AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("me", "叶落メ让子") }, true);
             selection.Select("me");
             FoxIdentitySelectionResult result = selection.SaveAndUse();
 
@@ -157,10 +151,10 @@ namespace Readboard.VerificationTests.AutoPlay
             ConfigBackedPersistence persistence = new ConfigBackedPersistence(config);
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(new[] { Candidate("me", "叶落メ让子") }, true, AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("me", "叶落メ让子") }, true);
             selection.Select("me");
             selection.SaveAndUse();
-            selection.Open(new[] { Candidate("me", "叶落メ让子") }, false, AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("me", "叶落メ让子") }, false);
 
             FoxIdentitySelectionResult result = selection.ClearSaved();
 
@@ -179,18 +173,15 @@ namespace Readboard.VerificationTests.AutoPlay
             RecordingPersistence persistence = new RecordingPersistence("saved-signature");
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(new[] { Candidate("temporary", "temporary-signature") }, true, AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("temporary", "temporary-signature") }, true);
             selection.Select("temporary");
             selection.UseOnce();
 
-            FoxIdentitySelectionSnapshot snapshot = selection.Open(
-                new[]
-                {
-                    Candidate("saved", "saved-signature"),
-                    Candidate("temporary", "temporary-signature")
-                },
-                false,
-                AutoPlayColorMode.ManualBlack);
+            FoxIdentitySelectionSnapshot snapshot = selection.Open(new[]
+            {
+                Candidate("saved", "saved-signature"),
+                Candidate("temporary", "temporary-signature")
+            }, false);
 
             Assert.Equal("temporary", snapshot.SelectedCandidateId);
             Assert.Equal("saved", snapshot.SavedCandidateId);
@@ -203,13 +194,10 @@ namespace Readboard.VerificationTests.AutoPlay
             RecordingPersistence persistence = new RecordingPersistence("saved-signature");
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(new[] { Candidate("temporary", "temporary-signature") }, true, AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("temporary", "temporary-signature") }, true);
             selection.Select("temporary");
             selection.UseOnce();
-            selection.Open(
-                new[] { Candidate("temporary", "temporary-signature") },
-                false,
-                AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("temporary", "temporary-signature") }, false);
 
             FoxIdentitySelectionResult result = selection.ClearSaved();
 
@@ -232,7 +220,7 @@ namespace Readboard.VerificationTests.AutoPlay
             };
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(new[] { Candidate("new", "new-signature") }, false, AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("new", "new-signature") }, false);
             selection.Select("new");
             FoxIdentitySelectionResult result = selection.SaveAndUse();
 
@@ -256,7 +244,7 @@ namespace Readboard.VerificationTests.AutoPlay
             };
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(new[] { Candidate("saved", "saved-signature") }, false, AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("saved", "saved-signature") }, false);
             FoxIdentitySelectionResult result = selection.ClearSaved();
 
             Assert.Equal(FoxIdentitySelectionActionOutcome.PersistenceFailed, result.Outcome);
@@ -274,7 +262,7 @@ namespace Readboard.VerificationTests.AutoPlay
             RecordingPersistence persistence = new RecordingPersistence("saved-signature");
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(new[] { Candidate("other", "other-signature") }, false, AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("other", "other-signature") }, false);
             FoxIdentitySelectionResult result = selection.Cancel();
 
             Assert.Equal(FoxIdentitySelectionActionOutcome.Applied, result.Outcome);
@@ -289,7 +277,7 @@ namespace Readboard.VerificationTests.AutoPlay
             RecordingPersistence persistence = new RecordingPersistence("saved-signature");
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(new[] { Candidate("current", "process-signature") }, true, AutoPlayColorMode.ManualBlack);
+            selection.Open(new[] { Candidate("current", "process-signature") }, true);
             selection.Select("current");
             selection.UseOnce();
 

@@ -74,7 +74,6 @@ namespace readboard
         private readonly WebViewUpdateCheckJourney webViewUpdateCheckJourney;
         private readonly MainFormShutdownCoordinator shutdownCoordinator;
         private readonly YikeContextRuntime yikeContextRuntime;
-        private AutoPlayColorMode lastManualAutoPlayColorMode = AutoPlayColorMode.ManualBlack;
 
         private static Boolean IsFoxSyncType(int syncType)
         {
@@ -129,7 +128,7 @@ namespace readboard
             ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
             if (controlCenter.CanSendAutoPlayCommand(sessionCoordinator.KeepSync))
             {
-                FoxWindowContext foxWindowContext = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
+                FoxWindowContext foxWindowContext = controlCenter.SelectedAutoPlayColorMode == AutoPlayColorMode.FoxAuto
                     ? ResolveFoxWindowContext()
                     : FoxWindowContext.Unknown();
                 ResolveCurrentAutoPlayColor(foxWindowContext);
@@ -310,16 +309,6 @@ namespace readboard
             return new PixelRect(selectionX1, selectionY1, ox2 - selectionX1, oy2 - selectionY1);
         }
 
-        private void ApplyAutoPlayColorMode(AutoPlayColorMode mode)
-        {
-            if (mode == AutoPlayColorMode.ManualBlack || mode == AutoPlayColorMode.ManualWhite)
-                lastManualAutoPlayColorMode = mode;
-
-            if (mode != AutoPlayColorMode.FoxAuto)
-                ClearFoxAutoPlayColorDetectionState();
-        }
-
-
         private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)
         {
             ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
@@ -327,7 +316,7 @@ namespace readboard
                 return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
 
             FoxIdentityRecognitionResult recognition = null;
-            AutoPlayColorResolution detected = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
+            AutoPlayColorResolution detected = controlCenter.SelectedAutoPlayColorMode == AutoPlayColorMode.FoxAuto
                 ? ResolveDetectedFoxAutoPlayColor(foxWindowContext, out recognition)
                 : null;
             if (recognition == null)

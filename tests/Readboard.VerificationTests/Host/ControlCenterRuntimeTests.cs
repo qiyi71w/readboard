@@ -517,6 +517,50 @@ namespace Readboard.VerificationTests.Host
             Assert.Empty(persistence.Saved);
         }
 
+        [Theory]
+        [InlineData(0, "black", false)]
+        [InlineData(1, "white", false)]
+        [InlineData(0, "black", true)]
+        [InlineData(1, "white", true)]
+        public void AutoPlayEnableCycle_RequiresExplicitManualColor(int modeValue, string color, bool disableTwoWay)
+        {
+            AutoPlayColorMode mode = (AutoPlayColorMode)modeValue;
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = true;
+            config.AutoPlayColorMode = mode;
+            RecordingPersistence persistence = new RecordingPersistence();
+            ControlCenterRuntime runtime = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(config), new RecordingSessionAdapter(),
+                persistence, new RejectingControlCenterActionAdapter());
+
+            ControlCenterApplyResult enabled = runtime.Apply(ControlCenterIntent.SetAutoPlayEnabled(true));
+            Assert.Null(enabled.Snapshot.PlayColor);
+            Assert.False(enabled.Snapshot.AutoPlayColorResolution.IsKnown);
+
+            ControlCenterApplyResult selected = runtime.Apply(ControlCenterIntent.SetAutoPlayColor(mode));
+            Assert.Equal(ControlCenterApplyOutcome.Changed, selected.Outcome);
+            Assert.Equal(color, selected.Snapshot.PlayColor);
+            Assert.Equal(ControlCenterApplyOutcome.NoOp,
+                runtime.Apply(ControlCenterIntent.SetAutoPlayEnabled(true)).Outcome);
+            Assert.Equal(color, runtime.Snapshot.PlayColor);
+
+            runtime.Apply(disableTwoWay
+                ? ControlCenterIntent.SetTwoWaySync(false)
+                : ControlCenterIntent.SetAutoPlayEnabled(false));
+            Assert.Null(runtime.Snapshot.PlayColor);
+            if (disableTwoWay)
+                runtime.Apply(ControlCenterIntent.SetTwoWaySync(true));
+            runtime.Apply(ControlCenterIntent.SetAutoPlayEnabled(true));
+            Assert.Null(runtime.Snapshot.PlayColor);
+            Assert.False(runtime.Snapshot.AutoPlayColorResolution.IsKnown);
+
+            Assert.Equal(ControlCenterApplyOutcome.Changed,
+                runtime.Apply(ControlCenterIntent.SetAutoPlayColor(mode)).Outcome);
+            Assert.Equal(color, runtime.Snapshot.PlayColor);
+            if (!disableTwoWay)
+                Assert.Empty(persistence.Saved);
+        }
+
         [Fact]
         public void AutoPlayColorAndMoveMode_ArePersistentPreferences()
         {
@@ -760,8 +804,10 @@ namespace Readboard.VerificationTests.Host
             };
         }
 
-        [Fact]
-        public void DisablingAutoPlay_ClearsRecognitionBeforeNextEnable()
+        [Theory]
+        [InlineData("room-1")]
+        [InlineData("room-2")]
+        public void DisablingAutoPlay_ClearsRecognitionBeforeNextEnable(string nextRoom)
         {
             AppConfig config = AppConfig.CreateDefault("220430", "TEST");
             config.SyncBoth = true;
@@ -770,11 +816,7 @@ namespace Readboard.VerificationTests.Host
             {
                 AutoPlayEnabled = true,
                 FoxAutoPlayNicknameSignature = "sig",
-                FoxWindowContext = new FoxWindowContext
-                {
-                    Kind = FoxWindowKind.LiveRoom,
-                    LiveRoomState = FoxLiveRoomState.Playing
-                },
+                FoxWindowContext = PlayingRoom("room-1"),
                 DetectedAutoPlayColor = AutoPlayColorResolution.Known(
                     "white",
                     AutoPlayColorStatus.RecognizedWhite)
@@ -791,6 +833,13 @@ namespace Readboard.VerificationTests.Host
             Assert.True(enabled.Snapshot.AutoPlayEnabled);
             Assert.Null(enabled.Snapshot.PlayColor);
             Assert.Equal(AutoPlayColorStatus.ColorUnknown, enabled.Snapshot.AutoPlayColorStatus);
+            Assert.Equal(AutoPlayColorMode.FoxAuto, enabled.Snapshot.SelectedAutoPlayColorMode);
+            FoxWindowContext currentRoom = PlayingRoom(nextRoom);
+            Assert.False(runtime.ApplyFoxIdentityRecognition("sig", currentRoom, RecognizedFoxRoom(nextRoom, "black")));
+            runtime.UpdateAutoPlayObservation("sig", currentRoom, null);
+            Assert.Null(runtime.Snapshot.PlayColor);
+            Assert.True(runtime.ApplyFoxIdentityRecognition("sig", currentRoom, RecognizedFoxRoom(nextRoom, "black")));
+            Assert.Equal("black", runtime.Snapshot.PlayColor);
         }
 
         [Fact]

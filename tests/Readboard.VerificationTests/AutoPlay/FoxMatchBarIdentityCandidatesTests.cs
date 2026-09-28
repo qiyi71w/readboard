@@ -49,10 +49,7 @@ namespace Readboard.VerificationTests.AutoPlay
             RecordingPersistence persistence = new RecordingPersistence();
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            FoxIdentitySelectionSnapshot snapshot = selection.Open(
-                FoxMatchBarIdentityCandidates.Build(Array.Empty<FoxPlayerListEntry>()),
-                true,
-                AutoPlayColorMode.ManualWhite);
+            FoxIdentitySelectionSnapshot snapshot = selection.Open(FoxMatchBarIdentityCandidates.Build(Array.Empty<FoxPlayerListEntry>()), true);
 
             Assert.Empty(snapshot.Candidates);
             Assert.True(string.IsNullOrWhiteSpace(snapshot.SelectedCandidateId));
@@ -68,11 +65,8 @@ namespace Readboard.VerificationTests.AutoPlay
             RecordingPersistence persistence = new RecordingPersistence();
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(
-                FoxMatchBarIdentityCandidates.Build(
-                    new[] { White("叶落メ让子"), Black("真的不懂啊") }),
-                true,
-                AutoPlayColorMode.ManualBlack);
+            selection.Open(FoxMatchBarIdentityCandidates.Build(
+                new[] { White("叶落メ让子"), Black("真的不懂啊") }), true);
             selection.Select("叶落メ让子");
             FoxIdentitySelectionResult result = selection.UseOnce();
 
@@ -91,11 +85,8 @@ namespace Readboard.VerificationTests.AutoPlay
             ConfigBackedPersistence persistence = new ConfigBackedPersistence(config);
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(
-                FoxMatchBarIdentityCandidates.Build(
-                    new[] { White("对手乙"), Black("叶落メ让子") }),
-                false,
-                AutoPlayColorMode.ManualBlack);
+            selection.Open(FoxMatchBarIdentityCandidates.Build(
+                new[] { White("对手乙"), Black("叶落メ让子") }), false);
             selection.Select("叶落メ让子");
             FoxIdentitySelectionResult result = selection.SaveAndUse();
 
@@ -114,18 +105,12 @@ namespace Readboard.VerificationTests.AutoPlay
             ConfigBackedPersistence persistence = new ConfigBackedPersistence(config);
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(
-                FoxMatchBarIdentityCandidates.Build(
-                    new[] { White("叶落メ让子"), Black("对手乙") }),
-                true,
-                AutoPlayColorMode.ManualBlack);
+            selection.Open(FoxMatchBarIdentityCandidates.Build(
+                new[] { White("叶落メ让子"), Black("对手乙") }), true);
             selection.Select("叶落メ让子");
             selection.SaveAndUse();
-            selection.Open(
-                FoxMatchBarIdentityCandidates.Build(
-                    new[] { White("叶落メ让子"), Black("对手乙") }),
-                false,
-                AutoPlayColorMode.ManualBlack);
+            selection.Open(FoxMatchBarIdentityCandidates.Build(
+                new[] { White("叶落メ让子"), Black("对手乙") }), false);
 
             FoxIdentitySelectionResult result = selection.ClearSaved();
 
@@ -137,23 +122,6 @@ namespace Readboard.VerificationTests.AutoPlay
             Assert.False(result.RequiresAutomaticColorReevaluation);
         }
 
-        [Fact]
-        public void Cancel_FirstAutomaticListSelection_RestoresPreviousManualMode()
-        {
-            FoxIdentitySelection selection = new FoxIdentitySelection(new RecordingPersistence());
-
-            selection.Open(
-                FoxMatchBarIdentityCandidates.Build(
-                    new[] { White("叶落メ让子"), Black("对手乙") }),
-                true,
-                AutoPlayColorMode.ManualWhite);
-            FoxIdentitySelectionResult result = selection.Cancel();
-
-            Assert.True(result.RestorePreviousManualMode);
-            Assert.Equal(AutoPlayColorMode.ManualWhite, result.RestoredManualMode);
-            Assert.False(result.RequiresAutomaticColorReevaluation);
-            Assert.Equal(string.Empty, selection.EffectiveIdentitySignature);
-        }
 
         [Fact]
         public void Cancel_ManuallyOpenedListSelection_LeavesIdentityAndModeUnchanged()
@@ -161,14 +129,10 @@ namespace Readboard.VerificationTests.AutoPlay
             RecordingPersistence persistence = new RecordingPersistence("叶落メ让子");
             FoxIdentitySelection selection = new FoxIdentitySelection(persistence);
 
-            selection.Open(
-                FoxMatchBarIdentityCandidates.Build(
-                    new[] { White("叶落メ让子"), Black("对手乙") }),
-                false,
-                AutoPlayColorMode.ManualBlack);
+            selection.Open(FoxMatchBarIdentityCandidates.Build(
+                new[] { White("叶落メ让子"), Black("对手乙") }), false);
             FoxIdentitySelectionResult result = selection.Cancel();
 
-            Assert.False(result.RestorePreviousManualMode);
             Assert.False(result.RequiresAutomaticColorReevaluation);
             Assert.Equal("叶落メ让子", selection.EffectiveIdentitySignature);
             Assert.Equal("叶落メ让子", persistence.CurrentSignature);
