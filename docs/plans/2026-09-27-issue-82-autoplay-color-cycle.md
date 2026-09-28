@@ -6,7 +6,7 @@
 - 分析基线：刚从 `origin/main` 获取的 `d6e38ae7af615dd7259a73dd79234f222d83e7df`。
 - 工作树：`/home/dev/dev/weiqi/worktrees/readboard/issue-82-autoplay-color-20260927`。
 - 分支：`plan/issue-82-autoplay-color`。
-- 用户已回复“可以”批准实施。代码、聚焦验证及双轴审查已完成；真实 Fox 验收尚未完成，不代表 issue 全部验收或发布完成。
+- 用户已批准实施并继续交付。代码、聚焦验证及双轴审查已完成；手动棋色每次启用需重选已通过原生 WebView2 与协议链检查。真实 Fox 回归未执行，作为验证覆盖限制记录，不阻塞本次 PR 交付。
 - 原主工作树有本地提交和未跟踪内容，保持原样；独立工作树直接从远程 main 创建，没有合并本地主分支。
 
 ## 目标与术语
@@ -149,7 +149,7 @@ A1–A6 对应 issue 六项明确回归要求。B 行覆盖状态分离容易漏
 - C# 聚焦过滤器按实际受影响测试选择：`ControlCenterRuntimeTests`、`AutoPlayWireIssuerTests`、`FoxIdentitySelectionTests`、`SyncSessionCoordinatorOrchestrationTests`；跨 runtime → real coordinator 的行为用现有测试项目承载。
 - `npm run test:webview` 是 DOM 验证，不是原生宿主验收。
 - 原生入口为 `npm run test:webview:host` 及 `tests/WebView/real-webview2-host-fixture.js`；复用隔离配置和 FakeHost，增加相关场景或一次性 smoke，不必跑无关宿主案例。
-- 真实 Fox 验收按桌面验收 skill 准备精确 Windows 候选，观察同房间重新采样、换房间后正确执子色及协议证据；确定性 fixture 不能代替这项原生证据。
+- 真实 Fox 回归若执行，按桌面验收 skill 使用精确 Windows 候选，观察同房间重新采样、换房间后正确执子色及协议证据；确定性 fixture 不等同于原生证据。此次交付保留其未执行状态。
 - 开工前对变更导出符号运行 LSP references；实现后再决定是否需要扩大检查。不是默认全仓库构建、格式化或全套测试。
 
 ## 已批准的交付边界
@@ -179,7 +179,7 @@ Windows 检查使用此工作树源码的隔离镜像 `D:\dev\weiqi\worktrees\re
 
 A1/A2/A4/B1 的状态和协议行为由 runtime → issuer → real coordinator/RecordingTransport 覆盖；A3 由真实 coordinator 持续同步 worker 覆盖。A5/A6 已覆盖同房间与换房间状态失效、上下文更新和重新识别，以及既有识别代次回归；真实 Fox 场景仍未验收。B2/B3 由 runtime 检查，B4 由原生身份取消检查，B6 由 DOM 检查覆盖。B5 有既有 Settings 回归及原生重启证据，不宣称对每种持久化故障组合都做过原生验收。
 
-**外部验收阻塞**：当前 Windows 未运行 Fox 对局窗口；缺少可识别的实际房间与配置身份。需要在精确提交候选上完成 A5/A6 的同房间／换房间采样及协议观察，不能用 fixture 替代。无窗口坐标、DPI 或布局改动，未扩展到无关多屏布局验收。
+**验证覆盖限制**：A5/A6 的状态失效与重新识别已有确定性回归证据；真实 Fox 同房间／换房间采样及协议观察未执行。手动棋色周期的交付验收使用上述 runtime、协议链与原生 WebView2 证据。无窗口坐标、DPI 或布局改动，未扩展到无关多屏布局验收。
 
 LSP references 两次返回无可用 language server；调用方迁移以当前源码与符号检索确认。删除旧身份恢复接口后无残留调用。未修改日常 Windows clone，未 push 或发布。
 
@@ -187,4 +187,4 @@ LSP references 两次返回无可用 language server；调用方迁移以当前�
 
 以 `d6e38ae7af615dd7259a73dd79234f222d83e7df` 为固定基线与审查时 HEAD，审查工作树全部 16 个受版本控制文件的差异及未跟踪计划；`.codegraph/.gitignore` 为本地生成索引文件，不纳入提交。独立 Standards、Spec 审查均未发现代码问题。审查前后 HEAD、diff、status、未跟踪清单及内容完全一致。
 
-审查结论：`SUCCESS`，开放阻塞项 0、follow-up 项 0。A5/A6 真实 Fox 验收是仍未满足的原任务外部验收门禁，不作为已完成或转交后续票据；issue 保持未关闭。审查记录补入本文后只作交付记录变更，生产代码保持审查时状态。
+审查结论：`SUCCESS`，开放阻塞项 0、follow-up 项 0。真实 Fox 回归保留为未执行的覆盖限制，本次继续 PR 交付。审查记录与交付边界补入本文后，生产代码保持审查时状态。
