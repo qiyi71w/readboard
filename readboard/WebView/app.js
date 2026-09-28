@@ -374,7 +374,9 @@
     setValue("#board-height", control.boardHeight ?? 19);
     setChecked("#two-way", control.twoWaySync);
     setChecked("#auto-play", control.autoPlay);
-    setChecked(`input[name="color"][value="${cssValue(control.color || "auto")}"]`, true);
+    $$('input[name="color"]').forEach(input => {
+      input.checked = input.value === control.color;
+    });
     const autoPlayColorStatus = $("#auto-play-color-status");
     if (autoPlayColorStatus) {
       const showAutoPlayColorStatus = (control.platform === "fox" || control.platform === "foxBackground") && control.color === "auto";

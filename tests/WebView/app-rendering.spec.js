@@ -589,4 +589,46 @@ test("keeps labeled sidebar actions visible at short factory width", async ({ pa
   expect(shortLabeled.sidebarButtonsVisible).toBe(true);
 });
 
+test("clears color radio selection on empty snapshot without lingering checked state or outbound commands", async ({ page }) => {
+  const commands = [];
+  page.on("console", message => {
+    if (message.text().includes("ReadBoard preview command")) commands.push(message.text());
+  });
+  await page.goto(baseUrl + "/index.html");
+  const setColor = async (color, extras = {}) => {
+    await page.evaluate(({ color, extras }) => {
+      const snapshot = window.readboardPreview.getState();
+      Object.assign(snapshot.controlCenter, {
+        color, autoPlay: true, colorEnabled: true, autoColorEnabled: true, ...extras
+      });
+      window.readboardPreview.setState(snapshot);
+    }, { color, extras });
+  };
+  const checked = page.locator('input[name="color"]:checked');
+  for (const color of ["black", "white", "auto", "black", "white"]) {
+    await setColor(color);
+    await expect(checked).toHaveValue(color);
+    await setColor("");
+    await expect(checked).toHaveCount(0);
+  }
+  await setColor("auto", {
+    platform: "fox", playColorKnown: false, autoPlayColorStatus: "Auto identifying"
+  });
+  await expect(checked).toHaveValue("auto");
+  await expect(page.locator("#auto-play-color-status")).toHaveAttribute("data-known", "false");
+  await setColor("", { colorEnabled: false, autoColorEnabled: false });
+  await expect(checked).toHaveCount(0);
+  for (const color of ["black", "white", "auto"])
+    await expect(page.locator(`input[name="color"][value="${color}"]`)).toBeDisabled();
+  expect(commands).toEqual([]);
+
+  await setColor("");
+  await page.locator('label:has(input[name="color"][value="black"])').click();
+  await expect(checked).toHaveValue("black");
+  await expect.poll(() => commands.length).toBe(1);
+  await setColor("");
+  await expect(checked).toHaveCount(0);
+  expect(commands).toHaveLength(1);
+});
+
 

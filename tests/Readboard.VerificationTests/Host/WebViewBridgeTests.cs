@@ -223,17 +223,14 @@ namespace Readboard.VerificationTests.Host
         public void WebViewPublication_MapsIdentityNoOpAndCloseState()
         {
             FoxIdentitySelection selection = new FoxIdentitySelection(new IdentityPublicationPersistence());
-            selection.Open(
-                new[]
-                {
-                    new FoxIdentityCandidate(
-                        "candidate-1",
-                        SemanticMessage.Create("WebView_candidateRowNumber", 1),
-                        "signature",
-                        null)
-                },
-                false,
-                AutoPlayColorMode.ManualBlack);
+            selection.Open(new[]
+            {
+                new FoxIdentityCandidate(
+                    "candidate-1",
+                    SemanticMessage.Create("WebView_candidateRowNumber", 1),
+                    "signature",
+                    null)
+            }, false);
 
             selection.Select("candidate-1");
             FoxIdentitySelectionResult sameSelection = selection.Select("candidate-1");

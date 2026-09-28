@@ -1303,7 +1303,7 @@ namespace readboard
             }
 
             string platformToken = ControlCenterPreferences.ToPlatformToken(controlCenter.Platform);
-            bool foxAutoPlay = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto;
+            bool foxAutoPlay = controlCenter.SelectedAutoPlayColorMode == AutoPlayColorMode.FoxAuto;
             return new ReadBoardControlCenterState
             {
                 Platform = platformToken,
@@ -1318,9 +1318,11 @@ namespace readboard
                 BoardHeight = controlCenter.BoardHeight,
                 TwoWaySync = controlCenter.TwoWaySync,
                 AutoPlay = controlCenter.AutoPlayEnabled,
-                Color = controlCenter.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
+                Color = controlCenter.SelectedAutoPlayColorMode == AutoPlayColorMode.FoxAuto
                     ? "auto"
-                    : controlCenter.AutoPlayColorMode == AutoPlayColorMode.ManualWhite ? "white" : "black",
+                    : controlCenter.SelectedAutoPlayColorMode == AutoPlayColorMode.ManualWhite
+                        ? "white"
+                        : controlCenter.SelectedAutoPlayColorMode == AutoPlayColorMode.ManualBlack ? "black" : string.Empty,
                 Placement = controlCenter.AutoPlayMoveMode == AutoPlayMoveMode.GenmoveAnalyze ? "engine" : "direct",
                 AiTime = controlCenter.AiTimeValue,
                 Playouts = controlCenter.PlayoutsValue,

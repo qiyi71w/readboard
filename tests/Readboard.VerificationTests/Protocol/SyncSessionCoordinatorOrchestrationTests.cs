@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Xunit;
 using readboard;
 using Readboard.VerificationTests.Support;
+using Readboard.VerificationTests.Host;
 
 namespace Readboard.VerificationTests.Protocol
 {
@@ -329,6 +330,76 @@ namespace Readboard.VerificationTests.Protocol
             }
 
             VerificationCompletion.Wait(hostRecorder.KeepStopped, "Keep sync did not stop.");
+        }
+
+        [Fact]
+        public void KeepSync_RuntimeManualSelectionMustBeRenewedAfterDisable()
+        {
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.SyncBoth = true;
+            config.SyncMode = SyncMode.Foreground;
+            ColorCycleEnvironment environment = new ColorCycleEnvironment();
+            ControlCenterRuntime control = new ControlCenterRuntime(
+                ControlCenterPreferences.FromConfig(config), environment, environment,
+                new RejectingControlCenterActionAdapter());
+            RecordingTransport transport = new RecordingTransport();
+            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.SetSyncBoth(true);
+            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
+            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
+            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
+            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
+
+            void RunSync()
+            {
+                ControlCenterRuntimeSnapshot state = control.Snapshot;
+                object snapshot = CreateSnapshot(snapshotType, SyncMode.Foreground, IntPtr.Zero);
+                SetProperty(snapshot, "PlayColor", state.PlayColor);
+                SetProperty(snapshot, "AutoPlayColorMode", state.AutoPlayColorMode);
+                HostRecorder host = new HostRecorder(snapshot);
+                object runtime = Activator.CreateInstance(runtimeType);
+                SetProperty(runtime, "Host", CreateProxy(hostInterfaceType, host.HandleCall));
+                SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
+                ScriptedBlockingRecognitionService recognition = new ScriptedBlockingRecognitionService(
+                    CreateResult("re=foreground"), 3);
+                SetProperty(runtime, "RecognitionService", recognition);
+                SetProperty(runtime, "PlacementService", new PassivePlacementService());
+                SetProperty(runtime, "OverlayService", new PassiveOverlayService());
+                Invoke(coordinator, "AttachRuntime", runtime);
+                Assert.True((bool)Invoke(coordinator, "TryStartKeepSync"));
+                try
+                {
+                    VerificationCompletion.Wait(recognition.BlockedRecognizeStarted, "Sync snapshots did not reach recognition.");
+                }
+                finally
+                {
+                    recognition.Release();
+                    Invoke(coordinator, "StopSyncSession");
+                }
+                VerificationCompletion.Wait(host.KeepStopped, "Keep sync did not stop.");
+            }
+
+            control.Apply(ControlCenterIntent.SetAutoPlayEnabled(true));
+            RunSync();
+            Assert.Equal(0, transport.CountLines("play>black>0 0 0"));
+            control.Apply(ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.ManualBlack));
+            RunSync();
+            Assert.Equal(1, transport.CountLines("play>black>0 0 0"));
+            control.Apply(ControlCenterIntent.SetAutoPlayEnabled(false));
+            coordinator.SendStopAutoPlay();
+            control.Apply(ControlCenterIntent.SetAutoPlayEnabled(true));
+            RunSync();
+            Assert.Equal(1, transport.CountLines("play>black>0 0 0"));
+            control.Apply(ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.ManualWhite));
+            RunSync();
+            Assert.Equal(1, transport.CountLines("play>white>0 0 0"));
+        }
+
+        private sealed class ColorCycleEnvironment : IControlCenterSessionAdapter, IControlCenterPreferencePersistence
+        {
+            public bool HasActiveSyncOperation { get { return false; } }
+            public void Apply(ControlCenterPreferences preferences, ControlCenterSessionState sessionState) { }
+            public void Save(ControlCenterPreferences preferences) { }
         }
 
         [Fact]

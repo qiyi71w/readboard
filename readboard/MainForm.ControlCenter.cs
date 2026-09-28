@@ -14,7 +14,7 @@ namespace readboard
             private bool appliedShowOnBoard;
             private bool hasAppliedSession;
             private bool appliedAutoPlayEnabled;
-            private AutoPlayColorMode appliedAutoPlayColorMode;
+            private AutoPlayColorMode? appliedSelectedAutoPlayColorMode;
             private AutoPlayMoveMode appliedAutoPlayMoveMode;
             private string appliedAiTimeValue;
             private string appliedPlayoutsValue;
@@ -46,8 +46,8 @@ namespace readboard
                     && appliedShowOnBoard != preferences.ShowOnBoard;
                 bool autoPlayChanged = hasAppliedSession
                     && appliedAutoPlayEnabled != sessionState.AutoPlayEnabled;
-                bool autoPlayColorChanged = hasAppliedPreferences
-                    && appliedAutoPlayColorMode != preferences.AutoPlayColorMode;
+                bool autoPlayColorChanged = hasAppliedSession
+                    && appliedSelectedAutoPlayColorMode != sessionState.SelectedAutoPlayColorMode;
                 bool autoPlayMoveModeChanged = hasAppliedPreferences
                     && appliedAutoPlayMoveMode != preferences.AutoPlayMoveMode;
                 bool aiTimeChanged = hasAppliedSession
@@ -62,11 +62,10 @@ namespace readboard
                     form.ClearFoxAutoPlayColorDetectionState();
                     form.ResetWebViewSyncState();
                 }
-                if (autoPlayChanged && !sessionState.AutoPlayEnabled)
+                if (autoPlayChanged || sessionState.SelectedAutoPlayColorMode != AutoPlayColorMode.FoxAuto)
                     form.ClearFoxAutoPlayColorDetectionState();
                 if (!hasAppliedPreferences || twoWaySyncChanged)
                     form.SetSyncBoth(preferences.TwoWaySync);
-                form.ApplyAutoPlayColorMode(preferences.AutoPlayColorMode);
                 if (platformChanged)
                     form.ApplySyncModeControlState();
                 hasAppliedPlatform = true;
@@ -76,7 +75,7 @@ namespace readboard
                 appliedShowOnBoard = preferences.ShowOnBoard;
                 hasAppliedSession = true;
                 appliedAutoPlayEnabled = sessionState.AutoPlayEnabled;
-                appliedAutoPlayColorMode = preferences.AutoPlayColorMode;
+                appliedSelectedAutoPlayColorMode = sessionState.SelectedAutoPlayColorMode;
                 appliedAutoPlayMoveMode = preferences.AutoPlayMoveMode;
                 appliedAiTimeValue = sessionState.AiTimeValue;
                 appliedPlayoutsValue = sessionState.PlayoutsValue;

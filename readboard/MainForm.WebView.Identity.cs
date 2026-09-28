@@ -99,8 +99,7 @@ namespace readboard
                 reading.Players);
             FoxIdentitySelectionSnapshot snapshot = foxIdentitySelection.Open(
                 candidates,
-                resumeAutoPlay,
-                lastManualAutoPlayColorMode);
+                resumeAutoPlay);
             webViewIdentityState = CreateWebViewIdentityState(snapshot);
             return true;
         }
@@ -302,7 +301,7 @@ namespace readboard
                     ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.FoxAuto));
             }
             CloseWebViewIdentity(false);
-            if (controlCenterRuntime.Snapshot.AutoPlayColorMode == AutoPlayColorMode.FoxAuto)
+            if (controlCenterRuntime.Snapshot.SelectedAutoPlayColorMode == AutoPlayColorMode.FoxAuto)
             {
                 ResolveCurrentAutoPlayColor(ResolveFoxWindowContext());
                 bool modeChangeMayHaveSentPlay = modeResult != null
@@ -323,8 +322,6 @@ namespace readboard
             {
                 FoxIdentitySelectionResult result = foxIdentitySelection.Cancel();
                 changed = ShouldPublishWebViewIdentityResult(result);
-                if (result.RestorePreviousManualMode)
-                    ApplyAutoPlayColorMode(result.RestoredManualMode);
             }
             webViewIdentityState = new ReadBoardIdentityUiState();
             return changed || wasOpen;
