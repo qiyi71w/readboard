@@ -404,7 +404,7 @@ namespace Readboard.VerificationTests.Host
         public void SettingsSaveClearsControlCenterPersistenceError()
         {
             AppConfig active = AppConfig.CreateDefault("220430", "TEST");
-            ControlCenterRuntime controlCenter = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(active), new NoOpControlCenterSessionAdapter(), new NoOpControlCenterPreferencePersistence(), new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime controlCenter = RuntimeTestFactory.Create(ControlCenterPreferences.FromConfig(active), new RuntimeTestEnvironment(), new NoOpControlCenterPreferencePersistence(), new RejectingControlCenterActionAdapter());
             controlCenter.MarkPersistenceFailed(new IOException("old failure"));
 
             AppConfig current = active.Clone();
@@ -506,19 +506,6 @@ namespace Readboard.VerificationTests.Host
                 effects);
         }
 
-        private sealed class NoOpControlCenterSessionAdapter : IControlCenterSessionAdapter
-        {
-            public bool HasActiveSyncOperation
-            {
-                get { return false; }
-            }
-
-            public void Apply(
-                ControlCenterPreferences preferences,
-                ControlCenterSessionState sessionState)
-            {
-            }
-        }
 
         private sealed class NoOpControlCenterPreferencePersistence : IControlCenterPreferencePersistence
         {

@@ -178,6 +178,133 @@ test("real Control Center manual autoplay color requires explicit selection per 
   });
 });
 
+test("real Control Center runtime authorization publishes one final snapshot per identity and color operation", async ({}, testInfo) => {
+  await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
+    await readBoard.host.waitForExactLine("ready");
+    await expect(readBoard.page.locator("#host-state")).toHaveText("Host communication active");
+    await expect(readBoard.page.locator("#log-list")).toContainText("Host mode started; ReadBoard is ready");
+    await readBoard.page.waitForFunction(() => window.readboardPreview?.getState()?.controlCenter);
+
+    // Observe the actual native bridge; never replace the renderer's state or inject players.
+    await readBoard.page.evaluate(() => {
+      window.receivedAuthorizationStates = [];
+      window.chrome.webview.addEventListener("message", event => {
+        if (event.data?.type === "state")
+          window.receivedAuthorizationStates.push(structuredClone(event.data));
+      });
+    });
+    const receivedStates = () => readBoard.page.evaluate(() => window.receivedAuthorizationStates);
+    const renderedState = () => readBoard.page.evaluate(() => window.readboardPreview.getState());
+    const operations = [];
+    const operate = async (name, action, expected) => {
+      const operation = {
+        name,
+        stateStart: (await receivedStates()).length,
+        wireStart: readBoard.host.transcript.length
+      };
+      operations.push(operation);
+      await action();
+      await expect.poll(async () => (await receivedStates()).length).toBeGreaterThan(operation.stateStart);
+      // Keep listening after the first delivery so a duplicate final or intermediate
+      // publication cannot pass just because the expected state arrived first.
+      await readBoard.page.evaluate(() => new Promise(resolve => setTimeout(resolve, 250)));
+      const messages = (await receivedStates()).slice(operation.stateStart);
+      operation.stateEnd = operation.stateStart + messages.length;
+      operation.wireEnd = readBoard.host.transcript.length;
+      expect(messages, `${name}: exactly one complete final native snapshot`).toHaveLength(1);
+      const snapshot = messages[0].payload;
+      for (const key of ["page", "language", "text", "shell", "controlCenter", "settings", "update", "identity", "dialog", "logs"])
+        expect(snapshot, `${name}: complete snapshot`).toHaveProperty(key);
+      expect(snapshot).toMatchObject(expected);
+      expect(await renderedState()).toEqual(snapshot);
+      return snapshot;
+    };
+    const identityButton = command => readBoard.page.locator(`[data-command="identity.${command}"]`);
+    const expectNoPlayers = async () => {
+      await expect(readBoard.page.locator('input[name="candidate"]')).toHaveCount(0);
+      await expect(identityButton("useOnce")).toBeDisabled();
+      await expect(identityButton("saveAndUse")).toBeDisabled();
+    };
+    const emptySelection = { candidates: [], selectedId: null, canUseOnce: false, canSaveAndUse: false };
+
+    try {
+      // A saved preference is real config input, not evidence of any Fox player.
+      await operate("open saved identity", () => identityButton("open").click(), {
+        identity: { ...emptySelection, open: true, hasSavedIdentity: true }
+      });
+      await expectNoPlayers();
+      await readBoard.page.screenshot({ path: testInfo.outputPath("authorization-saved-identity.png") });
+      await operate("clear saved identity", () => identityButton("clearSaved").click(), {
+        identity: { ...emptySelection, open: true, hasSavedIdentity: false }
+      });
+      await expect(identityButton("clearSaved")).toHaveCount(0);
+      const configuration = await readBoard.readConfigurationFiles();
+      expect(JSON.parse(configuration["config.readboard.json"].replace(/^\uFEFF/, "")).FoxAutoPlayNickname).toBe("");
+      await operate("close cleared identity", () => identityButton("close").click(), {
+        identity: { open: false, hasSavedIdentity: false }
+      });
+
+      if ((await renderedState()).controlCenter.twoWaySync) {
+        await operate("disable two-way sync", () => readBoard.page.locator('label:has(#two-way)').click(), {
+          controlCenter: { twoWaySync: false, autoPlay: false }
+        });
+      }
+      await operate("enable two-way sync", () => readBoard.page.locator('label:has(#two-way)').click(), {
+        controlCenter: { twoWaySync: true, autoPlay: false }
+      });
+      await operate("enable autoplay", () => readBoard.page.locator('label:has(#auto-play)').click(), {
+        controlCenter: { autoPlay: true, color: "", playColorKnown: false }
+      });
+      await expect(readBoard.page.locator('input[name="color"]:checked')).toHaveCount(0);
+      for (const color of ["black", "white"]) {
+        await operate(`select manual ${color}`, () => readBoard.page.locator(`label:has(input[name="color"][value="${color}"])`).click(), {
+          controlCenter: { autoPlay: true, color, playColorKnown: true }
+        });
+        await expect(readBoard.page.locator('input[name="color"]:checked')).toHaveValue(color);
+      }
+      const retainedManualColor = { autoPlay: true, color: "white", playColorKnown: true };
+      await operate("first automatic selection without identity", () => readBoard.page.locator('label:has(input[name="color"][value="auto"])').click(), {
+        controlCenter: retainedManualColor,
+        identity: { ...emptySelection, open: true, hasSavedIdentity: false }
+      });
+      await expectNoPlayers();
+      await expect(readBoard.page.locator('input[name="color"]:checked')).toHaveValue("white");
+      await readBoard.page.screenshot({ path: testInfo.outputPath("authorization-empty-automatic-selection.png") });
+      await operate("cancel first automatic selection", () => identityButton("close").click(), {
+        controlCenter: retainedManualColor,
+        identity: { open: false, hasSavedIdentity: false }
+      });
+      await expect(readBoard.page.locator("#modal-layer")).toBeHidden();
+      await operate("reopen identity without players", () => identityButton("open").click(), {
+        controlCenter: retainedManualColor,
+        identity: { ...emptySelection, open: true, hasSavedIdentity: false }
+      });
+      await expectNoPlayers();
+      await operate("cancel reopened identity", () => identityButton("close").click(), {
+        controlCenter: retainedManualColor,
+        identity: { open: false, hasSavedIdentity: false }
+      });
+      await expect(readBoard.page.locator("#modal-layer")).toBeHidden();
+      await expect(readBoard.page.locator('input[name="color"]:checked')).toHaveValue("white");
+      expect(readBoard.host.transcript.filter(entry => entry.direction === "inbound" && entry.line.startsWith("play>"))).toEqual([]);
+      expect(readBoard.pageErrors).toEqual([]);
+      expect(readBoard.process.isRunning()).toBe(true);
+      await readBoard.page.screenshot({ path: testInfo.outputPath("authorization-final-manual-color.png") });
+    } finally {
+      await testInfo.attach("authorization-state-publications.json", {
+        body: Buffer.from(JSON.stringify({
+          operations,
+          received: await receivedStates(),
+          finalRenderedState: await renderedState(),
+          wireTranscript: readBoard.getWireTranscript(),
+          notCovered: ["Identity selection and confirmation require actual detected Fox players; no candidates were injected.", "No real Fox placement or live recognition is exercised by FakeHost."]
+        }, null, 2)),
+        contentType: "application/json"
+      });
+    }
+  }, { seedFoxIdentity: "ReadBoard native bridge saved identity" });
+});
+
 test("real Settings Cancel discards its draft and leaves persisted configuration unchanged", async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");

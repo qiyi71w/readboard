@@ -41,7 +41,6 @@ namespace readboard
         private readonly ISyncSessionCoordinator sessionCoordinator;
         private readonly ILegacySelectionCalibrationService selectionCalibrationService;
         private readonly ControlCenterRuntime controlCenterRuntime;
-        private readonly FoxIdentitySelection foxIdentitySelection;
         private readonly UiThreadInvoker uiThreadInvoker;
         private readonly SerialBackgroundWorkQueue placeRequestQueue;
         private HostedUpdateJourney hostedUpdateJourney;
@@ -58,7 +57,6 @@ namespace readboard
         private bool hasRetainedFoxTitleSnapshot = false;
         private MainWindowTitleTurn lastMainWindowTitleTurn = MainWindowTitleTurn.None;
         private string lastAppliedMainWindowTitle = string.Empty;
-        private readonly FoxMatchBarLiveRecognition foxMatchBarLiveRecognition = new FoxMatchBarLiveRecognition();
 
         int posX = -1;
         int posY = -1;
@@ -66,7 +64,6 @@ namespace readboard
         private bool isShuttingDown = false;
         private bool closeRequestedBeforeHandle = false;
         private bool webViewWindowBoundsAppliedAfterHandle = false;
-        private bool isInitializingProtocolState = true;
         private bool hostedUpdateSupported = false;
         private bool hostedUpdatePackageV2Supported = false;
         private readonly WebViewStatePublisher webViewStatePublisher;
@@ -99,18 +96,6 @@ namespace readboard
         }
 
 
-        private void ApplySyncModeControlState()
-        {
-            if (CurrentSyncType != TYPE_YIKE)
-                ClearYikeContext();
-            ResetMainWindowTitle();
-        }
-
-
-        private void SetSyncBoth(bool enabled)
-        {
-            sessionCoordinator.SetSyncBoth(enabled);
-        }
 
 
         public void SendError(String strMsg)
@@ -118,28 +103,6 @@ namespace readboard
             sessionCoordinator.SendError(strMsg);
         }
 
-        private static string GetProtocolNumericValue(string value)
-        {
-            return string.IsNullOrWhiteSpace(value) ? "0" : value;
-        }
-
-        private void SendPlayCommandIfSelected()
-        {
-            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
-            if (controlCenter.CanSendAutoPlayCommand(sessionCoordinator.KeepSync))
-            {
-                FoxWindowContext foxWindowContext = controlCenter.SelectedAutoPlayColorMode == AutoPlayColorMode.FoxAuto
-                    ? ResolveFoxWindowContext()
-                    : FoxWindowContext.Unknown();
-                ResolveCurrentAutoPlayColor(foxWindowContext);
-                controlCenter = controlCenterRuntime.Snapshot;
-            }
-
-            AutoPlayWireIssuer.IssueIfAuthorized(
-                controlCenter,
-                sessionCoordinator.KeepSync,
-                sessionCoordinator);
-        }
 
         private void SendPonderStatusCommand()
         {
@@ -151,45 +114,15 @@ namespace readboard
             sessionCoordinator.SendVersion(Program.version);
         }
 
-        private void SendSyncCommand()
-        {
-            sessionCoordinator.SendSync();
-        }
 
         private void SendStopSyncCommand()
         {
             sessionCoordinator.SendStopSync();
         }
 
-        private void SendBothSyncCommand(bool enabled)
-        {
-            sessionCoordinator.SendBothSync(enabled);
-        }
-
         private bool CanUseForegroundFoxInBoardProtocol()
         {
             return CurrentSyncType == TYPE_FOX;
-        }
-
-        private void SendForegroundFoxInBoardCommand(bool enabled)
-        {
-            sessionCoordinator.SendForegroundFoxInBoard(enabled);
-        }
-
-        private void SendBothSyncStateChange()
-        {
-            ControlCenterPreferences preferences = controlCenterRuntime.CurrentPreferences;
-            SendBothSyncCommand(preferences.TwoWaySync);
-            if (preferences.ShowOnBoard && CanUseForegroundFoxInBoardProtocol())
-                SendForegroundFoxInBoardCommand(preferences.TwoWaySync);
-        }
-
-        private void ResendSyncSessionState()
-        {
-            if (!sessionCoordinator.KeepSync)
-                return;
-            SendSyncCommand();
-            SendPlayCommandIfSelected();
         }
 
         private void SendClearCommand()
@@ -202,43 +135,18 @@ namespace readboard
             sessionCoordinator.SendNoInBoard();
         }
 
-        private void SendNotInBoardCommand()
-        {
-            sessionCoordinator.SendNotInBoard();
-        }
 
         private void SendPlacementResultCommand(bool success)
         {
             sessionCoordinator.SendPlacementResult(success);
         }
 
-        private void SendTimeChangedCommand()
-        {
-            sessionCoordinator.SendTimeChanged(
-                GetProtocolNumericValue(controlCenterRuntime.CurrentSessionState.AiTimeValue));
-        }
-
-        private void SendPlayoutsChangedCommand()
-        {
-            sessionCoordinator.SendPlayoutsChanged(
-                GetProtocolNumericValue(controlCenterRuntime.CurrentSessionState.PlayoutsValue));
-        }
-
-        private void SendFirstPolicyChangedCommand()
-        {
-            sessionCoordinator.SendFirstPolicyChanged(
-                GetProtocolNumericValue(controlCenterRuntime.CurrentSessionState.FirstPolicyValue));
-        }
 
         private void SendNoPonderCommand()
         {
             sessionCoordinator.SendNoPonder();
         }
 
-        private void SendStopAutoPlayCommand()
-        {
-            sessionCoordinator.SendStopAutoPlay();
-        }
 
         private void SendPassCommand()
         {
@@ -309,150 +217,6 @@ namespace readboard
             return new PixelRect(selectionX1, selectionY1, ox2 - selectionX1, oy2 - selectionY1);
         }
 
-        private AutoPlayColorResolution ResolveCurrentAutoPlayColor(FoxWindowContext foxWindowContext)
-        {
-            ControlCenterRuntimeSnapshot controlCenter = controlCenterRuntime.Snapshot;
-            if (!controlCenter.AutoPlayEnabled)
-                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
-
-            FoxIdentityRecognitionResult recognition = null;
-            AutoPlayColorResolution detected = controlCenter.SelectedAutoPlayColorMode == AutoPlayColorMode.FoxAuto
-                ? ResolveDetectedFoxAutoPlayColor(foxWindowContext, out recognition)
-                : null;
-            if (recognition == null)
-            {
-                controlCenterRuntime.UpdateAutoPlayObservation(
-                    foxIdentitySelection.EffectiveIdentitySignature,
-                    foxWindowContext,
-                    detected);
-            }
-            else if (recognition.Accepted)
-            {
-                controlCenterRuntime.ApplyFoxIdentityRecognition(
-                    foxIdentitySelection.EffectiveIdentitySignature,
-                    foxWindowContext,
-                    recognition);
-            }
-            return controlCenterRuntime.Snapshot.AutoPlayColorResolution;
-        }
-
-        private AutoPlayColorResolution ResolveDetectedFoxAutoPlayColor(
-            FoxWindowContext foxWindowContext,
-            out FoxIdentityRecognitionResult recognitionResult)
-        {
-            recognitionResult = null;
-            string nicknameSignature = foxIdentitySelection.EffectiveIdentitySignature;
-            FoxIdentityRoomSnapshot roomSnapshot = foxIdentitySelection.BeginRoomContext(foxWindowContext);
-            long operationGeneration = roomSnapshot.OperationGeneration;
-            if (!IsFoxSyncType(CurrentSyncType)
-                || hwnd == IntPtr.Zero
-                || string.IsNullOrWhiteSpace(nicknameSignature))
-            {
-                return AutoPlayColorResolution.Unknown(AutoPlayColorStatus.ColorUnknown);
-            }
-
-            AutoPlayColorResolution detection = SampleFoxMatchBar(
-                hwnd,
-                foxWindowContext,
-                nicknameSignature,
-                false);
-            FoxIdentityRecognitionResult recognition = foxIdentitySelection.ApplyRoomRecognition(
-                operationGeneration,
-                foxWindowContext,
-                (SyncMode)CurrentSyncType,
-                IsUniqueFoxIdentityMatch(detection),
-                detection);
-            recognitionResult = recognition;
-            return recognition.Snapshot.DerivedAuthorization;
-        }
-
-        private AutoPlayColorResolution SampleFoxMatchBar(
-            IntPtr windowHandle,
-            FoxWindowContext foxWindowContext,
-            string identitySignature,
-            bool forceResample)
-        {
-            string contextSignature = BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext);
-            DateTime now = DateTime.UtcNow;
-            if (!foxMatchBarLiveRecognition.NeedsSample(
-                windowHandle,
-                contextSignature,
-                identitySignature,
-                now,
-                forceResample))
-            {
-                return foxMatchBarLiveRecognition.CurrentResolution;
-            }
-
-            FoxMatchBarReading reading = FoxMatchBarWindowsReader.TryRead(windowHandle);
-            return foxMatchBarLiveRecognition.AcceptSample(
-                windowHandle,
-                contextSignature,
-                identitySignature,
-                now,
-                reading);
-        }
-
-        private static bool IsUniqueFoxIdentityMatch(AutoPlayColorResolution detection)
-        {
-            return detection != null
-                && detection.Status != AutoPlayColorStatus.NicknameNotMatched
-                && detection.Status != AutoPlayColorStatus.Unconfigured;
-        }
-
-        private static string BuildFoxAutoPlayColorDetectionContextSignature(FoxWindowContext context)
-        {
-            if (context == null)
-                return string.Empty;
-
-            if (context.Kind == FoxWindowKind.LiveRoom)
-            {
-                return "live|state=" + (int)context.LiveRoomState
-                    + "|room=" + (context.RoomToken ?? string.Empty).Trim();
-            }
-
-            if (context.Kind == FoxWindowKind.RecordView)
-            {
-                return "record|current=" + FormatNullableInt(context.RecordCurrentMove)
-                    + "|total=" + FormatNullableInt(context.RecordTotalMove)
-                    + "|end=" + (context.RecordAtEnd ? "1" : "0")
-                    + "|fingerprint=" + (context.TitleFingerprint ?? string.Empty).Trim();
-            }
-
-            return "kind=" + (int)context.Kind;
-        }
-
-        private static string FormatNullableInt(int? value)
-        {
-            return value.HasValue ? value.Value.ToString() : string.Empty;
-        }
-
-
-
-        private FoxIdentitySelectionResult ClearSavedFoxAutoPlayIdentity()
-        {
-            FoxIdentitySelectionResult result = foxIdentitySelection.ClearSaved();
-            if (result.Accepted
-                && result.PersistedIdentityChanged
-                && string.IsNullOrWhiteSpace(foxIdentitySelection.CurrentProcessIdentitySignature))
-            {
-                ClearFoxAutoPlayColorDetectionState();
-                controlCenterRuntime.UpdateAutoPlayObservation(
-                    foxIdentitySelection.EffectiveIdentitySignature,
-                    ResolveFoxWindowContext(),
-                    null);
-            }
-            return result;
-        }
-
-        private void ClearFoxAutoPlayColorDetectionState()
-        {
-            foxMatchBarLiveRecognition.Invalidate();
-            if (foxIdentitySelection != null)
-                foxIdentitySelection.ClearRoomRecognition();
-            if (controlCenterRuntime != null)
-                controlCenterRuntime.ClearAutoPlayObservation();
-        }
 
         private bool TryDispatchProtocolCommand(Action command)
         {
@@ -562,11 +326,11 @@ namespace readboard
             ControlCenterPreferences controlCenter = controlCenterRuntime.CurrentPreferences;
             SyncMode syncMode = controlCenter.Platform;
             string syncPlatform = ResolveSyncPlatform(syncMode);
-            FoxWindowContext foxWindowContext = ResolveFoxWindowContext();
+            AutoPlayColorResolution autoPlayColor = controlCenterRuntime.RefreshAutoPlayColor();
+            ControlCenterRuntimeSnapshot runtimeSnapshot = controlCenterRuntime.Snapshot;
+            FoxWindowContext foxWindowContext = runtimeSnapshot.FoxWindowContext;
             int? foxMoveNumber = foxWindowContext.ResolveDisplayedMoveNumber();
             UpdateMainWindowTitle(foxWindowContext);
-            AutoPlayColorResolution autoPlayColor = ResolveCurrentAutoPlayColor(foxWindowContext);
-            ControlCenterRuntimeSnapshot runtimeSnapshot = controlCenterRuntime.Snapshot;
 
             SyncCoordinatorHostSnapshot snapshot = new SyncCoordinatorHostSnapshot
             {
@@ -621,84 +385,56 @@ namespace readboard
             sessionCoordinator.SetYikeGeometry(null);
         }
 
-        private FoxWindowContext ResolveFoxWindowContext()
+        private ControlCenterWindowFacts ReadFoxWindowFacts()
         {
+            ControlCenterWindowFacts facts = new ControlCenterWindowFacts { Handle = hwnd };
             if (!IsFoxSyncType(CurrentSyncType) || hwnd == IntPtr.Zero)
             {
-                InvalidateFoxWindowBinding();
-                return FoxWindowContext.Unknown();
+                foxWindowBinding = null;
+                facts.BindingInvalidated = true;
+                return facts;
             }
 
-            FoxWindowContext foxWindowContext;
-            if (TryRefreshFoxWindowContextFromBinding(out foxWindowContext))
-                return foxWindowContext;
-            if (TryResolveFoxWindowBinding(out foxWindowContext))
-                return foxWindowContext;
-            return FoxWindowContext.Unknown();
-        }
-
-        private bool TryRefreshFoxWindowContextFromBinding(out FoxWindowContext foxWindowContext)
-        {
-            if (FoxWindowTitleReader.TryRead(foxWindowBinding, hwnd, GetParent, out foxWindowContext))
-                return true;
-
-            InvalidateFoxWindowBinding();
-            foxWindowContext = FoxWindowContext.Unknown();
-            return false;
-        }
-
-        private bool TryResolveFoxWindowBinding(out FoxWindowContext foxWindowContext)
-        {
-            FoxWindowBinding binding;
-            if (!FoxWindowBindingResolver.TryResolve(
-                hwnd,
-                FoxWindowTitleReader.ReadWindowTitle,
-                GetParent,
-                out binding,
-                out foxWindowContext))
+            FoxWindowContext context;
+            if (FoxWindowTitleReader.TryRead(foxWindowBinding, hwnd, GetParent, out context))
             {
-                InvalidateFoxWindowBinding();
-                foxWindowContext = FoxWindowContext.Unknown();
-                return false;
+                facts.Context = context;
+                return facts;
             }
 
-            foxWindowBinding = binding;
-            return true;
+            foxWindowBinding = null;
+            facts.BindingInvalidated = true;
+            FoxWindowBinding binding;
+            if (FoxWindowBindingResolver.TryResolve(hwnd, FoxWindowTitleReader.ReadWindowTitle,
+                GetParent, out binding, out context))
+            {
+                foxWindowBinding = binding;
+                facts.Context = context;
+            }
+            return facts;
         }
 
         private void InvalidateFoxWindowBinding()
         {
             foxWindowBinding = null;
-            ClearFoxAutoPlayColorDetectionState();
+            controlCenterRuntime?.InvalidateWindowEvidence();
         }
 
         private void UpdateMainWindowTitle(FoxWindowContext foxWindowContext)
         {
-            string previousContextSignature = BuildFoxAutoPlayColorDetectionContextSignature(lastFoxWindowContext);
-            string nextContextSignature = BuildFoxAutoPlayColorDetectionContextSignature(foxWindowContext);
-            if (!string.Equals(previousContextSignature, nextContextSignature, StringComparison.Ordinal))
-            {
-                ClearFoxAutoPlayColorDetectionState();
-            }
+            bool contextChanged = !ControlCenterRuntime.AreSameFoxWindowContext(lastFoxWindowContext, foxWindowContext);
             lastFoxWindowContext = FoxWindowContext.CopyOf(foxWindowContext);
-            if (foxIdentitySelection != null)
-                foxIdentitySelection.BeginRoomContext(lastFoxWindowContext);
             ApplyMainWindowTitle();
-            if (controlCenterRuntime != null)
-            {
-                ApplyControlCenterSessionObservation(
-                    new ControlCenterSessionObservation(
-                        controlCenterRuntime.CaptureSessionObservationGeneration())
-                        .WithFoxWindowContext(lastFoxWindowContext));
-            }
+            if (contextChanged)
+                PostWebViewState();
         }
 
         private void RefreshMainWindowTitleFromCurrentWindow()
         {
-            UpdateMainWindowTitle(ResolveFoxWindowContext());
+            UpdateMainWindowTitle(controlCenterRuntime.RefreshWindowContext());
         }
 
-        private void ResetMainWindowTitle()
+        private void ResetMainWindowTitleProjection()
         {
             hasRetainedFoxTitleSnapshot = false;
             lastMainWindowTitleTurn = MainWindowTitleTurn.None;
@@ -707,8 +443,14 @@ namespace readboard
                 lastYikeWindowContext = YikeWindowContext.Unknown();
             if (CurrentSyncType != TYPE_YIKE || lastYikeContextWindowHandle != hwnd)
                 lastYikeContextWindowHandle = IntPtr.Zero;
-            InvalidateFoxWindowBinding();
+            foxWindowBinding = null;
             ApplyMainWindowTitle();
+        }
+
+        private void ResetMainWindowTitle()
+        {
+            InvalidateFoxWindowBinding();
+            ResetMainWindowTitleProjection();
             if (controlCenterRuntime != null)
             {
                 ApplyControlCenterSessionObservation(
@@ -846,7 +588,7 @@ namespace readboard
                 ClearYikeContext();
             if (hwnd != handle)
             {
-                ClearFoxAutoPlayColorDetectionState();
+                controlCenterRuntime.InvalidateWindowEvidence();
             }
             hwnd = handle;
         }
@@ -1146,7 +888,6 @@ namespace readboard
             this.launchOptions = launchOptions;
             this.sessionCoordinator = sessionCoordinator;
             this.selectionCalibrationService = selectionCalibrationService;
-            this.foxIdentitySelection = new FoxIdentitySelection(new AppConfigFoxIdentityPersistence());
             this.webViewStatePublisher = new WebViewStatePublisher(PostWebViewStateCore);
             this.webViewWindowCommandRuntime = new WebViewWindowCommandRuntime(
                 new MainFormWebViewWindowAdapter(this));
@@ -1171,15 +912,13 @@ namespace readboard
             this.controlCenterRuntime = new ControlCenterRuntime(
                 ControlCenterPreferences.FromConfig(Program.CurrentConfig),
                 ControlCenterSessionState.FromLaunchOptions(launchOptions),
-                new MainFormControlCenterSessionAdapter(this),
+                new MainFormControlCenterEnvironment(this),
                 new AppConfigControlCenterPreferencePersistence(
                     delegate { return Program.CurrentConfig; },
                     Program.SaveAppConfig),
-                new MainFormControlCenterActionAdapter(this));
-            this.controlCenterRuntime.UpdateAutoPlayObservation(
-                foxIdentitySelection.EffectiveIdentitySignature,
-                FoxWindowContext.Unknown(),
-                null);
+                new MainFormControlCenterActionAdapter(this),
+                sessionCoordinator,
+                new FoxIdentitySelection(new AppConfigFoxIdentityPersistence()));
             using (System.Drawing.Bitmap bitmap = new Bitmap(1, 1))
             using (System.Drawing.Graphics graphics2 = Graphics.FromImage(bitmap))
             {
@@ -1193,7 +932,7 @@ namespace readboard
             this.MaximizeBox = false;
             ResetMainWindowTitle();
             InitializeWebViewShell();
-            isInitializingProtocolState = false;
+            controlCenterRuntime.CompleteInitialization();
         }
 
         private String getLangStr(String itemName)

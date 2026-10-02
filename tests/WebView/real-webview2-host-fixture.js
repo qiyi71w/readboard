@@ -556,20 +556,25 @@ class RealWebView2HostFixture {
     this.profileDirectory = path.join(this.testDirectory, "profile");
     await fs.mkdir(this.profileDirectory, { recursive: true });
     await fs.cp(this.publishDirectory, this.appDirectory, { recursive: true });
-    if (options.seedSyncInterval !== undefined)
-      await this.seedConfiguration(options.seedSyncInterval);
+    if (options.seedSyncInterval !== undefined || options.seedFoxIdentity !== undefined)
+      await this.seedConfiguration(options.seedSyncInterval ?? 200, options.seedFoxIdentity ?? "");
     await this.launchProcess();
     return this;
   }
 
-  async seedConfiguration(syncInterval) {
+  async seedConfiguration(syncInterval, foxIdentity) {
     if (!Number.isInteger(syncInterval) || syncInterval < 20)
       throw new Error(`Invalid seeded sync interval: ${syncInterval}`);
     const machineName = process.env.ComputerName || process.env.COMPUTERNAME || os.hostname();
     const machineKey = machineName.replace(/_/g, "");
     await fs.writeFile(
       path.join(this.appDirectory, "config.readboard.json"),
-      JSON.stringify({ ProtocolVersion: "220430", MachineKey: machineKey, SyncIntervalMs: syncInterval }, null, 2),
+      JSON.stringify({
+        ProtocolVersion: "220430",
+        MachineKey: machineKey,
+        SyncIntervalMs: syncInterval,
+        FoxAutoPlayNickname: foxIdentity
+      }, null, 2),
       "utf8"
     );
   }

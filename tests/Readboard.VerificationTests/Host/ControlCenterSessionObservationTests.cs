@@ -236,7 +236,8 @@ namespace Readboard.VerificationTests.Host
         [Fact]
         public void RepeatedObservation_ReappliesAfterRuntimeSessionMutation()
         {
-            ControlCenterRuntime runtime = CreateRuntime();
+            var environment = new RuntimeTestEnvironment();
+            ControlCenterRuntime runtime = CreateRuntime(environment);
             FoxWindowContext firstContext = new FoxWindowContext
             {
                 Kind = FoxWindowKind.LiveRoom,
@@ -249,15 +250,13 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(
                 ControlCenterSessionObservationApplyOutcome.Applied,
                 runtime.ApplyObservation(observation).Outcome);
-            runtime.UpdateAutoPlayObservation(
-                "external",
-                new FoxWindowContext
-                {
-                    Kind = FoxWindowKind.LiveRoom,
-                    LiveRoomState = FoxLiveRoomState.Playing,
-                    RoomToken = "second"
-                },
-                null);
+            environment.Context = new FoxWindowContext
+            {
+                Kind = FoxWindowKind.LiveRoom,
+                LiveRoomState = FoxLiveRoomState.Playing,
+                RoomToken = "second"
+            };
+            runtime.RefreshWindowContext();
 
             ControlCenterSessionObservationApplyResult reapplied = runtime.ApplyObservation(observation);
 
@@ -290,21 +289,11 @@ namespace Readboard.VerificationTests.Host
             Assert.False(stale.ShouldPublishSnapshot);
         }
 
-        private static ControlCenterRuntime CreateRuntime()
+        private static ControlCenterRuntime CreateRuntime(RuntimeTestEnvironment environment = null)
         {
-            return new ControlCenterRuntime(ControlCenterPreferences.FromConfig(AppConfig.CreateDefault("220430", "TEST")), new RecordingSessionAdapter(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
+            return RuntimeTestFactory.Create(ControlCenterPreferences.FromConfig(AppConfig.CreateDefault("220430", "TEST")), environment ?? new RuntimeTestEnvironment(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
         }
 
-        private sealed class RecordingSessionAdapter : IControlCenterSessionAdapter
-        {
-            public bool HasActiveSyncOperation { get; set; }
-
-            public void Apply(
-                ControlCenterPreferences preferences,
-                ControlCenterSessionState sessionState)
-            {
-            }
-        }
 
         private sealed class RecordingYikeContextAdapter : IYikeContextAdapter
         {

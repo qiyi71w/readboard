@@ -42,15 +42,7 @@ namespace readboard
 
         public void ReplayStartupProtocolState()
         {
-            SendBothSyncStateChange();
-            ControlCenterSessionState sessionState = controlCenterRuntime.CurrentSessionState;
-            if (!string.IsNullOrWhiteSpace(sessionState.AiTimeValue))
-                SendTimeChangedCommand();
-            if (!string.IsNullOrWhiteSpace(sessionState.PlayoutsValue))
-                SendPlayoutsChangedCommand();
-            if (!string.IsNullOrWhiteSpace(sessionState.FirstPolicyValue))
-                SendFirstPolicyChangedCommand();
-            SendPlayCommandIfSelected();
+            controlCenterRuntime.ReplayStartupProtocolState();
         }
 
         void IProtocolCommandHost.HandlePlaceRequest(MoveRequest request)
