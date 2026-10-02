@@ -334,8 +334,8 @@ namespace Readboard.VerificationTests.Protocol
             var environment = new ColorCycleEnvironment();
             FoxMatchBarReading Players(string color) => new FoxMatchBarReading(new[]
             {
-                new FoxPlayerListEntry("self", AutoPlayColorResolution.Known(color,
-                    color == "black" ? AutoPlayColorStatus.RecognizedBlack : AutoPlayColorStatus.RecognizedWhite))
+                new FoxPlayerListEntry(color == "white" ? "self" : "other", null),
+                new FoxPlayerListEntry(color == "black" ? "self" : "other", null)
             });
             environment.Players = Players("black");
             var transport = new RecordingTransport();
@@ -349,6 +349,7 @@ namespace Readboard.VerificationTests.Protocol
             object snapshot = CreateSnapshot(typeof(SyncCoordinatorHostSnapshot), SyncMode.Fox, environment.Handle);
             var host = new HostRecorder(snapshot);
             int captures = 0;
+            var observedCounts = new List<int>();
             object Capture(MethodInfo method, object[] args)
             {
                 if (method.Name != "CaptureSnapshot")
@@ -357,21 +358,21 @@ namespace Readboard.VerificationTests.Protocol
                 // These actions run on the existing capture path, like the UI-thread host.
                 if (captures == 4)
                 {
-                    Assert.Equal(1, transport.CountLines(blackLine));
+                    observedCounts.Add(transport.CountLines(blackLine));
                     control.RequestAutoPlay();
                     control.RequestAutoPlay();
-                    Assert.Equal(3, transport.CountLines(blackLine));
+                    observedCounts.Add(transport.CountLines(blackLine));
                 }
                 if (captures == 5)
                 {
                     environment.BindingInvalidated = true;
                     environment.Players = FoxMatchBarReading.Empty;
                     control.RequestAutoPlay();
-                    Assert.Equal(0, transport.CountLines("stopAutoPlay"));
+                    observedCounts.Add(transport.CountLines("stopAutoPlay"));
                 }
                 if (captures == 7)
                 {
-                    Assert.Equal(1, transport.CountLines("stopAutoPlay"));
+                    observedCounts.Add(transport.CountLines("stopAutoPlay"));
                     control.Apply(ControlCenterIntent.SetAutoPlayEnabled(false));
                     environment.Players = Players("white");
                     control.Apply(ControlCenterIntent.SetAutoPlayEnabled(true));
@@ -400,6 +401,7 @@ namespace Readboard.VerificationTests.Protocol
             try
             {
                 VerificationCompletion.Wait(recognition.BlockedRecognizeStarted, "Runtime authorization captures did not settle.");
+                Assert.Equal(new[] { 1, 3, 0, 1 }, observedCounts);
                 Assert.Equal(3, transport.CountLines(blackLine));
                 Assert.Equal(1, transport.CountLines(whiteLine));
                 Assert.Equal(2, transport.CountLines("stopAutoPlay"));

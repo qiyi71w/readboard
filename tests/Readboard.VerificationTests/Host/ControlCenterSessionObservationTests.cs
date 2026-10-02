@@ -12,7 +12,7 @@ namespace Readboard.VerificationTests.Host
         public void CompositeObservation_AppliesAllFieldsAndPublishesOnce()
         {
             ControlCenterRuntime runtime = CreateRuntime();
-            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithTargetWindowValid(true)
                 .WithFoxWindowContext(new FoxWindowContext
                 {
@@ -86,7 +86,7 @@ namespace Readboard.VerificationTests.Host
         public void RepeatedObservation_IsNoOpWithoutSecondPublicationEffect()
         {
             ControlCenterRuntime runtime = CreateRuntime();
-            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithHostConnected(true)
                 .WithSemanticLog("INFO", "WebView_hostConnected");
 
@@ -103,9 +103,9 @@ namespace Readboard.VerificationTests.Host
         public void SemanticLogFingerprintIncludesTypedArguments()
         {
             ControlCenterRuntime runtime = CreateRuntime();
-            ControlCenterSessionObservation first = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation first = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithSemanticLog("SYNC", "WebView_candidateRowNumber", null, 1);
-            ControlCenterSessionObservation second = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation second = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithSemanticLog("SYNC", "WebView_candidateRowNumber", null, 2);
 
             Assert.Equal(ControlCenterSessionObservationApplyOutcome.Applied, runtime.ApplyObservation(first).Outcome);
@@ -122,9 +122,9 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterRuntime runtime = CreateRuntime();
 
-            ControlCenterSessionObservation first = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation first = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithRecentSync("a|1", 2, "3");
-            ControlCenterSessionObservation second = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation second = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithRecentSync("a", 1, "2|3");
 
             Assert.Equal(
@@ -143,7 +143,7 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterRuntime runtime = CreateRuntime();
 
-            ControlCenterSessionObservation first = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation first = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithFoxWindowContext(new FoxWindowContext
                 {
                     Kind = FoxWindowKind.LiveRoom,
@@ -154,7 +154,7 @@ namespace Readboard.VerificationTests.Host
                     RecordTotalMove = 1,
                     TitleFingerprint = "tail"
                 });
-            ControlCenterSessionObservation second = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation second = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithFoxWindowContext(new FoxWindowContext
                 {
                     Kind = FoxWindowKind.LiveRoom,
@@ -185,14 +185,14 @@ namespace Readboard.VerificationTests.Host
         public void ObservationFingerprint_DistinguishesNullAndEmptyContextFields()
         {
             ControlCenterRuntime runtime = CreateRuntime();
-            ControlCenterSessionObservation nullFox = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation nullFox = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithFoxWindowContext(new FoxWindowContext
                 {
                     Kind = FoxWindowKind.LiveRoom,
                     RoomToken = null,
                     TitleFingerprint = null
                 });
-            ControlCenterSessionObservation emptyFox = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation emptyFox = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithFoxWindowContext(new FoxWindowContext
                 {
                     Kind = FoxWindowKind.LiveRoom,
@@ -214,11 +214,11 @@ namespace Readboard.VerificationTests.Host
         public void ObservationFingerprint_DoesNotNormalizeYikeContextFields()
         {
             ControlCenterRuntime runtime = CreateRuntime();
-            ControlCenterSessionObservation seedYike = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation seedYike = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithYikeWindowContext(new YikeWindowContext { RoomToken = "seed" });
-            ControlCenterSessionObservation nullYike = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation nullYike = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithYikeWindowContext(new YikeWindowContext { RoomToken = null });
-            ControlCenterSessionObservation underscoreYike = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation underscoreYike = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithYikeWindowContext(new YikeWindowContext { RoomToken = "_" });
 
             Assert.Equal(
@@ -244,7 +244,7 @@ namespace Readboard.VerificationTests.Host
                 LiveRoomState = FoxLiveRoomState.Playing,
                 RoomToken = "first"
             };
-            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(0)
+            ControlCenterSessionObservation observation = new ControlCenterSessionObservation(runtime.CaptureSessionObservationGeneration())
                 .WithFoxWindowContext(firstContext);
 
             Assert.Equal(

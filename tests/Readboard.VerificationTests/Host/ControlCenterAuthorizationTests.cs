@@ -464,10 +464,8 @@ namespace Readboard.VerificationTests.Host
         {
             return new FoxMatchBarReading(new[]
             {
-                new FoxPlayerListEntry("self", AutoPlayColorResolution.Known(selfColor,
-                    selfColor == "black" ? AutoPlayColorStatus.RecognizedBlack : AutoPlayColorStatus.RecognizedWhite)),
-                new FoxPlayerListEntry("other", AutoPlayColorResolution.Known(selfColor == "black" ? "white" : "black",
-                    selfColor == "black" ? AutoPlayColorStatus.RecognizedWhite : AutoPlayColorStatus.RecognizedBlack))
+                new FoxPlayerListEntry(selfColor == "white" ? "self" : "other", null),
+                new FoxPlayerListEntry(selfColor == "black" ? "self" : "other", null)
             });
         }
 
