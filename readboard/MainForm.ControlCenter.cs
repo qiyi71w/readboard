@@ -40,7 +40,7 @@ namespace readboard
 
             public void ShowOnBoardHint()
             {
-                form.webViewSettingsDialog = form.CreateWebViewDialog("showInBoardHint");
+                form.webViewSettingsDialog = CreateWebViewDialog("showInBoardHint");
             }
         }
 
