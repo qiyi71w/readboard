@@ -4,111 +4,44 @@ namespace readboard
 {
     public partial class MainForm
     {
-        private sealed class MainFormControlCenterSessionAdapter : IControlCenterSessionAdapter
+        private sealed class MainFormControlCenterEnvironment : IControlCenterEnvironment
         {
             private readonly MainForm form;
-            private bool hasAppliedPlatform;
-            private SyncMode appliedPlatform;
-            private bool hasAppliedPreferences;
-            private bool appliedTwoWaySync;
-            private bool appliedShowOnBoard;
-            private bool hasAppliedSession;
-            private bool appliedAutoPlayEnabled;
-            private AutoPlayColorMode? appliedSelectedAutoPlayColorMode;
-            private AutoPlayMoveMode appliedAutoPlayMoveMode;
-            private string appliedAiTimeValue;
-            private string appliedPlayoutsValue;
-            private string appliedFirstPolicyValue;
 
-            public MainFormControlCenterSessionAdapter(MainForm form)
+            public MainFormControlCenterEnvironment(MainForm form)
             {
                 this.form = form ?? throw new ArgumentNullException("form");
             }
 
-            public bool HasActiveSyncOperation
+            public bool HasActiveSyncOperation { get { return form.HasActiveSyncOperation(); } }
+            public bool? TargetWindowValid { get { return form.hwnd == IntPtr.Zero ? (bool?)null : IsWindow(form.hwnd); } }
+            public bool ShowInBoardHint { get { return Program.showInBoardHint; } }
+            public DateTime UtcNow { get { return DateTime.UtcNow; } }
+
+            public ControlCenterWindowFacts ReadWindow()
             {
-                get { return form.HasActiveSyncOperation(); }
+                return form.ReadFoxWindowFacts();
             }
 
-            public void Apply(
-                ControlCenterPreferences preferences,
-                ControlCenterSessionState sessionState)
+            public FoxMatchBarReading ReadPlayers(IntPtr windowHandle)
             {
-                if (preferences == null)
-                    throw new ArgumentNullException("preferences");
-                if (sessionState == null)
-                    throw new ArgumentNullException("sessionState");
+                return FoxMatchBarWindowsReader.TryRead(windowHandle);
+            }
 
-                bool platformChanged = !hasAppliedPlatform || appliedPlatform != preferences.Platform;
-                bool twoWaySyncChanged = hasAppliedPreferences
-                    && appliedTwoWaySync != preferences.TwoWaySync;
-                bool showOnBoardChanged = hasAppliedPreferences
-                    && appliedShowOnBoard != preferences.ShowOnBoard;
-                bool autoPlayChanged = hasAppliedSession
-                    && appliedAutoPlayEnabled != sessionState.AutoPlayEnabled;
-                bool autoPlayColorChanged = hasAppliedSession
-                    && appliedSelectedAutoPlayColorMode != sessionState.SelectedAutoPlayColorMode;
-                bool autoPlayMoveModeChanged = hasAppliedPreferences
-                    && appliedAutoPlayMoveMode != preferences.AutoPlayMoveMode;
-                bool aiTimeChanged = hasAppliedSession
-                    && !string.Equals(appliedAiTimeValue, sessionState.AiTimeValue, StringComparison.Ordinal);
-                bool playoutsChanged = hasAppliedSession
-                    && !string.Equals(appliedPlayoutsValue, sessionState.PlayoutsValue, StringComparison.Ordinal);
-                bool firstPolicyChanged = hasAppliedSession
-                    && !string.Equals(appliedFirstPolicyValue, sessionState.FirstPolicyValue, StringComparison.Ordinal);
-
+            public void ProjectState(ControlCenterPreferences preferences, ControlCenterSessionState sessionState, bool platformChanged)
+            {
                 if (platformChanged)
                 {
-                    form.ClearFoxAutoPlayColorDetectionState();
-                    form.ResetWebViewSyncState();
+                    if (preferences.Platform != SyncMode.Yike)
+                        form.ClearYikeContext();
+                    form.ResetMainWindowTitleProjection();
                 }
-                if (autoPlayChanged || sessionState.SelectedAutoPlayColorMode != AutoPlayColorMode.FoxAuto)
-                    form.ClearFoxAutoPlayColorDetectionState();
-                if (!hasAppliedPreferences || twoWaySyncChanged)
-                    form.SetSyncBoth(preferences.TwoWaySync);
-                if (platformChanged)
-                    form.ApplySyncModeControlState();
-                hasAppliedPlatform = true;
-                appliedPlatform = preferences.Platform;
-                hasAppliedPreferences = true;
-                appliedTwoWaySync = preferences.TwoWaySync;
-                appliedShowOnBoard = preferences.ShowOnBoard;
-                hasAppliedSession = true;
-                appliedAutoPlayEnabled = sessionState.AutoPlayEnabled;
-                appliedSelectedAutoPlayColorMode = sessionState.SelectedAutoPlayColorMode;
-                appliedAutoPlayMoveMode = preferences.AutoPlayMoveMode;
-                appliedAiTimeValue = sessionState.AiTimeValue;
-                appliedPlayoutsValue = sessionState.PlayoutsValue;
-                appliedFirstPolicyValue = sessionState.FirstPolicyValue;
-
-                form.sessionCoordinator.SetSyncPlatform(MainForm.ResolveSyncPlatform(preferences.Platform));
                 form.ApplyMainWindowTitle();
-                if (!form.isInitializingProtocolState)
-                {
-                    if (twoWaySyncChanged)
-                        form.ApplyControlCenterTwoWaySyncEffect();
-                    if (showOnBoardChanged && !platformChanged)
-                        form.ApplyControlCenterShowOnBoardEffect(preferences.ShowOnBoard);
-                    if (autoPlayChanged)
-                    {
-                        if (sessionState.AutoPlayEnabled)
-                            form.SendPlayCommandIfSelected();
-                        else
-                            form.SendStopAutoPlayCommand();
-                    }
-                    else if ((autoPlayColorChanged || autoPlayMoveModeChanged)
-                        && sessionState.AutoPlayEnabled
-                        && form.sessionCoordinator.KeepSync)
-                    {
-                        form.SendPlayCommandIfSelected();
-                    }
-                    if (aiTimeChanged)
-                        form.SendTimeChangedCommand();
-                    if (playoutsChanged)
-                        form.SendPlayoutsChangedCommand();
-                    if (firstPolicyChanged)
-                        form.SendFirstPolicyChangedCommand();
-                }
+            }
+
+            public void ShowOnBoardHint()
+            {
+                form.webViewSettingsDialog = CreateWebViewDialog("showInBoardHint");
             }
         }
 
@@ -181,53 +114,6 @@ namespace readboard
         }
 
 
-        private void ApplyControlCenterTwoWaySyncEffect()
-        {
-            ControlCenterPreferences preferences = controlCenterRuntime.CurrentPreferences;
-            foreach (ControlCenterSessionEffect effect in ControlCenterSessionEffectPlanner.PlanTwoWaySync(
-                preferences,
-                CanUseForegroundFoxInBoardProtocol()))
-            {
-                ApplyControlCenterSessionEffect(effect);
-            }
-        }
-
-        private void ApplyControlCenterShowOnBoardEffect(bool enabled)
-        {
-            ControlCenterPreferences preferences = controlCenterRuntime.CurrentPreferences;
-            foreach (ControlCenterSessionEffect effect in ControlCenterSessionEffectPlanner.PlanShowOnBoard(
-                enabled,
-                preferences.TwoWaySync,
-                CanUseForegroundFoxInBoardProtocol(),
-                Program.showInBoardHint))
-            {
-                ApplyControlCenterSessionEffect(effect);
-            }
-        }
-
-        private void ApplyControlCenterSessionEffect(ControlCenterSessionEffect effect)
-        {
-            switch (effect.Kind)
-            {
-                case ControlCenterSessionEffectKind.SendBothSync:
-                    SendBothSyncCommand(effect.Enabled);
-                    return;
-                case ControlCenterSessionEffectKind.SendForegroundFoxInBoard:
-                    SendForegroundFoxInBoardCommand(effect.Enabled);
-                    return;
-                case ControlCenterSessionEffectKind.SendNotInBoard:
-                    SendNotInBoardCommand();
-                    return;
-                case ControlCenterSessionEffectKind.ShowOnBoardHint:
-                    webViewSettingsDialog = CreateWebViewDialog("showInBoardHint");
-                    return;
-                case ControlCenterSessionEffectKind.ResendSyncSessionState:
-                    ResendSyncSessionState();
-                    return;
-                default:
-                    throw new ArgumentOutOfRangeException("effect");
-            }
-        }
 
         private void ProjectControlCenterState()
         {

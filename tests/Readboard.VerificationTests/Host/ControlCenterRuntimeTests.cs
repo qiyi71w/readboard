@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using readboard;
 using Xunit;
 
@@ -43,7 +42,7 @@ namespace Readboard.VerificationTests.Host
             SyncMode platform = (SyncMode)platformValue;
             AppConfig config = AppConfig.CreateDefault("220430", "TEST");
             config.SyncMode = platform;
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), new RecordingSessionAdapter(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(ControlCenterPreferences.FromConfig(config), new RuntimeTestEnvironment(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
 
             Assert.Equal(expectedEnabled, runtime.Snapshot.IdentityEnabled);
         }
@@ -53,16 +52,15 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetPlatform(SyncMode.Yike));
 
             Assert.Equal(ControlCenterApplyOutcome.Changed, result.Outcome);
             Assert.Equal(SyncMode.Yike, result.Snapshot.Platform);
-            Assert.Equal(SyncMode.Yike, session.Applied[0].Platform);
             Assert.Single(persistence.Saved);
             Assert.True(result.Snapshot.PreferencesSaved);
             Assert.False(result.Snapshot.CustomBoardSizeEnabled);
@@ -74,15 +72,14 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetPlatform(SyncMode.Fox));
 
             Assert.Equal(ControlCenterApplyOutcome.NoOp, result.Outcome);
-            Assert.Empty(session.Applied);
             Assert.Empty(persistence.Saved);
             Assert.False(result.ShouldPublishSnapshot);
         }
@@ -92,9 +89,9 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            RecordingSessionAdapter session = new RecordingSessionAdapter { HasActiveSyncOperation = true };
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment { HasActiveSyncOperation = true };
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetPlatform(SyncMode.Yike));
@@ -105,7 +102,6 @@ namespace Readboard.VerificationTests.Host
             Assert.False(result.Snapshot.ConfigurationEnabled);
             Assert.False(result.Snapshot.CustomBoardSizeEnabled);
             Assert.False(result.Snapshot.CustomBoardDimensionsEnabled);
-            Assert.Empty(session.Applied);
             Assert.Empty(persistence.Saved);
             Assert.True(result.ShouldPublishSnapshot);
         }
@@ -117,9 +113,9 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(platform
                 ? ControlCenterIntent.SetPlatform((SyncMode)value)
@@ -128,7 +124,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(ControlCenterApplyOutcome.Rejected, result.Outcome);
             Assert.Equal(SyncMode.Fox, result.Snapshot.Platform);
             Assert.Equal(ControlCenterBoardSizeKind.Preset19, result.Snapshot.BoardSizeKind);
-            Assert.Empty(session.Applied);
             Assert.Empty(persistence.Saved);
             Assert.True(result.ShouldPublishSnapshot);
         }
@@ -142,7 +137,7 @@ namespace Readboard.VerificationTests.Host
             config.BoardHeight = 9;
             config.CustomBoardWidth = 17;
             config.CustomBoardHeight = 9;
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), new RecordingSessionAdapter(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(ControlCenterPreferences.FromConfig(config), new RuntimeTestEnvironment(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Custom));
@@ -163,9 +158,9 @@ namespace Readboard.VerificationTests.Host
         {
             AppConfig config = AppConfig.CreateDefault("220430", "TEST");
             config.SyncMode = SyncMode.Background;
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(ControlCenterPreferences.FromConfig(config), session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(width
                 ? ControlCenterIntent.SetCustomBoardWidth(17)
@@ -175,7 +170,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(ControlCenterBoardSizeKind.Preset19, result.Snapshot.BoardSizeKind);
             Assert.True(result.Snapshot.CustomBoardSizeEnabled);
             Assert.False(result.Snapshot.CustomBoardDimensionsEnabled);
-            Assert.Empty(session.Applied);
             Assert.Empty(persistence.Saved);
             Assert.True(result.ShouldPublishSnapshot);
         }
@@ -194,9 +188,9 @@ namespace Readboard.VerificationTests.Host
                 CustomBoardWidth = 17,
                 CustomBoardHeight = 9
             };
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(width
                 ? ControlCenterIntent.SetCustomBoardWidth(18)
@@ -207,7 +201,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(ControlCenterBoardSizeKind.Custom, result.Snapshot.BoardSizeKind);
             Assert.False(result.Snapshot.CustomBoardSizeEnabled);
             Assert.False(result.Snapshot.CustomBoardDimensionsEnabled);
-            Assert.Empty(session.Applied);
             Assert.Empty(persistence.Saved);
             Assert.True(result.ShouldPublishSnapshot);
         }
@@ -227,9 +220,9 @@ namespace Readboard.VerificationTests.Host
             config.BoardHeight = 9;
             config.CustomBoardWidth = 17;
             config.CustomBoardHeight = 9;
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(ControlCenterPreferences.FromConfig(config), session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(width
                 ? ControlCenterIntent.SetCustomBoardWidth(dimension)
@@ -238,7 +231,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(ControlCenterApplyOutcome.Rejected, result.Outcome);
             Assert.Equal(17, result.Snapshot.BoardWidth);
             Assert.Equal(9, result.Snapshot.BoardHeight);
-            Assert.Empty(session.Applied);
             Assert.Empty(persistence.Saved);
             Assert.True(result.ShouldPublishSnapshot);
         }
@@ -252,9 +244,9 @@ namespace Readboard.VerificationTests.Host
             config.BoardHeight = 19;
             config.CustomBoardWidth = 19;
             config.CustomBoardHeight = 19;
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(ControlCenterPreferences.FromConfig(config), session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult selectCustom = runtime.Apply(
                 ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Custom));
@@ -265,7 +257,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(ControlCenterApplyOutcome.Changed, setWidth.Outcome);
             Assert.Equal(17, setWidth.Snapshot.BoardWidth);
             Assert.Equal(19, setWidth.Snapshot.BoardHeight);
-            Assert.Equal(2, session.Applied.Count);
             Assert.Equal(2, persistence.Saved.Count);
             Assert.True(setWidth.Snapshot.CustomBoardSizeEnabled);
             Assert.True(setWidth.Snapshot.CustomBoardDimensionsEnabled);
@@ -276,9 +267,9 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetBoardSize(ControlCenterBoardSizeKind.Custom));
@@ -287,7 +278,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(ControlCenterBoardSizeKind.Preset19, result.Snapshot.BoardSizeKind);
             Assert.False(result.Snapshot.CustomBoardSizeEnabled);
             Assert.False(result.Snapshot.CustomBoardDimensionsEnabled);
-            Assert.Empty(session.Applied);
             Assert.Empty(persistence.Saved);
         }
 
@@ -296,9 +286,9 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence { Failure = new IOException("disk full") };
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetPlatform(SyncMode.Yike));
@@ -307,7 +297,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(SyncMode.Yike, runtime.Snapshot.Platform);
             Assert.False(result.Snapshot.PreferencesSaved);
             Assert.Equal("disk full", result.Snapshot.PersistenceError);
-            Assert.Single(session.Applied);
             Assert.Single(persistence.Saved);
         }
 
@@ -316,12 +305,12 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence
             {
                 Failure = new IOException("disk full")
             };
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             runtime.Apply(ControlCenterIntent.SetPlatform(SyncMode.Yike));
             Assert.Single(persistence.Saved);
@@ -342,16 +331,15 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetTwoWaySync(true));
 
             Assert.Equal(ControlCenterApplyOutcome.Changed, result.Outcome);
             Assert.True(result.Snapshot.TwoWaySync);
-            Assert.True(session.Applied[0].TwoWaySync);
             Assert.Single(persistence.Saved);
             Assert.True(persistence.Saved[0].TwoWaySync);
             Assert.True(result.Snapshot.TwoWaySyncEnabled);
@@ -362,9 +350,9 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetShowOnBoard(true));
@@ -372,7 +360,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(ControlCenterApplyOutcome.Changed, result.Outcome);
             Assert.True(result.Snapshot.ShowOnBoard);
             Assert.True(result.Snapshot.ShowOnBoardEnabled);
-            Assert.True(session.Applied[0].ShowOnBoard);
             Assert.Single(persistence.Saved);
             Assert.True(persistence.Saved[0].ShowOnBoard);
         }
@@ -382,9 +369,9 @@ namespace Readboard.VerificationTests.Host
         {
             AppConfig config = AppConfig.CreateDefault("220430", "TEST");
             config.SyncMode = SyncMode.Foreground;
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(ControlCenterPreferences.FromConfig(config), session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetShowOnBoard(true));
@@ -392,7 +379,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(ControlCenterApplyOutcome.Rejected, result.Outcome);
             Assert.False(result.Snapshot.ShowOnBoard);
             Assert.False(result.Snapshot.ShowOnBoardEnabled);
-            Assert.Empty(session.Applied);
             Assert.Empty(persistence.Saved);
             Assert.True(result.ShouldPublishSnapshot);
         }
@@ -408,7 +394,7 @@ namespace Readboard.VerificationTests.Host
                 BoardHeight = 19,
                 ShowOnBoard = true
             };
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, new RecordingSessionAdapter(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, new RuntimeTestEnvironment(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
 
             Assert.False(runtime.Snapshot.ShowOnBoard);
             Assert.False(runtime.Snapshot.ShowOnBoardEnabled);
@@ -419,9 +405,9 @@ namespace Readboard.VerificationTests.Host
         {
             AppConfig config = AppConfig.CreateDefault("220430", "TEST");
             config.ShowInBoard = true;
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(ControlCenterPreferences.FromConfig(config), session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetPlatform(SyncMode.Foreground));
@@ -430,8 +416,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(SyncMode.Foreground, result.Snapshot.Platform);
             Assert.False(result.Snapshot.ShowOnBoard);
             Assert.False(result.Snapshot.ShowOnBoardEnabled);
-            Assert.Single(session.Applied);
-            Assert.False(session.Applied[0].ShowOnBoard);
             Assert.Single(persistence.Saved);
             Assert.False(persistence.Saved[0].ShowOnBoard);
         }
@@ -441,9 +425,9 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            RecordingSessionAdapter session = new RecordingSessionAdapter { HasActiveSyncOperation = true };
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment { HasActiveSyncOperation = true };
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult twoWay = runtime.Apply(
                 ControlCenterIntent.SetTwoWaySync(true));
@@ -452,7 +436,6 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Equal(ControlCenterApplyOutcome.Changed, twoWay.Outcome);
             Assert.Equal(ControlCenterApplyOutcome.Changed, show.Outcome);
-            Assert.Equal(2, session.Applied.Count);
             Assert.Equal(2, persistence.Saved.Count);
             Assert.False(twoWay.Snapshot.ConfigurationEnabled);
             Assert.True(twoWay.Snapshot.TwoWaySyncEnabled);
@@ -464,12 +447,12 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence
             {
                 Failure = new IOException("disk full")
             };
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetShowOnBoard(true));
@@ -478,7 +461,6 @@ namespace Readboard.VerificationTests.Host
             Assert.True(runtime.Snapshot.ShowOnBoard);
             Assert.False(result.Snapshot.PreferencesSaved);
             Assert.Equal("disk full", result.Snapshot.PersistenceError);
-            Assert.Single(session.Applied);
             Assert.Single(persistence.Saved);
         }
 
@@ -494,9 +476,9 @@ namespace Readboard.VerificationTests.Host
                 PlayoutsValue = "1000",
                 FirstPolicyValue = "200"
             };
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, sessionState, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, sessionState, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetAutoPlayEnabled(true));
@@ -513,7 +495,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal("5", result.Snapshot.AiTimeValue);
             Assert.Equal("1000", result.Snapshot.PlayoutsValue);
             Assert.Equal("200", result.Snapshot.FirstPolicyValue);
-            Assert.True(session.AppliedSessions[0].AutoPlayEnabled);
             Assert.Empty(persistence.Saved);
         }
 
@@ -529,8 +510,8 @@ namespace Readboard.VerificationTests.Host
             config.SyncBoth = true;
             config.AutoPlayColorMode = mode;
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(
-                ControlCenterPreferences.FromConfig(config), new RecordingSessionAdapter(),
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(
+                ControlCenterPreferences.FromConfig(config), new RuntimeTestEnvironment(),
                 persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult enabled = runtime.Apply(ControlCenterIntent.SetAutoPlayEnabled(true));
@@ -573,7 +554,7 @@ namespace Readboard.VerificationTests.Host
                 AutoPlayEnabled = true
             };
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, sessionState, new RecordingSessionAdapter(), persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, sessionState, new RuntimeTestEnvironment(), persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult color = runtime.Apply(
                 ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.ManualWhite));
@@ -599,9 +580,9 @@ namespace Readboard.VerificationTests.Host
         {
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(
                 AppConfig.CreateDefault("220430", "TEST"));
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterIntent intent = kind == 0
                 ? ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.ManualBlack)
@@ -613,234 +594,9 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Equal(ControlCenterApplyOutcome.Rejected, result.Outcome);
             Assert.True(result.ShouldPublishSnapshot);
-            Assert.Empty(session.Applied);
             Assert.Empty(persistence.Saved);
         }
 
-        [Fact]
-        public void FoxAutoPlayObservation_IsKnownOnlyForFoxAndCurrentRecognition()
-        {
-            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
-            config.SyncBoth = true;
-            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
-            ControlCenterSessionState sessionState = new ControlCenterSessionState
-            {
-                AutoPlayEnabled = true,
-                FoxAutoPlayNicknameSignature = "sig",
-                FoxWindowContext = new FoxWindowContext
-                {
-                    Kind = FoxWindowKind.LiveRoom,
-                    LiveRoomState = FoxLiveRoomState.Playing
-                },
-                DetectedAutoPlayColor = AutoPlayColorResolution.Known(
-                    "black",
-                    AutoPlayColorStatus.RecognizedBlack)
-            };
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), sessionState, new RecordingSessionAdapter(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
-
-            Assert.Equal("black", runtime.Snapshot.PlayColor);
-            Assert.Equal(AutoPlayColorStatus.RecognizedBlack, runtime.Snapshot.AutoPlayColorStatus);
-            Assert.False(runtime.UpdateAutoPlayObservation(
-                "sig",
-                sessionState.FoxWindowContext,
-                AutoPlayColorResolution.Known("white", AutoPlayColorStatus.RecognizedWhite)));
-            Assert.Equal("black", runtime.Snapshot.PlayColor);
-
-            runtime.UpdateAutoPlayObservation(
-                "sig",
-                sessionState.FoxWindowContext,
-                AutoPlayColorResolution.Unknown(AutoPlayColorStatus.NicknameNotMatched));
-            Assert.Null(runtime.Snapshot.PlayColor);
-            Assert.Equal(AutoPlayColorStatus.NicknameNotMatched, runtime.Snapshot.AutoPlayColorStatus);
-
-            ControlCenterApplyResult platform = runtime.Apply(
-                ControlCenterIntent.SetPlatform(SyncMode.Yike));
-            Assert.Equal(ControlCenterApplyOutcome.Changed, platform.Outcome);
-            Assert.Null(platform.Snapshot.PlayColor);
-            Assert.Equal(AutoPlayColorStatus.UnsupportedPlatform, platform.Snapshot.AutoPlayColorStatus);
-        }
-
-        [Fact]
-        public void FoxRoomContextChange_RevokesColorUntilCurrentRoomRecognition()
-        {
-            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
-            config.SyncBoth = true;
-            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
-            FoxWindowContext roomOne = PlayingRoom("room-1");
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), new ControlCenterSessionState
-            {
-                AutoPlayEnabled = true,
-                FoxAutoPlayNicknameSignature = "sig",
-                FoxWindowContext = roomOne,
-                DetectedAutoPlayColor = AutoPlayColorResolution.Known(
-                    "black",
-                    AutoPlayColorStatus.RecognizedBlack)
-            }, new RecordingSessionAdapter(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
-
-            ControlCenterSessionObservationApplyResult roomChange = runtime.ApplyObservation(
-                new ControlCenterSessionObservation(0)
-                    .WithFoxWindowContext(PlayingRoom("room-2")));
-
-            Assert.Equal(ControlCenterSessionObservationApplyOutcome.Applied, roomChange.Outcome);
-            Assert.Null(roomChange.Snapshot.PlayColor);
-            Assert.Equal(AutoPlayColorStatus.ColorUnknown, roomChange.Snapshot.AutoPlayColorStatus);
-
-            Assert.True(runtime.ApplyFoxIdentityRecognition(
-                "sig",
-                PlayingRoom("room-2"),
-                RecognizedFoxRoom("room-2", "white")));
-
-            Assert.Equal("white", runtime.Snapshot.PlayColor);
-        }
-
-        [Fact]
-        public void FoxLiveMoveChange_RetainsDetectedColorAuthorization()
-        {
-            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
-            config.SyncBoth = true;
-            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
-            FoxWindowContext roomOne = PlayingRoom("room-1");
-            roomOne.LiveTitleMove = 1;
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), new ControlCenterSessionState
-            {
-                AutoPlayEnabled = true,
-                FoxAutoPlayNicknameSignature = "sig",
-                FoxWindowContext = roomOne,
-                DetectedAutoPlayColor = AutoPlayColorResolution.Known(
-                    "black",
-                    AutoPlayColorStatus.RecognizedBlack)
-            }, new RecordingSessionAdapter(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
-
-            FoxWindowContext nextMove = PlayingRoom("room-1");
-            nextMove.LiveTitleMove = 2;
-            ControlCenterSessionObservationApplyResult result = runtime.ApplyObservation(
-                new ControlCenterSessionObservation(0)
-                    .WithFoxWindowContext(nextMove));
-
-            Assert.Equal(ControlCenterSessionObservationApplyOutcome.Applied, result.Outcome);
-            Assert.Equal("black", result.Snapshot.PlayColor);
-            Assert.Equal(AutoPlayColorStatus.RecognizedBlack, result.Snapshot.AutoPlayColorStatus);
-        }
-
-        [Fact]
-        public void PreviousRoomFoxIdentityRecognition_DoesNotMutateCurrentAuthorization()
-        {
-            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
-            config.SyncBoth = true;
-            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
-            FoxWindowContext currentRoom = PlayingRoom("room-2");
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), new ControlCenterSessionState
-            {
-                AutoPlayEnabled = true,
-                FoxAutoPlayNicknameSignature = "sig",
-                FoxWindowContext = currentRoom,
-                DetectedAutoPlayColor = AutoPlayColorResolution.Known(
-                    "white",
-                    AutoPlayColorStatus.RecognizedWhite)
-            }, new RecordingSessionAdapter(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
-
-            bool changed = runtime.ApplyFoxIdentityRecognition(
-                "sig",
-                PlayingRoom("room-1"),
-                RecognizedFoxRoom("room-1", "black"));
-
-            Assert.False(changed);
-            Assert.Equal("room-2", runtime.Snapshot.FoxWindowContext.RoomToken);
-            Assert.Equal("white", runtime.Snapshot.PlayColor);
-        }
-
-        [Fact]
-        public void MismatchedFoxIdentityRecognition_DoesNotMutateCurrentAuthorization()
-        {
-            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
-            config.SyncBoth = true;
-            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), new ControlCenterSessionState
-            {
-                AutoPlayEnabled = true,
-                FoxAutoPlayNicknameSignature = "sig",
-                FoxWindowContext = PlayingRoom("room-2"),
-                DetectedAutoPlayColor = AutoPlayColorResolution.Known(
-                    "white",
-                    AutoPlayColorStatus.RecognizedWhite)
-            }, new RecordingSessionAdapter(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
-
-            bool changed = runtime.ApplyFoxIdentityRecognition(
-                "other-sig",
-                PlayingRoom("room-2"),
-                RecognizedFoxRoom("room-2", "black"));
-
-            Assert.False(changed);
-            Assert.Equal("room-2", runtime.Snapshot.FoxWindowContext.RoomToken);
-            Assert.Equal("white", runtime.Snapshot.PlayColor);
-        }
-
-        private static FoxIdentityRecognitionResult RecognizedFoxRoom(
-            string roomToken,
-            string color)
-        {
-            FoxWindowContext context = PlayingRoom(roomToken);
-            AutoPlayColorStatus status = color == "black"
-                ? AutoPlayColorStatus.RecognizedBlack
-                : AutoPlayColorStatus.RecognizedWhite;
-            AutoPlayColorResolution resolution = AutoPlayColorResolution.Known(color, status);
-            return new FoxIdentityRecognitionResult(
-                FoxIdentityRecognitionApplyOutcome.Applied,
-                new FoxIdentityRoomSnapshot(
-                    1,
-                    FoxIdentitySelection.BuildRoomContextSignature(context),
-                    true,
-                    resolution,
-                    resolution));
-        }
-
-        private static FoxWindowContext PlayingRoom(string roomToken)
-        {
-            return new FoxWindowContext
-            {
-                Kind = FoxWindowKind.LiveRoom,
-                LiveRoomState = FoxLiveRoomState.Playing,
-                RoomToken = roomToken
-            };
-        }
-
-        [Theory]
-        [InlineData("room-1")]
-        [InlineData("room-2")]
-        public void DisablingAutoPlay_ClearsRecognitionBeforeNextEnable(string nextRoom)
-        {
-            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
-            config.SyncBoth = true;
-            config.AutoPlayColorMode = AutoPlayColorMode.FoxAuto;
-            ControlCenterSessionState sessionState = new ControlCenterSessionState
-            {
-                AutoPlayEnabled = true,
-                FoxAutoPlayNicknameSignature = "sig",
-                FoxWindowContext = PlayingRoom("room-1"),
-                DetectedAutoPlayColor = AutoPlayColorResolution.Known(
-                    "white",
-                    AutoPlayColorStatus.RecognizedWhite)
-            };
-            ControlCenterRuntime runtime = new ControlCenterRuntime(ControlCenterPreferences.FromConfig(config), sessionState, new RecordingSessionAdapter(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
-
-            ControlCenterApplyResult disabled = runtime.Apply(
-                ControlCenterIntent.SetAutoPlayEnabled(false));
-            ControlCenterApplyResult enabled = runtime.Apply(
-                ControlCenterIntent.SetAutoPlayEnabled(true));
-
-            Assert.False(disabled.Snapshot.AutoPlayEnabled);
-            Assert.False(disabled.Snapshot.ManualColorEnabled);
-            Assert.True(enabled.Snapshot.AutoPlayEnabled);
-            Assert.Null(enabled.Snapshot.PlayColor);
-            Assert.Equal(AutoPlayColorStatus.ColorUnknown, enabled.Snapshot.AutoPlayColorStatus);
-            Assert.Equal(AutoPlayColorMode.FoxAuto, enabled.Snapshot.SelectedAutoPlayColorMode);
-            FoxWindowContext currentRoom = PlayingRoom(nextRoom);
-            Assert.False(runtime.ApplyFoxIdentityRecognition("sig", currentRoom, RecognizedFoxRoom(nextRoom, "black")));
-            runtime.UpdateAutoPlayObservation("sig", currentRoom, null);
-            Assert.Null(runtime.Snapshot.PlayColor);
-            Assert.True(runtime.ApplyFoxIdentityRecognition("sig", currentRoom, RecognizedFoxRoom(nextRoom, "black")));
-            Assert.Equal("black", runtime.Snapshot.PlayColor);
-        }
 
         [Fact]
         public void EngineConditionIntents_AreSessionOnlyAndRespectMoveModeEnablement()
@@ -856,9 +612,9 @@ namespace Readboard.VerificationTests.Host
                 PlayoutsValue = string.Empty,
                 FirstPolicyValue = "200"
             };
-            RecordingSessionAdapter session = new RecordingSessionAdapter();
+            RuntimeTestEnvironment session = new RuntimeTestEnvironment();
             RecordingPersistence persistence = new RecordingPersistence();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, sessionState, session, persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, sessionState, session, persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult aiTime = runtime.Apply(ControlCenterIntent.SetAiTime("7"));
             ControlCenterApplyResult playouts = runtime.Apply(ControlCenterIntent.SetPlayouts("1200"));
@@ -875,7 +631,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal("200", runtime.Snapshot.FirstPolicyValue);
             Assert.False(runtime.Snapshot.FirstPolicyEnabled);
             Assert.Single(persistence.Saved);
-            Assert.Equal(3, session.Applied.Count);
         }
 
         [Fact]
@@ -893,7 +648,7 @@ namespace Readboard.VerificationTests.Host
             {
                 Failure = new IOException("disk full")
             };
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, sessionState, new RecordingSessionAdapter(), persistence, new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, sessionState, new RuntimeTestEnvironment(), persistence, new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult result = runtime.Apply(
                 ControlCenterIntent.SetAutoPlayMoveMode(AutoPlayMoveMode.GenmoveAnalyze));
@@ -921,10 +676,10 @@ namespace Readboard.VerificationTests.Host
         {
             AppConfig config = AppConfig.CreateDefault("220430", "TEST");
             config.SyncBoth = twoWaySync;
-            ControlCenterRuntime runtime = new ControlCenterRuntime(
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(
                 ControlCenterPreferences.FromConfig(config),
                 new ControlCenterSessionState { AutoPlayEnabled = autoPlayEnabled },
-                new RecordingSessionAdapter(),
+                new RuntimeTestEnvironment(),
                 new RecordingPersistence(),
                 new RejectingControlCenterActionAdapter());
 
@@ -933,68 +688,6 @@ namespace Readboard.VerificationTests.Host
                 runtime.Snapshot.CanSendAutoPlayCommand(keepSync));
         }
 
-        [Fact]
-        public void TwoWaySyncEffectPlan_PreservesProtocolOrderAndForegroundFoxCondition()
-        {
-            ControlCenterPreferences preferences = ControlCenterPreferences.FromConfig(
-                AppConfig.CreateDefault("220430", "TEST"));
-            preferences.TwoWaySync = true;
-            preferences.ShowOnBoard = true;
-
-            IList<ControlCenterSessionEffect> effects = ControlCenterSessionEffectPlanner.PlanTwoWaySync(
-                preferences,
-                true);
-
-            Assert.Equal(
-                new[]
-                {
-                    ControlCenterSessionEffectKind.SendBothSync,
-                    ControlCenterSessionEffectKind.SendForegroundFoxInBoard,
-                    ControlCenterSessionEffectKind.ResendSyncSessionState
-                },
-                effects.Select(effect => effect.Kind));
-            Assert.True(effects[0].Enabled);
-            Assert.True(effects[1].Enabled);
-        }
-
-        [Fact]
-        public void ShowOnBoardEffectPlan_PreservesForegroundFoxNotInBoardAndHintSemantics()
-        {
-            IList<ControlCenterSessionEffect> enabledEffects = ControlCenterSessionEffectPlanner.PlanShowOnBoard(
-                true,
-                false,
-                true,
-                true);
-            IList<ControlCenterSessionEffect> disabledEffects = ControlCenterSessionEffectPlanner.PlanShowOnBoard(
-                false,
-                true,
-                true,
-                true);
-            IList<ControlCenterSessionEffect> noHintEffects = ControlCenterSessionEffectPlanner.PlanShowOnBoard(
-                true,
-                true,
-                true,
-                false);
-
-            Assert.Equal(
-                new[]
-                {
-                    ControlCenterSessionEffectKind.SendForegroundFoxInBoard,
-                    ControlCenterSessionEffectKind.ShowOnBoardHint
-                },
-                enabledEffects.Select(effect => effect.Kind));
-            Assert.False(enabledEffects[0].Enabled);
-            Assert.Equal(
-                new[]
-                {
-                    ControlCenterSessionEffectKind.SendForegroundFoxInBoard,
-                    ControlCenterSessionEffectKind.SendNotInBoard
-                },
-                disabledEffects.Select(effect => effect.Kind));
-            Assert.DoesNotContain(
-                noHintEffects,
-                effect => effect.Kind == ControlCenterSessionEffectKind.ShowOnBoardHint);
-        }
 
         [Fact]
         public void ApplyResults_ExposeChangedRejectedAndInvalidPublicationSemantics()
@@ -1002,7 +695,7 @@ namespace Readboard.VerificationTests.Host
             AppConfig config = AppConfig.CreateDefault("220430", "TEST");
             config.SyncMode = SyncMode.Foreground;
             ControlCenterPreferences initial = ControlCenterPreferences.FromConfig(config);
-            ControlCenterRuntime runtime = new ControlCenterRuntime(initial, new RecordingSessionAdapter(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
+            ControlCenterRuntime runtime = RuntimeTestFactory.Create(initial, new RuntimeTestEnvironment(), new RecordingPersistence(), new RejectingControlCenterActionAdapter());
 
             ControlCenterApplyResult changed = runtime.Apply(
                 ControlCenterIntent.SetTwoWaySync(true));
@@ -1123,20 +816,6 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal((ControlCenterIntentKind)expectedKind, intent.Kind);
         }
 
-        private sealed class RecordingSessionAdapter : IControlCenterSessionAdapter
-        {
-            public bool HasActiveSyncOperation { get; set; }
-            public List<ControlCenterPreferences> Applied { get; } = new List<ControlCenterPreferences>();
-            public List<ControlCenterSessionState> AppliedSessions { get; } = new List<ControlCenterSessionState>();
-
-            public void Apply(
-                ControlCenterPreferences preferences,
-                ControlCenterSessionState sessionState)
-            {
-                Applied.Add(preferences.Clone());
-                AppliedSessions.Add(sessionState.Clone());
-            }
-        }
 
         private sealed class RecordingPersistence : IControlCenterPreferencePersistence
         {

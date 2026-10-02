@@ -986,13 +986,6 @@ namespace readboard
             ControlCenterIntent controlCenterIntent;
             if (TryCreateControlCenterIntent(payload, out controlCenterIntent))
             {
-                if (controlCenterIntent.Kind == ControlCenterIntentKind.SetAutoPlayColor
-                    && controlCenterIntent.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
-                    && string.IsNullOrWhiteSpace(foxIdentitySelection.EffectiveIdentitySignature))
-                {
-                    OpenWebViewIdentity(true);
-                    return true;
-                }
                 return ApplyControlCenterIntent(controlCenterIntent).ShouldPublishSnapshot;
             }
 
@@ -1466,13 +1459,6 @@ namespace readboard
                 && boardPixelHeight > 0;
         }
 
-        private void ResetWebViewSyncState()
-        {
-            ApplyControlCenterSessionObservation(
-                new ControlCenterSessionObservation(
-                    controlCenterRuntime.BeginSessionObservationGeneration())
-                    .ClearRuntimeFrame());
-        }
 
         internal static void ResetShellSyncState(ReadBoardShellState shell)
         {

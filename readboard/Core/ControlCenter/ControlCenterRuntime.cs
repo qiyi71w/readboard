@@ -31,7 +31,8 @@ namespace readboard
     {
         Changed = 0,
         NoOp = 1,
-        Rejected = 2
+        Rejected = 2,
+        IdentitySelectionOpened = 3
     }
 
     internal sealed class ControlCenterIntent
@@ -536,113 +537,6 @@ namespace readboard
         }
     }
 
-    internal enum ControlCenterSessionEffectKind
-    {
-        SendBothSync = 0,
-        SendForegroundFoxInBoard = 1,
-        SendNotInBoard = 2,
-        ShowOnBoardHint = 3,
-        ResendSyncSessionState = 4
-    }
-
-    internal sealed class ControlCenterSessionEffect
-    {
-        private ControlCenterSessionEffect(
-            ControlCenterSessionEffectKind kind,
-            bool enabled)
-        {
-            Kind = kind;
-            Enabled = enabled;
-        }
-
-        public ControlCenterSessionEffectKind Kind { get; private set; }
-        public bool Enabled { get; private set; }
-
-        public static ControlCenterSessionEffect SendBothSync(bool enabled)
-        {
-            return new ControlCenterSessionEffect(
-                ControlCenterSessionEffectKind.SendBothSync,
-                enabled);
-        }
-
-        public static ControlCenterSessionEffect SendForegroundFoxInBoard(bool enabled)
-        {
-            return new ControlCenterSessionEffect(
-                ControlCenterSessionEffectKind.SendForegroundFoxInBoard,
-                enabled);
-        }
-
-        public static ControlCenterSessionEffect SendNotInBoard()
-        {
-            return new ControlCenterSessionEffect(
-                ControlCenterSessionEffectKind.SendNotInBoard,
-                false);
-        }
-
-        public static ControlCenterSessionEffect ShowOnBoardHint()
-        {
-            return new ControlCenterSessionEffect(
-                ControlCenterSessionEffectKind.ShowOnBoardHint,
-                false);
-        }
-
-        public static ControlCenterSessionEffect ResendSyncSessionState()
-        {
-            return new ControlCenterSessionEffect(
-                ControlCenterSessionEffectKind.ResendSyncSessionState,
-                false);
-        }
-    }
-
-    internal static class ControlCenterSessionEffectPlanner
-    {
-        public static IList<ControlCenterSessionEffect> PlanTwoWaySync(
-            ControlCenterPreferences preferences,
-            bool canUseForegroundFoxInBoardProtocol)
-        {
-            if (preferences == null)
-                throw new ArgumentNullException("preferences");
-
-            List<ControlCenterSessionEffect> effects = new List<ControlCenterSessionEffect>
-            {
-                ControlCenterSessionEffect.SendBothSync(preferences.TwoWaySync)
-            };
-            if (preferences.ShowOnBoard && canUseForegroundFoxInBoardProtocol)
-                effects.Add(ControlCenterSessionEffect.SendForegroundFoxInBoard(preferences.TwoWaySync));
-            effects.Add(ControlCenterSessionEffect.ResendSyncSessionState());
-            return effects;
-        }
-
-        public static IList<ControlCenterSessionEffect> PlanShowOnBoard(
-            bool enabled,
-            bool twoWaySync,
-            bool canUseForegroundFoxInBoardProtocol,
-            bool showInBoardHint)
-        {
-            List<ControlCenterSessionEffect> effects = new List<ControlCenterSessionEffect>();
-            if (canUseForegroundFoxInBoardProtocol)
-                effects.Add(ControlCenterSessionEffect.SendForegroundFoxInBoard(enabled && twoWaySync));
-            if (enabled)
-            {
-                if (showInBoardHint)
-                    effects.Add(ControlCenterSessionEffect.ShowOnBoardHint());
-            }
-            else
-            {
-                effects.Add(ControlCenterSessionEffect.SendNotInBoard());
-            }
-            return effects;
-        }
-    }
-
-
-    internal interface IControlCenterSessionAdapter
-    {
-        bool HasActiveSyncOperation { get; }
-        void Apply(
-            ControlCenterPreferences preferences,
-            ControlCenterSessionState sessionState);
-    }
 
     internal interface IControlCenterPreferencePersistence
     {
@@ -673,9 +567,9 @@ namespace readboard
         }
     }
 
-    internal sealed class ControlCenterRuntime
+    internal sealed partial class ControlCenterRuntime
     {
-        private readonly IControlCenterSessionAdapter sessionAdapter;
+        private readonly IControlCenterEnvironment environment;
         private readonly IControlCenterPreferencePersistence persistence;
         private readonly IControlCenterActionAdapter actionAdapter;
         private readonly object observationSyncRoot = new object();
@@ -688,24 +582,12 @@ namespace readboard
 
         public ControlCenterRuntime(
             ControlCenterPreferences initialPreferences,
-            IControlCenterSessionAdapter sessionAdapter,
-            IControlCenterPreferencePersistence persistence,
-            IControlCenterActionAdapter actionAdapter)
-            : this(
-                initialPreferences,
-                new ControlCenterSessionState(),
-                sessionAdapter,
-                persistence,
-                actionAdapter)
-        {
-        }
-
-        public ControlCenterRuntime(
-            ControlCenterPreferences initialPreferences,
             ControlCenterSessionState initialSessionState,
-            IControlCenterSessionAdapter sessionAdapter,
+            IControlCenterEnvironment environment,
             IControlCenterPreferencePersistence persistence,
-            IControlCenterActionAdapter actionAdapter)
+            IControlCenterActionAdapter actionAdapter,
+            ISyncSessionCoordinator coordinator,
+            FoxIdentitySelection identitySelection)
         {
             preferences = initialPreferences == null
                 ? throw new ArgumentNullException("initialPreferences")
@@ -726,7 +608,10 @@ namespace readboard
                 ? AutoPlayColorMode.FoxAuto
                 : (AutoPlayColorMode?)null;
             preferences.AutoPlayMoveMode = AppConfig.NormalizeAutoPlayMoveMode(preferences.AutoPlayMoveMode);
-            this.sessionAdapter = sessionAdapter ?? throw new ArgumentNullException("sessionAdapter");
+            this.environment = environment ?? throw new ArgumentNullException("environment");
+            this.coordinator = coordinator ?? throw new ArgumentNullException("coordinator");
+            this.identitySelection = identitySelection ?? throw new ArgumentNullException("identitySelection");
+            sessionState.FoxAutoPlayNicknameSignature = identitySelection.EffectiveIdentitySignature;
             this.persistence = persistence ?? throw new ArgumentNullException("persistence");
             this.actionAdapter = actionAdapter ?? throw new ArgumentNullException("actionAdapter");
             preferencesSaved = true;
@@ -805,19 +690,20 @@ namespace readboard
                         delegate { sessionState.TargetWindowValid = observation.TargetWindowValid; });
                 if (observation.HasFoxWindowContext)
                 {
-                    bool foxRoomContextChanged = !AreSameFoxRoomIdentityContext(
-                        sessionState.FoxWindowContext,
-                        observation.FoxWindowContext);
+                    bool recognitionContextChanged = !string.Equals(
+                        BuildRecognitionContextSignature(sessionState.FoxWindowContext),
+                        BuildRecognitionContextSignature(observation.FoxWindowContext), StringComparison.Ordinal);
                     bool foxContextChanged = SetIfDifferent(
                         sessionState.FoxWindowContext,
                         observation.FoxWindowContext,
                         AreSameFoxWindowContext,
                         delegate { sessionState.FoxWindowContext = observation.FoxWindowContext; });
                     changed |= foxContextChanged;
-                    if (foxRoomContextChanged && sessionState.DetectedAutoPlayColor != null)
+                    if (recognitionContextChanged)
                     {
-                        sessionState.DetectedAutoPlayColor = null;
-                        changed = true;
+                        changed |= sessionState.DetectedAutoPlayColor != null;
+                        InvalidateWindowEvidence();
+                        identitySelection.BeginRoomContext(sessionState.FoxWindowContext);
                     }
                 }
                 if (observation.HasYikeWindowContext)
@@ -941,10 +827,10 @@ namespace readboard
 
         public void ProjectCurrentState()
         {
-            sessionAdapter.Apply(preferences.Clone(), sessionState.Clone());
+            ProjectState(!hasProjectedState);
         }
 
-        public bool ApplyFoxIdentityRecognition(
+        private bool ApplyFoxIdentityRecognition(
             string nicknameSignature,
             FoxWindowContext foxWindowContext,
             FoxIdentityRecognitionResult recognition)
@@ -984,7 +870,7 @@ namespace readboard
             return true;
         }
 
-        public bool UpdateAutoPlayObservation(
+        private bool UpdateAutoPlayObservation(
             string nicknameSignature,
             FoxWindowContext foxWindowContext,
             AutoPlayColorResolution detectedColor)
@@ -1005,19 +891,12 @@ namespace readboard
             return true;
         }
 
-        public bool ClearAutoPlayObservation()
-        {
-            if (sessionState.DetectedAutoPlayColor == null)
-                return false;
-
-            sessionState.DetectedAutoPlayColor = null;
-            return true;
-        }
 
         public ControlCenterApplyResult Apply(ControlCenterIntent intent)
         {
             if (intent == null)
                 throw new ArgumentNullException("intent");
+
 
             ControlCenterPreferences candidate;
             ControlCenterSessionState sessionCandidate = sessionState.Clone();
@@ -1030,6 +909,15 @@ namespace readboard
                 return new ControlCenterApplyResult(
                     ControlCenterApplyOutcome.Rejected,
                     BuildSnapshot());
+            if (intent.Kind == ControlCenterIntentKind.SetAutoPlayColor
+                && intent.AutoPlayColorMode == AutoPlayColorMode.FoxAuto
+                && string.IsNullOrWhiteSpace(identitySelection.EffectiveIdentitySignature))
+            {
+                OpenIdentity(true);
+                return new ControlCenterApplyResult(
+                    ControlCenterApplyOutcome.IdentitySelectionOpened,
+                    BuildSnapshot());
+            }
 
             if (ControlCenterPreferences.Equals(preferences, candidate)
                 && AreSameSessionState(sessionState, sessionCandidate))
@@ -1038,9 +926,11 @@ namespace readboard
                     BuildSnapshot());
 
             bool preferenceChanged = !ControlCenterPreferences.Equals(preferences, candidate);
+            ControlCenterPreferences previousPreferences = preferences;
+            ControlCenterSessionState previousSession = sessionState;
             preferences = candidate;
             sessionState = sessionCandidate;
-            sessionAdapter.Apply(candidate.Clone(), sessionState.Clone());
+            ApplySessionEffects(previousPreferences, previousSession);
             if (preferenceChanged)
                 TryPersist(candidate);
             return new ControlCenterApplyResult(
@@ -1313,7 +1203,7 @@ namespace readboard
             ControlCenterPreferences candidate,
             ControlCenterSessionState sessionCandidate)
         {
-            if (sessionAdapter.HasActiveSyncOperation
+            if (environment.HasActiveSyncOperation
                 && (intent.Kind == ControlCenterIntentKind.SetPlatform
                     || intent.Kind == ControlCenterIntentKind.SetBoardSize
                     || intent.Kind == ControlCenterIntentKind.SetCustomBoardWidth
@@ -1365,7 +1255,7 @@ namespace readboard
 
         private ControlCenterRuntimeSnapshot BuildSnapshot()
         {
-            bool liveSyncOperationActive = sessionAdapter.HasActiveSyncOperation;
+            bool liveSyncOperationActive = environment.HasActiveSyncOperation;
             bool configurationEnabled = !liveSyncOperationActive;
             bool quickSyncEnabled = IsFastSyncPlatform(preferences.Platform);
             bool continuousSyncEnabled = !sessionState.QuickSyncActive;
@@ -1576,7 +1466,7 @@ namespace readboard
                 && AreSameAutoPlayColorResolution(left.DetectedAutoPlayColor, right.DetectedAutoPlayColor);
         }
 
-        private static bool AreSameFoxWindowContext(
+        internal static bool AreSameFoxWindowContext(
             FoxWindowContext left,
             FoxWindowContext right)
         {

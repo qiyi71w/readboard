@@ -9,7 +9,6 @@ namespace readboard
 {
     public partial class MainForm
     {
-        private ReadBoardIdentityUiState webViewIdentityState = new ReadBoardIdentityUiState();
         internal static bool IsValidWebViewIdentityCommand(ReadBoardUiCommand command)
         {
             if (command == null)
@@ -47,30 +46,27 @@ namespace readboard
             switch (command.Type)
             {
                 case "identity.open":
-                    return OpenWebViewIdentity(false);
+                    controlCenterRuntime.OpenIdentity();
+                    return true;
                 case "identity.close":
-                    return CloseWebViewIdentity(true);
+                    return ShouldPublishWebViewIdentityResult(controlCenterRuntime.CancelIdentity());
                 case "identity.clearSaved":
                 {
-                    FoxIdentitySelectionResult result = ClearSavedFoxAutoPlayIdentity();
-                    webViewIdentityState = CreateWebViewIdentityState(result.Snapshot);
+                    FoxIdentitySelectionResult result = controlCenterRuntime.ClearSavedIdentity();
                     return ShouldPublishWebViewIdentityResult(result);
                 }
                 case "identity.select":
                 {
-                    FoxIdentitySelectionResult result = foxIdentitySelection.Select(
+                    FoxIdentitySelectionResult result = controlCenterRuntime.SelectIdentity(
                         command.Payload.GetProperty("candidateId").GetString());
-                    webViewIdentityState = CreateWebViewIdentityState(result.Snapshot);
                     return ShouldPublishWebViewIdentityResult(result);
                 }
                 case "identity.useOnce":
-                    return UseWebViewIdentity(
-                        command.Payload.GetProperty("candidateId").GetString(),
-                        false);
+                    return ShouldPublishWebViewIdentityResult(controlCenterRuntime.ConfirmIdentity(
+                        command.Payload.GetProperty("candidateId").GetString(), false));
                 case "identity.saveAndUse":
-                    return UseWebViewIdentity(
-                        command.Payload.GetProperty("candidateId").GetString(),
-                        true);
+                    return ShouldPublishWebViewIdentityResult(controlCenterRuntime.ConfirmIdentity(
+                        command.Payload.GetProperty("candidateId").GetString(), true));
                 default:
                     return false;
             }
@@ -79,30 +75,11 @@ namespace readboard
         private ReadBoardIdentityUiState GetWebViewIdentityState()
         {
             return ResolveWebViewIdentityState(
-                webViewIdentityState,
+                CreateWebViewIdentityState(controlCenterRuntime.IdentitySnapshot),
                 getLangStr,
                 Program.GetDefaultLanguageText);
         }
 
-        private bool OpenWebViewIdentity(bool resumeAutoPlay)
-        {
-            if (!IsFoxSyncType(CurrentSyncType))
-                return true;
-
-            SampleFoxMatchBar(
-                hwnd,
-                ResolveFoxWindowContext(),
-                foxIdentitySelection.EffectiveIdentitySignature,
-                true);
-            FoxMatchBarReading reading = foxMatchBarLiveRecognition.CurrentReading;
-            IList<FoxIdentityCandidate> candidates = FoxMatchBarIdentityCandidates.Build(
-                reading.Players);
-            FoxIdentitySelectionSnapshot snapshot = foxIdentitySelection.Open(
-                candidates,
-                resumeAutoPlay);
-            webViewIdentityState = CreateWebViewIdentityState(snapshot);
-            return true;
-        }
 
 
         private static ReadBoardIdentityUiState CreateWebViewIdentityState(
@@ -277,54 +254,5 @@ namespace readboard
             }
         }
 
-        private bool UseWebViewIdentity(string candidateId, bool save)
-        {
-            FoxIdentitySelectionResult selectResult = foxIdentitySelection.Select(candidateId);
-            if (selectResult.Outcome == FoxIdentitySelectionActionOutcome.Rejected)
-                return ShouldPublishWebViewIdentityResult(selectResult);
-            bool resumeAutomaticColor = foxIdentitySelection.IsFirstAutomaticSelectionPending;
-            FoxIdentitySelectionResult result = save
-                ? foxIdentitySelection.SaveAndUse()
-                : foxIdentitySelection.UseOnce();
-            if (!result.Accepted)
-                return ShouldPublishWebViewIdentityResult(result);
-
-            ClearFoxAutoPlayColorDetectionState();
-            controlCenterRuntime.UpdateAutoPlayObservation(
-                foxIdentitySelection.EffectiveIdentitySignature,
-                ResolveFoxWindowContext(),
-                null);
-            ControlCenterApplyResult modeResult = null;
-            if (resumeAutomaticColor)
-            {
-                modeResult = ApplyControlCenterIntent(
-                    ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.FoxAuto));
-            }
-            CloseWebViewIdentity(false);
-            if (controlCenterRuntime.Snapshot.SelectedAutoPlayColorMode == AutoPlayColorMode.FoxAuto)
-            {
-                ResolveCurrentAutoPlayColor(ResolveFoxWindowContext());
-                bool modeChangeMayHaveSentPlay = modeResult != null
-                    && modeResult.Outcome == ControlCenterApplyOutcome.Changed;
-                if (!modeChangeMayHaveSentPlay
-                    && sessionCoordinator.KeepSync
-                    && !isInitializingProtocolState)
-                    SendPlayCommandIfSelected();
-            }
-            return true;
-        }
-
-        private bool CloseWebViewIdentity(bool cancelled)
-        {
-            bool wasOpen = webViewIdentityState.Open;
-            bool changed = false;
-            if (cancelled)
-            {
-                FoxIdentitySelectionResult result = foxIdentitySelection.Cancel();
-                changed = ShouldPublishWebViewIdentityResult(result);
-            }
-            webViewIdentityState = new ReadBoardIdentityUiState();
-            return changed || wasOpen;
-        }
     }
 }

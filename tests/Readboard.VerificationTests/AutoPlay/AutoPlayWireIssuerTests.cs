@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using Xunit;
 using readboard;
-using Readboard.VerificationTests.Host;
 
 namespace Readboard.VerificationTests.AutoPlay
 {
@@ -269,47 +268,6 @@ namespace Readboard.VerificationTests.AutoPlay
             Assert.Equal(new[] { "play>black>0 0 0" }, transport.SentLines);
         }
 
-        [Theory]
-        [InlineData(0, "play>black>0 0 0")]
-        [InlineData(1, "play>white>0 0 0")]
-        public void RuntimeManualColor_ReenableCannotIssueUntilExplicitReselection(int modeValue, string playLine)
-        {
-            AutoPlayColorMode mode = (AutoPlayColorMode)modeValue;
-            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
-            config.SyncBoth = true;
-            config.AutoPlayColorMode = mode;
-            RuntimeEnvironment environment = new RuntimeEnvironment();
-            ControlCenterRuntime runtime = new ControlCenterRuntime(
-                ControlCenterPreferences.FromConfig(config), environment, environment,
-                new RejectingControlCenterActionAdapter());
-            RecordingTransport transport = new RecordingTransport();
-            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
-
-            runtime.Apply(ControlCenterIntent.SetAutoPlayEnabled(true));
-            AutoPlayWireIssuer.IssueIfAuthorized(runtime.Snapshot, true, coordinator);
-            Assert.Empty(transport.SentLines);
-
-            runtime.Apply(ControlCenterIntent.SetAutoPlayColor(mode));
-            AutoPlayWireIssuer.IssueIfAuthorized(runtime.Snapshot, true, coordinator);
-            Assert.Equal(new[] { playLine }, transport.SentLines);
-
-            runtime.Apply(ControlCenterIntent.SetAutoPlayEnabled(false));
-            coordinator.SendStopAutoPlay();
-            runtime.Apply(ControlCenterIntent.SetAutoPlayEnabled(true));
-            AutoPlayWireIssuer.IssueIfAuthorized(runtime.Snapshot, true, coordinator);
-            Assert.Equal(new[] { playLine, "stopAutoPlay" }, transport.SentLines);
-
-            runtime.Apply(ControlCenterIntent.SetAutoPlayColor(mode));
-            AutoPlayWireIssuer.IssueIfAuthorized(runtime.Snapshot, true, coordinator);
-            Assert.Equal(new[] { playLine, "stopAutoPlay", playLine }, transport.SentLines);
-        }
-
-        private sealed class RuntimeEnvironment : IControlCenterSessionAdapter, IControlCenterPreferencePersistence
-        {
-            public bool HasActiveSyncOperation { get { return false; } }
-            public void Apply(ControlCenterPreferences preferences, ControlCenterSessionState sessionState) { }
-            public void Save(ControlCenterPreferences preferences) { }
-        }
 
         private static ControlCenterRuntimeSnapshot CreateSnapshot(
             bool keepTwoWay,

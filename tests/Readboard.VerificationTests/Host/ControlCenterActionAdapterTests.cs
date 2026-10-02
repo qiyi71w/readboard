@@ -351,10 +351,10 @@ namespace Readboard.VerificationTests.Host
         {
             AppConfig config = AppConfig.CreateDefault("220430", "TEST");
             config.SyncMode = platform;
-            return new ControlCenterRuntime(
+            return RuntimeTestFactory.Create(
                 ControlCenterPreferences.FromConfig(config),
                 sessionState ?? new ControlCenterSessionState(),
-                new RecordingSessionAdapter { HasActiveSyncOperation = liveSyncOperationActive },
+                new RuntimeTestEnvironment { HasActiveSyncOperation = liveSyncOperationActive },
                 new RecordingPersistence(),
                 actionAdapter);
         }
@@ -387,16 +387,6 @@ namespace Readboard.VerificationTests.Host
         }
 
 
-        private sealed class RecordingSessionAdapter : IControlCenterSessionAdapter
-        {
-            public bool HasActiveSyncOperation { get; set; }
-
-            public void Apply(
-                ControlCenterPreferences preferences,
-                ControlCenterSessionState sessionState)
-            {
-            }
-        }
 
         private sealed class RecordingPersistence : IControlCenterPreferencePersistence
         {
