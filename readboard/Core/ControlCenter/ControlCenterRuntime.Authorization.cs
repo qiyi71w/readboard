@@ -165,9 +165,12 @@ namespace readboard
             return FoxWindowContext.CopyOf(context);
         }
 
-        public AutoPlayColorResolution RefreshAutoPlayColor()
+        public AutoPlayColorResolution RefreshAutoPlayColor(out bool changed)
         {
-            return ResolveAutoPlayColor(RefreshWindowContext());
+            AutoPlayColorResolution previous = ResolveAutoPlayColor();
+            AutoPlayColorResolution current = ResolveAutoPlayColor(RefreshWindowContext());
+            changed = !AreSameAutoPlayColorResolution(previous, current);
+            return current;
         }
 
         private AutoPlayColorResolution ResolveAutoPlayColor(FoxWindowContext context)
@@ -195,7 +198,7 @@ namespace readboard
                     ApplyFoxIdentityRecognition(signature, context, recognition);
                 }
             }
-            return BuildSnapshot().AutoPlayColorResolution;
+            return ResolveAutoPlayColor();
         }
 
         private AutoPlayColorResolution SamplePlayers(FoxWindowContext context, bool force)
@@ -259,7 +262,7 @@ namespace readboard
                 : null;
             if (sessionState.SelectedAutoPlayColorMode == AutoPlayColorMode.FoxAuto)
             {
-                RefreshAutoPlayColor();
+                RefreshAutoPlayColor(out _);
                 // A mode change owns the direct request even when its gate emits no wire.
                 if ((modeResult == null || modeResult.Outcome != ControlCenterApplyOutcome.Changed)
                     && coordinator.KeepSync)

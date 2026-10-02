@@ -198,6 +198,7 @@ WebView 通过虚拟主机 `https://app.readboard/index.html` 加载静态资源
 - 首次无身份选择 FoxAuto 只打开身份弹层，保留当次手动选择；取消不改选择。确认由 Runtime 一次完成选人、使用/保存、失效、求值与直接请求。保存身份失败仍使用进程身份并关闭弹层；清除保存失败保留原保存身份。
 - 窗口句柄、绑定失败、房间/状态、RecordView 的手数/终局/标题以及新启用周期都会失效识别证据。已知名单缓存到失效为止；未知名单沿用 1000ms 重试间隔。窗口失效本身不结束启用周期。
 - 周期捕获在 UI thread 调用 `RefreshAutoPlayColor` 取得事实，不直接签发；`RequestAutoPlay` 经 `AutoPlayWireIssuer` 执行 force 请求，周期发送仍由 coordinator 去重和撤销。构造只接线，初始化投影不发 wire，启动重放与 keep-sync 重发由 Runtime 编排。
+- 周期刷新同时返回棋色、已知状态或授权状态是否变化；与同次捕获的窗口 context 变化合并后，只请求一份最终 snapshot。上下文不变时的重新识别也必须发布；三项授权事实和上下文均不变时，捕获本身不额外发布。
 - 验证使用真实 Runtime、身份模块与 coordinator，加记录 transport 和原生事实 fixture；不在测试里补发生产应执行的停止或签发。`ControlCenterAuthorizationTests` 覆盖状态/wire/失败，真实 WebView2 + FakeHost 覆盖桥接、线程和最终 snapshot；后者不代替真实 Fox 对局验收。
 - `real-webview2-authorization.spec.js` 用独立原生 HWND/UI Automation 输入窗口，经生产 locator 和玩家读取器验证选人、Use Once、Save and Use，以及目标销毁后的平台切换。测试观察真实 `chrome.webview` 完整消息、落盘配置和 wire，不注入候选或 renderer state；外部窗口输入 fixture 不等于真实 Fox 对局。
 

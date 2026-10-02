@@ -377,7 +377,7 @@ namespace Readboard.VerificationTests.Protocol
                     environment.Players = Players("white");
                     control.Apply(ControlCenterIntent.SetAutoPlayEnabled(true));
                 }
-                control.RefreshAutoPlayColor();
+                control.RefreshAutoPlayColor(out _);
                 ControlCenterRuntimeSnapshot state = control.Snapshot;
                 SetProperty(snapshot, "PlayColor", state.PlayColor);
                 SetProperty(snapshot, "AutoPlayColorMode", state.AutoPlayColorMode);

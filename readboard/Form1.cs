@@ -326,11 +326,12 @@ namespace readboard
             ControlCenterPreferences controlCenter = controlCenterRuntime.CurrentPreferences;
             SyncMode syncMode = controlCenter.Platform;
             string syncPlatform = ResolveSyncPlatform(syncMode);
-            AutoPlayColorResolution autoPlayColor = controlCenterRuntime.RefreshAutoPlayColor();
+            bool autoPlayColorChanged;
+            AutoPlayColorResolution autoPlayColor = controlCenterRuntime.RefreshAutoPlayColor(out autoPlayColorChanged);
             ControlCenterRuntimeSnapshot runtimeSnapshot = controlCenterRuntime.Snapshot;
             FoxWindowContext foxWindowContext = runtimeSnapshot.FoxWindowContext;
             int? foxMoveNumber = foxWindowContext.ResolveDisplayedMoveNumber();
-            UpdateMainWindowTitle(foxWindowContext);
+            UpdateMainWindowTitle(foxWindowContext, autoPlayColorChanged);
 
             SyncCoordinatorHostSnapshot snapshot = new SyncCoordinatorHostSnapshot
             {
@@ -420,12 +421,12 @@ namespace readboard
             controlCenterRuntime?.InvalidateWindowEvidence();
         }
 
-        private void UpdateMainWindowTitle(FoxWindowContext foxWindowContext)
+        private void UpdateMainWindowTitle(FoxWindowContext foxWindowContext, bool autoPlayColorChanged = false)
         {
             bool contextChanged = !ControlCenterRuntime.AreSameFoxWindowContext(lastFoxWindowContext, foxWindowContext);
             lastFoxWindowContext = FoxWindowContext.CopyOf(foxWindowContext);
             ApplyMainWindowTitle();
-            if (contextChanged)
+            if (contextChanged || autoPlayColorChanged)
                 PostWebViewState();
         }
 

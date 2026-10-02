@@ -249,7 +249,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Null(h.Runtime.Snapshot.PlayColor);
             Assert.True(h.Runtime.Snapshot.AutoPlayEnabled);
             Assert.Equal(AutoPlayColorMode.FoxAuto, h.Runtime.CurrentSessionState.SelectedAutoPlayColorMode);
-            h.Runtime.RefreshAutoPlayColor();
+            h.Runtime.RefreshAutoPlayColor(out _);
             Assert.Equal(reads + 1, h.Environment.PlayerReads);
             Assert.Equal(change == "state" ? null : "white", h.Runtime.Snapshot.PlayColor);
             Assert.Empty(h.Transport.Lines);
@@ -277,7 +277,7 @@ namespace Readboard.VerificationTests.Host
             if (field == "total") h.Environment.Context.RecordTotalMove = 21;
             if (field == "end") h.Environment.Context.RecordAtEnd = true;
             if (field == "title") h.Environment.Context.TitleFingerprint = "record-B";
-            h.Runtime.RefreshAutoPlayColor();
+            h.Runtime.RefreshAutoPlayColor(out _);
             Assert.Equal(reads + 1, h.Environment.PlayerReads);
             Assert.Null(h.Runtime.Snapshot.PlayColor);
             h.Runtime.RequestAutoPlay();
@@ -294,18 +294,43 @@ namespace Readboard.VerificationTests.Host
             int reads = h.Environment.PlayerReads;
             h.Environment.Players = Players("white");
             h.Environment.UtcNow = h.Environment.UtcNow.AddMilliseconds(999);
-            h.Runtime.RefreshAutoPlayColor();
+            h.Runtime.RefreshAutoPlayColor(out bool beforeRetryChanged);
+            Assert.False(beforeRetryChanged);
             Assert.Equal(reads, h.Environment.PlayerReads);
             Assert.Null(h.Runtime.Snapshot.PlayColor);
             h.Environment.UtcNow = h.Environment.UtcNow.AddMilliseconds(1);
-            h.Runtime.RefreshAutoPlayColor();
+            h.Runtime.RefreshAutoPlayColor(out bool detectedChanged);
+            Assert.True(detectedChanged);
             Assert.Equal(reads + 1, h.Environment.PlayerReads);
             Assert.Equal("white", h.Runtime.Snapshot.PlayColor);
             h.Environment.Players = Players("black");
             h.Environment.UtcNow = h.Environment.UtcNow.AddDays(1);
-            h.Runtime.RefreshAutoPlayColor();
+            h.Runtime.RefreshAutoPlayColor(out bool cachedChanged);
+            Assert.False(cachedChanged);
             Assert.Equal(reads + 1, h.Environment.PlayerReads);
             Assert.Equal("white", h.Runtime.Snapshot.PlayColor);
+            Assert.Empty(h.Transport.Lines);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void RefreshAutoPlayColor_ReportsWatchingStatusEvenWhenBothColorsAreUnknown(bool initiallyKnown)
+        {
+            var h = new Harness(saved: "self");
+            if (!initiallyKnown) h.Environment.Players = FoxMatchBarReading.Empty;
+            h.EnableAutomatic();
+            h.Transport.Lines.Clear();
+            h.Environment.Context.LiveRoomState = FoxLiveRoomState.Watching;
+
+            AutoPlayColorResolution color = h.Runtime.RefreshAutoPlayColor(out bool changed);
+
+            Assert.True(changed);
+            Assert.Null(color.PlayColor);
+            Assert.False(color.IsKnown);
+            Assert.Equal(AutoPlayColorStatus.Spectating, color.Status);
+            h.Runtime.RefreshAutoPlayColor(out bool repeatedChanged);
+            Assert.False(repeatedChanged);
             Assert.Empty(h.Transport.Lines);
         }
 
