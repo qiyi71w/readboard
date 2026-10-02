@@ -12,6 +12,7 @@ namespace readboard
     internal interface IControlCenterEnvironment
     {
         bool HasActiveSyncOperation { get; }
+        bool? TargetWindowValid { get; }
         bool ShowInBoardHint { get; }
         DateTime UtcNow { get; }
         ControlCenterWindowFacts ReadWindow();

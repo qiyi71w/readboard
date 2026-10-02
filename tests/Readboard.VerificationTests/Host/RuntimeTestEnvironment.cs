@@ -7,6 +7,7 @@ namespace Readboard.VerificationTests.Host
     internal class RuntimeTestEnvironment : IControlCenterEnvironment
     {
         public bool HasActiveSyncOperation { get; set; }
+        public bool? TargetWindowValid { get; set; }
         public bool ShowInBoardHint { get; set; }
         public DateTime UtcNow { get; set; } = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
         public IntPtr Handle { get; set; } = new IntPtr(42);

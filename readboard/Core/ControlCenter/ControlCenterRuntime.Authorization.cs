@@ -29,6 +29,7 @@ namespace readboard
                 ControlCenterSessionObservation reset = new ControlCenterSessionObservation(
                     BeginSessionObservationGeneration())
                     .ClearRuntimeFrame()
+                    .WithTargetWindowValid(environment.TargetWindowValid)
                     .WithFoxWindowContext(FoxWindowContext.Unknown())
                     .WithTitleTurn(MainWindowTitleTurn.None);
                 if (preferences.Platform != SyncMode.Yike)

@@ -14,6 +14,7 @@ namespace readboard
             }
 
             public bool HasActiveSyncOperation { get { return form.HasActiveSyncOperation(); } }
+            public bool? TargetWindowValid { get { return form.hwnd == IntPtr.Zero ? (bool?)null : IsWindow(form.hwnd); } }
             public bool ShowInBoardHint { get { return Program.showInBoardHint; } }
             public DateTime UtcNow { get { return DateTime.UtcNow; } }
 

@@ -44,6 +44,25 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Theory]
+        [InlineData(null)]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void PlatformChange_ProjectsFreshTargetValidityBeforeSaving(bool? targetValid)
+        {
+            var h = new Harness(keepSync: false);
+            h.Runtime.ApplyObservation(new ControlCenterSessionObservation(
+                h.Runtime.CaptureSessionObservationGeneration()).WithTargetWindowValid(targetValid != true));
+            h.Environment.TargetWindowValid = targetValid;
+            h.Environment.OnProject = () => Assert.Equal(targetValid, h.Runtime.Snapshot.TargetWindowValid);
+            h.OnSave = () => Assert.Equal(targetValid, h.Runtime.Snapshot.TargetWindowValid);
+
+            h.Runtime.Apply(ControlCenterIntent.SetPlatform(SyncMode.Foreground));
+
+            Assert.Equal(targetValid, h.Runtime.Snapshot.TargetWindowValid);
+            Assert.Empty(h.Transport.Lines);
+        }
+
+        [Theory]
         [InlineData("")]
         [InlineData("self")]
         public void UnsupportedFoxAuto_IsRejectedWithoutOpeningIdentityOrAuthorizing(string saved)

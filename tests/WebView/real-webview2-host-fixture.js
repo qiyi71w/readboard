@@ -521,6 +521,31 @@ async function terminateProcessTree(readBoardProcess) {
   await readBoardProcess.waitForExit(PROCESS_EXIT_TIMEOUT_MS);
 }
 
+async function withNativeFoxWindow(body) {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "readboard-native-fox-"));
+  let process;
+  try {
+    const built = await runCommand(global.process.env.DOTNET_EXE || "dotnet", [
+      "publish", path.join(__dirname, "NativeFoxWindowFixture", "NativeFoxWindowFixture.csproj"),
+      "-c", "Release", "--output", directory
+    ], { cwd: REPO_ROOT, windowsHide: true });
+    if (built.code !== 0 || built.error || built.timedOut)
+      throw new Error(`Native input fixture build failed: ${JSON.stringify(built)}`);
+    process = new ReadBoardProcess(path.join(directory, "foxwq-native-fixture.exe"), [], {
+      cwd: directory, windowsHide: false
+    }).start();
+    await waitForCondition("native Fox input window", () => {
+      if (!process.isRunning())
+        throw createStopPollingError(`Native input exited: ${process.stderr}`);
+      return process.stdout.includes("NATIVE_FOX_READY ");
+    });
+    await body({ stop: () => terminateProcessTree(process), diagnostics: () => process.stdout + process.stderr });
+  } finally {
+    if (process) await terminateProcessTree(process);
+    await removeDirectory(directory);
+  }
+}
+
 class RealWebView2HostFixture {
   constructor(publishDirectory) {
     this.publishDirectory = publishDirectory;
@@ -722,7 +747,7 @@ class RealWebView2HostFixture {
 
     const snapshot = { errors: [] };
     try {
-      snapshot.screenshot = await this.page.screenshot({ fullPage: true });
+      snapshot.screenshot = await this.page.screenshot({ fullPage: true, timeout: CDP_OPERATION_TIMEOUT_MS });
     } catch (error) {
       snapshot.errors.push({ file: "failure.png", error: error.message });
     }
@@ -800,7 +825,7 @@ class RealWebView2HostFixture {
       evidenceErrors.push(...snapshot.errors);
     } else if (this.page) {
       try {
-        await writeBinary("failure.png", await this.page.screenshot({ fullPage: true }));
+        await writeBinary("failure.png", await this.page.screenshot({ fullPage: true, timeout: CDP_OPERATION_TIMEOUT_MS }));
       } catch (error) {
         evidenceErrors.push({ file: "failure.png", error: error.message });
       }
@@ -1150,5 +1175,6 @@ async function withRealWebView2Host(publishDirectory, testInfo, body, startOptio
 module.exports = {
   publishRelease,
   removeDirectory,
-  withRealWebView2Host
+  withRealWebView2Host,
+  withNativeFoxWindow
 };
