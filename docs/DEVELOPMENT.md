@@ -86,11 +86,11 @@ readboard.exe yzy <aiTime> <playouts> <firstPolicy> <transport> <language> <tcpP
 启用宿主诊断（`--diagnostics on` 或现有 `readboardLoggingSet` 控制）后，ReadBoard 的 `app.log` 记录以下事件：
 
 - `fox.autoplay.window`：窗口／房间识别上下文变化、绑定失效、前后句柄和窗口修订号。
-- `fox.autoplay.players`：正式采样或每秒最多一次的缓存旁路观察；包含 `sampled`、`cachedColor`、`observedColor`、玩家数量，以及读取器的 `hwnd/root/list/fallback`。旁路观察只用于日志，不更新识别缓存，也不授予落子权限；关闭诊断即停止额外读取。
+- `fox.autoplay.players`：正式采样或每秒最多一次的缓存旁路观察；包含 `sampled`、`cachedColor`、`observedColor`、玩家数量及 `reader` 诊断字符串。绑定读取成功时，`reader` 包含 `binding=matched`、`hwnd`、`room`、`list`、`players`，其中 `room` 是房间面板 HWND；读取失败时记录 `binding=unmatched/changed/incomplete-seats/error`，`error` 另附异常类型。旁路观察只用于日志，不更新识别缓存，也不授予落子权限；关闭诊断即停止额外读取。
 - `fox.autoplay.request`：Control Center 请求授权时的模式、启用状态、同步门禁、颜色和识别状态。
 - `fox.autoplay.play-dispatched`：协调器实际调用协议分发后的颜色、模式及计算参数；不代表宿主已接收或执行。
 
-昵称不写入日志；玩家座位通过已配置身份的 `observedColor` 表达。`room` 按 `UserText` 标记，导出时遵循宿主隐私处理。换房复现应从旧房间开始录制，保留新房间稳定后的数秒记录。若 `sampled=false` 且 `cachedColor` 与 `observedColor` 不同，即取得缓存与当前读取结果不一致的证据；若 `root/list` 指向其他窗口，需核实面板绑定。额外 UI Automation 读取会影响采样时序，诊断版复现失败不能排除竞态。
+昵称不写入日志；玩家座位通过已配置身份的 `observedColor` 表达。事件外层的 `room` 是按 `UserText` 标记的房间 token，导出时遵循宿主隐私处理，与 `reader` 内的房间面板 HWND 不同。换房复现应从旧房间开始录制，保留新房间稳定后的数秒记录。若 `sampled=false` 且 `cachedColor` 与 `observedColor` 不同，即取得缓存与当前读取结果不一致的证据；绑定读取成功时可核对 `reader` 中的 `room/list` 句柄，失败时先检查 `binding` 原因。额外 UI Automation 读取会影响采样时序，诊断版复现失败不能排除竞态。
 
 ### 启动顺序
 
