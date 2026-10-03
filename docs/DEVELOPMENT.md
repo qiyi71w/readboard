@@ -350,21 +350,43 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 
 异步测试使用 `VerificationCompletion` 的有界等待，不要增加 `Thread.Sleep`。
 
+自动落子故障序列（[#87](https://github.com/qiyi71w/readboard/issues/87)）：
+
+```powershell
+dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj --filter "FullyQualifiedName~AutoPlayFaultSequenceTests" --logger "console;verbosity=detailed"
+```
+
+`AutoPlayFaultSequenceHarness` 使用真实 `ControlCenterRuntime`、coordinator 和 `LegacyProtocolAdapter`，只控制窗口、棋手、时钟、捕获／识别与外部 I/O。显式识别屏障覆盖未知棋色／keepSync 抖动及恢复、关闭后的旧结果、目标切换后的旧 observation；每个案例输出事件、状态和 wire 顺序。同步启动 prime 不计入 worker 步数，停止必须等实际 host 停止回调，不能把 flags idle 当成 worker 已退休。
+
+直发未知棋色不发新 `play>`，也不发送 `stopAutoPlay`；周期 FoxAuto 未知样本可撤销棋色授权，但不结束启用周期。两条路径分别验证，不统一授权规则。
+
+真实 EOF 案例用 loopback TCP 宿主半关闭发送方向，等待生产 transport 的断链通知与协议会话关闭，再释放在途识别；最终状态已停止，关闭后的完整 wire 不得增加。该案例在独立的 `dotnet vstest` 子进程运行，未捕获的 worker 异常只让该案例失败，不中止其他案例；失败保留完整 transcript，不跳过测试或降低断言。
+
+EOF 子进程启用 `RunConfiguration.TreatNoTestsAsError=true`，没有匹配用例时必须失败；父测试读取 TRX，要求 `total`、`executed`、`passed` 均为 1，不能只凭退出码或本地化控制台摘要判定成功。TRX 写入每次运行独立的临时目录，成功、失败或超时后都清理该目录。
+
+TCP 和 pipe 的非预期 EOF／I/O 失败使 transport 先变为 disconnected，再在 transport 锁外同步通知 coordinator。订阅者在该连接的终止转换时固定；coordinator 的断链回调绑定到启动代次，旧连接通知即使跨过重启才送达，也不能关闭新会话。当前会话断链时 coordinator 立即关闭出入站入口、取消在途任务，再调度现有宿主退出路径；主动 `Stop`／`Dispose` 不触发非预期断链通知。不增加自动重连，也不改变 wire 文本或自动落子授权规则。该生命周期收口修复了基线 `d8078b75724f7f8563f7ddfaf733de71dae01781` 在 EOF 后写已释放 `NetworkStream` 的 `ObjectDisposedException`。
+
+确定性测试不等同于真实 Fox 客户端／在线对局验收。原生退出 smoke 使用隔离候选中的真实 `readboard.exe`：收到 version 响应后注入 TCP 半关闭或 stdin EOF，进程应以退出码 0 结束。
+
 ### 真实 WebView2 host E2E
 
 仅在原生 Windows checkout 运行，需要 Evergreen Runtime 和 Node 依赖：
 
 ```powershell
 $env:DOTNET_EXE = "C:\path\to\dotnet.exe" # PATH 中的 dotnet 正确时可省略
+npm run check:webview:host # Linux/Windows 均可运行；只发现测试，不启动宿主
 npm run test:webview:host:core
 npm run test:webview:host:extended
 ```
 
 - `core`：首个权威 snapshot、version/platform 交互、Settings Save 后重启持久化。
-- `extended`：Settings Cancel、analysis 权威观察、shell close 和有序 shutdown。
-- 两组测试串行、单 worker、零 retry。
+- `extended`：其余宿主用例，包含 Settings Cancel、分析状态（含暂停）、自动落子逐次授权、单次最终快照、原生身份输入、失效目标窗口刷新和有序 shutdown。
+- `playwright.host.config.js` 统一发现 `tests/WebView/**/real-webview2-*.spec.js`。每个用例必须标记 `@host-core` 或 `@host-extended`；两组互斥且非空，新增文件遵循同一命名规则。检查器比较文件、describe 层级和标题组成的具体集合，不以数量替代覆盖。
+- 两组单 worker、零 retry；禁止 `test.only`。执行 reporter 将 skip、fixme 和预期失败视为失败，不能用跳过获得成功结果。
+- `npm run test:webview:host:guards` 覆盖集合完整性和结果汇总的失败路径，不启动 Windows 宿主。
+- CI 保留 required check 名称 `WebView2 Host E2E Core`，其结果汇总 coverage、build、core 和 extended；所有分组均须成功。只有变更检测明确输出 `run_heavy=false` 时允许纯文档等变更跳过。
 - `READBOARD_PUBLISH_DIRECTORY` 可指向已经 publish 的目录，避免重复构建；未设置时会 fresh publish。
-- 失败产物在 `test-results` / `playwright-report`，包含 DOM、截图、console/page errors、TCP wire、进程输出、配置和 cleanup 状态。
+- 每组上传 `test-results/host-results.json` 中的逐例结果；失败诊断在 `test-results` / `playwright-report`，包含 DOM、截图、console/page errors、TCP wire、进程输出、配置和 cleanup 状态。
 
 只有首 snapshot、Settings save/restart、analysis observation、shell close 或真实 WebView2 生命周期变化才需要这层；不要把它扩成完整按钮矩阵。
 

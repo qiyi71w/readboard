@@ -1,5 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -24,6 +28,111 @@ namespace Readboard.VerificationTests.Protocol
             transport.Emit("quit");
 
             Assert.Equal(1, host.QuitCount);
+        }
+
+        [Fact]
+        public void TransportDisconnect_ClosesSessionBeforeQueuedShutdownAndRejectsNewWrites()
+        {
+            var transport = new RecordingTransport();
+            var host = new DeferredDispatchHost();
+            using var coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.AttachHost(host);
+            coordinator.Start();
+            coordinator.BeginKeepSync();
+            coordinator.SendLine("before-disconnect");
+
+            transport.EmitDisconnected();
+
+            Assert.False(coordinator.IsProtocolSessionActive);
+            Assert.False(coordinator.StartedSync);
+            Assert.False(coordinator.KeepSync);
+            Assert.False(transport.IsConnected);
+            coordinator.SendLine("after-disconnect");
+            coordinator.SendError("after-disconnect");
+            Assert.Equal(new[] { "before-disconnect" }, transport.SentLines);
+            Assert.Empty(transport.ErrorMessages);
+            Assert.NotNull(host.PendingCommand);
+            Assert.Equal(0, host.QuitCount);
+            host.RunPendingCommand();
+            transport.EmitDisconnected();
+            Assert.Equal(1, host.QuitCount);
+        }
+
+        [Fact]
+        public void Restart_DropsShutdownQueuedByPreviousDisconnect()
+        {
+            var transport = new RecordingTransport();
+            var host = new DeferredDispatchHost();
+            using var coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.AttachHost(host);
+            coordinator.Start();
+            transport.EmitDisconnected();
+            Assert.NotNull(host.PendingCommand);
+
+            coordinator.Start();
+            host.RunPendingCommand();
+
+            Assert.True(coordinator.IsProtocolSessionActive);
+            Assert.Equal(0, host.QuitCount);
+        }
+
+        [Fact]
+        public async Task Restart_DropsPreviousTcpDisconnectAlreadyBeingDelivered()
+        {
+            using var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            using var transport = new TcpTransport(((IPEndPoint)listener.LocalEndpoint).Port);
+            using var releaseNotification = new ManualResetEventSlim(false);
+            var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var delivered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            int notificationCount = 0;
+            transport.Disconnected += (_, _) =>
+            {
+                if (Interlocked.Increment(ref notificationCount) != 1)
+                    return;
+                entered.TrySetResult(true);
+                if (!releaseNotification.Wait(VerificationCompletion.WatchdogTimeout))
+                    delivered.TrySetException(new TimeoutException("Old TCP disconnect notification was not released."));
+            };
+            var host = new DeferredDispatchHost();
+            using var coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
+            coordinator.AttachHost(host);
+            coordinator.Start();
+            transport.Disconnected += (_, _) => delivered.TrySetResult(true);
+            using var oldPeer = await VerificationCompletion.WaitAsync(
+                listener.AcceptTcpClientAsync(), "Old TCP session did not connect.");
+
+            try
+            {
+                oldPeer.Client.Shutdown(SocketShutdown.Send);
+                await VerificationCompletion.WaitAsync(entered.Task, "Old TCP disconnect did not reach the delivery barrier.");
+                Assert.False(transport.IsConnected);
+                coordinator.Stop();
+                coordinator.Start();
+                using var currentPeer = await VerificationCompletion.WaitAsync(
+                    listener.AcceptTcpClientAsync(), "New TCP session did not connect.");
+                Assert.True(coordinator.IsProtocolSessionActive);
+                Assert.True(transport.IsConnected);
+
+                releaseNotification.Set();
+                await VerificationCompletion.WaitAsync(delivered.Task, "Old TCP disconnect delivery did not finish.");
+
+                Assert.True(coordinator.IsProtocolSessionActive);
+                Assert.True(transport.IsConnected);
+                Assert.Null(host.PendingCommand);
+                Assert.Equal(0, host.QuitCount);
+                coordinator.SendLine("current-session-survives");
+                using var reader = new StreamReader(currentPeer.GetStream(), Encoding.UTF8, false, 1024, leaveOpen: true);
+                Assert.Equal("current-session-survives", await VerificationCompletion.WaitAsync(
+                    reader.ReadLineAsync(), "New TCP session could not exchange a real protocol line."));
+                coordinator.Stop();
+            }
+            finally
+            {
+                releaseNotification.Set();
+                await VerificationCompletion.WaitAsync(delivered.Task, "Old TCP disconnect did not retire during cleanup.");
+                coordinator.Stop();
+            }
         }
 
         [Fact]
@@ -154,6 +263,7 @@ namespace Readboard.VerificationTests.Protocol
         private sealed class RecordingTransport : IReadBoardTransport
         {
             public event EventHandler<string> MessageReceived;
+            public event EventHandler Disconnected;
 
             public bool IsConnected { get; private set; }
             public List<string> SentLines { get; } = new List<string>();
@@ -167,6 +277,12 @@ namespace Readboard.VerificationTests.Protocol
             public void Emit(string rawLine)
             {
                 MessageReceived?.Invoke(this, rawLine);
+            }
+
+            public void EmitDisconnected()
+            {
+                IsConnected = false;
+                Disconnected?.Invoke(this, EventArgs.Empty);
             }
 
             public void Send(string line)

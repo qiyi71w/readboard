@@ -159,7 +159,7 @@ Source-slice        HighDpi / Title / WebViewUiPolish / 部分 Packaging
 | --- | --- | --- |
 | 本地小改 | 相关 `FullyQualifiedName~` 过滤 | host E2E、benchmark |
 | 普通 PR | Windows：`dotnet test` 全部 VerificationTests；`npm run test:webview`（DOM）。两项都跑且挡合并 | benchmark；不要把 host E2E 塞进同一 job |
-| PR host E2E | `webview2-host-e2e` Core 每条 PR 必跑且挡合并；Extended 继续在 PR/dispatch 跑，不挡合并 | 不要把 Extended 标成 required |
+| PR host E2E | `webview2-host-e2e` 比较完整发现集合与 core/extended 分组；两组均在 PR/dispatch 执行。保留 required check `WebView2 Host E2E Core`，汇总 coverage、build、core、extended，全部成功才放行；仅显式纯文档跳过例外 | 不要仅按用例数量核对，也不要以分组跳过或取消作为成功 |
 | 定时 | 无。需要时 `workflow_dispatch` | 不要加回 cron |
 | tag / 正式打包 | 已有 VerificationTests + benchmark + `package-readboard-release.local.ps1` | 不要用 host E2E 挡打包，除非 host smoke 当时是红的且改的是 shell 生命周期 |
 

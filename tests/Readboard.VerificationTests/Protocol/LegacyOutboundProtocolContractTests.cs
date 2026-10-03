@@ -339,6 +339,7 @@ namespace Readboard.VerificationTests.Protocol
 
         private sealed class RecordingTransport : IReadBoardTransport
         {
+            public event System.EventHandler Disconnected { add { } remove { } }
             public event System.EventHandler<string> MessageReceived;
 
             public List<string> SentLines { get; } = new List<string>();

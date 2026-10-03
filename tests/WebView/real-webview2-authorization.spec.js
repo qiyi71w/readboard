@@ -48,7 +48,7 @@ async function observeOperations(readBoard, testInfo, body) {
   }
 }
 
-test("native player input confirms identity through the real WebView2 bridge", async ({}, testInfo) => {
+test("native player input confirms identity through the real WebView2 bridge", { tag: "@host-extended" }, async ({}, testInfo) => {
   await withNativeFoxWindow(async nativeWindow => {
     await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
       await observeOperations(readBoard, testInfo, async ({ state, operate }) => {
@@ -83,7 +83,7 @@ test("native player input confirms identity through the real WebView2 bridge", a
   });
 });
 
-test("platform change refreshes a destroyed native target in one final snapshot", async ({}, testInfo) => {
+test("platform change refreshes a destroyed native target in one final snapshot", { tag: "@host-extended" }, async ({}, testInfo) => {
   await withNativeFoxWindow(async nativeWindow => {
     await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
       await readBoard.host.waitForExactLine("ready");

@@ -96,6 +96,7 @@ namespace Readboard.VerificationTests.Protocol
 
         private sealed class FakeTransport : IReadBoardTransport
         {
+            public event EventHandler Disconnected { add { } remove { } }
             public event EventHandler<string> MessageReceived
             {
                 add { }

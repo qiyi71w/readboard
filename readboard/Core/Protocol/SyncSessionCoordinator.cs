@@ -22,6 +22,7 @@ namespace readboard
         private int disposeState;
         private int inboundProtocolGeneration;
         private volatile bool acceptingInboundProtocolMessages;
+        private EventHandler transportDisconnectedHandler;
         private string syncPlatform = "generic";
         private FoxWindowContext foxWindowContext = FoxWindowContext.Unknown();
         private bool forceRebuildArmed;
@@ -185,10 +186,12 @@ namespace readboard
 
         public void Start()
         {
-            Interlocked.Increment(ref inboundProtocolGeneration);
+            int startedGeneration = Interlocked.Increment(ref inboundProtocolGeneration);
             outboundProtocolDispatcher.Open();
             acceptingInboundProtocolMessages = true;
             transport.MessageReceived += OnMessageReceived;
+            transportDisconnectedHandler = (_, _) => OnTransportDisconnected(startedGeneration);
+            transport.Disconnected += transportDisconnectedHandler;
             transport.Start();
         }
 
@@ -207,6 +210,8 @@ namespace readboard
             Interlocked.Increment(ref inboundProtocolGeneration);
             StopSyncSessionCore(waitForWorkers);
             transport.MessageReceived -= OnMessageReceived;
+            transport.Disconnected -= transportDisconnectedHandler;
+            transportDisconnectedHandler = null;
             CancelPendingMove();
             continuousSyncStoppedEvent.Set();
             syncIdleEvent.Set();
@@ -690,6 +695,28 @@ namespace readboard
         public void SendError(string message)
         {
             outboundProtocolDispatcher.SendError(message);
+        }
+
+        private void OnTransportDisconnected(int startedGeneration)
+        {
+            if (startedGeneration != Volatile.Read(ref inboundProtocolGeneration)
+                || !acceptingInboundProtocolMessages
+                || Volatile.Read(ref disposeState) == DisposeStateDisposed)
+                return;
+
+            // Close the gates and cancel workers before any UI-thread shutdown can be delayed.
+            Stop();
+            int disconnectedGeneration = unchecked(startedGeneration + 1);
+            IProtocolCommandHost currentHost = host;
+            if (currentHost == null)
+                return;
+            currentHost.DispatchProtocolCommand(delegate
+            {
+                if (disconnectedGeneration != Volatile.Read(ref inboundProtocolGeneration)
+                    || Volatile.Read(ref disposeState) == DisposeStateDisposed)
+                    return;
+                currentHost.HandleQuitRequest();
+            });
         }
 
         private void OnMessageReceived(object sender, string rawLine)
