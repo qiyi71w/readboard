@@ -596,6 +596,7 @@ namespace Readboard.VerificationTests.Protocol
         {
             private readonly object syncRoot = new object();
 
+            public event EventHandler Disconnected { add { } remove { } }
             public event EventHandler<string> MessageReceived;
 
             public List<string> SentLines { get; } = new List<string>();

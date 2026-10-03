@@ -23,6 +23,7 @@ namespace readboard
         }
 
         public event EventHandler<string> MessageReceived;
+        public event EventHandler Disconnected;
 
         public bool IsConnected
         {
@@ -30,7 +31,7 @@ namespace readboard
             {
                 lock (syncRoot)
                 {
-                    return client != null && client.Connected && stream != null;
+                    return running && client != null && client.Connected && stream != null;
                 }
             }
         }
@@ -51,7 +52,7 @@ namespace readboard
                 client = tcpClient;
                 stream = networkStream;
                 running = true;
-                thread = CreateReadThread();
+                thread = CreateReadThread(tcpClient, networkStream);
                 readThread = thread;
             }
             thread.Start();
@@ -94,65 +95,149 @@ namespace readboard
             Stop();
         }
 
-        private void ReadLoop()
+        private void ReadLoop(TcpClient activeClient, NetworkStream activeStream)
         {
-            NetworkStream currentStream = GetStream();
-            if (currentStream == null)
-                return;
+            StreamReader reader;
             try
             {
-                using (StreamReader reader = new StreamReader(currentStream, Encoding.UTF8, false, ReaderBufferSize))
-                {
-                    ReadMessages(reader);
-                }
+                reader = new StreamReader(activeStream, Encoding.UTF8, false, ReaderBufferSize, leaveOpen: true);
             }
             catch (IOException)
             {
-                if (running)
-                    throw;
+                TryTransitionDisconnected(activeClient, activeStream);
+                return;
+            }
+            catch (SocketException)
+            {
+                TryTransitionDisconnected(activeClient, activeStream);
+                return;
             }
             catch (ObjectDisposedException)
             {
-                if (running)
-                    throw;
+                TryTransitionDisconnected(activeClient, activeStream);
+                return;
+            }
+
+            try
+            {
+                ReadMessages(reader, activeClient, activeStream);
+            }
+            finally
+            {
+                reader.Dispose();
+            }
+        }
+
+        private void ReadMessages(StreamReader reader, TcpClient activeClient, NetworkStream activeStream)
+        {
+            while (running)
+            {
+                string line;
+                try
+                {
+                    line = reader.ReadLine();
+                }
+                catch (IOException)
+                {
+                    TryTransitionDisconnected(activeClient, activeStream);
+                    return;
+                }
+                catch (SocketException)
+                {
+                    TryTransitionDisconnected(activeClient, activeStream);
+                    return;
+                }
+                catch (ObjectDisposedException)
+                {
+                    TryTransitionDisconnected(activeClient, activeStream);
+                    return;
+                }
+
+                if (line == null)
+                {
+                    TryTransitionDisconnected(activeClient, activeStream);
+                    return;
+                }
+
+                if (line.Length > 0)
+                {
+                    EventHandler<string> handler = MessageReceived;
+                    if (handler != null)
+                        handler(this, line);
+                }
             }
         }
 
         private void WriteLine(string line)
         {
-            byte[] buffer = Encoding.UTF8.GetBytes(line + "\r\n");
-            NetworkStream currentStream = GetStream();
-            if (currentStream == null)
-                return;
-            currentStream.Write(buffer, 0, buffer.Length);
-        }
-
-        private NetworkStream GetStream()
-        {
+            TcpClient currentClient;
+            NetworkStream currentStream;
             lock (syncRoot)
             {
-                return stream;
+                if (!running || stream == null)
+                    return;
+                currentClient = client;
+                currentStream = stream;
+            }
+
+            byte[] buffer = Encoding.UTF8.GetBytes(line + "\r\n");
+            try
+            {
+                currentStream.Write(buffer, 0, buffer.Length);
+            }
+            catch (IOException)
+            {
+                TryTransitionDisconnected(currentClient, currentStream);
+            }
+            catch (SocketException)
+            {
+                TryTransitionDisconnected(currentClient, currentStream);
+            }
+            catch (ObjectDisposedException)
+            {
+                TryTransitionDisconnected(currentClient, currentStream);
             }
         }
 
-        private Thread CreateReadThread()
+        private void TryTransitionDisconnected(TcpClient activeClient, NetworkStream activeStream)
         {
-            Thread thread = new Thread(ReadLoop);
+            NetworkStream streamToDispose = null;
+            TcpClient clientToClose = null;
+            bool shouldRaise = false;
+            EventHandler handler = null;
+            lock (syncRoot)
+            {
+                if (running && client == activeClient && stream == activeStream)
+                {
+                    running = false;
+                    streamToDispose = stream;
+                    clientToClose = client;
+                    stream = null;
+                    client = null;
+                    readThread = null;
+                    shouldRaise = true;
+                    handler = Disconnected;
+                }
+            }
+
+            if (!shouldRaise)
+                return;
+
+            if (streamToDispose != null)
+                streamToDispose.Dispose();
+            if (clientToClose != null)
+                clientToClose.Close();
+
+            if (handler != null)
+                handler(this, EventArgs.Empty);
+        }
+
+        private Thread CreateReadThread(TcpClient activeClient, NetworkStream activeStream)
+        {
+            Thread thread = new Thread(() => ReadLoop(activeClient, activeStream));
             thread.IsBackground = true;
             return thread;
         }
-
-        private void ReadMessages(StreamReader reader)
-        {
-            string line;
-            while (running && (line = reader.ReadLine()) != null)
-            {
-                EventHandler<string> handler = MessageReceived;
-                if (line.Length > 0 && handler != null)
-                    handler(this, line);
-            }
-        }
-
         private static void TryJoinReadThread(Thread thread)
         {
             if (thread == null || Thread.CurrentThread == thread)

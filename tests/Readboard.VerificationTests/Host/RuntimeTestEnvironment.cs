@@ -76,6 +76,7 @@ namespace Readboard.VerificationTests.Host
 
     internal sealed class RuntimeRecordingTransport : IReadBoardTransport
     {
+        public event EventHandler Disconnected { add { } remove { } }
         public event EventHandler<string> MessageReceived { add { } remove { } }
         public List<string> Lines { get; } = new List<string>();
         public Action<string> OnSend { get; set; }
