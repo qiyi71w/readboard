@@ -285,11 +285,11 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Theory]
-        [InlineData(SyncMode.Fox)]
-        [InlineData(SyncMode.FoxBackgroundPlace)]
-        public void DelayedNewRoomPlayers_RefreshAuthorization_AndUnreadablePlayersRevokeIt(SyncMode platform)
+        [InlineData((int)SyncMode.Fox)]
+        [InlineData((int)SyncMode.FoxBackgroundPlace)]
+        public void DelayedNewRoomPlayers_RefreshAuthorization_AndUnreadablePlayersRevokeIt(int platformValue)
         {
-            var h = new Harness(platform: platform, saved: "self");
+            var h = new Harness(platform: (SyncMode)platformValue, saved: "self");
             h.EnableAutomatic();
             h.Environment.Context.RoomToken = "room-2";
             h.Runtime.RefreshAutoPlayColor(out _);
