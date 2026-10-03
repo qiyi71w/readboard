@@ -62,7 +62,7 @@ namespace readboard
             int controlId = GetDlgCtrlID(roomHandle);
             if (!FoxWindowBindingResolver.TryResolve(boardHandle, GetWindowTitle, GetParent,
                     out titleBinding, out actual)
-                || !FoxRoomPlayerBinding.MatchesRoom(expected, actual, controlId))
+                || !FoxRoomPlayerBinding.MatchesRoom(expected, actual))
                 return null;
 
             IntPtr listHandle = IntPtr.Zero;

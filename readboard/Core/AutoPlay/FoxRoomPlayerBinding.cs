@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 
 namespace readboard
 {
@@ -24,28 +23,14 @@ namespace readboard
                 && TitleHandle == other.TitleHandle && ControlId == other.ControlId;
         }
 
-        public static bool MatchesRoom(FoxWindowContext expected, FoxWindowContext actual, int controlId)
+        public static bool MatchesRoom(FoxWindowContext expected, FoxWindowContext actual)
         {
-            if (expected == null || actual == null
-                || expected.Kind != FoxWindowKind.LiveRoom || actual.Kind != FoxWindowKind.LiveRoom
-                || expected.LiveRoomState != FoxLiveRoomState.Playing
-                || actual.LiveRoomState != FoxLiveRoomState.Playing
-                || !string.Equals(expected.RoomToken, actual.RoomToken, StringComparison.Ordinal))
-                return false;
-
-            string token = expected.RoomToken;
-            if (string.IsNullOrEmpty(token) || !token.EndsWith("号", StringComparison.Ordinal))
-                return false;
-            int roomNumber;
-            if (!int.TryParse(token.AsSpan(0, token.Length - 1), NumberStyles.None,
-                CultureInfo.InvariantCulture, out roomNumber) || roomNumber <= 0)
-                return false;
-
-            // Observed Fox native layout (four rooms, two processes), not a public Fox API.
-            // Unsupported layouts must remain unknown rather than authorize another room's list.
-            const int RoomControlIdOffset = 888;
-            return roomNumber <= int.MaxValue - RoomControlIdOffset
-                && controlId == roomNumber + RoomControlIdOffset;
+            return expected != null && actual != null
+                && expected.Kind == FoxWindowKind.LiveRoom && actual.Kind == FoxWindowKind.LiveRoom
+                && expected.LiveRoomState == FoxLiveRoomState.Playing
+                && actual.LiveRoomState == FoxLiveRoomState.Playing
+                && !string.IsNullOrWhiteSpace(expected.RoomToken)
+                && string.Equals(expected.RoomToken, actual.RoomToken, StringComparison.Ordinal);
         }
     }
 }

@@ -8,19 +8,15 @@ namespace Readboard.VerificationTests.AutoPlay
     public sealed class FoxRoomPlayerBindingTests
     {
         [Theory]
-        [InlineData("45471号", 46359, true)]
-        [InlineData("45024号", 46359, false)]
-        [InlineData("45024号", 45912, true)]
-        [InlineData("45399号", 46287, true)]
-        [InlineData("44998号", 46287, false)]
-        [InlineData("44998号", 45886, true)]
-        [InlineData("44998号", 0, false)]
-        [InlineData("2147483647号", 887, false)]
-        [InlineData("room-1", 889, false)]
-        public void RoomPanelMustMatchExpectedTitle(string room, int controlId, bool matches)
+        [InlineData("24|6号", "24|6号", true)]
+        [InlineData("24|6号", "24|7号", false)]
+        [InlineData("45471号", "45471号", true)]
+        [InlineData("45471号", "45024号", false)]
+        [InlineData(null, null, false)]
+        [InlineData("", "", false)]
+        public void RoomTokensMustMatchWithoutNumericAssumptions(string expectedRoom, string actualRoom, bool matches)
         {
-            var expected = Playing(room);
-            Assert.Equal(matches, FoxRoomPlayerBinding.MatchesRoom(expected, Playing(room), controlId));
+            Assert.Equal(matches, FoxRoomPlayerBinding.MatchesRoom(Playing(expectedRoom), Playing(actualRoom)));
         }
 
         [Theory]
@@ -34,7 +30,7 @@ namespace Readboard.VerificationTests.AutoPlay
             {
                 RoomToken = room, Kind = (FoxWindowKind)kind, LiveRoomState = (FoxLiveRoomState)state
             };
-            Assert.False(FoxRoomPlayerBinding.MatchesRoom(Playing("45399号"), actual, 46287));
+            Assert.False(FoxRoomPlayerBinding.MatchesRoom(Playing("45399号"), actual));
         }
 
         [Theory]

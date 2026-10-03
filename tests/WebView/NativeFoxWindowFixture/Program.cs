@@ -25,14 +25,14 @@ internal static class Program
         Application.EnableVisualStyles();
         using var window = new Form
         {
-            Text = "Native acceptance > 123号 对弈中",
+            Text = "Native acceptance > 24|6号房间 对弈中",
             ClientSize = new Size(700, 480),
             StartPosition = FormStartPosition.Manual,
             Location = new Point(720, 40)
         };
         var room = new GroupBox { Text = "CRoomPanel", Dock = DockStyle.Fill };
         window.Controls.Add(room);
-        SetWindowLongPtr(room.Handle, -12, new IntPtr(123 + 888));
+        SetWindowLongPtr(room.Handle, -12, new IntPtr(688));
         var players = new GroupBox
         {
             Text = "CRoomPlayerListPanel",

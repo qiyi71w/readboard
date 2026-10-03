@@ -336,29 +336,30 @@ namespace Readboard.VerificationTests.Host
         [Theory]
         [InlineData((int)SyncMode.Fox)]
         [InlineData((int)SyncMode.FoxBackgroundPlace)]
-        public void TitleChangesBeforeRoomPanel_RevokeOldSeatAndRecoverWithoutReselection(int platformValue)
+        public void CompositeRoomBindingLoss_RevokesOldSeatAndRecoversWithoutReselection(int platformValue)
         {
             var h = new Harness(platform: (SyncMode)platformValue, saved: "self");
-            h.Environment.Context.RoomToken = "45399号";
-            int panelControlId = 46287;
+            h.Environment.Context.RoomToken = "24|6号";
+            bool panelVisible = true;
             h.Environment.OnReadPlayers = (handle, expected) => FoxMatchBarWindowsReader.ReadBoundPlayers(
                 handle, expected,
-                (board, context) => FoxRoomPlayerBinding.MatchesRoom(context, h.Environment.Context, panelControlId)
-                    ? new FoxRoomPlayerBinding(new IntPtr(100), new IntPtr(101), new IntPtr(102), panelControlId)
+                (board, context) => panelVisible && FoxRoomPlayerBinding.MatchesRoom(context, h.Environment.Context)
+                    ? new FoxRoomPlayerBinding(new IntPtr(100), new IntPtr(101), new IntPtr(102), 688)
                     : (FoxRoomPlayerBinding?)null,
                 list => h.Environment.Players.Players);
             h.EnableAutomatic();
             Assert.Equal("black", h.Runtime.Snapshot.PlayColor);
             h.Transport.Lines.Clear();
 
-            h.Environment.Context.RoomToken = "44998号";
+            h.Environment.Context.RoomToken = "24|7号";
+            panelVisible = false;
             h.Runtime.RequestAutoPlay();
             Assert.Null(h.Runtime.Snapshot.PlayColor);
             Assert.Equal(new[] { "stopAutoPlay" }, h.Transport.Lines);
             h.Runtime.RequestAutoPlay();
             Assert.Equal(new[] { "stopAutoPlay" }, h.Transport.Lines);
 
-            panelControlId = 45886;
+            panelVisible = true;
             h.Environment.Players = Players("white");
             h.Environment.UtcNow = h.Environment.UtcNow.AddMilliseconds(1000);
             h.Runtime.RefreshAutoPlayColor(out _);
