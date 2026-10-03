@@ -12,7 +12,80 @@ namespace readboard
         private const int MaxUiaNodes = 200;
         private const string PlayerListPanelTitle = "CRoomPlayerListPanel";
 
-        public static FoxMatchBarReading TryRead(IntPtr boardHandle)
+        public static FoxMatchBarReading TryRead(IntPtr boardHandle, FoxWindowContext context)
+        {
+            return ReadBoundPlayers(boardHandle, context, ResolveBinding, ReadPlayers);
+        }
+
+        internal static FoxMatchBarReading ReadBoundPlayers(
+            IntPtr boardHandle,
+            FoxWindowContext context,
+            Func<IntPtr, FoxWindowContext, FoxRoomPlayerBinding?> resolveBinding,
+            Func<IntPtr, IList<FoxPlayerListEntry>> readPlayers)
+        {
+            try
+            {
+                // Keep the expected context fixed while UIA may run across a room switch.
+                FoxWindowContext expected = FoxWindowContext.CopyOf(context);
+                FoxRoomPlayerBinding? before = resolveBinding(boardHandle, expected);
+                if (!before.HasValue)
+                    return DiagnosedEmpty("binding=unmatched");
+                IList<FoxPlayerListEntry> players = readPlayers(before.Value.ListHandle);
+                FoxRoomPlayerBinding? after = resolveBinding(boardHandle, expected);
+                if (!after.HasValue || !before.Value.IsSameBinding(after.Value))
+                    return DiagnosedEmpty("binding=changed");
+                if (players == null || players.Count < 2)
+                    return DiagnosedEmpty("binding=incomplete-seats");
+                return new FoxMatchBarReading(players,
+                    "binding=matched hwnd=" + boardHandle.ToInt64().ToString("X")
+                    + " room=" + before.Value.RoomHandle.ToInt64().ToString("X")
+                    + " list=" + before.Value.ListHandle.ToInt64().ToString("X")
+                    + " players=" + players.Count);
+            }
+            catch (Exception ex)
+            {
+                return DiagnosedEmpty("binding=error ex=" + ex.GetType().Name);
+            }
+        }
+
+        private static FoxRoomPlayerBinding? ResolveBinding(IntPtr boardHandle, FoxWindowContext expected)
+        {
+            if (!IsWindow(boardHandle) || IsMinimized(boardHandle)
+                || !string.Equals(GetWindowTitle(boardHandle), "CChessboardPanel", StringComparison.Ordinal))
+                return null;
+            IntPtr roomHandle = GetParent(boardHandle);
+            if (IsMinimized(roomHandle)
+                || !string.Equals(GetWindowTitle(roomHandle), "CRoomPanel", StringComparison.Ordinal))
+                return null;
+            FoxWindowBinding titleBinding;
+            FoxWindowContext actual;
+            int controlId = GetDlgCtrlID(roomHandle);
+            if (!FoxWindowBindingResolver.TryResolve(boardHandle, GetWindowTitle, GetParent,
+                    out titleBinding, out actual)
+                || !FoxRoomPlayerBinding.MatchesRoom(expected, actual, controlId))
+                return null;
+
+            IntPtr listHandle = IntPtr.Zero;
+            bool ambiguous = false;
+            EnumChildWindows(roomHandle, delegate(IntPtr child, IntPtr parameter)
+            {
+                if (GetParent(child) != roomHandle || IsMinimized(child)
+                    || !string.Equals(GetWindowTitle(child), PlayerListPanelTitle, StringComparison.Ordinal))
+                    return true;
+                if (listHandle != IntPtr.Zero)
+                {
+                    ambiguous = true;
+                    return false;
+                }
+                listHandle = child;
+                return true;
+            }, IntPtr.Zero);
+            if (ambiguous || listHandle == IntPtr.Zero)
+                return null;
+            return new FoxRoomPlayerBinding(roomHandle, listHandle, titleBinding.TitleSourceHandle, controlId);
+        }
+
+        public static FoxMatchBarReading DiscoverIdentityCandidates(IntPtr boardHandle)
         {
             try
             {
@@ -298,6 +371,9 @@ namespace readboard
 
         [DllImport("user32.dll")]
         private static extern bool EnumWindows(EnumProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern int GetDlgCtrlID(IntPtr hWnd);
 
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);

@@ -143,7 +143,7 @@ namespace Readboard.VerificationTests.AutoPlay
         }
 
         [Fact]
-        public void IssueIfAuthorized_UnknownColor_DoesNotEmitPlayOrRevokeAuthorization()
+        public void IssueIfAuthorized_UnknownColor_RevokesPreviousAuthorization()
         {
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
@@ -165,11 +165,11 @@ namespace Readboard.VerificationTests.AutoPlay
                 keepSync: true,
                 coordinator);
 
-            Assert.Equal(new[] { "play>black>5 1000 0" }, transport.SentLines);
+            Assert.Equal(new[] { "play>black>5 1000 0", "stopAutoPlay" }, transport.SentLines);
         }
 
         [Fact]
-        public void IssueIfAuthorized_UnknownColorAfterFoxAutoPlay_AllowsNextQualifiedPlayWithoutStop()
+        public void IssueIfAuthorized_UnknownColorAfterFoxAutoPlay_RevokesAndAutomaticallyRearms()
         {
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
@@ -189,12 +189,12 @@ namespace Readboard.VerificationTests.AutoPlay
             AutoPlayWireIssuer.IssueIfAuthorized(known, keepSync: true, coordinator);
 
             Assert.Equal(
-                new[] { "play>black>5 1000 0", "play>black>5 1000 0" },
+                new[] { "play>black>5 1000 0", "stopAutoPlay", "play>black>5 1000 0" },
                 transport.SentLines);
         }
 
         [Fact]
-        public void IssueIfAuthorized_NullColorResolutionAfterFoxAutoPlay_AllowsNextQualifiedPlayWithoutStop()
+        public void IssueIfAuthorized_NullColorResolutionAfterFoxAutoPlay_RevokesAndAutomaticallyRearms()
         {
             RecordingTransport transport = new RecordingTransport();
             SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
@@ -216,7 +216,7 @@ namespace Readboard.VerificationTests.AutoPlay
             AutoPlayWireIssuer.IssueIfAuthorized(known, keepSync: true, coordinator);
 
             Assert.Equal(
-                new[] { "play>black>5 1000 0", "play>black>5 1000 0" },
+                new[] { "play>black>5 1000 0", "stopAutoPlay", "play>black>5 1000 0" },
                 transport.SentLines);
         }
 

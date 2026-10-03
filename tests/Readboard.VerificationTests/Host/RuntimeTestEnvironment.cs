@@ -23,6 +23,7 @@ namespace Readboard.VerificationTests.Host
         public int WindowReads { get; private set; }
         public int HintCount { get; private set; }
         public Action OnProject { get; set; }
+        public Func<IntPtr, FoxWindowContext, FoxMatchBarReading> OnReadPlayers { get; set; }
         public Action OnHint { get; set; }
 
         public ControlCenterWindowFacts ReadWindow()
@@ -38,9 +39,14 @@ namespace Readboard.VerificationTests.Host
             };
         }
 
-        public FoxMatchBarReading ReadPlayers(IntPtr handle)
+        public FoxMatchBarReading ReadPlayers(IntPtr handle, FoxWindowContext context)
         {
             PlayerReads++;
+            return OnReadPlayers == null ? Players : OnReadPlayers(handle, context);
+        }
+
+        public FoxMatchBarReading DiscoverIdentityCandidates(IntPtr handle)
+        {
             return Players;
         }
 

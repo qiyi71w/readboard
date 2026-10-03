@@ -71,7 +71,7 @@ namespace readboard
                 return;
             lastDiagnosticPlayersUtc = now;
             // Shadow reads are evidence only: never feed them back into liveRecognition or authorization.
-            reading = reading ?? environment.ReadPlayers(observedWindowHandle) ?? FoxMatchBarReading.Empty;
+            reading = reading ?? environment.ReadPlayers(observedWindowHandle, context) ?? FoxMatchBarReading.Empty;
             AutoPlayColorResolution observed = FoxMatchBarSeatResolver.Resolve(identity, reading.Players);
             RecordAutoPlayDiagnostic("fox.autoplay.players", context, new Dictionary<string, LoggingField>
             {

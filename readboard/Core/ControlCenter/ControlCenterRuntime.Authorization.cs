@@ -216,7 +216,7 @@ namespace readboard
                 RecordPlayersDiagnostic(context, now, identitySignature, false, force, null);
                 return liveRecognition.CurrentResolution;
             }
-            FoxMatchBarReading reading = environment.ReadPlayers(observedWindowHandle);
+            FoxMatchBarReading reading = environment.ReadPlayers(observedWindowHandle, context);
             AutoPlayColorResolution result = liveRecognition.AcceptSample(observedWindowHandle,
                 contextSignature, identitySignature, now, reading);
             RecordPlayersDiagnostic(context, now, identitySignature, true, force, reading ?? FoxMatchBarReading.Empty);
@@ -241,9 +241,10 @@ namespace readboard
         {
             if (preferences.Platform != SyncMode.Fox && preferences.Platform != SyncMode.FoxBackgroundPlace)
                 return identitySelection.Snapshot;
-            FoxWindowContext context = RefreshWindowContext();
-            SamplePlayers(context, true);
-            return identitySelection.Open(FoxMatchBarIdentityCandidates.Build(liveRecognition.CurrentReading.Players),
+            RefreshWindowContext();
+            FoxMatchBarReading candidates = environment.DiscoverIdentityCandidates(observedWindowHandle)
+                ?? FoxMatchBarReading.Empty;
+            return identitySelection.Open(FoxMatchBarIdentityCandidates.Build(candidates.Players),
                 firstAutomaticSelection);
         }
 

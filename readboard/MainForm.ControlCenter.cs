@@ -23,9 +23,14 @@ namespace readboard
                 return form.ReadFoxWindowFacts();
             }
 
-            public FoxMatchBarReading ReadPlayers(IntPtr windowHandle)
+            public FoxMatchBarReading ReadPlayers(IntPtr windowHandle, FoxWindowContext context)
             {
-                return FoxMatchBarWindowsReader.TryRead(windowHandle);
+                return FoxMatchBarWindowsReader.TryRead(windowHandle, context);
+            }
+
+            public FoxMatchBarReading DiscoverIdentityCandidates(IntPtr windowHandle)
+            {
+                return FoxMatchBarWindowsReader.DiscoverIdentityCandidates(windowHandle);
             }
 
             public void ProjectState(ControlCenterPreferences preferences, ControlCenterSessionState sessionState, bool platformChanged)

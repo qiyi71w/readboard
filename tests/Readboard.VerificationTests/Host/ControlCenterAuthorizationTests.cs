@@ -254,7 +254,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(change == "state" ? null : "white", h.Runtime.Snapshot.PlayColor);
             Assert.Empty(h.Transport.Lines);
             h.Runtime.RequestAutoPlay();
-            Assert.Equal(change == "state" ? Array.Empty<string>() : new[] { "play>white>0 0 0" }, h.Transport.Lines);
+            Assert.Equal(change == "state" ? new[] { "stopAutoPlay" } : new[] { "play>white>0 0 0" }, h.Transport.Lines);
         }
 
         [Theory]
@@ -321,7 +321,8 @@ namespace Readboard.VerificationTests.Host
             Assert.True(unreadableChanged);
             Assert.Null(h.Runtime.Snapshot.PlayColor);
             h.Runtime.RequestAutoPlay();
-            Assert.Empty(h.Transport.Lines);
+            Assert.Equal(new[] { "stopAutoPlay" }, h.Transport.Lines);
+            h.Transport.Lines.Clear();
 
             h.Environment.Players = Players("black");
             h.Environment.UtcNow = h.Environment.UtcNow.AddMilliseconds(1000);
@@ -330,6 +331,54 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal("black", h.Runtime.Snapshot.PlayColor);
             h.Runtime.RequestAutoPlay();
             Assert.Equal(new[] { "play>black>0 0 0" }, h.Transport.Lines);
+        }
+
+        [Theory]
+        [InlineData((int)SyncMode.Fox)]
+        [InlineData((int)SyncMode.FoxBackgroundPlace)]
+        public void TitleChangesBeforeRoomPanel_RevokeOldSeatAndRecoverWithoutReselection(int platformValue)
+        {
+            var h = new Harness(platform: (SyncMode)platformValue, saved: "self");
+            h.Environment.Context.RoomToken = "45399号";
+            int panelControlId = 46287;
+            h.Environment.OnReadPlayers = (handle, expected) => FoxMatchBarWindowsReader.ReadBoundPlayers(
+                handle, expected,
+                (board, context) => FoxRoomPlayerBinding.MatchesRoom(context, h.Environment.Context, panelControlId)
+                    ? new FoxRoomPlayerBinding(new IntPtr(100), new IntPtr(101), new IntPtr(102), panelControlId)
+                    : (FoxRoomPlayerBinding?)null,
+                list => h.Environment.Players.Players);
+            h.EnableAutomatic();
+            Assert.Equal("black", h.Runtime.Snapshot.PlayColor);
+            h.Transport.Lines.Clear();
+
+            h.Environment.Context.RoomToken = "44998号";
+            h.Runtime.RequestAutoPlay();
+            Assert.Null(h.Runtime.Snapshot.PlayColor);
+            Assert.Equal(new[] { "stopAutoPlay" }, h.Transport.Lines);
+            h.Runtime.RequestAutoPlay();
+            Assert.Equal(new[] { "stopAutoPlay" }, h.Transport.Lines);
+
+            panelControlId = 45886;
+            h.Environment.Players = Players("white");
+            h.Environment.UtcNow = h.Environment.UtcNow.AddMilliseconds(1000);
+            h.Runtime.RefreshAutoPlayColor(out _);
+            h.Runtime.RequestAutoPlay();
+            Assert.Equal(new[] { "stopAutoPlay", "play>white>0 0 0" }, h.Transport.Lines);
+            Assert.True(h.Runtime.Snapshot.AutoPlayEnabled);
+            Assert.Equal(AutoPlayColorMode.FoxAuto, h.Runtime.CurrentSessionState.SelectedAutoPlayColorMode);
+        }
+
+        [Fact]
+        public void IdentityCandidatesWithoutRoomEvidence_CanBeSelectedButCannotAuthorize()
+        {
+            var h = new Harness();
+            h.Environment.OnReadPlayers = (handle, context) => FoxMatchBarReading.Empty;
+            h.Runtime.Apply(ControlCenterIntent.SetAutoPlayEnabled(true));
+            h.Runtime.Apply(ControlCenterIntent.SetAutoPlayColor(AutoPlayColorMode.FoxAuto));
+            Assert.True(h.Runtime.ConfirmIdentity(h.Candidate(), false).Accepted);
+            Assert.Equal("self", h.Runtime.IdentitySnapshot.EffectiveIdentitySignature);
+            Assert.Null(h.Runtime.Snapshot.PlayColor);
+            Assert.DoesNotContain(h.Transport.Lines, line => line.StartsWith("play>"));
         }
 
         [Theory]
@@ -396,25 +445,24 @@ namespace Readboard.VerificationTests.Host
             h.Transport.Lines.Clear();
             h.Runtime.RequestAutoPlay();
             Assert.Null(h.Runtime.Snapshot.PlayColor);
-            Assert.Empty(h.Transport.Lines);
+            Assert.Equal(new[] { "stopAutoPlay" }, h.Transport.Lines);
         }
 
         [Fact]
-        public void ZeroHandleAndForcedIdentityRefresh_DoNotReuseBoundWindowPlayers()
+        public void CandidateDiscovery_DoesNotAuthorizeUnboundPlayers_AndZeroHandleRevokes()
         {
             var h = new Harness(saved: "self");
             h.EnableAutomatic();
-            int reads = h.Environment.PlayerReads;
             h.Environment.Players = Players("white");
             h.Runtime.OpenIdentity();
-            Assert.Equal(reads + 1, h.Environment.PlayerReads);
+            Assert.Contains(h.Runtime.IdentitySnapshot.Candidates, candidate => candidate.Signature == "self");
+            Assert.Equal("black", h.Runtime.Snapshot.PlayColor);
             h.Runtime.CancelIdentity();
             h.Environment.Handle = IntPtr.Zero;
             h.Transport.Lines.Clear();
             h.Runtime.RequestAutoPlay();
             Assert.Null(h.Runtime.Snapshot.PlayColor);
-            Assert.Equal(reads + 1, h.Environment.PlayerReads);
-            Assert.Empty(h.Transport.Lines);
+            Assert.Equal(new[] { "stopAutoPlay" }, h.Transport.Lines);
         }
 
         [Fact]

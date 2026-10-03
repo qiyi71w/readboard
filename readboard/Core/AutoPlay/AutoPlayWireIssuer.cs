@@ -40,7 +40,8 @@ namespace readboard
             if (snapshot.AutoPlayColorMode != AutoPlayColorMode.FoxAuto)
                 return false;
 
-            return !snapshot.AutoPlayEnabled || !snapshot.TwoWaySync;
+            return !snapshot.AutoPlayEnabled || !snapshot.TwoWaySync
+                || snapshot.AutoPlayColorResolution == null || !snapshot.AutoPlayColorResolution.IsKnown;
         }
 
         internal static string ToProtocolNumericValue(string value)
