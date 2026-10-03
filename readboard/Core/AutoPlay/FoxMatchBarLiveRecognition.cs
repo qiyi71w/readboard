@@ -79,8 +79,6 @@ namespace readboard
                 return true;
             if (!string.Equals(lastIdentitySignature, Normalize(identitySignature), StringComparison.Ordinal))
                 return true;
-            if (CurrentResolution != null && CurrentResolution.IsKnown)
-                return false;
             return (nowUtc - lastAttemptUtc).TotalMilliseconds >= RetryIntervalMs;
         }
 

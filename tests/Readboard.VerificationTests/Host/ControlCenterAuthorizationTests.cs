@@ -284,32 +284,52 @@ namespace Readboard.VerificationTests.Host
             Assert.Empty(h.Transport.Lines);
         }
 
-        [Fact]
-        public void UnknownPlayers_RetryAt1000Milliseconds_WhileKnownPlayersRemainCached()
+        [Theory]
+        [InlineData(SyncMode.Fox)]
+        [InlineData(SyncMode.FoxBackgroundPlace)]
+        public void DelayedNewRoomPlayers_RefreshAuthorization_AndUnreadablePlayersRevokeIt(SyncMode platform)
         {
-            var h = new Harness(saved: "self");
-            h.Environment.Players = FoxMatchBarReading.Empty;
+            var h = new Harness(platform: platform, saved: "self");
             h.EnableAutomatic();
-            Assert.Null(h.Runtime.Snapshot.PlayColor);
+            h.Environment.Context.RoomToken = "room-2";
+            h.Runtime.RefreshAutoPlayColor(out _);
+            Assert.Equal("black", h.Runtime.Snapshot.PlayColor);
             int reads = h.Environment.PlayerReads;
+            h.Transport.Lines.Clear();
+
             h.Environment.Players = Players("white");
             h.Environment.UtcNow = h.Environment.UtcNow.AddMilliseconds(999);
-            h.Runtime.RefreshAutoPlayColor(out bool beforeRetryChanged);
-            Assert.False(beforeRetryChanged);
+            h.Runtime.RefreshAutoPlayColor(out bool beforeRefreshChanged);
+            Assert.False(beforeRefreshChanged);
             Assert.Equal(reads, h.Environment.PlayerReads);
-            Assert.Null(h.Runtime.Snapshot.PlayColor);
+            Assert.Equal("black", h.Runtime.Snapshot.PlayColor);
+
             h.Environment.UtcNow = h.Environment.UtcNow.AddMilliseconds(1);
-            h.Runtime.RefreshAutoPlayColor(out bool detectedChanged);
-            Assert.True(detectedChanged);
-            Assert.Equal(reads + 1, h.Environment.PlayerReads);
-            Assert.Equal("white", h.Runtime.Snapshot.PlayColor);
-            h.Environment.Players = Players("black");
-            h.Environment.UtcNow = h.Environment.UtcNow.AddDays(1);
-            h.Runtime.RefreshAutoPlayColor(out bool cachedChanged);
-            Assert.False(cachedChanged);
+            h.Runtime.RefreshAutoPlayColor(out bool colorChanged);
+            Assert.True(colorChanged);
             Assert.Equal(reads + 1, h.Environment.PlayerReads);
             Assert.Equal("white", h.Runtime.Snapshot.PlayColor);
             Assert.Empty(h.Transport.Lines);
+            h.Runtime.RequestAutoPlay();
+            Assert.Equal(new[] { "play>white>0 0 0" }, h.Transport.Lines);
+            Assert.Equal(reads + 1, h.Environment.PlayerReads);
+
+            h.Transport.Lines.Clear();
+            h.Environment.Players = FoxMatchBarReading.Empty;
+            h.Environment.UtcNow = h.Environment.UtcNow.AddMilliseconds(1000);
+            h.Runtime.RefreshAutoPlayColor(out bool unreadableChanged);
+            Assert.True(unreadableChanged);
+            Assert.Null(h.Runtime.Snapshot.PlayColor);
+            h.Runtime.RequestAutoPlay();
+            Assert.Empty(h.Transport.Lines);
+
+            h.Environment.Players = Players("black");
+            h.Environment.UtcNow = h.Environment.UtcNow.AddMilliseconds(1000);
+            h.Runtime.RefreshAutoPlayColor(out bool recoveredChanged);
+            Assert.True(recoveredChanged);
+            Assert.Equal("black", h.Runtime.Snapshot.PlayColor);
+            h.Runtime.RequestAutoPlay();
+            Assert.Equal(new[] { "play>black>0 0 0" }, h.Transport.Lines);
         }
 
         [Theory]
