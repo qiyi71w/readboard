@@ -90,7 +90,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(AutoPlayColorMode.FoxAuto, h.Runtime.CurrentSessionState.SelectedAutoPlayColorMode);
             Assert.Equal(AutoPlayColorStatus.UnsupportedPlatform, h.Runtime.Snapshot.AutoPlayColorResolution.Status);
             Assert.Null(h.Runtime.Snapshot.PlayColor);
-            Assert.Empty(h.Transport.Lines);
+            Assert.Equal(new[] { "stopAutoPlay" }, h.Transport.Lines);
         }
 
         [Fact]
@@ -209,7 +209,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(hasProcessIdentity ? "self" : string.Empty, h.Runtime.IdentitySnapshot.EffectiveIdentitySignature);
             Assert.Equal(hasProcessIdentity ? "black" : null, h.Runtime.Snapshot.PlayColor);
             h.Runtime.RequestAutoPlay();
-            Assert.Equal(hasProcessIdentity ? new[] { "play>black>0 0 0" } : Array.Empty<string>(), h.Transport.Lines);
+            Assert.Equal(hasProcessIdentity ? new[] { "play>black>0 0 0" } : new[] { "stopAutoPlay" }, h.Transport.Lines);
         }
 
         [Fact]
@@ -418,7 +418,8 @@ namespace Readboard.VerificationTests.Host
             h.Transport.Lines.Clear();
             h.Runtime.RequestAutoPlay();
             Assert.Null(h.Runtime.Snapshot.PlayColor);
-            Assert.Empty(h.Transport.Lines);
+            Assert.Equal(new[] { "stopAutoPlay" }, h.Transport.Lines);
+            h.Transport.Lines.Clear();
             h.Runtime.Apply(ControlCenterIntent.SetPlatform(SyncMode.Fox));
             h.Runtime.RequestAutoPlay();
             Assert.Equal("black", h.Runtime.Snapshot.PlayColor);

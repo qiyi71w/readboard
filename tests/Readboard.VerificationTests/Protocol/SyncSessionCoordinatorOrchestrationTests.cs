@@ -401,7 +401,7 @@ namespace Readboard.VerificationTests.Protocol
             try
             {
                 VerificationCompletion.Wait(recognition.BlockedRecognizeStarted, "Runtime authorization captures did not settle.");
-                Assert.Equal(new[] { 1, 3, 0, 1 }, observedCounts);
+                Assert.Equal(new[] { 1, 3, 1, 1 }, observedCounts);
                 Assert.Equal(3, transport.CountLines(blackLine));
                 Assert.Equal(1, transport.CountLines(whiteLine));
                 Assert.Equal(2, transport.CountLines("stopAutoPlay"));
