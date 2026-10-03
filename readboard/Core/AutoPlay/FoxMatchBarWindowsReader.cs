@@ -25,6 +25,7 @@ namespace readboard
                     searchRoot = ResolveSearchRoot(boardHandle);
 
                 IntPtr listHandle = FindNamedOnScreenChild(searchRoot, PlayerListPanelTitle);
+                bool usedFallback = listHandle == IntPtr.Zero;
                 if (listHandle == IntPtr.Zero)
                 {
                     IntPtr visibleRoot = FindVisibleFoxSearchRoot(processId);
@@ -40,12 +41,13 @@ namespace readboard
                     + " live=" + (boardHandle != IntPtr.Zero && IsWindow(boardHandle) ? "1" : "0")
                     + " root=" + searchRoot.ToInt64().ToString("X")
                     + " list=" + listHandle.ToInt64().ToString("X")
+                    + " fallback=" + (usedFallback ? "1" : "0")
                     + " players=" + players.Count;
                 return new FoxMatchBarReading(players, diagnostic);
             }
             catch (Exception ex)
             {
-                return DiagnosedEmpty("ex=" + ex.GetType().Name + ":" + ex.Message);
+                return DiagnosedEmpty("ex=" + ex.GetType().Name);
             }
         }
 

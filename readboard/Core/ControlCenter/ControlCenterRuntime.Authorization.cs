@@ -140,11 +140,13 @@ namespace readboard
                     : FoxWindowContext.Unknown());
                 snapshot = BuildSnapshot();
             }
+            RecordAuthorizationDiagnostic(snapshot);
             AutoPlayWireIssuer.IssueIfAuthorized(snapshot, coordinator.KeepSync, coordinator);
         }
 
         public void InvalidateWindowEvidence()
         {
+            lastDiagnosticPlayersUtc = DateTime.MinValue;
             liveRecognition.Invalidate();
             identitySelection.ClearRoomRecognition();
             sessionState.DetectedAutoPlayColor = null;
@@ -157,7 +159,10 @@ namespace readboard
             if (facts.BindingInvalidated || observedWindowHandle != facts.Handle
                 || !string.Equals(BuildRecognitionContextSignature(sessionState.FoxWindowContext),
                     BuildRecognitionContextSignature(context), StringComparison.Ordinal))
+            {
+                RecordWindowDiagnostic(facts, sessionState.FoxWindowContext);
                 InvalidateWindowEvidence();
+            }
             observedWindowHandle = facts.Handle;
             sessionState.FoxWindowContext = context;
             sessionState.FoxAutoPlayNicknameSignature = identitySelection.EffectiveIdentitySignature;
@@ -207,9 +212,15 @@ namespace readboard
             string identitySignature = identitySelection.EffectiveIdentitySignature;
             DateTime now = environment.UtcNow;
             if (!liveRecognition.NeedsSample(observedWindowHandle, contextSignature, identitySignature, now, force))
+            {
+                RecordPlayersDiagnostic(context, now, identitySignature, false, force, null);
                 return liveRecognition.CurrentResolution;
-            return liveRecognition.AcceptSample(observedWindowHandle, contextSignature, identitySignature,
-                now, environment.ReadPlayers(observedWindowHandle));
+            }
+            FoxMatchBarReading reading = environment.ReadPlayers(observedWindowHandle);
+            AutoPlayColorResolution result = liveRecognition.AcceptSample(observedWindowHandle,
+                contextSignature, identitySignature, now, reading);
+            RecordPlayersDiagnostic(context, now, identitySignature, true, force, reading ?? FoxMatchBarReading.Empty);
+            return result;
         }
 
         private static string BuildRecognitionContextSignature(FoxWindowContext context)
