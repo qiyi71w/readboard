@@ -348,6 +348,8 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 
 真实 EOF 案例用 loopback TCP 宿主半关闭发送方向，等待生产 transport 的断链通知与协议会话关闭，再释放在途识别；最终状态已停止，关闭后的完整 wire 不得增加。该案例在独立的 `dotnet vstest` 子进程运行，未捕获的 worker 异常只让该案例失败，不中止其他案例；失败保留完整 transcript，不跳过测试或降低断言。
 
+EOF 子进程启用 `RunConfiguration.TreatNoTestsAsError=true`，没有匹配用例时必须失败；父测试读取 TRX，要求 `total`、`executed`、`passed` 均为 1，不能只凭退出码或本地化控制台摘要判定成功。TRX 写入每次运行独立的临时目录，成功、失败或超时后都清理该目录。
+
 TCP 和 pipe 的非预期 EOF／I/O 失败使 transport 先变为 disconnected，再在 transport 锁外同步通知 coordinator。订阅者在该连接的终止转换时固定；coordinator 的断链回调绑定到启动代次，旧连接通知即使跨过重启才送达，也不能关闭新会话。当前会话断链时 coordinator 立即关闭出入站入口、取消在途任务，再调度现有宿主退出路径；主动 `Stop`／`Dispose` 不触发非预期断链通知。不增加自动重连，也不改变 wire 文本或自动落子授权规则。该生命周期收口修复了基线 `d8078b75724f7f8563f7ddfaf733de71dae01781` 在 EOF 后写已释放 `NetworkStream` 的 `ObjectDisposedException`。
 
 确定性测试不等同于真实 Fox 客户端／在线对局验收。原生退出 smoke 使用隔离候选中的真实 `readboard.exe`：收到 version 响应后注入 TCP 半关闭或 stdin EOF，进程应以退出码 0 结束。

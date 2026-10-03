@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using readboard;
 using Readboard.VerificationTests.Support;
 using Xunit;
@@ -33,40 +34,60 @@ namespace Readboard.VerificationTests.Protocol
                 dotnet = string.IsNullOrEmpty(root) ? "dotnet.exe" : Path.Combine(root, "dotnet.exe");
             }
             string assembly = typeof(AutoPlayFaultSequenceTests).Assembly.Location;
-            var start = new ProcessStartInfo(dotnet)
-            {
-                WorkingDirectory = Path.GetDirectoryName(assembly),
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8
-            };
-            start.Environment[EofChildMarker] = "1";
-            start.ArgumentList.Add("vstest");
-            start.ArgumentList.Add(assembly);
-            start.ArgumentList.Add("/TestCaseFilter:FullyQualifiedName=" + typeof(AutoPlayFaultSequenceTests).FullName
-                + "." + nameof(HostEof_WithPendingRecognition_StopsWithoutInvalidOutboundWrites));
-            start.ArgumentList.Add("/Logger:console;verbosity=detailed");
-            using Process child = Process.Start(start);
-            Task<string> stdout = child.StandardOutput.ReadToEndAsync();
-            Task<string> stderr = child.StandardError.ReadToEndAsync();
+            string resultsDirectory = Path.Combine(Path.GetTempPath(), "readboard-host-eof-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(resultsDirectory);
             try
             {
-                await VerificationCompletion.WaitAsync(child.WaitForExitAsync(), "Real EOF child did not terminate.");
+                var start = new ProcessStartInfo(dotnet)
+                {
+                    WorkingDirectory = Path.GetDirectoryName(assembly),
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
+                };
+                start.Environment[EofChildMarker] = "1";
+                start.ArgumentList.Add("vstest");
+                start.ArgumentList.Add(assembly);
+                start.ArgumentList.Add("/TestCaseFilter:FullyQualifiedName=" + typeof(AutoPlayFaultSequenceTests).FullName
+                    + "." + nameof(HostEof_WithPendingRecognition_StopsWithoutInvalidOutboundWrites));
+                start.ArgumentList.Add("/Logger:console;verbosity=detailed");
+                start.ArgumentList.Add("/Logger:trx;LogFileName=eof-child.trx");
+                start.ArgumentList.Add("/ResultsDirectory:" + resultsDirectory);
+                start.ArgumentList.Add("--");
+                start.ArgumentList.Add("RunConfiguration.TreatNoTestsAsError=true");
+                using Process child = Process.Start(start);
+                Task<string> stdout = child.StandardOutput.ReadToEndAsync();
+                Task<string> stderr = child.StandardError.ReadToEndAsync();
+                try
+                {
+                    await VerificationCompletion.WaitAsync(child.WaitForExitAsync(), "Real EOF child did not terminate.");
+                }
+                finally
+                {
+                    if (!child.HasExited)
+                    {
+                        child.Kill(entireProcessTree: true);
+                        await child.WaitForExitAsync();
+                    }
+                    output.WriteLine(await stdout);
+                    output.WriteLine(await stderr);
+                }
+                Assert.True(child.ExitCode == 0,
+                    "Real host EOF sequence failed in the isolated child (exit " + child.ExitCode + "). See event/wire transcript above.");
+
+                XNamespace trxNamespace = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
+                XElement counters = Assert.Single(XDocument.Load(Path.Combine(resultsDirectory, "eof-child.trx"))
+                    .Descendants(trxNamespace + "Counters"));
+                Assert.Equal("1", (string)counters.Attribute("total"));
+                Assert.Equal("1", (string)counters.Attribute("executed"));
+                Assert.Equal("1", (string)counters.Attribute("passed"));
             }
             finally
             {
-                if (!child.HasExited)
-                {
-                    child.Kill(entireProcessTree: true);
-                    await child.WaitForExitAsync();
-                }
-                output.WriteLine(await stdout);
-                output.WriteLine(await stderr);
+                Directory.Delete(resultsDirectory, recursive: true);
             }
-            Assert.True(child.ExitCode == 0,
-                "Real host EOF sequence failed in the isolated child (exit " + child.ExitCode + "). See event/wire transcript above.");
         }
 
         private async Task RunRealHostEofSequence()
