@@ -540,6 +540,27 @@ namespace readboard
             SendPlayAndRearmBoardSnapshotForGmaWhileSynchronized(
                 protocolAdapter.CreatePlayMessage(color, time, playouts, firstPolicy, moveMode),
                 moveMode);
+            LoggingRuntime logging = Program.CurrentContext == null ? null : Program.CurrentContext.Logging;
+            if (logging != null && logging.Observe().Diagnostics == LoggingToggle.On)
+            {
+                logging.Write(new LoggingRecord
+                {
+                    Level = Microsoft.Extensions.Logging.LogLevel.Information,
+                    Stream = LoggingStreams.App,
+                    EventId = "fox.autoplay.play-dispatched",
+                    Module = "SyncSessionCoordinator",
+                    DiagnosticOnly = true,
+                    Fields = new Dictionary<string, LoggingField>
+                    {
+                        ["color"] = LoggingField.Safe(color),
+                        ["colorMode"] = LoggingField.Safe(colorMode.ToString()),
+                        ["moveMode"] = LoggingField.Safe(moveMode.ToString()),
+                        ["time"] = LoggingField.Safe(time),
+                        ["playouts"] = LoggingField.Safe(playouts),
+                        ["firstPolicy"] = LoggingField.Safe(firstPolicy)
+                    }
+                });
+            }
             lock (stateLock)
             {
                 autoPlayAuthorizationGeneration++;

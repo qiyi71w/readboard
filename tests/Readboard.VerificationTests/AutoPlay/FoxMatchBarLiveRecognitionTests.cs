@@ -7,51 +7,48 @@ namespace Readboard.VerificationTests.AutoPlay
 {
     public sealed class FoxMatchBarLiveRecognitionTests
     {
-        [Fact]
-        public void RecognizedRoom_FreezesUntilRoomChangeOrIdentityReselect()
+        [Theory]
+        [InlineData("room")]
+        [InlineData("window")]
+        [InlineData("identity")]
+        [InlineData("force")]
+        public void ChangedEvidence_ResamplesBeforePeriodicRefresh(string change)
         {
             FoxMatchBarLiveRecognition live = new FoxMatchBarLiveRecognition();
             DateTime t0 = new DateTime(2026, 8, 20, 7, 0, 0, DateTimeKind.Utc);
             IntPtr window = new IntPtr(1);
+            const string room = "live|state=1|room=room-1";
+            const string saved = "鳕鱼の让子";
+            live.AcceptSample(window, room, saved, t0, RightSeatReading(saved));
 
-            AutoPlayColorResolution first = live.AcceptSample(
-                window,
-                "live|state=1|room=room-1",
-                "鳕鱼の让子",
-                t0,
-                RightSeatReading("鳕鱼の让子"));
-
-            AssertRecognized(Authorize(first, "鳕鱼の让子"), "black", AutoPlayColorStatus.RecognizedBlack);
-            Assert.Equal(new[] { "play>black>5 1000 0" }, IssuePlay(Authorize(first, "鳕鱼の让子")));
-            Assert.False(live.NeedsSample(
-                window,
-                "live|state=1|room=room-1",
-                "鳕鱼の让子",
-                t0.AddSeconds(5),
-                false));
-
-            FoxMatchBarReading oppositeSeat = LeftSeatReading("鳕鱼の让子");
+            Assert.False(live.NeedsSample(window, room, saved, t0.AddMilliseconds(100), false));
             Assert.True(live.NeedsSample(
-                window,
-                "live|state=1|room=room-2",
-                "鳕鱼の让子",
+                change == "window" ? new IntPtr(2) : window,
+                change == "room" ? "live|state=1|room=room-2" : room,
+                change == "identity" ? "对手甲" : saved,
                 t0.AddMilliseconds(100),
-                false));
-            AutoPlayColorResolution roomTwo = live.AcceptSample(
-                window,
-                "live|state=1|room=room-2",
-                "鳕鱼の让子",
-                t0.AddMilliseconds(100),
-                oppositeSeat);
-            AssertRecognized(Authorize(roomTwo, "鳕鱼の让子"), "white", AutoPlayColorStatus.RecognizedWhite);
-            Assert.Equal(new[] { "play>white>5 1000 0" }, IssuePlay(Authorize(roomTwo, "鳕鱼の让子")));
+                change == "force"));
+        }
 
-            Assert.True(live.NeedsSample(
-                window,
-                "live|state=1|room=room-2",
-                "鳕鱼の让子",
-                t0.AddMilliseconds(100),
-                true));
+        [Fact]
+        public void DelayedSeatChange_RefreshesKnownColorWithinSameRoom()
+        {
+            FoxMatchBarLiveRecognition live = new FoxMatchBarLiveRecognition();
+            DateTime t0 = new DateTime(2026, 8, 20, 7, 0, 0, DateTimeKind.Utc);
+            IntPtr window = new IntPtr(1);
+            const string room = "live|state=1|room=room-2";
+            const string saved = "鳕鱼の让子";
+            live.AcceptSample(window, room, saved, t0, RightSeatReading(saved));
+
+            Assert.False(live.NeedsSample(window, room, saved, t0.AddMilliseconds(999), false));
+            Assert.True(live.NeedsSample(window, room, saved, t0.AddMilliseconds(1000), false));
+            AutoPlayColorResolution refreshed = live.AcceptSample(
+                window, room, saved, t0.AddMilliseconds(1000), LeftSeatReading(saved));
+
+            AssertRecognized(Authorize(refreshed, saved), "white", AutoPlayColorStatus.RecognizedWhite);
+            Assert.Equal(new[] { "play>white>5 1000 0" }, IssuePlay(Authorize(refreshed, saved)));
+            Assert.False(live.NeedsSample(window, room, saved, t0.AddMilliseconds(1999), false));
+            Assert.True(live.NeedsSample(window, room, saved, t0.AddMilliseconds(2000), false));
         }
 
         [Fact]
@@ -81,7 +78,6 @@ namespace Readboard.VerificationTests.AutoPlay
                 t0.AddMilliseconds(1000),
                 RightSeatReading(saved));
             AssertRecognized(Authorize(recognized, saved), "black", AutoPlayColorStatus.RecognizedBlack);
-            Assert.False(live.NeedsSample(window, room, saved, t0.AddMilliseconds(5000), false));
         }
 
         [Fact]

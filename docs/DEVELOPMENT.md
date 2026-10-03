@@ -81,6 +81,17 @@ readboard.exe yzy <aiTime> <playouts> <firstPolicy> <transport> <language> <tcpP
 
 持久化的 Settings 语言可以在初始化时覆盖宿主语言参数；这不改变参数格式。
 
+### 野狐自动执色诊断
+
+启用宿主诊断（`--diagnostics on` 或现有 `readboardLoggingSet` 控制）后，ReadBoard 的 `app.log` 记录以下事件：
+
+- `fox.autoplay.window`：窗口／房间识别上下文变化、绑定失效、前后句柄和窗口修订号。
+- `fox.autoplay.players`：正式采样或每秒最多一次的缓存旁路观察；包含 `sampled`、`cachedColor`、`observedColor`、玩家数量及 `reader` 诊断字符串。绑定读取成功时，`reader` 包含 `binding=matched`、`hwnd`、`room`、`list`、`players`，其中 `room` 是房间面板 HWND；读取失败时记录 `binding=unmatched/changed/incomplete-seats/error`，`error` 另附异常类型。旁路观察只用于日志，不更新识别缓存，也不授予落子权限；关闭诊断即停止额外读取。
+- `fox.autoplay.request`：Control Center 请求授权时的模式、启用状态、同步门禁、颜色和识别状态。
+- `fox.autoplay.play-dispatched`：协调器实际调用协议分发后的颜色、模式及计算参数；不代表宿主已接收或执行。
+
+昵称不写入日志；玩家座位通过已配置身份的 `observedColor` 表达。事件外层的 `room` 是按 `UserText` 标记的房间 token，导出时遵循宿主隐私处理，与 `reader` 内的房间面板 HWND 不同。换房复现应从旧房间开始录制，保留新房间稳定后的数秒记录。若 `sampled=false` 且 `cachedColor` 与 `observedColor` 不同，即取得缓存与当前读取结果不一致的证据；绑定读取成功时可核对 `reader` 中的 `room/list` 句柄，失败时先检查 `binding` 原因。额外 UI Automation 读取会影响采样时序，诊断版复现失败不能排除竞态。
+
 ### 启动顺序
 
 `Program.Main` 的关键顺序：
@@ -196,8 +207,11 @@ WebView 通过虚拟主机 `https://app.readboard/index.html` 加载静态资源
 - Runtime 管启用周期、当次选择与接受的观察；`FoxIdentitySelection` 管身份和房间代次；`FoxMatchBarLiveRecognition` 管玩家名单缓存；coordinator 管同步 operation、宿主授权账本与出站串行化。
 - `IControlCenterEnvironment` 返回句柄、目标有效性、完整窗口 context、绑定失效事实、玩家行和时间，并完成原生投影。平台变化先重新读取目标有效性（无句柄为 null，失效句柄为 false），再发布最终状态。它不决定授权，不从标题绘制回调授权政策。
 - 首次无身份选择 FoxAuto 只打开身份弹层，保留当次手动选择；取消不改选择。确认由 Runtime 一次完成选人、使用/保存、失效、求值与直接请求。保存身份失败仍使用进程身份并关闭弹层；清除保存失败保留原保存身份。
-- 窗口句柄、绑定失败、房间/状态、RecordView 的手数/终局/标题以及新启用周期都会失效识别证据。已知名单缓存到失效为止；未知名单沿用 1000ms 重试间隔。窗口失效本身不结束启用周期。
-- 周期捕获在 UI thread 调用 `RefreshAutoPlayColor` 取得事实，不直接签发；`RequestAutoPlay` 经 `AutoPlayWireIssuer` 执行 force 请求，周期发送仍由 coordinator 去重和撤销。构造只接线，初始化投影不发 wire，启动重放与 keep-sync 重发由 Runtime 编排。
+- 窗口句柄、绑定失败、房间/状态、RecordView 的手数/终局/标题以及新启用周期都会失效识别证据并触发重读。上下文不变时，已知与未知名单均按 1000ms 最小间隔重新采样：新房名单延迟更新后，下一次到期捕获会修正棋色；名单不可读或身份不匹配则撤销识别授权。窗口失效本身不结束启用周期。
+- 自动执色读取只接受当前可见 `CChessboardPanel` 的直接 `CRoomPanel` 父节点内唯一可见的直属 `CRoomPlayerListPanel`。读取前后须保持房间面板、名单、标题源及面板控件 ID 一致，标题均为预期房间的 Playing 状态，且至少读到两名玩家；不满足时返回未知，后续周期自动重试。
+- 房间 token 按标题解析结果原样比较，支持 `24|6号` 等复合房号；原生面板控件 ID 只用于读取前后一致性检查，不从房号推导。相同可见面板与稳定标题能限制跨容器读取，但不能证明标题和名单内容原子刷新；标题已更新、旧面板仍可见且未变时，这些结构检查本身无法证明名单已属于新房间。周期重采样负责后续颜色修正，不以固定等待或多次一致冒充名单就绪证据。
+- 昵称候选发现走 `DiscoverIdentityCandidates`，可独立发现可见名单供用户选人，但不写入执色缓存；确认身份后仍须通过当前房间绑定读取才能授权。
+- 周期捕获在 UI thread 调用 `RefreshAutoPlayColor` 取得事实，不直接签发；`RequestAutoPlay` 经 `AutoPlayWireIssuer` 执行 force 请求，FoxAuto 证据未知时立即撤销现有宿主授权，周期发送仍由 coordinator 去重和撤销。构造只接线，初始化投影不发 wire，启动重放与 keep-sync 重发由 Runtime 编排。
 - 周期刷新同时返回棋色、已知状态或授权状态是否变化；与同次捕获的窗口 context 变化合并后，只请求一份最终 snapshot。上下文不变时的重新识别也必须发布；三项授权事实和上下文均不变时，捕获本身不额外发布。
 - 验证使用真实 Runtime、身份模块与 coordinator，加记录 transport 和原生事实 fixture；不在测试里补发生产应执行的停止或签发。`ControlCenterAuthorizationTests` 覆盖状态/wire/失败，真实 WebView2 + FakeHost 覆盖桥接、线程和最终 snapshot；后者不代替真实 Fox 对局验收。
 - `real-webview2-authorization.spec.js` 用独立原生 HWND/UI Automation 输入窗口，经生产 locator 和玩家读取器验证选人、Use Once、Save and Use，以及目标销毁后的平台切换。测试观察真实 `chrome.webview` 完整消息、落盘配置和 wire，不注入候选或 renderer state；外部窗口输入 fixture 不等于真实 Fox 对局。

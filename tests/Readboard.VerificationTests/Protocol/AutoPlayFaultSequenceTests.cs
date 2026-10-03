@@ -22,7 +22,7 @@ namespace Readboard.VerificationTests.Protocol
         }
 
         [Fact]
-        public void DirectRequest_UnknownAndKeepSyncJitterSuppressPlayWithoutEndingCycle_ThenRecover()
+        public void DirectRequest_UnknownRevokesAndKeepSyncJitterPreservesCycle_ThenRecover()
         {
             RunSequence(h =>
             {
@@ -40,11 +40,11 @@ namespace Readboard.VerificationTests.Protocol
                 });
                 Assert.Null(h.Runtime.Snapshot.PlayColor);
                 Assert.True(h.Runtime.Snapshot.AutoPlayEnabled);
-                Assert.Equal(new[] { "play>black>0 0 0" }, h.AutoPlayWire);
+                Assert.Equal(new[] { "play>black>0 0 0", "stopAutoPlay" }, h.AutoPlayWire);
 
                 h.Coordinator.EndKeepSync();
                 h.AtUi("direct request while keep sync false", () => h.Runtime.RequestAutoPlay());
-                Assert.Equal(new[] { "play>black>0 0 0" }, h.AutoPlayWire);
+                Assert.Equal(new[] { "play>black>0 0 0", "stopAutoPlay" }, h.AutoPlayWire);
                 h.Coordinator.BeginKeepSync();
                 h.AtUi("recover current room evidence", () =>
                 {
@@ -55,7 +55,7 @@ namespace Readboard.VerificationTests.Protocol
                 h.Samples.Release(2);
                 h.Samples.Wait(3);
 
-                Assert.Equal(new[] { "play>black>0 0 0", "play>black>0 0 0" }, h.AutoPlayWire);
+                Assert.Equal(new[] { "play>black>0 0 0", "stopAutoPlay", "play>black>0 0 0" }, h.AutoPlayWire);
                 Assert.Equal("black", h.Runtime.Snapshot.PlayColor);
                 Assert.True(h.Runtime.Snapshot.AutoPlayEnabled);
                 Assert.Equal(generation, h.Runtime.CaptureSessionObservationGeneration());
@@ -76,9 +76,8 @@ namespace Readboard.VerificationTests.Protocol
                 {
                     h.Environment.BindingInvalidated = true;
                     h.Environment.Players = FoxMatchBarReading.Empty;
-                    h.Runtime.RequestAutoPlay();
                 });
-                // Direct request does not revoke; the next genuinely unknown periodic sample does.
+                // Without a direct request, the next unknown periodic sample must revoke authorization.
                 Assert.Equal(new[] { "play>black>0 0 0" }, h.AutoPlayWire);
                 h.Samples.Release(2);
                 h.Samples.Wait(3);

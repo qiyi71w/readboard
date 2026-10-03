@@ -16,6 +16,8 @@ internal static class Program
     private static extern int GetWindowText(IntPtr handle, StringBuilder text, int capacity);
     [DllImport("user32.dll")]
     private static extern bool IsWindowVisible(IntPtr handle);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static extern IntPtr SetWindowLongPtr(IntPtr handle, int index, IntPtr value);
 
     [STAThread]
     private static void Main()
@@ -23,11 +25,14 @@ internal static class Program
         Application.EnableVisualStyles();
         using var window = new Form
         {
-            Text = "Native acceptance > 123号 对弈中",
+            Text = "Native acceptance > 24|6号房间 对弈中",
             ClientSize = new Size(700, 480),
             StartPosition = FormStartPosition.Manual,
             Location = new Point(720, 40)
         };
+        var room = new GroupBox { Text = "CRoomPanel", Dock = DockStyle.Fill };
+        window.Controls.Add(room);
+        SetWindowLongPtr(room.Handle, -12, new IntPtr(688));
         var players = new GroupBox
         {
             Text = "CRoomPlayerListPanel",
@@ -41,12 +46,12 @@ internal static class Program
                 Text = names[i], AutoSize = true,
                 Location = new Point(15, 35 + i * 35), TabIndex = i
             });
-        window.Controls.Add(players);
+        room.Controls.Add(players);
         window.Shown += (_, _) =>
         {
             // The locator requires Fox's real board class/title combination.
             IntPtr board = CreateWindowEx(0, "#32770", "CChessboardPanel",
-                0x50000000, 10, 10, 460, 460, window.Handle,
+                0x50000000, 10, 10, 460, 460, room.Handle,
                 IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
             if (board == IntPtr.Zero)
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());

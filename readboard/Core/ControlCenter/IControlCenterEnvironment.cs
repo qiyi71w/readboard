@@ -16,7 +16,8 @@ namespace readboard
         bool ShowInBoardHint { get; }
         DateTime UtcNow { get; }
         ControlCenterWindowFacts ReadWindow();
-        FoxMatchBarReading ReadPlayers(IntPtr windowHandle);
+        FoxMatchBarReading ReadPlayers(IntPtr windowHandle, FoxWindowContext context);
+        FoxMatchBarReading DiscoverIdentityCandidates(IntPtr windowHandle);
         void ProjectState(ControlCenterPreferences preferences, ControlCenterSessionState sessionState, bool platformChanged);
         void ShowOnBoardHint();
     }
