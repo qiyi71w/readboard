@@ -191,6 +191,7 @@ namespace Readboard.VerificationTests.Protocol
 
         private sealed class QuietTransport : IReadBoardTransport
         {
+            public event EventHandler Disconnected { add { } remove { } }
             public event EventHandler<string> MessageReceived { add { } remove { } }
             public bool IsConnected => true;
             public void Start() { }

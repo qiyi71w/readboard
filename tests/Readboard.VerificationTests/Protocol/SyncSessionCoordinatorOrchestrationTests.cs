@@ -2905,6 +2905,7 @@ namespace Readboard.VerificationTests.Protocol
         {
             private readonly ManualResetEventSlim lineEvent = new ManualResetEventSlim(false);
 
+            public event EventHandler Disconnected { add { } remove { } }
             public event EventHandler<string> MessageReceived;
 
             public List<string> SentLines { get; } = new List<string>();
@@ -3005,6 +3006,7 @@ namespace Readboard.VerificationTests.Protocol
                 this.blockedLine = blockedLine;
             }
 
+            public event EventHandler Disconnected { add { } remove { } }
             public event EventHandler<string> MessageReceived
             {
                 add { }

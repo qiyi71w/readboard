@@ -16,12 +16,22 @@ namespace readboard
         private Thread readThread;
         private IntPtr readThreadHandle = IntPtr.Zero;
         private volatile bool running;
+        private bool started;
+        private int generation;
+
+        public event EventHandler Disconnected;
 
         public event EventHandler<string> MessageReceived;
 
         public bool IsConnected
         {
-            get { return true; }
+            get
+            {
+                lock (syncRoot)
+                {
+                    return running;
+                }
+            }
         }
 
         public void Start()
@@ -31,9 +41,11 @@ namespace readboard
             {
                 if (running)
                     throw new InvalidOperationException("Pipe transport is already started.");
+                started = true;
+                generation++;
                 inputReader = new StreamReader(Console.OpenStandardInput(), Encoding.UTF8, false, ReaderBufferSize);
                 running = true;
-                readThread = CreateReadThread();
+                readThread = CreateReadThread(generation);
                 readThread.Start();
             }
         }
@@ -46,6 +58,7 @@ namespace readboard
             lock (syncRoot)
             {
                 running = false;
+                generation++;
                 currentReader = inputReader;
                 currentThread = readThread;
                 currentReadThreadHandle = readThreadHandle;
@@ -62,14 +75,62 @@ namespace readboard
 
         public void Send(string line)
         {
-            Console.OutputEncoding = Encoding.UTF8;
-            Console.WriteLine(line);
+            int writeGen;
+            bool wasStarted;
+            lock (syncRoot)
+            {
+                if (started && !running)
+                    return;
+                wasStarted = started;
+                writeGen = generation;
+            }
+
+            if (!wasStarted)
+            {
+                Console.OutputEncoding = Encoding.UTF8;
+                Console.WriteLine(line);
+                return;
+            }
+
+            try
+            {
+                Console.OutputEncoding = Encoding.UTF8;
+                Console.WriteLine(line);
+            }
+            catch (IOException)
+            {
+                NotifyUnexpectedDisconnect(writeGen);
+            }
         }
 
         public void SendError(string message)
         {
-            Console.OutputEncoding = Encoding.UTF8;
-            Console.Error.WriteLine("error: " + message);
+            int writeGen;
+            bool wasStarted;
+            lock (syncRoot)
+            {
+                if (started && !running)
+                    return;
+                wasStarted = started;
+                writeGen = generation;
+            }
+
+            if (!wasStarted)
+            {
+                Console.OutputEncoding = Encoding.UTF8;
+                Console.Error.WriteLine("error: " + message);
+                return;
+            }
+
+            try
+            {
+                Console.OutputEncoding = Encoding.UTF8;
+                Console.Error.WriteLine("error: " + message);
+            }
+            catch (IOException)
+            {
+                NotifyUnexpectedDisconnect(writeGen);
+            }
         }
 
         public void Dispose()
@@ -77,10 +138,14 @@ namespace readboard
             Stop();
         }
 
-        private void ReadLoop()
+        private void ReadLoop(int currentGen)
         {
-            StreamReader reader = inputReader;
+            StreamReader reader;
             IntPtr currentThreadHandle = IntPtr.Zero;
+            lock (syncRoot)
+            {
+                reader = inputReader;
+            }
             if (reader == null)
                 return;
             try
@@ -91,17 +156,7 @@ namespace readboard
                     CloseThreadHandle(currentThreadHandle);
                     return;
                 }
-                ReadMessages(reader);
-            }
-            catch (IOException)
-            {
-                if (running)
-                    throw;
-            }
-            catch (ObjectDisposedException)
-            {
-                if (running)
-                    throw;
+                ReadMessages(reader, currentGen);
             }
             finally
             {
@@ -109,21 +164,92 @@ namespace readboard
             }
         }
 
-        private Thread CreateReadThread()
+        private Thread CreateReadThread(int gen)
         {
-            Thread thread = new Thread(ReadLoop);
+            Thread thread = new Thread(() => ReadLoop(gen));
             thread.IsBackground = true;
             return thread;
         }
 
-        private void ReadMessages(StreamReader reader)
+        private void ReadMessages(StreamReader reader, int gen)
         {
-            while (running)
+            while (true)
             {
-                string line = reader.ReadLine();
-                if (line == null)
+                string line;
+                try
+                {
+                    line = reader.ReadLine();
+                }
+                catch (IOException)
+                {
+                    NotifyUnexpectedDisconnect(gen);
                     return;
+                }
+                catch (ObjectDisposedException)
+                {
+                    NotifyUnexpectedDisconnect(gen);
+                    return;
+                }
+
+                if (line == null)
+                {
+                    NotifyUnexpectedDisconnect(gen);
+                    return;
+                }
+
+                if (!running)
+                    return;
+
                 RaiseMessageReceived(line);
+            }
+        }
+
+        private void NotifyUnexpectedDisconnect(int expectedGen)
+        {
+            StreamReader currentReader = null;
+            IntPtr currentReadThreadHandle = IntPtr.Zero;
+            bool raiseDisconnected = false;
+            EventHandler handler = null;
+
+            lock (syncRoot)
+            {
+                if (running && generation == expectedGen)
+                {
+                    running = false;
+                    generation++;
+                    currentReader = inputReader;
+                    currentReadThreadHandle = readThreadHandle;
+                    inputReader = null;
+                    readThread = null;
+                    readThreadHandle = IntPtr.Zero;
+                    raiseDisconnected = true;
+                    handler = Disconnected;
+                }
+            }
+
+            if (currentReadThreadHandle != IntPtr.Zero)
+            {
+                CancelPendingRead(currentReadThreadHandle);
+                CloseThreadHandle(currentReadThreadHandle);
+            }
+            if (currentReader != null)
+            {
+                try
+                {
+                    currentReader.Dispose();
+                }
+                catch (IOException)
+                {
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+            }
+
+            if (raiseDisconnected)
+            {
+                if (handler != null)
+                    handler(this, EventArgs.Empty);
             }
         }
 
@@ -143,8 +269,6 @@ namespace readboard
 
         private bool TryRegisterReadThreadHandle(IntPtr handle)
         {
-            if (handle == IntPtr.Zero)
-                return false;
             lock (syncRoot)
             {
                 if (!running || readThread == null || Thread.CurrentThread != readThread)

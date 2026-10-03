@@ -52,6 +52,7 @@ namespace Readboard.VerificationTests.Host
 
         private sealed class RecordingTransport : IReadBoardTransport
         {
+            public event EventHandler Disconnected { add { } remove { } }
             public event EventHandler<string> MessageReceived;
 
             public bool IsConnected { get; private set; }

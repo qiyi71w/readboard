@@ -71,6 +71,154 @@ namespace Readboard.VerificationTests.Transport
 
             AssertTransportStopReturnsWithoutWaiting(transport, harness);
         }
+        [Fact]
+        public async Task HostEof_RaisesDisconnectedExactlyOnce_AndInvalidatesConnection()
+        {
+            using LoopbackServer server = await LoopbackServer.StartAsync();
+            using TcpTransport transport = new TcpTransport(server.Port);
+
+            int disconnectedCount = 0;
+            bool isConnectedDuringCallback = true;
+            TaskCompletionSource<bool> disconnectedSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            transport.Disconnected += (_, _) =>
+            {
+                Interlocked.Increment(ref disconnectedCount);
+                isConnectedDuringCallback = transport.IsConnected;
+                disconnectedSignal.TrySetResult(true);
+            };
+
+            transport.Start();
+            await VerificationCompletion.WaitAsync(
+                server.WaitForClientAsync(),
+                "TCP client did not connect.");
+            Assert.True(transport.IsConnected);
+
+            server.ShutdownSend();
+
+            await VerificationCompletion.WaitAsync(
+                disconnectedSignal.Task,
+                "Disconnected event was not raised on host EOF.");
+
+            Assert.Equal(1, disconnectedCount);
+            Assert.False(isConnectedDuringCallback);
+            Assert.False(transport.IsConnected);
+
+            transport.Send("stale outbound after EOF");
+            transport.SendError("stale error after EOF");
+
+            string line = await VerificationCompletion.WaitAsync(
+                server.ReadLineOrNullAsync(),
+                "Server did not receive peer EOF.");
+            Assert.Null(line);
+
+            transport.Stop();
+            transport.Dispose();
+            Assert.Equal(1, disconnectedCount);
+        }
+
+        [Fact]
+        public async Task ExplicitStopAndDispose_DoNotRaiseDisconnectedEvent()
+        {
+            using LoopbackServer server = await LoopbackServer.StartAsync();
+            using TcpTransport transport = new TcpTransport(server.Port);
+
+            int disconnectedCount = 0;
+            transport.Disconnected += (_, _) =>
+            {
+                Interlocked.Increment(ref disconnectedCount);
+            };
+
+            transport.Start();
+            await VerificationCompletion.WaitAsync(
+                server.WaitForClientAsync(),
+                "TCP client did not connect.");
+            Assert.True(transport.IsConnected);
+
+            transport.Stop();
+            transport.Dispose();
+
+            Assert.False(transport.IsConnected);
+            Assert.Equal(0, disconnectedCount);
+        }
+
+        [Fact]
+        public async Task PeerReset_TriggersDisconnectedAndPreventsStaleWrites()
+        {
+            using LoopbackServer server = await LoopbackServer.StartAsync();
+            using TcpTransport transport = new TcpTransport(server.Port);
+
+            int disconnectedCount = 0;
+            bool isConnectedDuringCallback = true;
+            TaskCompletionSource<bool> disconnectedSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            transport.Disconnected += (_, _) =>
+            {
+                Interlocked.Increment(ref disconnectedCount);
+                isConnectedDuringCallback = transport.IsConnected;
+                disconnectedSignal.TrySetResult(true);
+            };
+
+            transport.Start();
+            await VerificationCompletion.WaitAsync(
+                server.WaitForClientAsync(),
+                "TCP client did not connect.");
+            Assert.True(transport.IsConnected);
+
+            server.Reset();
+
+            transport.Send("trigger write failure on reset peer");
+
+            await VerificationCompletion.WaitAsync(
+                disconnectedSignal.Task,
+                "Disconnected event was not raised on connection reset / write failure.");
+
+            Assert.Equal(1, disconnectedCount);
+            Assert.False(isConnectedDuringCallback);
+            Assert.False(transport.IsConnected);
+
+            transport.Send("subsequent send after reset");
+            transport.Stop();
+            Assert.Equal(1, disconnectedCount);
+        }
+
+        [Fact]
+        public async Task StaleReaderFromPreviousConnection_DoesNotDisconnectNewConnection()
+        {
+            using LoopbackServer server = await LoopbackServer.StartAsync();
+            using TcpTransport transport = new TcpTransport(server.Port);
+
+            int disconnectedCount = 0;
+            transport.Disconnected += (_, _) =>
+            {
+                Interlocked.Increment(ref disconnectedCount);
+            };
+
+            transport.Start();
+            await VerificationCompletion.WaitAsync(
+                server.WaitForClientAsync(),
+                "TCP client did not connect.");
+
+            TcpClient client1 = (TcpClient)typeof(TcpTransport).GetField("client", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(transport);
+            NetworkStream stream1 = (NetworkStream)typeof(TcpTransport).GetField("stream", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(transport);
+
+            transport.Stop();
+
+            transport.Start();
+            await VerificationCompletion.WaitAsync(
+                server.WaitForClientAsync(),
+                "TCP client did not reconnect.");
+            Assert.True(transport.IsConnected);
+
+            MethodInfo method = typeof(TcpTransport).GetMethod("TryTransitionDisconnected", BindingFlags.Instance | BindingFlags.NonPublic);
+            method.Invoke(transport, new object[] { client1, stream1 });
+
+            Assert.True(transport.IsConnected);
+            Assert.Equal(0, disconnectedCount);
+
+            transport.Stop();
+        }
+
 
         private static void SetPrivateField(object target, string fieldName, object value)
         {
@@ -128,7 +276,7 @@ namespace Readboard.VerificationTests.Transport
         private sealed class LoopbackServer : IDisposable
         {
             private readonly TcpListener listener;
-            private readonly Task<TcpClient> acceptTask;
+            private Task<TcpClient> acceptTask;
             private TcpClient client;
             private StreamReader reader;
             private StreamWriter writer;
@@ -158,6 +306,28 @@ namespace Readboard.VerificationTests.Transport
                     AutoFlush = true,
                     NewLine = "\r\n"
                 };
+                acceptTask = listener.AcceptTcpClientAsync();
+            }
+
+            public void ShutdownSend()
+            {
+                client?.Client.Shutdown(SocketShutdown.Send);
+            }
+
+            public void Reset()
+            {
+                if (client != null)
+                {
+                    client.Client.LingerState = new LingerOption(true, 0);
+                    client.Client.Close();
+                }
+            }
+
+            public async Task<string> ReadLineOrNullAsync()
+            {
+                if (reader == null)
+                    return null;
+                return await reader.ReadLineAsync();
             }
 
             public async Task<string> ReadLineAsync()

@@ -133,6 +133,7 @@ namespace Readboard.VerificationTests.Protocol
             private readonly object gate = new object();
             private readonly List<string> sentLines = new List<string>();
 
+            public event EventHandler Disconnected { add { } remove { } }
             public event EventHandler<string> MessageReceived
             {
                 add { }
