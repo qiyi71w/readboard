@@ -342,15 +342,19 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 
 ```powershell
 $env:DOTNET_EXE = "C:\path\to\dotnet.exe" # PATH 中的 dotnet 正确时可省略
+npm run check:webview:host # Linux/Windows 均可运行；只发现测试，不启动宿主
 npm run test:webview:host:core
 npm run test:webview:host:extended
 ```
 
 - `core`：首个权威 snapshot、version/platform 交互、Settings Save 后重启持久化。
-- `extended`：Settings Cancel、analysis 权威观察、shell close 和有序 shutdown。
-- 两组测试串行、单 worker、零 retry。
+- `extended`：其余宿主用例，包含 Settings Cancel、分析状态（含暂停）、自动落子逐次授权、单次最终快照、原生身份输入、失效目标窗口刷新和有序 shutdown。
+- `playwright.host.config.js` 统一发现 `tests/WebView/**/real-webview2-*.spec.js`。每个用例必须标记 `@host-core` 或 `@host-extended`；两组互斥且非空，新增文件遵循同一命名规则。检查器比较文件、describe 层级和标题组成的具体集合，不以数量替代覆盖。
+- 两组单 worker、零 retry；禁止 `test.only`。执行 reporter 将 skip、fixme 和预期失败视为失败，不能用跳过获得成功结果。
+- `npm run test:webview:host:guards` 覆盖集合完整性和结果汇总的失败路径，不启动 Windows 宿主。
+- CI 保留 required check 名称 `WebView2 Host E2E Core`，其结果汇总 coverage、build、core 和 extended；所有分组均须成功。只有变更检测明确输出 `run_heavy=false` 时允许纯文档等变更跳过。
 - `READBOARD_PUBLISH_DIRECTORY` 可指向已经 publish 的目录，避免重复构建；未设置时会 fresh publish。
-- 失败产物在 `test-results` / `playwright-report`，包含 DOM、截图、console/page errors、TCP wire、进程输出、配置和 cleanup 状态。
+- 每组上传 `test-results/host-results.json` 中的逐例结果；失败诊断在 `test-results` / `playwright-report`，包含 DOM、截图、console/page errors、TCP wire、进程输出、配置和 cleanup 状态。
 
 只有首 snapshot、Settings save/restart、analysis observation、shell close 或真实 WebView2 生命周期变化才需要这层；不要把它扩成完整按钮矩阵。
 
