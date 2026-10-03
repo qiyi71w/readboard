@@ -60,10 +60,31 @@ jobs:
 
           echo "run_heavy=$run_heavy" >> "$GITHUB_OUTPUT"
 
-  build:
-    name: WebView2 Host E2E Build
+  coverage:
+    name: WebView2 Host Test Coverage
     needs: changes
     if: needs.changes.outputs.run_heavy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Node dependencies
+        run: npm ci
+      - name: Verify host guard regressions
+        run: npm run test:webview:host:guards
+      - name: Check discovered host test coverage
+        run: npm run check:webview:host
+
+  build:
+    name: WebView2 Host E2E Build
+    needs:
+      - changes
+      - coverage
+    if: needs.changes.outputs.run_heavy == 'true' && needs.coverage.result == 'success'
     runs-on: windows-2022
     timeout-minutes: 20
 
@@ -150,8 +171,8 @@ jobs:
           READBOARD_PUBLISH_DIRECTORY: ${{ github.workspace }}\readboard-publish
         run: npm run test:webview:host:core
 
-      - name: Upload core E2E diagnostics
-        if: failure()
+      - name: Upload core E2E results and diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: webview2-host-e2e-core-diagnostics
@@ -167,47 +188,30 @@ jobs:
       - changes
       - build
       - core_run
+      - coverage
+      - extended
     if: always()
     runs-on: ubuntu-latest
 
     steps:
-      - name: Report core E2E result
-        shell: bash
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Report all host E2E results
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           RUN_HEAVY: ${{ needs.changes.outputs.run_heavy }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           CORE_RESULT: ${{ needs.core_run.result }}
-        run: |
-          if [[ "$CHANGES_RESULT" != "success" ]]; then
-            echo "Change detection failed."
-            exit 1
-          fi
-
-          if [[ "$RUN_HEAVY" != "true" ]]; then
-            echo "Only documentation, templates, or update-channel metadata changed; host E2E was intentionally skipped."
-            exit 0
-          fi
-
-          if [[ "$BUILD_RESULT" != "success" ]]; then
-            echo "WebView2 host build did not succeed: $BUILD_RESULT"
-            exit 1
-          fi
-
-          if [[ "$CORE_RESULT" != "success" ]]; then
-            echo "WebView2 Host E2E Core execution did not succeed: $CORE_RESULT"
-            exit 1
-          fi
-
-          echo "WebView2 Host E2E Core execution succeeded."
+          EXTENDED_RESULT: ${{ needs.extended.result }}
+        run: node scripts/check-webview2-host-result.js
 
   extended:
     name: WebView2 Host E2E Extended
     needs:
       - changes
       - build
-      - core_run
-    if: needs.changes.outputs.run_heavy == 'true' && needs.build.result == 'success' && needs.core_run.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+    if: needs.changes.outputs.run_heavy == 'true' && needs.build.result == 'success'
     runs-on: windows-2022
     timeout-minutes: 30
 
@@ -255,8 +259,8 @@ jobs:
           READBOARD_PUBLISH_DIRECTORY: ${{ github.workspace }}\readboard-publish
         run: npm run test:webview:host:extended
 
-      - name: Upload extended E2E diagnostics
-        if: failure()
+      - name: Upload extended E2E results and diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: webview2-host-e2e-extended-diagnostics

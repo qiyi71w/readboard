@@ -24,7 +24,7 @@ test.afterAll(async () => {
   }
 });
 
-test("real Release ReadBoard publishes its first authoritative WebView2 snapshot", async ({}, testInfo) => {
+test("real Release ReadBoard publishes its first authoritative WebView2 snapshot", { tag: "@host-core" }, async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
 
@@ -42,7 +42,7 @@ test("real Release ReadBoard publishes its first authoritative WebView2 snapshot
 });
 
 
-test("real Control Center exchanges version and platform state with its host", async ({}, testInfo) => {
+test("real Control Center exchanges version and platform state with its host", { tag: "@host-core" }, async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
 
@@ -64,7 +64,7 @@ test("real Control Center exchanges version and platform state with its host", a
   });
 });
 
-test("real Control Center waits for authoritative analysis observations", async ({}, testInfo) => {
+test("real Control Center waits for authoritative analysis observations", { tag: "@host-extended" }, async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
     const analysis = readBoard.page.locator('[data-command="sync.toggleAnalysis"]');
@@ -95,7 +95,7 @@ test("real Control Center waits for authoritative analysis observations", async 
   });
 });
 
-test("real Control Center waits for host analysis observations after pause", async ({}, testInfo) => {
+test("real Control Center waits for host analysis observations after pause", { tag: "@host-extended" }, async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
     const analysis = readBoard.page.locator('[data-command="sync.toggleAnalysis"]');
@@ -117,7 +117,7 @@ test("real Control Center waits for host analysis observations after pause", asy
   });
 });
 
-test("real Control Center manual autoplay color requires explicit selection per enablement cycle", async ({}, testInfo) => {
+test("real Control Center manual autoplay color requires explicit selection per enablement cycle", { tag: "@host-extended" }, async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     const state = () => readBoard.page.evaluate(() => window.readboardPreview.getState().controlCenter);
     const expectColor = async (color) => {
@@ -178,7 +178,7 @@ test("real Control Center manual autoplay color requires explicit selection per 
   });
 });
 
-test("real Control Center runtime authorization publishes one final snapshot per identity and color operation", async ({}, testInfo) => {
+test("real Control Center runtime authorization publishes one final snapshot per identity and color operation", { tag: "@host-extended" }, async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
     await expect(readBoard.page.locator("#host-state")).toHaveText("Host communication active");
@@ -305,7 +305,7 @@ test("real Control Center runtime authorization publishes one final snapshot per
   }, { seedFoxIdentity: "ReadBoard native bridge saved identity" });
 });
 
-test("real Settings Cancel discards its draft and leaves persisted configuration unchanged", async ({}, testInfo) => {
+test("real Settings Cancel discards its draft and leaves persisted configuration unchanged", { tag: "@host-extended" }, async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
     const initialConfiguration = await readBoard.readConfigurationFiles();
@@ -334,7 +334,7 @@ test("real Settings Cancel discards its draft and leaves persisted configuration
   }, { seedSyncInterval: 200 });
 });
 
-test("real Settings Save persists its draft across a fresh WebView2 profile restart", async ({}, testInfo) => {
+test("real Settings Save persists its draft across a fresh WebView2 profile restart", { tag: "@host-core" }, async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
     const firstProfile = readBoard.profileDirectory;
@@ -362,7 +362,7 @@ test("real Settings Save persists its draft across a fresh WebView2 profile rest
   }, { seedSyncInterval: 200 });
 });
 
-test("production shell close sends ordered shutdown and exits cleanly", async ({}, testInfo) => {
+test("production shell close sends ordered shutdown and exits cleanly", { tag: "@host-extended" }, async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
     await expect(readBoard.page.locator(".app-shell")).toBeVisible();
