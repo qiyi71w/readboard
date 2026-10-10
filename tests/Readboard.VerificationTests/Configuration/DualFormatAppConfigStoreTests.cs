@@ -188,6 +188,9 @@ namespace Readboard.VerificationTests
                 Assert.True(result.HasExistingConfig);
                 AssertImportedFixtureConfig(result.Config);
                 AssertJsonMirror(workspace.PathFor("config.readboard.json"));
+                AppConfig reopened = new DualFormatAppConfigStore(
+                    workspace.RootPath, FixtureMachineKey, ProtocolVersion).Load().Config;
+                AssertImportedFixtureConfig(reopened);
             }
         }
 
@@ -260,6 +263,64 @@ namespace Readboard.VerificationTests
                 }
                 Assert.Equal(SyncMode.Yike, loaded.SyncMode);
                 Assert.EndsWith("_6", legacyMain);
+            }
+        }
+
+        [Theory]
+        [InlineData(42, 18, 101, 77, 61)]
+        [InlineData(0, 0, 0, 0, 0)]
+        public void Save_RoundTripsRawRecognitionThresholdsThroughNewStore(
+            int blackPercent, int whitePercent, int blackOffset, int whiteOffset, int grayOffset)
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(
+                    workspace.RootPath, SaveMachineKey, ProtocolVersion);
+                AppConfig config = AppConfig.CreateDefault(ProtocolVersion, SaveMachineKey);
+                config.SyncMode = SyncMode.Foreground;
+                config.BlackPercent = blackPercent;
+                config.WhitePercent = whitePercent;
+                config.BlackOffset = blackOffset;
+                config.WhiteOffset = whiteOffset;
+                config.GrayOffset = grayOffset;
+
+                store.Save(config);
+
+                AppConfig loaded = new DualFormatAppConfigStore(
+                    workspace.RootPath, SaveMachineKey, ProtocolVersion).Load().Config;
+                Assert.Equal(blackPercent, loaded.BlackPercent);
+                Assert.Equal(whitePercent, loaded.WhitePercent);
+                Assert.Equal(blackOffset, loaded.BlackOffset);
+                Assert.Equal(whiteOffset, loaded.WhiteOffset);
+                Assert.Equal(grayOffset, loaded.GrayOffset);
+            }
+        }
+
+        [Fact]
+        public void Load_ImportsLegacyZeroThresholdsWithoutNormalizingStoredValues()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(workspace.PathFor("config_readboard.txt"),
+                    "0_0_0_0_1_1_1_0_1_1_MACHINE-001_5");
+                File.WriteAllText(workspace.PathFor("config_readboard_others.txt"),
+                    "220430_19_19_-1_-1_200_0_0_-1_-1_0_1_0_0");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(
+                    workspace.RootPath, FixtureMachineKey, ProtocolVersion);
+
+                AppConfig imported = store.Load().Config;
+                AppConfig reopened = new DualFormatAppConfigStore(
+                    workspace.RootPath, FixtureMachineKey, ProtocolVersion).Load().Config;
+
+                foreach (AppConfig config in new[] { imported, reopened })
+                {
+                    Assert.Equal(SyncMode.Foreground, config.SyncMode);
+                    Assert.Equal(0, config.BlackPercent);
+                    Assert.Equal(0, config.WhitePercent);
+                    Assert.Equal(0, config.BlackOffset);
+                    Assert.Equal(0, config.WhiteOffset);
+                    Assert.Equal(0, config.GrayOffset);
+                }
             }
         }
 
@@ -402,7 +463,7 @@ namespace Readboard.VerificationTests
             {
                 File.WriteAllText(
                     workspace.PathFor("config.readboard.json"),
-                    "{\"MachineKey\":\"MACHINE-001\",\"BoardWidth\":9,\"VerifyMove\":false,\"SyncMode\":4,\"AutoPlayColorMode\":2,\"FoxAutoPlayNickname\":\"鳕鱼の让子\",\"FoxAutoPlayNicknameSignature\":\"sig-xyz\"}");
+                    "{\"MachineKey\":\"MACHINE-001\",\"BoardWidth\":9,\"VerifyMove\":false,\"SyncMode\":4,\"BlackPercent\":42,\"WhiteOffset\":0,\"AutoPlayColorMode\":2,\"FoxAutoPlayNickname\":\"鳕鱼の让子\",\"FoxAutoPlayNicknameSignature\":\"sig-xyz\"}");
                 DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
 
                 AppConfigLoadResult result = store.Load();
@@ -416,6 +477,11 @@ namespace Readboard.VerificationTests
                 Assert.Equal(AppConfig.DefaultMoveVerifyMaxAttempts, result.Config.MoveVerifyMaxAttempts);
                 Assert.Equal(SyncMode.FoxBackgroundPlace, result.Config.SyncMode);
                 Assert.Equal(200, result.Config.SyncIntervalMs);
+                Assert.Equal(42, result.Config.BlackPercent);
+                Assert.Equal(33, result.Config.WhitePercent);
+                Assert.Equal(96, result.Config.BlackOffset);
+                Assert.Equal(0, result.Config.WhiteOffset);
+                Assert.Equal(50, result.Config.GrayOffset);
                 Assert.True(result.Config.PlayPonder);
                 Assert.True(result.Config.UseMagnifier);
                 Assert.Equal(-1, result.Config.WindowPosX);

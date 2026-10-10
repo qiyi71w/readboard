@@ -72,6 +72,7 @@ namespace readboard
         public bool AutoMinimize { get; set; }
         public int SampleIntervalMs { get; set; }
         public bool UseEnhancedCapture { get; set; }
+        public RecognitionThresholds Thresholds { get; set; }
         public string PlayColor { get; set; }
         public AutoPlayColorMode AutoPlayColorMode { get; set; }
         public string AiTimeValue { get; set; }

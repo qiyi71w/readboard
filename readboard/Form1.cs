@@ -347,6 +347,7 @@ namespace readboard
                 AutoMinimize = Program.autoMin,
                 SampleIntervalMs = Program.timeinterval,
                 UseEnhancedCapture = Program.useEnhanceScreen,
+                Thresholds = RecognitionThresholds.FromConfig(Program.CurrentConfig),
                 FoxMoveNumber = foxMoveNumber,
                 PlayColor = autoPlayColor.PlayColor,
                 AutoPlayColorMode = runtimeSnapshot.AutoPlayColorMode,

@@ -892,7 +892,8 @@ namespace readboard
             BoardFrame frame,
             Func<bool> isOperationCurrent)
         {
-            BoardRecognitionResult recognition = runtime.RecognitionService.Recognize(new BoardRecognitionRequest { Frame = frame });
+            BoardRecognitionResult recognition = runtime.RecognitionService.Recognize(
+                new BoardRecognitionRequest(snapshot.Thresholds) { Frame = frame });
             if (!IsOperationCurrent(isOperationCurrent))
             {
                 DisposeBoardFrame(frame);

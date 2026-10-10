@@ -3,8 +3,13 @@ namespace readboard
     internal sealed class BoardRecognitionRequest
     {
         public BoardRecognitionRequest()
+            : this(null)
         {
-            Thresholds = RecognitionThresholds.CreateDefault();
+        }
+
+        public BoardRecognitionRequest(RecognitionThresholds thresholds)
+        {
+            Thresholds = thresholds ?? RecognitionThresholds.CreateDefault();
             InferLastMove = true;
         }
 

@@ -10,7 +10,7 @@ using Readboard.VerificationTests.Host;
 
 namespace Readboard.VerificationTests.Protocol
 {
-    public sealed class SyncSessionCoordinatorOrchestrationTests
+    public sealed partial class SyncSessionCoordinatorOrchestrationTests
     {
         [Theory]
         [InlineData(false)]

@@ -35,7 +35,8 @@ namespace Readboard.VerificationTests.Host
                     MainForm.WebViewSettingsStateProjector.Project(
                         result.State,
                         delegate(string key) { return key; },
-                        delegate(string key) { return key; }).Language);
+                        delegate(string key) { return key; },
+                        SyncMode.Background).Language);
             }
         }
 

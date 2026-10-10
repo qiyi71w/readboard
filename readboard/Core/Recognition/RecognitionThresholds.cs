@@ -42,6 +42,18 @@ namespace readboard
             return new RecognitionThresholds();
         }
 
+        public static RecognitionThresholds FromConfig(AppConfig config)
+        {
+            return new RecognitionThresholds
+            {
+                BlackPercent = config.BlackPercent,
+                WhitePercent = config.WhitePercent,
+                BlackOffset = config.BlackOffset,
+                WhiteOffset = config.WhiteOffset,
+                GrayOffset = config.GrayOffset
+            };
+        }
+
         public static RecognitionThresholds GetEffective(RecognitionThresholds thresholds, SyncMode syncMode)
         {
             RecognitionThresholds effective = thresholds != null
@@ -57,7 +69,7 @@ namespace readboard
                 effective.RedBlueMarkerThreshold,
                 DefaultRedBlueMarkerThreshold);
 
-            if (UsesNativeThresholds(syncMode))
+            if (!UsesCustomThresholds(syncMode))
                 ApplyNativeDefaults(effective, syncMode);
 
             return effective;
@@ -74,9 +86,9 @@ namespace readboard
             thresholds.GrayOffset = NativeGrayOffset;
         }
 
-        private static bool UsesNativeThresholds(SyncMode syncMode)
+        public static bool UsesCustomThresholds(SyncMode syncMode)
         {
-            return syncMode != SyncMode.Background && syncMode != SyncMode.Foreground;
+            return syncMode == SyncMode.Background || syncMode == SyncMode.Foreground;
         }
 
         private static int NormalizePositive(int value, int fallback)

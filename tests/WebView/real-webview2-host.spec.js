@@ -339,6 +339,35 @@ test("real Settings Save persists its draft across a fresh WebView2 profile rest
     await readBoard.host.waitForExactLine("ready");
     const firstProfile = readBoard.profileDirectory;
 
+    const values = { blackPercent: "42", whitePercent: "18", blackOffset: "101", whiteOffset: "77", grayOffset: "61" };
+    const selectPlatform = async value => {
+      await readBoard.page.locator('.nav-item[data-page="controlCenter"]').click();
+      await readBoard.page.locator(`input[name="platform"][value="${value}"]`).check();
+      await expect(readBoard.page.locator(`input[name="platform"][value="${value}"]`)).toBeChecked();
+      await readBoard.page.locator('.nav-item[data-page="settings"]').click();
+    };
+    const expectThresholds = async (expected, readOnly) => {
+      for (const [field, value] of Object.entries(expected)) {
+        const input = readBoard.page.locator(`[data-setting="${field}"]`);
+        await expect(input).toHaveValue(value);
+        await expect(input).toBeEditable({ editable: !readOnly });
+      }
+    };
+    await selectPlatform("otherForeground");
+    for (const [field, value] of Object.entries(values)) {
+      const input = readBoard.page.locator(`[data-setting="${field}"]`);
+      await input.fill(value);
+      await input.press("Tab");
+    }
+    await selectPlatform("fox");
+    await expectThresholds({ blackPercent: "37", whitePercent: "30", blackOffset: "96", whiteOffset: "112", grayOffset: "50" }, true);
+    await expect(readBoard.page.locator('[data-setting="syncInterval"]')).toBeEditable();
+    await expect(readBoard.page.locator("#settings-dirty")).toHaveText("You have unsaved changes");
+    await readBoard.page.screenshot({ path: testInfo.outputPath("native-built-in-thresholds.png") });
+    await selectPlatform("yicheng");
+    await expect(readBoard.page.locator('[data-setting="whiteOffset"]')).toHaveValue("80");
+    await selectPlatform("otherBackground");
+    await expectThresholds(values, false);
     await readBoard.page.locator('.nav-item[data-page="settings"]').click();
     const syncInterval = readBoard.page.locator('[data-setting="syncInterval"]');
     await expect(syncInterval).toHaveValue("200");
@@ -350,6 +379,7 @@ test("real Settings Save persists its draft across a fresh WebView2 profile rest
     await expect(readBoard.page.locator("#settings-dirty")).toHaveText("No unsaved changes");
     expect(readPersistedSyncInterval(await readBoard.readConfigurationFiles())).toBe(350);
     expect(await readBoard.readConfigurationTransactionDirectories()).toEqual([]);
+    await readBoard.page.screenshot({ path: testInfo.outputPath("saved-custom-thresholds.png") });
 
     await readBoard.restartWithFreshProfile();
     expect(readBoard.profileDirectory).not.toBe(firstProfile);
@@ -357,6 +387,10 @@ test("real Settings Save persists its draft across a fresh WebView2 profile rest
     await readBoard.page.locator('.nav-item[data-page="settings"]').click();
     await expect(readBoard.page.locator('[data-setting="syncInterval"]')).toHaveValue("350");
     await expect(readBoard.page.locator("#settings-dirty")).toHaveText("No unsaved changes");
+    await expectThresholds(values, false);
+    await selectPlatform("otherForeground");
+    await expectThresholds(values, false);
+    await readBoard.page.screenshot({ path: testInfo.outputPath("restarted-custom-thresholds.png") });
     expect(readPersistedSyncInterval(await readBoard.readConfigurationFiles())).toBe(350);
     expect(await readBoard.readConfigurationTransactionDirectories()).toEqual([]);
   }, { seedSyncInterval: 200 });

@@ -93,6 +93,9 @@ namespace readboard
             {
                 case "settings.update":
                 {
+                    if (!CanUpdateWebViewSetting(command.Payload.GetProperty("key").GetString(),
+                        controlCenterRuntime.Snapshot.Platform))
+                        return false;
                     SettingsDraftOperationResult result = UpdateWebViewSetting(command.Payload);
                     return result == null || result.ShouldPublishSnapshot;
                 }
@@ -155,7 +158,8 @@ namespace readboard
             return WebViewSettingsStateProjector.Project(
                 draft,
                 getLangStr,
-                Program.GetDefaultLanguageText);
+                Program.GetDefaultLanguageText,
+                controlCenterRuntime.Snapshot.Platform);
         }
 
 
@@ -194,7 +198,8 @@ namespace readboard
             public static ReadBoardSettingsUiState Project(
                 SettingsDraftState draft,
                 Func<string, string> getLocalizedText,
-                Func<string, string> getDefaultText)
+                Func<string, string> getDefaultText,
+                SyncMode platform)
             {
                 if (draft == null)
                     throw new ArgumentNullException("draft");
@@ -202,6 +207,11 @@ namespace readboard
                     throw new ArgumentNullException("getLocalizedText");
                 if (getDefaultText == null)
                     throw new ArgumentNullException("getDefaultText");
+                bool editable = RecognitionThresholds.UsesCustomThresholds(platform);
+                RecognitionThresholds effective = editable ? null : RecognitionThresholds.GetEffective(null, platform);
+                bool hiddenErrors = false;
+                foreach (string key in draft.Errors.Keys)
+                    hiddenErrors |= !CanUpdateWebViewSetting(key, platform);
 
                 return new ReadBoardSettingsUiState
                 {
@@ -211,11 +221,22 @@ namespace readboard
                     EnhancedCapture = draft.EnhancedCapture,
                     PlacementValidation = draft.PlacementValidation,
                     SyncInterval = draft.SyncInterval,
-                    GrayOffset = draft.GrayOffset,
-                    BlackOffset = draft.BlackOffset,
-                    BlackPercent = draft.BlackPercent,
-                    WhiteOffset = draft.WhiteOffset,
-                    WhitePercent = draft.WhitePercent,
+                    GrayOffset = editable ? draft.GrayOffset : effective.GrayOffset.ToString(CultureInfo.InvariantCulture),
+                    BlackOffset = editable ? draft.BlackOffset : effective.BlackOffset.ToString(CultureInfo.InvariantCulture),
+                    BlackPercent = editable ? draft.BlackPercent : effective.BlackPercent.ToString(CultureInfo.InvariantCulture),
+                    WhiteOffset = editable ? draft.WhiteOffset : effective.WhiteOffset.ToString(CultureInfo.InvariantCulture),
+                    WhitePercent = editable ? draft.WhitePercent : effective.WhitePercent.ToString(CultureInfo.InvariantCulture),
+                    ThresholdsEditable = editable,
+                    ThresholdsDescription = ResolveSettingsMessage(SemanticMessage.Create(editable
+                        ? "WebView_customThresholdsDescription" : "WebView_nativeThresholdsDescription"),
+                        getLocalizedText, getDefaultText),
+                    ThresholdsDefaultsDescription = ResolveSettingsMessage(SemanticMessage.Create(
+                        "WebView_thresholdDefaultsDescription",
+                        RecognitionThresholds.DefaultBlackPercent, RecognitionThresholds.DefaultWhitePercent,
+                        RecognitionThresholds.DefaultBlackOffset, RecognitionThresholds.DefaultWhiteOffset,
+                        RecognitionThresholds.DefaultGrayOffset), getLocalizedText, getDefaultText),
+                    ThresholdsDraftWarning = hiddenErrors ? ResolveSettingsMessage(SemanticMessage.Create(
+                        "WebView_hiddenThresholdErrors"), getLocalizedText, getDefaultText) : null,
                     Theme = draft.Theme,
                     Language = draft.Language,
                     Diagnostics = draft.Diagnostics,
@@ -260,6 +281,13 @@ namespace readboard
                     getLocalizedText,
                     getDefaultText);
             }
+        }
+
+        internal static bool CanUpdateWebViewSetting(string key, SyncMode platform)
+        {
+            return RecognitionThresholds.UsesCustomThresholds(platform)
+                || (key != "grayOffset" && key != "blackOffset" && key != "blackPercent"
+                    && key != "whiteOffset" && key != "whitePercent");
         }
 
         private static bool IsValidWebViewSettingUpdate(JsonElement payload)
