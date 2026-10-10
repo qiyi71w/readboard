@@ -37,6 +37,78 @@ test.afterAll(async () => {
   await new Promise(resolve => server.close(resolve));
 });
 
+test("projects native thresholds over a focused draft without emitting updates", async ({ page }) => {
+  const commands = [];
+  page.on("console", message => {
+    if (message.text().includes("ReadBoard preview command")) commands.push(message.text());
+  });
+  await page.goto(baseUrl + "/index.html");
+  await page.evaluate(() => {
+    const snapshot = window.readboardPreview.getState();
+    snapshot.page = "settings";
+    snapshot.settings = {
+      ...snapshot.settings,
+      thresholdsEditable: true,
+      thresholdsDescription: "Shared by both Other modes. Changes take effect after saving settings.",
+      thresholdsDefaultsDescription: "0 uses the default: black 33%, white 33%, black offset 96, white offset 96, gray offset 50.",
+      thresholdsDraftWarning: null,
+      blackPercent: "42", whitePercent: "0", blackOffset: "103", whiteOffset: "107", grayOffset: "61",
+      syncInterval: "321", dirty: true, dirtyStatus: "Unsaved changes"
+    };
+    window.__customThresholdSnapshot = structuredClone(snapshot);
+    window.readboardPreview.setState(snapshot);
+  });
+  const black = page.locator('[data-setting="blackPercent"]');
+  const interval = page.locator('[data-setting="syncInterval"]');
+  await expect(black).toBeEnabled();
+  await expect(black).toHaveValue("42");
+  await expect(page.locator("#thresholds-defaults")).toContainText("0 uses the default");
+  await expect(interval).toBeEnabled();
+  await black.focus();
+  commands.length = 0;
+  await page.evaluate(() => {
+    const snapshot = window.readboardPreview.getState();
+    snapshot.settings = {
+      ...snapshot.settings,
+      thresholdsEditable: false,
+      thresholdsDescription: "Built-in platform values. Your Other-mode draft is retained and will also be saved.",
+      blackPercent: "37", whitePercent: "30", blackOffset: "96", whiteOffset: "112", grayOffset: "50"
+    };
+    window.readboardPreview.setState(snapshot);
+  });
+  for (const [key, value] of Object.entries({ blackPercent: "37", whitePercent: "30", blackOffset: "96", whiteOffset: "112", grayOffset: "50" })) {
+    const input = page.locator(`[data-setting="${key}"]`);
+    await expect(input).toBeDisabled();
+    await expect(input).toHaveValue(value);
+  }
+  await expect(interval).toBeEnabled();
+  await expect(interval).toHaveValue("321");
+  await expect(page.locator("#settings-dirty")).toHaveText("Unsaved changes");
+  await expect(page.locator("#thresholds-description")).toContainText("draft is retained");
+
+  await page.evaluate(() => {
+    const snapshot = window.readboardPreview.getState();
+    snapshot.settings.whiteOffset = "80";
+    snapshot.settings.errors = { blackPercent: "Enter an integer" };
+    snapshot.settings.thresholdsDraftWarning = "Switch to an Other mode to correct the draft, or Cancel to discard all unsaved changes.";
+    window.readboardPreview.setState(snapshot);
+  });
+  await expect(page.locator('[data-setting="whiteOffset"]')).toHaveValue("80");
+  await expect(page.locator("#thresholds-draft-warning")).toContainText("Switch to an Other mode");
+  await expect(black).not.toHaveAttribute("aria-invalid");
+
+  await page.evaluate(() => window.readboardPreview.setState(window.__customThresholdSnapshot));
+  for (const [key, value] of Object.entries({ blackPercent: "42", whitePercent: "0", blackOffset: "103", whiteOffset: "107", grayOffset: "61" })) {
+    const input = page.locator(`[data-setting="${key}"]`);
+    await expect(input).toBeEnabled();
+    await expect(input).toHaveValue(value);
+  }
+  await expect(interval).toBeEnabled();
+  await expect(page.locator("#thresholds-draft-warning")).toHaveText("");
+  await expect(page.locator("#settings-dirty")).toHaveText("Unsaved changes");
+  expect(commands).toEqual([]);
+});
+
 test("renders dynamic snapshots, language-switched logs, and accessible controls", async ({ page }) => {
   await page.goto(baseUrl + "/index.html");
 

@@ -78,6 +78,17 @@ Or point at an executable from a release package:
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-readboard-ui-debug.ps1 -ExePath "D:\path\to\readboard.exe"
 ```
 
+### Recognition Parameters
+
+Other (Background) and Other (Foreground) share five custom recognition parameters. Edits take effect after **Save**, starting with the next sampling snapshot; a sample already in progress keeps its original values.
+
+- `0` means use the default: black percentage `33%`, white percentage `33%`, black offset `96`, white offset `96`, gray offset `50`.
+- Fox, Fox (Background), Yike and Sina use built-in values `37% / 30% / 96 / 112 / 50`, in that order. Tygem uses a white offset of `80` instead. Settings shows these effective values as non-editable.
+- Switching platforms preserves custom values and unsaved drafts. Saving on a native platform also saves the retained custom draft; switch to either Other mode to edit it. **Cancel** reloads saved values.
+- **Sync Timing** is separate from recognition parameters and applies to every platform.
+
+Threshold tuning changes color classification conditions; it does not guarantee that every translucent preview stone will be rejected.
+
 ## Development
 
 ```powershell

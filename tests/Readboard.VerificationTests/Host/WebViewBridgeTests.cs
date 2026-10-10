@@ -14,6 +14,95 @@ namespace Readboard.VerificationTests.Host
 {
     public sealed class WebViewBridgeTests
     {
+        [Theory]
+        [InlineData((int)SyncMode.Fox, "112")]
+        [InlineData((int)SyncMode.FoxBackgroundPlace, "112")]
+        [InlineData((int)SyncMode.Yike, "112")]
+        [InlineData((int)SyncMode.Sina, "112")]
+        [InlineData((int)SyncMode.Tygem, "80")]
+        public void ThresholdProjection_PreservesSharedDraftAcrossNativePlatforms(int nativeMode, string whiteOffset)
+        {
+            SyncMode native = (SyncMode)nativeMode;
+            SettingsDraftState draft = SettingsDraftState.FromConfig(AppConfig.CreateDefault("220430", "TEST"));
+            draft.BlackPercent = "042";
+            draft.WhitePercent = "0";
+            draft.BlackOffset = "103";
+            draft.WhiteOffset = "107";
+            draft.GrayOffset = "61";
+            draft.SyncInterval = "321";
+            draft.Dirty = true;
+            ReadBoardSettingsUiState before = ProjectThresholdDraft(draft, SyncMode.Background);
+            Assert.True(before.ThresholdsEditable);
+            Assert.Contains("after saving", before.ThresholdsDescription);
+
+            ReadBoardSettingsUiState builtIn = ProjectThresholdDraft(draft, native);
+            Assert.False(builtIn.ThresholdsEditable);
+            Assert.Equal("37", builtIn.BlackPercent);
+            Assert.Equal("30", builtIn.WhitePercent);
+            Assert.Equal("96", builtIn.BlackOffset);
+            Assert.Equal(whiteOffset, builtIn.WhiteOffset);
+            Assert.Equal("50", builtIn.GrayOffset);
+            Assert.Equal("321", builtIn.SyncInterval);
+            Assert.True(builtIn.Dirty);
+            Assert.Contains("draft is retained", builtIn.ThresholdsDescription);
+            Assert.Null(builtIn.ThresholdsDraftWarning);
+            Assert.Contains("0 uses the default", builtIn.ThresholdsDefaultsDescription);
+            Assert.Contains("black percentage " + RecognitionThresholds.DefaultBlackPercent + "%", builtIn.ThresholdsDefaultsDescription);
+            Assert.Contains("white percentage " + RecognitionThresholds.DefaultWhitePercent + "%", builtIn.ThresholdsDefaultsDescription);
+            Assert.Contains("black offset " + RecognitionThresholds.DefaultBlackOffset, builtIn.ThresholdsDefaultsDescription);
+            Assert.Contains("white offset " + RecognitionThresholds.DefaultWhiteOffset, builtIn.ThresholdsDefaultsDescription);
+            Assert.Contains("gray offset " + RecognitionThresholds.DefaultGrayOffset, builtIn.ThresholdsDefaultsDescription);
+
+            ReadBoardSettingsUiState after = ProjectThresholdDraft(draft, SyncMode.Foreground);
+            Assert.True(after.ThresholdsEditable);
+            Assert.Equal(before.BlackPercent, after.BlackPercent);
+            Assert.Equal(before.WhitePercent, after.WhitePercent);
+            Assert.Equal(before.BlackOffset, after.BlackOffset);
+            Assert.Equal(before.WhiteOffset, after.WhiteOffset);
+            Assert.Equal(before.GrayOffset, after.GrayOffset);
+            Assert.Equal("042", draft.BlackPercent);
+            Assert.Equal("0", draft.WhitePercent);
+            Assert.True(draft.Dirty);
+
+            foreach (string key in new[] { "blackPercent", "whitePercent", "blackOffset", "whiteOffset", "grayOffset" })
+            {
+                Assert.False(MainForm.CanUpdateWebViewSetting(key, native));
+                Assert.True(MainForm.CanUpdateWebViewSetting(key, SyncMode.Background));
+                Assert.True(MainForm.CanUpdateWebViewSetting(key, SyncMode.Foreground));
+            }
+            Assert.True(MainForm.CanUpdateWebViewSetting("syncInterval", native));
+        }
+
+        [Fact]
+        public void ThresholdProjection_ExplainsHowToRecoverHiddenDraftErrors()
+        {
+            SettingsDraftState draft = SettingsDraftState.FromConfig(AppConfig.CreateDefault("220430", "TEST"));
+            draft.BlackPercent = "invalid";
+            draft.Dirty = true;
+            draft.Errors["blackPercent"] = SemanticMessage.Create("SettingsForm_mustBeInteger");
+            ReadBoardSettingsUiState native = ProjectThresholdDraft(draft, SyncMode.Fox);
+            Assert.Contains("Switch to an Other mode", native.ThresholdsDraftWarning);
+            Assert.Contains("Cancel", native.ThresholdsDraftWarning);
+            Assert.Equal("37", native.BlackPercent);
+            Assert.NotEmpty(native.Errors);
+            ReadBoardSettingsUiState custom = ProjectThresholdDraft(draft, SyncMode.Background);
+            Assert.Equal("invalid", custom.BlackPercent);
+            Assert.Null(custom.ThresholdsDraftWarning);
+            Assert.NotEmpty(custom.Errors);
+        }
+
+        private static ReadBoardSettingsUiState ProjectThresholdDraft(SettingsDraftState draft, SyncMode platform)
+        {
+            string path = Path.Combine(VerificationFixtureLocator.RepositoryRoot(), "readboard", "language_en.txt");
+            Dictionary<string, string> messages = File.ReadAllLines(path)
+                .Where(line => line.Contains('='))
+                .Select(line => line.Split(new[] { '=' }, 2))
+                .ToDictionary(parts => parts[0], parts => parts[1]);
+            return MainForm.WebViewSettingsStateProjector.Project(draft,
+                key => messages.TryGetValue(key, out string value) ? value : null,
+                key => null, platform);
+        }
+
         [Fact]
         public void MissingRuntime_OffersOfficialEvergreenDownloadRetryAndExit()
         {

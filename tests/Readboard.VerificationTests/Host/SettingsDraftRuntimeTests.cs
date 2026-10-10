@@ -147,10 +147,13 @@ namespace Readboard.VerificationTests.Host
         public void CancelReloadsLatestActiveConfig()
         {
             AppConfig active = AppConfig.CreateDefault("220430", "TEST");
+            SetCustomThresholds(active);
             RecordingPersistence persistence = new RecordingPersistence(active);
             SettingsDraftRuntime runtime = CreateRuntime(active, persistence, new RecordingEffects());
 
             runtime.Update(SettingsDraftUpdate.Text(SettingsDraftField.SyncInterval, "350"));
+            UpdateThresholdDraft(runtime);
+            AssertCustomThresholds(persistence.Active);
             persistence.Active.SyncIntervalMs = 410;
             persistence.Active.LanguagePreference = "jp";
             persistence.Active.BoardWidth = 13;
@@ -160,6 +163,8 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(SettingsDraftOperationOutcome.Applied, result.Outcome);
             Assert.Equal("410", result.State.SyncInterval);
             Assert.Equal("jp", result.State.Language);
+            AssertCustomThresholds(persistence.Active);
+            Assert.Equal(new[] { "42", "18", "101", "77", "61" }, ThresholdDraftValues(result.State));
             Assert.False(result.State.Dirty);
             Assert.Empty(persistence.Events);
         }
@@ -241,10 +246,12 @@ namespace Readboard.VerificationTests.Host
         public void PersistenceFailureRetainsDraftAndCanRetry()
         {
             AppConfig active = AppConfig.CreateDefault("220430", "TEST");
+            SetCustomThresholds(active);
             RecordingPersistence persistence = new RecordingPersistence(active) { Fail = true };
             RecordingEffects effects = new RecordingEffects();
             SettingsDraftRuntime runtime = CreateRuntime(active, persistence, effects);
             runtime.Update(SettingsDraftUpdate.Text(SettingsDraftField.SyncInterval, "350"));
+            UpdateThresholdDraft(runtime);
 
             SettingsDraftOperationResult failed = runtime.Save();
             Assert.True(failed.ShouldPublishSnapshot);
@@ -256,6 +263,8 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal("disk full", failed.State.SaveError.DiagnosticDetail);
             Assert.Equal(new[] { "persist" }, persistence.Events);
             Assert.Equal(200, persistence.Active.SyncIntervalMs);
+            AssertCustomThresholds(persistence.Active);
+            Assert.Equal(new[] { "45", "21", "105", "81", "65" }, ThresholdDraftValues(failed.State));
             Assert.Empty(effects.Events);
 
             persistence.Fail = false;
@@ -265,6 +274,8 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(SettingsDraftOperationOutcome.Saved, retried.Outcome);
             Assert.Equal(new[] { "persist", "persist", "replace" }, persistence.Events);
             Assert.Equal(350, persistence.Active.SyncIntervalMs);
+            AssertEditedThresholds(persistence.Active);
+            AssertEditedThresholds(persistence.Persisted);
             Assert.False(retried.State.Dirty);
             Assert.Null(retried.State.SaveError);
         }
@@ -457,7 +468,8 @@ namespace Readboard.VerificationTests.Host
                     return key == SettingsDraftMessageKeys.SaveFailed
                         ? "Failed to save"
                         : null;
-                });
+                },
+                SyncMode.Background);
 
             Assert.Equal("保存失败: disk full", projected.SaveError);
         }
@@ -492,6 +504,104 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(
                 new[] { "theme:" + AppConfig.ColorModeDark, "background:False" },
                 events);
+        }
+
+        [Fact]
+        public void ThresholdDraftSurvivesControlCenterPlatformSavesAndOverlaysLatestPlatform()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                AppConfig current = AppConfig.CreateDefault("220430", "TEST");
+                current.SyncMode = SyncMode.Background;
+                SetCustomThresholds(current);
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, "TEST", "220430");
+                store.Save(current);
+                MainForm.MainFormSettingsDraftPersistence settingsPersistence =
+                    new MainForm.MainFormSettingsDraftPersistence(
+                        () => current.Clone(),
+                        store.Save,
+                        candidate => current = candidate,
+                        delegate { });
+                SettingsDraftRuntime runtime = new SettingsDraftRuntime(
+                    current,
+                    () => AppConfig.CreateDefault("220430", "TEST"),
+                    settingsPersistence,
+                    new RecordingEffects());
+                AppConfigControlCenterPreferencePersistence platformPersistence =
+                    new AppConfigControlCenterPreferencePersistence(
+                        () => current,
+                        candidate =>
+                        {
+                            store.Save(candidate);
+                            current = candidate;
+                        });
+                UpdateThresholdDraft(runtime);
+
+                SyncMode[] platforms =
+                {
+                    SyncMode.Foreground, SyncMode.Background, SyncMode.Fox,
+                    SyncMode.Foreground, SyncMode.Tygem, SyncMode.Background,
+                    SyncMode.FoxBackgroundPlace, SyncMode.Yike, SyncMode.Sina
+                };
+                foreach (SyncMode platform in platforms)
+                {
+                    ControlCenterPreferences preferences = ControlCenterPreferences.FromConfig(current);
+                    preferences.Platform = platform;
+                    platformPersistence.Save(preferences);
+
+                    AppConfig loaded = new DualFormatAppConfigStore(workspace.RootPath, "TEST", "220430").Load().Config;
+                    Assert.Equal(platform, loaded.SyncMode);
+                    AssertCustomThresholds(loaded);
+                    AssertCustomThresholds(current);
+                    Assert.True(runtime.Snapshot.Dirty);
+                    Assert.Equal(new[] { "45", "21", "105", "81", "65" }, ThresholdDraftValues(runtime.Snapshot));
+                }
+
+                SettingsDraftOperationResult saved = runtime.Save();
+
+                Assert.Equal(SettingsDraftOperationOutcome.Saved, saved.Outcome);
+                Assert.False(saved.State.Dirty);
+                Assert.Equal(SyncMode.Sina, current.SyncMode);
+                AssertEditedThresholds(current);
+                AppConfig reopened = new DualFormatAppConfigStore(workspace.RootPath, "TEST", "220430").Load().Config;
+                Assert.Equal(SyncMode.Sina, reopened.SyncMode);
+                AssertEditedThresholds(reopened);
+            }
+        }
+
+        private static void SetCustomThresholds(AppConfig config)
+        {
+            config.BlackPercent = 42;
+            config.WhitePercent = 18;
+            config.BlackOffset = 101;
+            config.WhiteOffset = 77;
+            config.GrayOffset = 61;
+        }
+
+        private static void UpdateThresholdDraft(SettingsDraftRuntime runtime)
+        {
+            runtime.Update(SettingsDraftUpdate.Text(SettingsDraftField.BlackPercent, "45"));
+            runtime.Update(SettingsDraftUpdate.Text(SettingsDraftField.WhitePercent, "21"));
+            runtime.Update(SettingsDraftUpdate.Text(SettingsDraftField.BlackOffset, "105"));
+            runtime.Update(SettingsDraftUpdate.Text(SettingsDraftField.WhiteOffset, "81"));
+            runtime.Update(SettingsDraftUpdate.Text(SettingsDraftField.GrayOffset, "65"));
+        }
+
+        private static string[] ThresholdDraftValues(SettingsDraftState state)
+        {
+            return new[] { state.BlackPercent, state.WhitePercent, state.BlackOffset, state.WhiteOffset, state.GrayOffset };
+        }
+
+        private static void AssertCustomThresholds(AppConfig config)
+        {
+            Assert.Equal(new[] { 42, 18, 101, 77, 61 },
+                new[] { config.BlackPercent, config.WhitePercent, config.BlackOffset, config.WhiteOffset, config.GrayOffset });
+        }
+
+        private static void AssertEditedThresholds(AppConfig config)
+        {
+            Assert.Equal(new[] { 45, 21, 105, 81, 65 },
+                new[] { config.BlackPercent, config.WhitePercent, config.BlackOffset, config.WhiteOffset, config.GrayOffset });
         }
 
         private static SettingsDraftRuntime CreateRuntime(

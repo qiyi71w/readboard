@@ -16,6 +16,10 @@ namespace readboard
         public string BlackPercent { get; set; }
         public string WhiteOffset { get; set; }
         public string WhitePercent { get; set; }
+        public bool ThresholdsEditable { get; set; }
+        public string ThresholdsDescription { get; set; }
+        public string ThresholdsDefaultsDescription { get; set; }
+        public string ThresholdsDraftWarning { get; set; }
         public string Theme { get; set; }
         public string Language { get; set; }
         public bool Diagnostics { get; set; }

@@ -441,6 +441,11 @@ namespace readboard
             langItems["WebView_placementValidation"] = "落子验证";
             langItems["WebView_placementValidationDescription"] = "落子后检查目标位置是否成功";
             langItems["WebView_recognitionParameters"] = "识别参数";
+            langItems["WebView_syncTiming"] = "同步频率";
+            langItems["WebView_customThresholdsDescription"] = "其他（后台）与其他（前台）共用这些识别参数，保存设置后生效。";
+            langItems["WebView_nativeThresholdsDescription"] = "当前平台使用以下内置参数，不可编辑。其他模式的草稿仍保留，保存设置时会一并保存。";
+            langItems["WebView_thresholdDefaultsDescription"] = "其他模式中，0 表示使用默认值：黑棋百分比 {0}%、白棋百分比 {1}%、黑棋偏差 {2}、白棋偏差 {3}、灰度偏差 {4}。";
+            langItems["WebView_hiddenThresholdErrors"] = "其他模式的识别参数草稿有误，无法保存。请切换到其他模式修正，或点击取消放弃所有未保存更改。";
             langItems["WebView_syncInterval"] = "同步间隔";
             langItems["WebView_grayOffset"] = "灰度偏差";
             langItems["WebView_blackOffset"] = "黑棋颜色偏差";
@@ -515,7 +520,7 @@ namespace readboard
             langItems["WebView_initializationFailed"] = "WebView2 初始化失败";
             langItems["WebView_mainPageMissing"] = "找不到 WebView 主页面。";
             langItems["WebView_manualOpenFailedTitle"] = "无法打开说明";
-            langItems["WebView_resetDefaultsDescription"] = "将当前设置草稿恢复为默认值。此操作不会立即写入配置，仍需点击保存设置。";
+            langItems["WebView_resetDefaultsDescription"] = "将所有设置草稿（包括其他模式的识别参数）恢复为默认值。当前平台的内置参数不变；此操作不会立即写入配置，仍需点击保存设置。";
             langItems["WebView_resetDefaults"] = "恢复默认";
             langItems["WebView_enableDiagnostics"] = "开启调试诊断";
             langItems["WebView_diagnosticsDescription"] = "调试诊断可能产生较大的文件。确认后仅修改当前设置草稿，保存设置后生效。";

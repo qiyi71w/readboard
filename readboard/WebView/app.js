@@ -118,6 +118,7 @@
       enhancedCapture: false,
       placementValidation: true,
       syncInterval: 200,
+      thresholdsEditable: true,
       grayOffset: 0,
       blackOffset: 0,
       blackPercent: 85,
@@ -438,21 +439,30 @@
     const settings = state.settings || {};
     $$('[data-setting]').forEach(input => {
       const value = settings[input.dataset.setting];
+      const isThreshold = Boolean(input.closest("#threshold-settings"));
+      const disabled = isThreshold && !settings.thresholdsEditable;
+      const availabilityChanged = input.disabled !== disabled;
+      input.disabled = disabled;
       if (input.type === "checkbox") input.checked = Boolean(value);
-      else if (document.activeElement !== input) input.value = value ?? "";
+      else if (disabled || availabilityChanged || document.activeElement !== input) input.value = value ?? "";
       const error = input.closest("label")?.querySelector(".field-error");
       if (error) {
-        const message = settings.errors?.[input.dataset.setting] || "";
+        const message = disabled ? "" : settings.errors?.[input.dataset.setting] || "";
         error.textContent = message;
         if (!error.id) error.id = `${input.dataset.setting}-error`;
         input.toggleAttribute("aria-invalid", Boolean(message));
-        if (message) input.setAttribute("aria-describedby", error.id);
+        const describedBy = isThreshold ? ["thresholds-description", "thresholds-defaults"] : [];
+        if (message) describedBy.push(error.id);
+        if (describedBy.length) input.setAttribute("aria-describedby", describedBy.join(" "));
         else input.removeAttribute("aria-describedby");
       }
     });
     setChecked(`input[name="theme"][value="${cssValue(settings.theme || "system")}"]`, true);
     text("settings-dirty", settings.dirtyStatus || "");
     text("settings-error", settings.saveError || "");
+    text("thresholds-description", settings.thresholdsDescription || "");
+    text("thresholds-defaults", settings.thresholdsDefaultsDescription || "");
+    text("thresholds-draft-warning", settings.thresholdsDraftWarning || "");
   }
 
   function renderLogs() {

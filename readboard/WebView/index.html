@@ -122,8 +122,14 @@
           <label><span><b data-i18n="SettingsForm_chkEnhanceScreen">增强截图</b><small data-i18n="WebView_enhancedCaptureDescription">提高部分窗口的捕获兼容性</small></span><input type="checkbox" data-setting="enhancedCapture"></label>
           <label><span><b data-i18n="WebView_placementValidation">落子校验</b><small data-i18n="WebView_placementValidationDescription">自动落子后检查执行结果</small></span><input type="checkbox" data-setting="placementValidation"></label>
         </div></fieldset>
-        <fieldset class="card settings-card"><legend data-i18n="WebView_recognitionParameters">识别参数</legend><div class="input-grid">
+        <fieldset class="card settings-card"><legend data-i18n="WebView_syncTiming">同步频率</legend><div class="input-grid">
           <label><span data-i18n="WebView_syncInterval">同步间隔</span><span><input type="number" min="20" data-setting="syncInterval"><i>ms</i></span><small class="field-error"></small></label>
+        </div></fieldset>
+        <fieldset class="card settings-card" id="threshold-settings"><legend data-i18n="WebView_recognitionParameters">识别参数</legend>
+          <p class="settings-help" id="thresholds-description"></p>
+          <p class="settings-help" id="thresholds-defaults"></p>
+          <p class="settings-error" id="thresholds-draft-warning" role="status"></p>
+          <div class="input-grid">
           <label><span data-i18n="WebView_grayOffset">灰度偏移</span><input type="number" min="0" max="255" data-setting="grayOffset"><small class="field-error"></small></label>
           <label><span data-i18n="WebView_blackOffset">黑棋颜色偏移</span><span><input type="number" min="0" max="255" data-setting="blackOffset"><i>0–255</i></span><small class="field-error"></small></label>
           <label><span data-i18n="WebView_blackPercent">黑棋识别百分比</span><span><input type="number" min="0" max="100" data-setting="blackPercent"><i>%</i></span><small class="field-error"></small></label>

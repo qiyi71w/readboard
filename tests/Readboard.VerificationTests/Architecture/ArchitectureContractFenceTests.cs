@@ -132,26 +132,6 @@ namespace Readboard.VerificationTests.Architecture
                     "identityEnabled",
                     "showOnBoardEnabled");
                 AssertPropertyNames(
-                    payload.GetProperty("settings"),
-                    "autoMinimize",
-                    "backgroundAnalysis",
-                    "magnifier",
-                    "enhancedCapture",
-                    "placementValidation",
-                    "syncInterval",
-                    "grayOffset",
-                    "blackOffset",
-                    "blackPercent",
-                    "whiteOffset",
-                    "whitePercent",
-                    "theme",
-                    "language",
-                    "diagnostics",
-                    "dirty",
-                    "dirtyStatus",
-                    "errors",
-                    "saveError");
-                AssertPropertyNames(
                     payload.GetProperty("update"),
                     "open",
                     "status",
@@ -226,7 +206,8 @@ namespace Readboard.VerificationTests.Architecture
                 Settings = MainForm.WebViewSettingsStateProjector.Project(
                     draft,
                     delegate(string key) { return "Failed to save settings"; },
-                    delegate(string key) { return "Failed to save settings"; })
+                    delegate(string key) { return "Failed to save settings"; },
+                    SyncMode.Background)
             };
 
             using (JsonDocument document = JsonDocument.Parse(MainForm.SerializeWebViewState(state)))

@@ -317,6 +317,8 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .page[data-page-panel="settings"].active { gap: 5px; }
 .page[data-page-panel="settings"] .page-heading { padding-block: 0; }
 .page[data-page-panel="settings"] .settings-card { padding: 8px 12px 7px; }
+.settings-help { margin: 0 0 5px; font-size: 12px; overflow-wrap: anywhere; }
+.settings-help:empty { display: none; }
 .toggle-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 24px; }
 .toggle-grid > label, .diagnostics { display: grid; min-width: 0; min-height: 42px; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; gap: 10px; }
 .page[data-page-panel="settings"] .toggle-grid { gap-block: 4px; }
