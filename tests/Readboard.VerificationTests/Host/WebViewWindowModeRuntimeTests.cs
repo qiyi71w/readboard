@@ -202,6 +202,43 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(WebViewPage.Settings, currentPage);
         }
 
+        [Fact]
+        public void FirstEntryFromMaximizedFull_PlacesMiniAtVisibleFullWindowTopLeft()
+        {
+            FakeWindow window = new FakeWindow(96);
+            Rectangle fullBounds = new Rectangle(300, 200, 1216, 799);
+            WebViewWindowModeRuntime runtime = CreateFull(window, fullBounds);
+            window.SetState(WebViewWindowState.Maximized);
+
+            Apply(runtime, WebViewWindowModeIntent.EnterMini());
+
+            Assert.Equal(PrimaryWorkingArea.Location, window.Bounds.Location);
+            Apply(runtime, WebViewWindowModeIntent.ExitMini(WebViewPage.ControlCenter));
+            Assert.Equal(WebViewWindowState.Maximized, window.State);
+            Assert.Equal(fullBounds, window.RestoreBounds);
+        }
+
+        [Fact]
+        public void ExitFromMiniOnHigherDpiMonitor_RestoresOriginalFullBoundsOnOriginalMonitor()
+        {
+            FakeWindow window = new FakeWindow(96);
+            window.SecondScreen = new Rectangle(1920, 0, 2560, 1400);
+            window.SecondScreenDpi = 144;
+            Rectangle fullBounds = new Rectangle(100, 80, 1234 + NonClient.Width, 777 + NonClient.Height);
+            WebViewWindowModeRuntime runtime = CreateFull(window, fullBounds);
+            window.DpiChanged = runtime.RefreshForDpi;
+            Apply(runtime, WebViewWindowModeIntent.EnterMini());
+
+            window.SetBounds(new Rectangle(2000, 100, window.Bounds.Width, window.Bounds.Height));
+            Assert.Equal(144, window.Dpi);
+            Assert.Equal(new Size(1020, 327), window.ClientSize);
+
+            Apply(runtime, WebViewWindowModeIntent.ExitMini(WebViewPage.ControlCenter));
+
+            Assert.Equal(96, window.Dpi);
+            Assert.Equal(fullBounds, window.Bounds);
+        }
+
         private static WebViewWindowModeRuntime CreateFull(FakeWindow window, Rectangle bounds)
         {
             WebViewWindowModeRuntime runtime = new WebViewWindowModeRuntime(window);
@@ -225,10 +262,12 @@ namespace Readboard.VerificationTests.Host
         private sealed class FakeWindow : IWebViewWindowModeAdapter
         {
             private Rectangle normalBounds = new Rectangle(10, 10, 800, 600);
+            private readonly int primaryDpi;
 
             public FakeWindow(int dpi)
             {
                 Dpi = dpi;
+                primaryDpi = dpi;
             }
 
             public int Dpi { get; set; }
@@ -237,6 +276,11 @@ namespace Readboard.VerificationTests.Host
             public Size MaximumSize { get; private set; }
             public bool TopMost { get; private set; }
             public Action Changed { get; set; }
+            // A second monitor with its own DPI; landing on another monitor rescales the
+            // window by the DPI ratio (the suggested rectangle) and raises the DPI callback.
+            public Rectangle SecondScreen { get; set; }
+            public int SecondScreenDpi { get; set; }
+            public Action DpiChanged { get; set; }
 
             public Rectangle Bounds
             {
@@ -255,11 +299,11 @@ namespace Readboard.VerificationTests.Host
 
             public Size NonClientSize { get { return NonClient; } }
 
-            public Rectangle VirtualScreen { get { return PrimaryWorkingArea; } }
+            public Rectangle VirtualScreen { get { return Rectangle.Union(PrimaryWorkingArea, SecondScreen); } }
 
             public Rectangle GetWorkingArea(Point location)
             {
-                return PrimaryWorkingArea;
+                return !SecondScreen.IsEmpty && SecondScreen.Contains(location) ? SecondScreen : PrimaryWorkingArea;
             }
 
             public void SetState(WebViewWindowState state)
@@ -284,6 +328,21 @@ namespace Readboard.VerificationTests.Host
                     height = Math.Min(height, MaximumSize.Height);
                 }
                 normalBounds = new Rectangle(bounds.Location, new Size(width, height));
+                if (!SecondScreen.IsEmpty)
+                {
+                    int monitorDpi = SecondScreen.Contains(bounds.Location) ? SecondScreenDpi : primaryDpi;
+                    if (monitorDpi != Dpi)
+                    {
+                        double ratio = monitorDpi / (double)Dpi;
+                        normalBounds = new Rectangle(
+                            normalBounds.Location,
+                            new Size(
+                                (int)Math.Round(normalBounds.Width * ratio),
+                                (int)Math.Round(normalBounds.Height * ratio)));
+                        Dpi = monitorDpi;
+                        DpiChanged?.Invoke();
+                    }
+                }
                 Changed?.Invoke();
             }
 
