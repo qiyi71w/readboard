@@ -79,6 +79,11 @@ namespace readboard
             if (config == null)
                 throw new ArgumentNullException(nameof(config));
 
+            // Initialize runs again after handle creation; full-mode geometry needs the
+            // full window frame even when the window is currently mini.
+            fullPlacement = null;
+            MiniMode = false;
+            adapter.ApplyChrome(false);
             int dpi = adapter.Dpi;
             Size fullMinimumSize = ResolveFullMinimumOuterSize(dpi);
             Size desiredSize = ToOuterSize(
@@ -109,9 +114,6 @@ namespace readboard
                 return;
             }
 
-            fullPlacement = null;
-            MiniMode = false;
-            adapter.ApplyChrome(false);
             adapter.SetSizeLimits(LimitToWorkingArea(fullMinimumSize, workingArea), Size.Empty);
             adapter.SetBounds(fullBounds);
             if (config.WindowMaximized)

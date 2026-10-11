@@ -239,6 +239,31 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal(fullBounds, window.Bounds);
         }
 
+        [Fact]
+        public void StartupInMiniWithRepeatedInitialize_RestoresFullClientSizeIncludingFrame()
+        {
+            FakeWindow window = new FakeWindow(96);
+            WebViewWindowModeRuntime runtime = new WebViewWindowModeRuntime(window);
+            AppConfig config = AppConfig.CreateDefault("220430", "TEST");
+            config.WindowPosX = 200;
+            config.WindowPosY = 100;
+            config.WindowClientWidth = 1234;
+            config.WindowClientHeight = 777;
+            config.MiniMode = true;
+
+            // Production applies saved bounds before and again after handle creation.
+            runtime.Initialize(config);
+            runtime.Initialize(config);
+            Assert.Equal(new Size(680, 218), window.ClientSize);
+            Apply(runtime, WebViewWindowModeIntent.ExitMini(WebViewPage.ControlCenter));
+
+            Assert.Equal(new Size(1234, 777), window.ClientSize);
+            AppConfig rewritten = AppConfig.CreateDefault("220430", "TEST");
+            runtime.WriteTo(rewritten);
+            Assert.Equal(1234, rewritten.WindowClientWidth);
+            Assert.Equal(777, rewritten.WindowClientHeight);
+        }
+
         private static WebViewWindowModeRuntime CreateFull(FakeWindow window, Rectangle bounds)
         {
             WebViewWindowModeRuntime runtime = new WebViewWindowModeRuntime(window);
@@ -293,11 +318,12 @@ namespace Readboard.VerificationTests.Host
             {
                 get
                 {
-                    return WebViewWindowLayoutPolicy.ResolveClientSizeFromOuterBounds(Bounds.Size, NonClient);
+                    return WebViewWindowLayoutPolicy.ResolveClientSizeFromOuterBounds(Bounds.Size, NonClientSize);
                 }
             }
 
-            public Size NonClientSize { get { return NonClient; } }
+            // Mini chrome has no sizing frame, as in production.
+            public Size NonClientSize { get { return TopMost ? Size.Empty : NonClient; } }
 
             public Rectangle VirtualScreen { get { return Rectangle.Union(PrimaryWorkingArea, SecondScreen); } }
 
