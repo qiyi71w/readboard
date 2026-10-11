@@ -308,7 +308,7 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .log-tag.sync { color: var(--success-text); border-color: var(--success-border); background: var(--success-background); }
 .log-tag.warn { color: var(--warning-tag-text); border-color: var(--warning-tag-border); background: var(--warning-tag-background); }
 
-.page:not([data-page-panel="controlCenter"]).active { display: grid; align-content: start; gap: 7px; }
+.page:not([data-page-panel="controlCenter"]).active { display: grid; align-content: start; gap: 7px; overflow: auto; }
 .page-heading { margin: 0 4px; padding: 4px 0 2px; }
 .page-heading h1 { margin: 0 0 2px; font-size: 20px; font-weight: 500; }
 .page-heading p, .card p, small { color: var(--secondary-text); }
@@ -335,6 +335,13 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .input-grid span { position: relative; }
 .input-grid span input { width: 100%; padding-right: 50px; }
 .input-grid i { position: absolute; top: 9px; right: 10px; color: var(--secondary-text); font-style: normal; font-weight: 400; }
+#threshold-settings .settings-help { margin: 0; color: var(--primary-text); font-size: 13px; line-height: 1.6; }
+#threshold-settings #thresholds-defaults { margin-top: 4px; color: color-mix(in srgb, var(--primary-text) 72%, var(--surface-background)); font-size: 12px; }
+.threshold-fields { display: grid; grid-template-columns: minmax(0, .75fr) repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: 16px; }
+#threshold-settings .threshold-field-group { grid-template-columns: minmax(0, 1fr); align-content: start; gap: 16px; }
+#threshold-settings .threshold-field-group > label { min-width: 0; gap: 6px; font-weight: 500; white-space: normal; }
+#threshold-settings .field-error { white-space: normal; }
+.threshold-hints { display: grid; gap: 4px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
 .field-error { min-height: 12px; font-size: 11px; color: var(--danger); }
 .page[data-page-panel="settings"] .field-error:empty { display: none; }
 .settings-error { min-height: 18px; padding: 3px 10px; color: var(--danger); overflow-wrap: anywhere; }
@@ -444,8 +451,6 @@ html.dense-x .top-status > span:nth-child(4),
 html.dense-x .top-status > span:nth-child(5) { display: none; }
 html.dense-x .top-actions button span { display: none; }
 html.dense .page { padding: 0 8px 4px; }
-html.dense .page:not([data-page-panel="controlCenter"]).active,
-html.dense-y .page:not([data-page-panel="controlCenter"]).active { overflow: auto; }
 html.dense .context-strip > span { padding: 0 8px; }
 html.dense fieldset { padding: 0 8px 2px; }
 html.dense legend { padding: 0 6px; font-size: 13px; }
@@ -494,6 +499,8 @@ html.dense-x .settings-actions > span { grid-area: status; flex: none; order: 0;
 html.dense-x .settings-actions > button { grid-area: reset; justify-self: start; }
 html.dense-x .settings-actions > div { grid-area: actions; }
 html.dense-x .input-grid { grid-template-columns: 1fr 1fr; }
+html.dense-x .threshold-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+html.dense-x .threshold-field-group:first-child { grid-column: 1 / -1; width: calc((100% - 16px) / 2); }
 html.sidebar-icons .sidebar { padding: 6px 4px; }
 html.sidebar-icons .sidebar h2,
 html.sidebar-icons .nav-item span,

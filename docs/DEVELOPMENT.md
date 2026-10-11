@@ -222,6 +222,12 @@ WebView 通过虚拟主机 `https://app.readboard/index.html` 加载静态资源
 
 Save 的顺序固定为：校验 → overlay 到最新活动配置 → 持久化 → 替换活动配置 → 应用 language/theme/background-analysis effect → 发布。校验或持久化失败时不能执行 effect。Settings Save 不得改变主窗口 client size，也不得重新引入旧 `ApplyMainFormUi` 布局路径。
 
+设置、规则说明和关于页按实际内容溢出自动滚动，不依赖 `dense` / `dense-y` 布局断点。验证窗口从大到小、再从小到大跨越 680 CSS px 高度时，滚轮仍能到达底部操作区；内容完全容纳时不显示多余滚动条。控制中心继续保持独立日志滚动。
+
+识别参数输入项下方显示两条调参提示：识别过多时降低对应颜色偏差或增大占比，识别丢失时反向调整。复用 `SettingsForm_lblTips1` / `SettingsForm_lblTips2`，使用普通帮助文字、不加提示边框；四种语言资源与 `Program.AddDefaultLangItems` 同步维护。
+
+识别参数按灰度、黑棋、白棋分列，黑白各自的颜色偏差与识别百分比保持同组；窄窗口将灰度移到首行，黑白参数仍并排。适用范围、默认值说明、参数输入和调参提示通过字号、行距与留白区分，提示区使用中性分隔线。所有字段继续使用原有 `data-setting` 和就近 `label` 内的校验信息。
+
 ### 窗口、DPI 与原生 surface
 
 主窗口使用 Per-Monitor V2 DPI。改窗口尺寸、chrome、弹层、选框、截图或点击坐标时检查：
