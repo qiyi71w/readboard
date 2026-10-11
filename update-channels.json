@@ -13,9 +13,9 @@
       "id": "main",
       "status": "active",
       "minimumWindowsVersion": "10.0.17763",
-      "latestTag": "v3.1.4",
-      "assetName": "readboard-webview2-v3.1.4.zip",
-      "sha256": "390c2ac13d37014035758f26dfe7888a1be7b51d4ad9706a7822b44bb9172784"
+      "latestTag": "v3.1.5",
+      "assetName": "readboard-webview2-v3.1.5.zip",
+      "sha256": "c32ad72bebb4d49fe57b826d0541d0922eace8635c70e7400cb9a3c7defd4064"
     }
   ]
 }
