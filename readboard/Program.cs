@@ -703,8 +703,8 @@ namespace readboard
             langItems["SettingsForm_lblWhitePercents"] = "白色占比(0-100)";
             langItems["SettingsForm_lblGrayOffsets"] = "灰度偏差(0-255)";
             langItems["SettingsForm_lblTips"] = "注意:所有参数都必须为整数";
-            langItems["SettingsForm_lblTips1"] = "如某种颜色棋子识别过多,可尝试降低偏差或增大占比";
-            langItems["SettingsForm_lblTips2"] = "如某种颜色棋子识别丢失,可尝试增大偏差或降低占比";
+            langItems["SettingsForm_lblTips1"] = "如某种颜色棋子识别过多，可尝试降低偏差或增大占比";
+            langItems["SettingsForm_lblTips2"] = "如某种颜色棋子识别丢失，可尝试增大偏差或降低占比";
             langItems["SettingsForm_lblSyncInterval"] = "同步时间间隔(ms):";
             langItems["SettingsForm_btnReset"] = "恢复默认设置";
             langItems["SettingsForm_btnConfirm"] = "确认";
