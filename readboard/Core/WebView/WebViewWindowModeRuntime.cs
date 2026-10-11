@@ -238,13 +238,14 @@ namespace readboard
             if (adapter.State != WebViewWindowState.Normal)
                 adapter.SetState(WebViewWindowState.Normal);
 
+            // Chrome first: the mini window style has a different non-client frame.
+            adapter.ApplyChrome(true);
             Size miniSize = ResolveMiniOuterSize(adapter.Dpi);
             Point desiredLocation = miniLocation ?? firstLocation;
             Rectangle bounds = WebViewWindowLayoutPolicy.ClampBoundsToWorkingArea(
                 new Rectangle(desiredLocation, miniSize),
                 adapter.GetWorkingArea(desiredLocation),
                 miniSize);
-            adapter.ApplyChrome(true);
             adapter.SetSizeLimits(miniSize, miniSize);
             adapter.SetBounds(bounds);
         }

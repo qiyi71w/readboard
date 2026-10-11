@@ -47,7 +47,6 @@ namespace readboard
         internal const int HtBottom = 15;
         internal const int HtBottomLeft = 16;
         internal const int HtBottomRight = 17;
-        internal const int HtBorder = 18;
 
         protected override CreateParams CreateParams
         {
@@ -61,10 +60,13 @@ namespace readboard
             }
         }
 
+        // Mini Mode drops WS_THICKFRAME as well: WebView2's non-client region support
+        // offers top-edge resize hits whenever the root window is sizable.
         internal static int ResolveWebViewWindowStyle(int style, bool miniMode)
         {
-            int resolved = style | WsThickFrame | WsMinimizeBox | WsMaximizeBox;
-            return miniMode ? resolved & ~WsMaximizeBox : resolved;
+            return miniMode
+                ? (style | WsMinimizeBox) & ~(WsThickFrame | WsMaximizeBox)
+                : style | WsThickFrame | WsMinimizeBox | WsMaximizeBox;
         }
 
         internal enum WebViewRuntimePromptChoice
@@ -1172,6 +1174,8 @@ namespace readboard
             {
                 owner.TopMost = miniMode;
                 owner.MaximizeBox = !miniMode;
+                // CreateParams reads the runtime's mode; reapply the frame style now.
+                owner.UpdateStyles();
             }
         }
 
@@ -1184,14 +1188,9 @@ namespace readboard
                 return;
 
             base.WndProc(ref m);
-            if (m.Msg != WmNcHitTest)
-                return;
-            if (miniMode)
-            {
-                m.Result = (IntPtr)ResolveMiniWindowHitTest(m.Result.ToInt32());
-                return;
-            }
-            if (m.Result != (IntPtr)HtClient)
+            if (m.Msg != WmNcHitTest
+                || miniMode
+                || m.Result != (IntPtr)HtClient)
                 return;
 
             long coordinates = m.LParam.ToInt64();
@@ -1234,12 +1233,6 @@ namespace readboard
                 && point.X < maximizeRight)
                 return HtMaxButton;
             return HtClient;
-        }
-
-        // Mini Mode has a fixed size: native frame edges must not offer resize cursors.
-        internal static int ResolveMiniWindowHitTest(int nativeHit)
-        {
-            return nativeHit >= HtLeft && nativeHit <= HtBottomRight ? HtBorder : nativeHit;
         }
 
         internal static int ResolveResizeHitTest(Point point, Size size, int border)

@@ -831,28 +831,13 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Fact]
-        public void ResolveWebViewWindowStyle_MiniModeDropsMaximizeBoxSoCaptionDoubleClickCannotMaximize()
+        public void ResolveWebViewWindowStyle_MiniModeIsNeitherSizableNorMaximizable()
         {
-            int style = MainForm.ResolveWebViewWindowStyle(MainForm.WsMaximizeBox, true);
+            int style = MainForm.ResolveWebViewWindowStyle(MainForm.WsThickFrame | MainForm.WsMaximizeBox, true);
 
             Assert.Equal(MainForm.WsMinimizeBox, style & MainForm.WsMinimizeBox);
+            Assert.Equal(0, style & MainForm.WsThickFrame);
             Assert.Equal(0, style & MainForm.WsMaximizeBox);
-        }
-
-        [Theory]
-        [InlineData(MainForm.HtLeft)]
-        [InlineData(MainForm.HtTopRight)]
-        [InlineData(MainForm.HtBottom)]
-        [InlineData(MainForm.HtBottomRight)]
-        public void ResolveMiniWindowHitTest_SuppressesNativeResizeEdges(int nativeHit)
-        {
-            Assert.Equal(MainForm.HtBorder, MainForm.ResolveMiniWindowHitTest(nativeHit));
-        }
-
-        [Fact]
-        public void ResolveMiniWindowHitTest_KeepsClientHits()
-        {
-            Assert.Equal(MainForm.HtClient, MainForm.ResolveMiniWindowHitTest(MainForm.HtClient));
         }
 
         [Theory]
