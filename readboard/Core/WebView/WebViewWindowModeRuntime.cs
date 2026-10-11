@@ -13,6 +13,7 @@ namespace readboard
         Size NonClientSize { get; }
         Rectangle VirtualScreen { get; }
         Rectangle GetWorkingArea(Point location);
+        int GetMonitorDpi(Point location);
         void SetState(WebViewWindowState state);
         void SetSizeLimits(Size minimum, Size maximum);
         void SetBounds(Rectangle bounds);
@@ -47,18 +48,22 @@ namespace readboard
     {
         private sealed class FullWindowPlacement
         {
-            public FullWindowPlacement(Rectangle normalBounds, Size logicalClientSize, bool maximized, int dpi)
+            public FullWindowPlacement(Rectangle normalBounds, Size logicalClientSize, bool maximized, int dpi, bool measured)
             {
                 NormalBounds = normalBounds;
                 LogicalClientSize = logicalClientSize;
                 Maximized = maximized;
                 Dpi = dpi;
+                Measured = measured;
             }
 
             public Rectangle NormalBounds { get; private set; }
             public Size LogicalClientSize { get; private set; }
             public bool Maximized { get; private set; }
             public int Dpi { get; private set; }
+            // True when NormalBounds was read from the live window; config-derived bounds
+            // were sized with whatever frame and DPI the window had at startup.
+            public bool Measured { get; private set; }
         }
 
         private static readonly Point UnsetLocation = new Point(-1, -1);
@@ -84,15 +89,17 @@ namespace readboard
             fullPlacement = null;
             MiniMode = false;
             adapter.ApplyChrome(false);
-            int dpi = adapter.Dpi;
+            Point desiredLocation = IsUnset(config.WindowPosX, config.WindowPosY)
+                ? adapter.Bounds.Location
+                : new Point(config.WindowPosX, config.WindowPosY);
+            // The full window belongs to the monitor at its saved location, wherever the
+            // window handle currently is (startup in mini creates it on the mini monitor).
+            int dpi = adapter.GetMonitorDpi(desiredLocation);
             Size fullMinimumSize = ResolveFullMinimumOuterSize(dpi);
             Size desiredSize = ToOuterSize(
                 WebViewWindowLayoutPolicy.ScaleLogicalSize(
                     new Size(config.WindowClientWidth, config.WindowClientHeight),
                     dpi));
-            Point desiredLocation = IsUnset(config.WindowPosX, config.WindowPosY)
-                ? adapter.Bounds.Location
-                : new Point(config.WindowPosX, config.WindowPosY);
             Rectangle workingArea = adapter.GetWorkingArea(desiredLocation);
             Rectangle fullBounds = WebViewWindowLayoutPolicy.ClampBoundsToWorkingArea(
                 new Rectangle(desiredLocation, desiredSize),
@@ -108,7 +115,8 @@ namespace readboard
                     fullBounds,
                     new Size(config.WindowClientWidth, config.WindowClientHeight),
                     config.WindowMaximized,
-                    dpi);
+                    dpi,
+                    false);
                 MiniMode = true;
                 ApplyMiniWindow(fullBounds.Location);
                 return;
@@ -208,17 +216,15 @@ namespace readboard
                 adapter.SetState(WebViewWindowState.Normal);
 
             adapter.ApplyChrome(false);
-            if (full.Dpi != adapter.Dpi)
-            {
-                // Land on the original monitor first so its DPI applies before sizing;
-                // sizing across the DPI boundary would be rescaled by Windows afterwards.
-                adapter.SetSizeLimits(Size.Empty, Size.Empty);
-                adapter.SetBounds(new Rectangle(full.NormalBounds.Location, adapter.Bounds.Size));
-            }
+            // Land at the full-mode location before sizing. When that location is on a
+            // monitor with another DPI, Windows applies its own suggested rectangle on
+            // the crossing, so the final size is only set once the move has settled.
+            adapter.SetSizeLimits(Size.Empty, Size.Empty);
+            adapter.SetBounds(new Rectangle(full.NormalBounds.Location, adapter.Bounds.Size));
 
             int dpi = adapter.Dpi;
             Size fullMinimumSize = ResolveFullMinimumOuterSize(dpi);
-            Rectangle desiredBounds = full.Dpi == dpi
+            Rectangle desiredBounds = full.Measured && full.Dpi == dpi
                 ? full.NormalBounds
                 : new Rectangle(
                     full.NormalBounds.Location,
@@ -271,7 +277,8 @@ namespace readboard
                     Math.Max(AppConfig.MinimumWindowClientWidth, logicalClientSize.Width),
                     Math.Max(AppConfig.MinimumWindowClientHeight, logicalClientSize.Height)),
                 state == WebViewWindowState.Maximized,
-                dpi);
+                dpi,
+                true);
         }
 
         private Rectangle ResolveNormalBounds()

@@ -1153,6 +1153,11 @@ namespace readboard
                 return Screen.FromPoint(location).WorkingArea;
             }
 
+            public int GetMonitorDpi(Point location)
+            {
+                return Math.Max(96, (int)Math.Round(DisplayScaling.GetScaleForPoint(location) * 96));
+            }
+
             public void SetState(WebViewWindowState state)
             {
                 owner.ApplyWebViewWindowState(state);
