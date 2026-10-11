@@ -47,7 +47,7 @@
         <span><span data-i18n="WebView_version">版本：</span> <b id="version">v3.1.0</b></span>
         <span id="preferences-status" class="preference-status" role="status" aria-live="polite" hidden></span>
         <div class="top-actions">
-          <button type="button" data-page="settings"><i class="icon">&#xE713;</i><span data-i18n="MainForm_btnSettings">设置</span></button>
+          <button type="button" data-command="window.enterMiniMode"><i class="icon">&#xE73F;</i><span data-i18n="MiniMode_enter">迷你模式</span></button>
           <button type="button" data-command="rules.openManual"><i class="icon">&#xE897;</i><span data-i18n="MainForm_btnHelp">帮助</span></button>
         </div>
       </div>
@@ -175,6 +175,31 @@
     </main>
 
     <footer><span><i class="dot" id="target-dot"></i><b id="target-status" data-i18n="WebView_waitTarget">等待选择目标窗口</b></span><span><i class="dot" id="board-dot"></i><b id="board-status" data-i18n="WebView_waitBoardRecognition">等待首次棋盘识别</b></span><span><i class="dot" id="placement-dot"></i><b id="placement-status" data-i18n="WebView_placementUnavailable">落子区域暂不可用</b></span></footer>
+  </div>
+
+  <div class="mini-shell" id="mini-shell" hidden>
+    <header class="mini-titlebar">
+      <img src="lizziey.ico" alt="">
+      <div class="mini-status">
+        <span class="mini-sync"><i class="dot" id="mini-sync-dot"></i><b id="mini-sync-status" data-i18n="WebView_hostModeStarted">宿主模式已启动</b></span>
+        <span class="mini-stones"><span data-i18n="WebView_stoneCount">棋子数：</span> <b id="mini-stone-count">0</b></span>
+        <span class="mini-clock" id="mini-last-sync-item"><i class="icon">&#xE823;</i><b id="mini-last-sync">--:--:--</b></span>
+      </div>
+      <div class="mini-lights">
+        <span id="mini-target-light"><i class="dot" id="mini-target-dot"></i><span data-i18n="MiniMode_lightTarget">窗口</span></span>
+        <span id="mini-board-light"><i class="dot" id="mini-board-dot"></i><span data-i18n="MiniMode_lightBoard">识别</span></span>
+        <span id="mini-placement-light"><i class="dot" id="mini-placement-dot"></i><span data-i18n="MiniMode_lightPlacement">落子</span></span>
+      </div>
+      <div class="mini-window-controls" aria-label="窗口控制" data-i18n-aria-label="WebView_windowControls">
+        <button type="button" class="mini-full-mode" data-command="window.exitMiniMode" data-payload='{"page":"controlCenter"}'><i class="icon">&#xE740;</i><span data-i18n="MiniMode_fullMode">完整模式</span></button>
+        <button type="button" class="mini-icon-button" data-command="window.exitMiniMode" data-payload='{"page":"settings"}' aria-label="参数设置" data-i18n-aria-label="MainForm_btnSettings"><i class="icon">&#xE713;</i></button>
+        <button type="button" class="mini-icon-button" data-command="window.exitMiniMode" data-payload='{"page":"rules"}' aria-label="帮助" data-i18n-aria-label="MainForm_btnHelp"><i class="icon">&#xE897;</i></button>
+        <i class="mini-rule" aria-hidden="true"></i>
+        <button type="button" class="mini-icon-button" data-command="window.minimize" aria-label="最小化" data-i18n-aria-label="WebView_minimize"><i class="icon">&#xE921;</i></button>
+        <button type="button" class="mini-icon-button mini-close" data-command="window.close" aria-label="关闭" data-i18n-aria-label="Update_close"><i class="icon">&#xE8BB;</i></button>
+      </div>
+    </header>
+    <div class="mini-body" id="mini-body"></div>
   </div>
 
   <div class="modal-layer" id="modal-layer" hidden>

@@ -161,7 +161,8 @@
     resizeFrame = 0;
     const viewportWidth = Math.max(1, window.innerWidth);
     const viewportHeight = Math.max(1, window.innerHeight);
-    const emergency = viewportWidth < minimumViewport.width || viewportHeight < minimumViewport.height;
+    const emergency = !isMiniMode()
+      && (viewportWidth < minimumViewport.width || viewportHeight < minimumViewport.height);
     const denseX = viewportWidth <= pageDenseMaxWidth;
     const verticalT = resolveVerticalT(viewportHeight);
     const denseY = verticalT > 0;
@@ -212,11 +213,18 @@
   }
 
   function syncCompactControlTitles() {
-    $$(".nav-item, .quick-actions button, .top-actions button").forEach(button => {
+    $$(".nav-item, .quick-actions button, .top-actions button, .mini-full-mode").forEach(button => {
       const label = button.querySelector("span");
       const text = label && label.textContent.trim();
       if (text) button.title = text;
     });
+    $$(".mini-icon-button").forEach(button => {
+      button.title = button.getAttribute("aria-label") || "";
+    });
+  }
+
+  function isMiniMode() {
+    return Boolean(state?.shell?.miniMode);
   }
 
   function scheduleViewportLayout() {
@@ -352,6 +360,32 @@
     setStatus("target", shell.targetStatus || "", shell.targetWindowValid);
     setStatus("board", shell.boardStatus || "", shell.boardRegionRecognized);
     setStatus("placement", shell.placementStatus || "", shell.placementRegionResolved);
+  }
+
+  function renderMode() {
+    const mini = isMiniMode();
+    document.documentElement.classList.toggle("mini-mode", mini);
+    $(".app-shell").hidden = mini;
+    $("#mini-shell").hidden = !mini;
+  }
+
+  function renderMiniShell() {
+    const shell = state.shell || {};
+    dynamicText("mini-sync-status", shell.syncStatus || "");
+    $("#mini-sync-status").classList.toggle("good", Boolean(shell.connected));
+    $("#mini-sync-dot").className = `dot${shell.connected ? " good" : ""}`;
+    text("mini-stone-count", shell.stoneCount ?? 0);
+    const lastSync = shell.lastSync || "--:--:--";
+    text("mini-last-sync", lastSync);
+    $("#mini-last-sync-item").title = `${t("WebView_lastSync", "最后同步：")} ${lastSync}`;
+    setMiniLight("target", shell.targetStatus || "", shell.targetWindowValid);
+    setMiniLight("board", shell.boardStatus || "", shell.boardRegionRecognized);
+    setMiniLight("placement", shell.placementStatus || "", shell.placementRegionResolved);
+  }
+
+  function setMiniLight(prefix, label, value) {
+    $(`#mini-${prefix}-light`).title = label;
+    $(`#mini-${prefix}-dot`).className = `dot${value === true ? " good" : value === false && prefix === "target" ? " bad" : ""}`;
   }
 
   function setStatus(prefix, label, value) {
@@ -664,7 +698,9 @@
     localizeStaticPage();
     applyTheme(state.shell.theme || "system");
     showPage(state.page);
+    renderMode();
     renderShell();
+    renderMiniShell();
     renderControlCenter();
     renderSettings();
     renderPreferenceStatus();

@@ -57,6 +57,9 @@ namespace readboard
         public AutoPlayMoveMode AutoPlayMoveMode { get; set; }
         public string FoxAutoPlayNickname { get; set; }
         public string FoxAutoPlayNicknameSignature { get; set; }
+        public bool MiniMode { get; set; }
+        public int MiniWindowPosX { get; set; }
+        public int MiniWindowPosY { get; set; }
 
         public static AppConfig CreateDefault(string protocolVersion, string machineKey)
         {
@@ -98,7 +101,10 @@ namespace readboard
                 AutoPlayColorMode = AutoPlayColorMode.ManualBlack,
                 AutoPlayMoveMode = AutoPlayMoveMode.FirstCandidate,
                 FoxAutoPlayNickname = string.Empty,
-                FoxAutoPlayNicknameSignature = string.Empty
+                FoxAutoPlayNicknameSignature = string.Empty,
+                MiniMode = false,
+                MiniWindowPosX = -1,
+                MiniWindowPosY = -1
             };
         }
 

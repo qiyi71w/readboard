@@ -92,7 +92,8 @@
   --control-center-group-padding: clamp(2px, calc(2.75vh - 15.7px), 8px);
   font-size: 14px;
 }
-.awaiting-state .app-shell {
+.awaiting-state .app-shell,
+.awaiting-state .mini-shell {
   visibility: hidden;
 }
 
@@ -203,6 +204,30 @@ html.emergency .app-shell {
 .window-controls button { width: var(--title-height); min-height: 0; padding: 0; border: 0; border-radius: 0; -webkit-app-region: no-drag; }
 .window-controls .icon { font-size: 16px; }
 .window-controls button:last-child:hover { color: #fff; background: var(--window-close-hover); }
+
+.app-shell[hidden], .mini-shell[hidden] { display: none; }
+.mini-shell { position: absolute; inset: 0; display: grid; grid-template-rows: 32px minmax(0, 1fr); width: 100%; height: 100%; min-width: 0; min-height: 0; background: var(--surface-background); font-size: 13px; }
+.mini-titlebar { display: flex; min-width: 0; align-items: center; gap: 10px; height: 32px; padding-left: 10px; border-bottom: 1px solid var(--border); white-space: nowrap; -webkit-app-region: drag; }
+.mini-titlebar img { flex: 0 0 auto; width: 16px; height: 16px; }
+.mini-status { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: 8px; overflow: hidden; }
+.mini-status > span { display: inline-flex; flex: 0 1 auto; min-width: 0; align-items: center; overflow: hidden; }
+.mini-status b { overflow: hidden; text-overflow: ellipsis; }
+.mini-sync b { font-weight: 600; }
+.mini-sync b.good { color: var(--success); }
+.mini-status > .mini-stones, .mini-status > .mini-clock { flex-shrink: 0; color: var(--secondary-text); }
+.mini-stones b, .mini-clock b { color: var(--primary-text); font-weight: 500; font-variant-numeric: tabular-nums; }
+.mini-clock { gap: 4px; }
+.mini-clock .icon { font-size: 12px; }
+.mini-titlebar .dot { width: 8px; height: 8px; margin-right: 5px; }
+.mini-lights { display: flex; flex: 0 0 auto; gap: 10px; color: var(--secondary-text); font-size: 12px; }
+.mini-lights > span { display: inline-flex; align-items: center; }
+.mini-window-controls { display: flex; flex: 0 0 auto; height: 100%; }
+.mini-window-controls button { display: inline-flex; align-items: center; gap: 5px; height: 32px; min-height: 0; padding: 0 9px; border: 0; border-radius: 0; background: transparent; font-size: 13px; -webkit-app-region: no-drag; }
+.mini-window-controls .icon { font-size: 14px; }
+.mini-window-controls .mini-icon-button { justify-content: center; width: 36px; padding: 0; }
+.mini-window-controls .mini-close:hover { color: #fff; background: var(--window-close-hover); }
+.mini-rule { align-self: center; width: 1px; height: 16px; margin: 0 2px; background: var(--line); }
+.mini-body { min-width: 0; min-height: 0; overflow: hidden; }
 
 .sidebar { grid-row: 2 / 4; min-height: 0; padding: var(--sidebar-pad-block) var(--sidebar-pad-inline); border-right: 1px solid var(--border); background: var(--sidebar-background); overflow: hidden; }
 .sidebar nav, .quick-actions { display: grid; gap: var(--sidebar-gap); }

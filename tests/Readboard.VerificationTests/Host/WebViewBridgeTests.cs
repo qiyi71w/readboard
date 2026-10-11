@@ -301,8 +301,11 @@ namespace Readboard.VerificationTests.Host
         [InlineData("{\"type\":\"about.checkUpdate\",\"payload\":{}}")]
         [InlineData("{\"type\":\"update.install\",\"payload\":{}}")]
         [InlineData("{\"type\":\"identity.select\",\"payload\":{\"candidateId\":\"candidate-1\"}}")]
-
-
+        [InlineData("{\"type\":\"window.enterMiniMode\",\"payload\":{}}")]
+        [InlineData("{\"type\":\"window.enterMiniMode\"}")]
+        [InlineData("{\"type\":\"window.exitMiniMode\",\"payload\":{\"page\":\"controlCenter\"}}")]
+        [InlineData("{\"type\":\"window.exitMiniMode\",\"payload\":{\"page\":\"settings\"}}")]
+        [InlineData("{\"type\":\"window.exitMiniMode\",\"payload\":{\"page\":\"rules\"}}")]
         public void TryParseWebViewCommand_AcceptsWhitelistedShape(string json)
         {
             Assert.True(MainForm.TryParseWebViewCommand(json, out ReadBoardUiCommand command));
@@ -347,6 +350,12 @@ namespace Readboard.VerificationTests.Host
         [InlineData("{\"type\":\"window.close\",\"extra\":true}")]
         [InlineData("{\"Type\":\"window.close\"}")]
         [InlineData("{\"type\":\"window.close\",\"type\":\"window.close\"}")]
+        [InlineData("{\"type\":\"window.enterMiniMode\",\"payload\":{\"page\":\"controlCenter\"}}")]
+        [InlineData("{\"type\":\"window.exitMiniMode\",\"payload\":{}}")]
+        [InlineData("{\"type\":\"window.exitMiniMode\"}")]
+        [InlineData("{\"type\":\"window.exitMiniMode\",\"payload\":{\"page\":\"about\"}}")]
+        [InlineData("{\"type\":\"window.exitMiniMode\",\"payload\":{\"page\":\"rules\",\"extra\":true}}")]
+        [InlineData("{\"type\":\"window.exitMiniMode\",\"payload\":{\"page\":1}}")]
         public void TryParseWebViewCommand_RejectsUnknownOrMalformedShape(string json)
         {
             Assert.False(MainForm.TryParseWebViewCommand(json, out _));
@@ -814,11 +823,36 @@ namespace Readboard.VerificationTests.Host
         [Fact]
         public void ResolveWebViewWindowStyle_EnablesNativeBorderlessResizeAndWindowCommands()
         {
-            int style = MainForm.ResolveWebViewWindowStyle(0);
+            int style = MainForm.ResolveWebViewWindowStyle(0, false);
 
             Assert.Equal(MainForm.WsThickFrame, style & MainForm.WsThickFrame);
             Assert.Equal(MainForm.WsMinimizeBox, style & MainForm.WsMinimizeBox);
             Assert.Equal(MainForm.WsMaximizeBox, style & MainForm.WsMaximizeBox);
+        }
+
+        [Fact]
+        public void ResolveWebViewWindowStyle_MiniModeDropsMaximizeBoxSoCaptionDoubleClickCannotMaximize()
+        {
+            int style = MainForm.ResolveWebViewWindowStyle(MainForm.WsMaximizeBox, true);
+
+            Assert.Equal(MainForm.WsMinimizeBox, style & MainForm.WsMinimizeBox);
+            Assert.Equal(0, style & MainForm.WsMaximizeBox);
+        }
+
+        [Theory]
+        [InlineData(MainForm.HtLeft)]
+        [InlineData(MainForm.HtTopRight)]
+        [InlineData(MainForm.HtBottom)]
+        [InlineData(MainForm.HtBottomRight)]
+        public void ResolveMiniWindowHitTest_SuppressesNativeResizeEdges(int nativeHit)
+        {
+            Assert.Equal(MainForm.HtBorder, MainForm.ResolveMiniWindowHitTest(nativeHit));
+        }
+
+        [Fact]
+        public void ResolveMiniWindowHitTest_KeepsClientHits()
+        {
+            Assert.Equal(MainForm.HtClient, MainForm.ResolveMiniWindowHitTest(MainForm.HtClient));
         }
 
         [Theory]

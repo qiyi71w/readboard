@@ -343,6 +343,9 @@ namespace readboard
             config.AutoPlayMoveMode = (AutoPlayMoveMode)ReadIntValue(values, "AutoPlayMoveMode", (int)config.AutoPlayMoveMode);
             config.FoxAutoPlayNickname = ReadStringValue(values, "FoxAutoPlayNickname", config.FoxAutoPlayNickname);
             config.FoxAutoPlayNicknameSignature = ReadStringValue(values, "FoxAutoPlayNicknameSignature", config.FoxAutoPlayNicknameSignature);
+            config.MiniMode = ReadBoolValue(values, "MiniMode", config.MiniMode);
+            config.MiniWindowPosX = ReadIntValue(values, "MiniWindowPosX", config.MiniWindowPosX);
+            config.MiniWindowPosY = ReadIntValue(values, "MiniWindowPosY", config.MiniWindowPosY);
         }
 
         private LegacyMainConfigStatus ApplyLegacyMainConfig(AppConfig config)
@@ -378,6 +381,7 @@ namespace readboard
         //   19: + AutoPlayMoveMode @ 18
         //   22: + WindowClientWidth @ 19, WindowClientHeight @ 20, WindowMaximized @ 21
         //   23: + LanguagePreference @ 22
+        //   26: + MiniMode @ 23, MiniWindowPosX @ 24, MiniWindowPosY @ 25
         private bool ApplyLegacyOtherConfig(AppConfig config)
         {
             string[] parts = ReadLegacyParts(LegacyOtherFileName);
@@ -426,6 +430,12 @@ namespace readboard
             }
             if (parts.Length >= 23)
                 config.LanguagePreference = ReadString(parts[22], config.LanguagePreference);
+            if (parts.Length >= 26)
+            {
+                config.MiniMode = ReadBool(parts[23], config.MiniMode);
+                config.MiniWindowPosX = ReadInt(parts[24], config.MiniWindowPosX);
+                config.MiniWindowPosY = ReadInt(parts[25], config.MiniWindowPosY);
+            }
             return true;
         }
 
@@ -487,6 +497,9 @@ namespace readboard
             builder.Append('_').Append(config.WindowClientHeight);
             builder.Append('_').Append(ToLegacyBool(config.WindowMaximized));
             builder.Append('_').Append(config.LanguagePreference);
+            builder.Append('_').Append(ToLegacyBool(config.MiniMode));
+            builder.Append('_').Append(config.MiniWindowPosX);
+            builder.Append('_').Append(config.MiniWindowPosY);
             return builder.ToString();
         }
 
@@ -515,23 +528,27 @@ namespace readboard
             if (config == null)
                 return;
 
-            if (config.WindowPosX == -1 || config.WindowPosY == -1)
-            {
-                config.WindowPosX = -1;
-                config.WindowPosY = -1;
-                return;
-            }
+            Point full = NormalizeWindowPosition(config.WindowPosX, config.WindowPosY);
+            config.WindowPosX = full.X;
+            config.WindowPosY = full.Y;
+            Point mini = NormalizeWindowPosition(config.MiniWindowPosX, config.MiniWindowPosY);
+            config.MiniWindowPosX = mini.X;
+            config.MiniWindowPosY = mini.Y;
+        }
+
+        private static Point NormalizeWindowPosition(int x, int y)
+        {
+            if (x == -1 || y == -1)
+                return new Point(-1, -1);
 
             Rectangle virtualScreen = SystemInformation.VirtualScreen;
-            if (config.WindowPosX <= -16000
-                || config.WindowPosY <= -16000
+            if (x <= -16000
+                || y <= -16000
                 || virtualScreen.Width <= 0
                 || virtualScreen.Height <= 0
-                || !virtualScreen.Contains(config.WindowPosX, config.WindowPosY))
-            {
-                config.WindowPosX = -1;
-                config.WindowPosY = -1;
-            }
+                || !virtualScreen.Contains(x, y))
+                return new Point(-1, -1);
+            return new Point(x, y);
         }
 
         private JsonConfigReadResult RecoverFromInvalidJson(string path)

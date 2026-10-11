@@ -73,7 +73,8 @@ namespace Readboard.VerificationTests.Architecture
                     "boardRegionRecognized",
                     "placementRegionResolved",
                     "maximized",
-                    "maximizeLabel");
+                    "maximizeLabel",
+                    "miniMode");
                 AssertPropertyNames(
                     payload.GetProperty("controlCenter"),
                     "platform",
@@ -542,7 +543,7 @@ namespace Readboard.VerificationTests.Architecture
                 }
 
                 Assert.Equal(12, File.ReadAllText(legacyMainPath).Split('_').Length);
-                Assert.Equal(23, File.ReadAllText(legacyOtherPath).Split('_').Length);
+                Assert.Equal(26, File.ReadAllText(legacyOtherPath).Split('_').Length);
 
                 AppConfig loaded = store.Load().Config;
                 Assert.Equal(SyncMode.Yike, loaded.SyncMode);
@@ -664,6 +665,10 @@ namespace Readboard.VerificationTests.Architecture
         {
             Assert.Equal(new Size(1100, 680), WebViewWindowLayoutPolicy.BaseLogicalClientSize);
             Assert.Equal(new Size(700, 433), WebViewWindowLayoutPolicy.MinimumLogicalClientSize);
+            Assert.Equal(new Size(680, 218), WebViewWindowLayoutPolicy.MiniLogicalClientSize);
+            Assert.Equal(new Size(1020, 327), WebViewWindowLayoutPolicy.ScaleLogicalSize(
+                WebViewWindowLayoutPolicy.MiniLogicalClientSize,
+                144));
             Assert.Equal(1100, AppConfig.DefaultWindowClientWidth);
             Assert.Equal(680, AppConfig.DefaultWindowClientHeight);
             Assert.Equal(700, AppConfig.MinimumWindowClientWidth);

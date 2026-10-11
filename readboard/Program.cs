@@ -409,6 +409,11 @@ namespace readboard
             langItems["WebView_windowControls"] = "窗口控制";
             langItems["WebView_minimize"] = "最小化";
             langItems["WebView_maximize"] = "最大化";
+            langItems["MiniMode_enter"] = "迷你模式";
+            langItems["MiniMode_fullMode"] = "完整模式";
+            langItems["MiniMode_lightTarget"] = "窗口";
+            langItems["MiniMode_lightBoard"] = "识别";
+            langItems["MiniMode_lightPlacement"] = "落子";
             langItems["WebView_mainNavigation"] = "主导航";
             langItems["WebView_rules"] = "规则说明";
             langItems["WebView_about"] = "关于";

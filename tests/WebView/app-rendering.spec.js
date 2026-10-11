@@ -703,4 +703,120 @@ test("clears color radio selection on empty snapshot without lingering checked s
   expect(commands).toHaveLength(1);
 });
 
+function hostedSnapshot(shell) {
+  return {
+    page: "controlCenter",
+    language: "cn",
+    text: {},
+    shell: {
+      version: "v3.1.5",
+      theme: "light",
+      connected: true,
+      syncStatus: "就绪",
+      targetStatus: "目标窗口有效",
+      boardStatus: "等待首次棋盘识别",
+      placementStatus: "落子区域暂不可用",
+      lastSync: "12:34:56",
+      stoneCount: 42,
+      targetWindowValid: true,
+      boardRegionRecognized: false,
+      placementRegionResolved: false,
+      maximized: false,
+      maximizeLabel: "最大化",
+      miniMode: false,
+      ...shell
+    },
+    controlCenter: {},
+    settings: {},
+    update: null,
+    identity: null,
+    dialog: null,
+    logs: []
+  };
+}
+
+async function openHostedShell(page) {
+  await page.addInitScript(() => {
+    window.__readboardPostedMessages = [];
+    Object.defineProperty(window, "chrome", {
+      configurable: true,
+      value: {
+        webview: {
+          addEventListener(type, handler) {
+            if (type === "message") window.__readboardWebViewMessageHandler = handler;
+          },
+          postMessage(message) {
+            window.__readboardPostedMessages.push(message);
+          }
+        }
+      }
+    });
+  });
+  await page.goto(baseUrl + "/index.html");
+}
+
+async function publish(page, snapshot) {
+  await page.evaluate(payload => window.__readboardWebViewMessageHandler({ data: { type: "state", payload } }), snapshot);
+}
+
+test("renders only the mini shell from shell.miniMode without the emergency layout", async ({ page }) => {
+  await page.setViewportSize({ width: 680, height: 218 });
+  await openHostedShell(page);
+
+  await publish(page, hostedSnapshot({ miniMode: true }));
+
+  await expect(page.locator("#mini-shell")).toBeVisible();
+  await expect(page.locator(".app-shell")).toBeHidden();
+  await expect(page.locator("#mini-sync-status")).toHaveText("就绪");
+  await expect(page.locator("#mini-stone-count")).toHaveText("42");
+  await expect(page.locator("#mini-last-sync")).toHaveText("12:34:56");
+  await expect(page.locator("#mini-target-light")).toHaveAttribute("title", "目标窗口有效");
+  await expect(page.locator("#mini-target-dot")).toHaveClass(/good/);
+  await expect(page.locator("#mini-board-light")).toHaveAttribute("title", "等待首次棋盘识别");
+  const layout = await page.evaluate(() => ({
+    metrics: window.readboardPreview.getLayoutMetrics(),
+    scrollWidth: document.documentElement.scrollWidth,
+    scrollHeight: document.documentElement.scrollHeight,
+    titlebarHeight: document.querySelector(".mini-titlebar").getBoundingClientRect().height
+  }));
+  expect(layout.metrics.emergency).toBe(false);
+  expect(layout.scrollWidth).toBeLessThanOrEqual(680);
+  expect(layout.scrollHeight).toBeLessThanOrEqual(218);
+  expect(layout.titlebarHeight).toBe(32);
+
+  await page.setViewportSize({ width: 1100, height: 680 });
+  await publish(page, hostedSnapshot({ miniMode: false }));
+
+  await expect(page.locator(".app-shell")).toBeVisible();
+  await expect(page.locator("#mini-shell")).toBeHidden();
+  const topActions = page.locator(".top-actions button");
+  await expect(topActions.first()).toHaveAttribute("data-command", "window.enterMiniMode");
+  await expect(topActions.first().locator("span")).toHaveText("迷你模式");
+  await expect(page.locator('.top-actions [data-page="settings"]')).toHaveCount(0);
+  await expect(page.locator('.sidebar .nav-item[data-page="settings"]')).toHaveCount(1);
+});
+
+test("mini title bar and full-mode entry send window mode commands with exact payloads", async ({ page }) => {
+  await page.setViewportSize({ width: 680, height: 218 });
+  await openHostedShell(page);
+  await publish(page, hostedSnapshot({ miniMode: true }));
+
+  await page.locator(".mini-full-mode").click();
+  await page.locator('.mini-icon-button[data-payload*="settings"]').click();
+  await page.locator('.mini-icon-button[data-payload*="rules"]').click();
+  await page.locator('#mini-shell [data-command="window.minimize"]').click();
+
+  await page.setViewportSize({ width: 1100, height: 680 });
+  await publish(page, hostedSnapshot({ miniMode: false }));
+  await page.locator('.top-actions [data-command="window.enterMiniMode"]').click();
+
+  const posted = await page.evaluate(() => window.__readboardPostedMessages);
+  expect(posted).toEqual([
+    { type: "window.exitMiniMode", payload: { page: "controlCenter" } },
+    { type: "window.exitMiniMode", payload: { page: "settings" } },
+    { type: "window.exitMiniMode", payload: { page: "rules" } },
+    { type: "window.minimize", payload: {} },
+    { type: "window.enterMiniMode", payload: {} }
+  ]);
+});
 
