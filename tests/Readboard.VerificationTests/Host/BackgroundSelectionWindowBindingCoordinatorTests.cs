@@ -30,7 +30,7 @@ namespace Readboard.VerificationTests.Host
                     resolvedAfterRestore = restored;
                     return new IntPtr(4242);
                 },
-                delegate(IntPtr handle)
+                delegate(IntPtr handle, int requestId)
                 {
                     appliedHandle = handle;
                     applied.TrySetResult(true);
@@ -77,7 +77,7 @@ namespace Readboard.VerificationTests.Host
             coordinator.Start(
                 firstCenter,
                 ResolveHandle,
-                delegate(IntPtr handle)
+                delegate(IntPtr handle, int requestId)
                 {
                     appliedHandle = handle;
                     appliedCount++;
@@ -94,7 +94,7 @@ namespace Readboard.VerificationTests.Host
             coordinator.Start(
                 secondCenter,
                 ResolveHandle,
-                delegate(IntPtr handle)
+                delegate(IntPtr handle, int requestId)
                 {
                     appliedHandle = handle;
                     appliedCount++;
@@ -129,6 +129,38 @@ namespace Readboard.VerificationTests.Host
             {
                 return point.X == 200 ? new IntPtr(2200) : new IntPtr(1100);
             }
+        }
+
+        [Fact]
+        public void InvalidatedResolutionCannotPublishOldTargetOrSelection()
+        {
+            BackgroundSelectionWindowBindingCoordinator coordinator =
+                new BackgroundSelectionWindowBindingCoordinator(_ => Task.CompletedTask);
+            BackgroundSelectionBinding binding = null;
+            WindowDescriptor window = new WindowDescriptor
+            {
+                Handle = new IntPtr(42),
+                ClientBounds = new PixelRect(100, 120, 400, 400),
+                DpiScale = 1d
+            };
+            coordinator.Start(new Point(200, 200), point =>
+            {
+                coordinator.Invalidate();
+                return window.Handle;
+            }, (handle, requestId) =>
+            {
+                binding = BackgroundSelectionBinding.TryCreate(window, new PixelRect(150, 170, 200, 200), requestId);
+            }, () => { }, ex => throw ex);
+            Assert.Null(binding);
+
+            coordinator.Start(new Point(200, 200), point => window.Handle,
+                (handle, requestId) => binding = BackgroundSelectionBinding.TryCreate(
+                    window, new PixelRect(150, 170, 200, 200), requestId), () => { }, ex => throw ex);
+            window.ClientBounds.X = -300;
+            PixelRect projected;
+            Assert.True(binding.TryProject(window, out projected));
+            Assert.Equal(-250, projected.X);
+            Assert.Equal(170, projected.Y);
         }
 
         private static TaskCompletionSource<bool> CreateSignal()

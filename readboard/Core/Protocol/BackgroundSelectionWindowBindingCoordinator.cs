@@ -16,10 +16,15 @@ namespace readboard
             this.delayAsync = delayAsync ?? Task.Delay;
         }
 
+        internal void Invalidate()
+        {
+            Interlocked.Increment(ref latestRequestId);
+        }
+
         internal void Start(
             Point selectionCenter,
             Func<Point, IntPtr> resolveWindowHandle,
-            Action<IntPtr> applyHandle,
+            Action<IntPtr, int> applyHandle,
             Action restoreMainWindow,
             Action<Exception> reportError)
         {
@@ -40,7 +45,7 @@ namespace readboard
             int requestId,
             Point selectionCenter,
             Func<Point, IntPtr> resolveWindowHandle,
-            Action<IntPtr> applyHandle,
+            Action<IntPtr, int> applyHandle,
             Action restoreMainWindow,
             Action<Exception> reportError)
         {
@@ -54,7 +59,7 @@ namespace readboard
                 if (!IsLatest(requestId))
                     return;
 
-                applyHandle(handle);
+                applyHandle(handle, requestId);
                 restoreMainWindow();
             }
             catch (Exception ex)

@@ -764,6 +764,8 @@ namespace readboard
             IntPtr handle = ResolveSelectedWindowHandle(snapshot);
             if (handle == IntPtr.Zero || !runtime.WindowDescriptorFactory.TryCreate(handle, out descriptor))
             {
+                if (snapshot.SyncMode == SyncMode.Background)
+                    snapshot.BackgroundSelection?.Invalidate();
                 if (showMessages)
                     runtime.Host.ShowMissingSyncSourceMessage();
                 return false;
@@ -771,7 +773,13 @@ namespace readboard
 
             if (snapshot.SyncMode != SyncMode.Background)
                 return true;
-            return EnsureSelectionBounds(snapshot, showMessages, runtime.Host);
+            PixelRect projectedSelection;
+            if (snapshot.BackgroundSelection != null
+                && snapshot.BackgroundSelection.TryProject(descriptor, out projectedSelection))
+                return true;
+            if (showMessages)
+                runtime.Host.ShowMissingSyncSourceMessage();
+            return false;
         }
 
         private static bool EnsureSelectionBounds(
@@ -1059,17 +1067,14 @@ namespace readboard
                 Window = descriptor,
                 SyncMode = snapshot.SyncMode,
                 BoardSize = new BoardDimensions(snapshot.BoardWidth, snapshot.BoardHeight),
-                SelectionBounds = ShouldAttachSelectionBounds(snapshot.SyncMode) ? snapshot.SelectionBounds : null,
+                SelectionBounds = snapshot.SyncMode == SyncMode.Foreground ? snapshot.SelectionBounds : null,
+                BackgroundSelection = snapshot.SyncMode == SyncMode.Background ? snapshot.BackgroundSelection : null,
                 PreferPrintWindow = runtimeState.PreferPrintWindow,
                 UseEnhancedCapture = snapshot.UseEnhancedCapture && runtimeState.PreferPrintWindow,
                 IsInitialProbe = runtimeState.InitialProbePending && runtimeState.PreferPrintWindow
             };
         }
 
-        private static bool ShouldAttachSelectionBounds(SyncMode syncMode)
-        {
-            return syncMode == SyncMode.Background || syncMode == SyncMode.Foreground;
-        }
 
         private static BoardFrame NormalizeCapturedFrame(BoardFrame frame, SyncCoordinatorHostSnapshot snapshot)
         {
@@ -1443,6 +1448,7 @@ namespace readboard
                 ProcessName = window.ProcessName,
                 Title = window.Title,
                 Bounds = CloneRect(window.Bounds),
+                ClientBounds = CloneRect(window.ClientBounds),
                 IsDpiAware = window.IsDpiAware,
                 DpiScale = window.DpiScale,
                 IsJavaWindow = window.IsJavaWindow

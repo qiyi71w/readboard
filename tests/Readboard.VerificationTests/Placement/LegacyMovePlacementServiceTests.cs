@@ -73,7 +73,7 @@ namespace Readboard.VerificationTests.Placement
             Assert.True(result.Success);
             Assert.Equal(PlacementPathKind.BackgroundPost, result.PlacementPath);
             Assert.Equal(2, nativeMethods.PostedMessages.Count);
-            int expectedLParam = BuildMouseLParam(34, 54);
+            int expectedLParam = BuildMouseLParam(23, 36);
             Assert.All(nativeMethods.PostedMessages, message => Assert.Equal(expectedLParam, message.LParam));
         }
 
@@ -99,6 +99,7 @@ namespace Readboard.VerificationTests.Placement
                     {
                         Handle = new IntPtr(2002),
                         Bounds = new PixelRect(300, 200, 100, 100),
+                        ClientBounds = new PixelRect(300, 200, 100, 100),
                         IsDpiAware = true,
                         DpiScale = 1d
                     }
@@ -350,6 +351,7 @@ namespace Readboard.VerificationTests.Placement
                 {
                     Handle = new IntPtr(2002),
                     Bounds = new PixelRect(300, 200, 100, 100),
+                    ClientBounds = new PixelRect(300, 200, 100, 100),
                     IsDpiAware = false,
                     DpiScale = 1.5d
                 }
