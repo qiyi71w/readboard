@@ -254,7 +254,7 @@ html.emergency .app-shell {
 .mini-body input[type="radio"], .mini-body input[type="checkbox"] { flex: 0 0 auto; margin: 0; accent-color: var(--accent); }
 .mini-body input[type="checkbox"]:disabled { accent-color: var(--disabled-selected-indicator); }
 .mini-body [data-i18n]:not(option), #mini-quick-label, #mini-continuous-label, #mini-analysis-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mini-board-size { flex: 0 0 auto; width: 96px; }
+.mini-board-size { flex: 0 0 auto; width: 104px; }
 .mini-dims { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; color: var(--secondary-text); }
 .mini-dims b { font-weight: 400; }
 .mini-dims input { width: 44px; text-align: center; }
