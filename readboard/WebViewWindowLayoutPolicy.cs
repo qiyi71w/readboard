@@ -7,6 +7,7 @@ namespace readboard
     {
         internal static readonly Size BaseLogicalClientSize = new Size(1100, 680);
         internal static readonly Size MinimumLogicalClientSize = new Size(700, 433);
+        internal static readonly Size MiniLogicalClientSize = new Size(680, 218);
         internal const int SidebarComfortLogicalWidth = 230;
         internal const int SidebarWideLogicalWidth = 264;
         internal const int SidebarIconLogicalWidth = 48;
@@ -80,6 +81,13 @@ namespace readboard
             return new Size(
                 (int)Math.Round(physicalSize.Width / scale),
                 (int)Math.Round(physicalSize.Height / scale));
+        }
+
+        internal static Size ResolveClientSizeFromOuterBounds(Size outerSize, Size nonClientSize)
+        {
+            return new Size(
+                Math.Max(0, outerSize.Width - nonClientSize.Width),
+                Math.Max(0, outerSize.Height - nonClientSize.Height));
         }
 
         internal static Rectangle ClampBoundsToWorkingArea(

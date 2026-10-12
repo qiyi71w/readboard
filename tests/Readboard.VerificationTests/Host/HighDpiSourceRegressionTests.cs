@@ -68,7 +68,7 @@ namespace Readboard.VerificationTests.Host
                 clientSize.Width + nonClientSize.Width,
                 clientSize.Height + nonClientSize.Height);
 
-            Size restoredClientSize = MainForm.ResolveClientSizeFromOuterBounds(outerSize, nonClientSize);
+            Size restoredClientSize = WebViewWindowLayoutPolicy.ResolveClientSizeFromOuterBounds(outerSize, nonClientSize);
 
             Assert.Equal(clientSize, restoredClientSize);
         }

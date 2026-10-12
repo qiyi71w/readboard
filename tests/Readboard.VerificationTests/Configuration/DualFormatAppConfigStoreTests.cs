@@ -148,7 +148,7 @@ namespace Readboard.VerificationTests
                     "\"MachineKey\": \"SECONDARY-HOST\"",
                     File.ReadAllText(workspace.PathFor("config.readboard.json")));
                 Assert.Equal(12, File.ReadAllText(workspace.PathFor("config_readboard.txt")).Split('_').Length);
-                Assert.Equal(23, File.ReadAllText(workspace.PathFor("config_readboard_others.txt")).Split('_').Length);
+                Assert.Equal(26, File.ReadAllText(workspace.PathFor("config_readboard_others.txt")).Split('_').Length);
             }
         }
 
@@ -238,7 +238,7 @@ namespace Readboard.VerificationTests
                         doc.RootElement.GetProperty("MoveVerifyMaxAttempts").GetInt32());
                 }
                 Assert.Equal("96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5", legacyMain);
-                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc_1_1100_680_0_host", legacyOther);
+                Assert.Equal("220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc_1_1100_680_0_host_0_-1_-1", legacyOther);
                 AssertNoTransactionArtifacts(workspace.RootPath);
             }
         }
@@ -345,7 +345,7 @@ namespace Readboard.VerificationTests
                 Assert.Equal(1234, loaded.WindowClientWidth);
                 Assert.Equal(777, loaded.WindowClientHeight);
                 Assert.True(loaded.WindowMaximized);
-                Assert.EndsWith("_1234_777_1_host", File.ReadAllText(workspace.PathFor("config_readboard_others.txt")));
+                Assert.EndsWith("_1234_777_1_host_0_-1_-1", File.ReadAllText(workspace.PathFor("config_readboard_others.txt")));
             }
         }
 
@@ -367,7 +367,7 @@ namespace Readboard.VerificationTests
                     Assert.Equal("jp", doc.RootElement.GetProperty("LanguagePreference").GetString());
                 }
                 Assert.Equal("jp", loaded.LanguagePreference);
-                Assert.EndsWith("_jp", File.ReadAllText(workspace.PathFor("config_readboard_others.txt")));
+                Assert.EndsWith("_jp_0_-1_-1", File.ReadAllText(workspace.PathFor("config_readboard_others.txt")));
             }
         }
 
@@ -394,6 +394,85 @@ namespace Readboard.VerificationTests
                 AppConfig loaded = store.Load().Config;
 
                 Assert.Equal(expectedLanguage, loaded.LanguagePreference);
+            }
+        }
+
+        [Fact]
+        public void Save_RoundTripsMiniModeAndMiniPositionAcrossJsonAndLegacyMirror()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, SaveMachineKey, ProtocolVersion);
+                AppConfig config = AppConfig.CreateDefault(ProtocolVersion, SaveMachineKey);
+                config.WindowPosX = 320;
+                config.WindowPosY = 180;
+                config.WindowClientWidth = 1234;
+                config.WindowClientHeight = 777;
+                config.MiniMode = true;
+                config.MiniWindowPosX = 40;
+                config.MiniWindowPosY = 30;
+
+                store.Save(config);
+                string jsonPath = workspace.PathFor("config.readboard.json");
+                using (JsonDocument doc = JsonDocument.Parse(File.ReadAllText(jsonPath)))
+                {
+                    Assert.True(doc.RootElement.GetProperty("MiniMode").GetBoolean());
+                    Assert.Equal(40, doc.RootElement.GetProperty("MiniWindowPosX").GetInt32());
+                    Assert.Equal(30, doc.RootElement.GetProperty("MiniWindowPosY").GetInt32());
+                }
+                Assert.EndsWith("_1234_777_0_host_1_40_30", File.ReadAllText(workspace.PathFor("config_readboard_others.txt")));
+
+                AppConfig fromJson = store.Load().Config;
+                File.Delete(jsonPath);
+                AppConfig fromLegacy = store.Load().Config;
+
+                foreach (AppConfig loaded in new[] { fromJson, fromLegacy })
+                {
+                    Assert.True(loaded.MiniMode);
+                    Assert.Equal(40, loaded.MiniWindowPosX);
+                    Assert.Equal(30, loaded.MiniWindowPosY);
+                    Assert.Equal(320, loaded.WindowPosX);
+                    Assert.Equal(180, loaded.WindowPosY);
+                    Assert.Equal(1234, loaded.WindowClientWidth);
+                    Assert.Equal(777, loaded.WindowClientHeight);
+                }
+            }
+        }
+
+        [Fact]
+        public void Load_ConfigWithoutMiniFieldsStartsInFullModeWithUnsetMiniPosition()
+        {
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config.readboard.json"),
+                    "{\"ProtocolVersion\":\"" + ProtocolVersion + "\",\"MachineKey\":\"" + SaveMachineKey + "\",\"WindowClientWidth\":1234}");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, SaveMachineKey, ProtocolVersion);
+
+                AppConfig fromJson = store.Load().Config;
+
+                Assert.False(fromJson.MiniMode);
+                Assert.Equal(-1, fromJson.MiniWindowPosX);
+                Assert.Equal(-1, fromJson.MiniWindowPosY);
+                Assert.Equal(1234, fromJson.WindowClientWidth);
+            }
+
+            using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
+            {
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard.txt"),
+                    "96_33_96_33_1_1_1_0_1_1_SECONDARY-HOST_5");
+                File.WriteAllText(
+                    workspace.PathFor("config_readboard_others.txt"),
+                    "220430_9_9_-1_-1_200_1_50_-1_-1_1_0_1_7_1_2_野狐高段9D_sig-abc_1_1100_680_0_jp");
+                DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, SaveMachineKey, ProtocolVersion);
+
+                AppConfig fromLegacy = store.Load().Config;
+
+                Assert.False(fromLegacy.MiniMode);
+                Assert.Equal(-1, fromLegacy.MiniWindowPosX);
+                Assert.Equal(-1, fromLegacy.MiniWindowPosY);
+                Assert.Equal("jp", fromLegacy.LanguagePreference);
             }
         }
 
@@ -792,7 +871,7 @@ namespace Readboard.VerificationTests
                     Assert.True(doc.RootElement.GetProperty("DebugDiagnosticsEnabled").GetBoolean());
                 }
                 Assert.True(loaded.DebugDiagnosticsEnabled);
-                Assert.Equal(23, legacyOther.Split('_').Length);
+                Assert.Equal(26, legacyOther.Split('_').Length);
             }
         }
 

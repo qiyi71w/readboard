@@ -47,7 +47,7 @@
         <span><span data-i18n="WebView_version">版本：</span> <b id="version">v3.1.0</b></span>
         <span id="preferences-status" class="preference-status" role="status" aria-live="polite" hidden></span>
         <div class="top-actions">
-          <button type="button" data-page="settings"><i class="icon">&#xE713;</i><span data-i18n="MainForm_btnSettings">设置</span></button>
+          <button type="button" data-command="window.enterMiniMode"><i class="icon">&#xE73F;</i><span data-i18n="MiniMode_enter">迷你模式</span></button>
           <button type="button" data-command="rules.openManual"><i class="icon">&#xE897;</i><span data-i18n="MainForm_btnHelp">帮助</span></button>
         </div>
       </div>
@@ -175,6 +175,100 @@
     </main>
 
     <footer><span><i class="dot" id="target-dot"></i><b id="target-status" data-i18n="WebView_waitTarget">等待选择目标窗口</b></span><span><i class="dot" id="board-dot"></i><b id="board-status" data-i18n="WebView_waitBoardRecognition">等待首次棋盘识别</b></span><span><i class="dot" id="placement-dot"></i><b id="placement-status" data-i18n="WebView_placementUnavailable">落子区域暂不可用</b></span></footer>
+  </div>
+
+  <div class="mini-shell" id="mini-shell" hidden>
+    <header class="mini-titlebar">
+      <img src="lizziey.ico" alt="">
+      <div class="mini-status">
+        <span class="mini-sync"><i class="dot" id="mini-sync-dot"></i><b id="mini-sync-status" data-i18n="WebView_hostModeStarted">宿主模式已启动</b></span>
+        <span class="mini-stones"><span data-i18n="WebView_stoneCount">棋子数：</span> <b id="mini-stone-count">0</b></span>
+        <span class="mini-clock" id="mini-last-sync-item"><i class="icon">&#xE823;</i><b id="mini-last-sync">--:--:--</b></span>
+      </div>
+      <span class="mini-preference-status" id="mini-preferences-status" role="status" aria-live="polite" hidden><i class="icon" aria-hidden="true">&#xE7BA;</i><span id="mini-preferences-text"></span></span>
+      <div class="mini-lights">
+        <span id="mini-target-light"><i class="dot" id="mini-target-dot"></i><span data-i18n="MiniMode_lightTarget">窗口</span></span>
+        <span id="mini-board-light"><i class="dot" id="mini-board-dot"></i><span data-i18n="MiniMode_lightBoard">识别</span></span>
+        <span id="mini-placement-light"><i class="dot" id="mini-placement-dot"></i><span data-i18n="MiniMode_lightPlacement">落子</span></span>
+      </div>
+      <div class="mini-window-controls" aria-label="窗口控制" data-i18n-aria-label="WebView_windowControls">
+        <button type="button" class="mini-full-mode" data-command="window.exitMiniMode" data-payload='{"page":"controlCenter"}'><i class="icon">&#xE740;</i><span data-i18n="MiniMode_fullMode">完整模式</span></button>
+        <button type="button" class="mini-icon-button" data-command="window.exitMiniMode" data-payload='{"page":"settings"}' aria-label="参数设置" data-i18n-aria-label="MainForm_btnSettings"><i class="icon">&#xE713;</i></button>
+        <button type="button" class="mini-icon-button" data-command="window.exitMiniMode" data-payload='{"page":"rules"}' aria-label="帮助" data-i18n-aria-label="MainForm_btnHelp"><i class="icon">&#xE897;</i></button>
+        <i class="mini-rule" aria-hidden="true"></i>
+        <button type="button" class="mini-icon-button" data-command="window.minimize" aria-label="最小化" data-i18n-aria-label="WebView_minimize"><i class="icon">&#xE921;</i></button>
+        <button type="button" class="mini-icon-button mini-close" data-command="window.close" aria-label="关闭" data-i18n-aria-label="Update_close"><i class="icon">&#xE8BB;</i></button>
+      </div>
+    </header>
+    <div class="mini-body" id="mini-body">
+      <div class="mini-form">
+        <span class="mini-label" data-i18n="MiniMode_platform">平台</span>
+        <div class="mini-control">
+          <select id="mini-platform" class="mini-grow" data-control="platform" aria-label="平台类型" data-i18n-aria-label="MainForm_groupPlatform" title="平台类型" data-i18n-title="MainForm_groupPlatform">
+            <option value="fox" data-i18n="MainForm_rdoFox">野狐</option>
+            <option value="foxBackground" data-i18n="MainForm_rdoFoxBack">野狐(后台)</option>
+            <option value="yike" data-i18n="MainForm_rdoYike">弈客</option>
+            <option value="yicheng" data-i18n="MainForm_rdoTygem">弈城</option>
+            <option value="sina" data-i18n="MainForm_rdoSina">新浪</option>
+            <option value="otherBackground" data-i18n="MainForm_rdoBack">其他(后台)</option>
+            <option value="otherForeground" data-i18n="MainForm_rdoFore">其他(前台)</option>
+          </select>
+        </div>
+        <span class="mini-label mini-label-right" data-i18n="MiniMode_board">棋盘</span>
+        <div class="mini-control">
+          <select id="mini-board-size" class="mini-board-size" data-control="boardSize" aria-label="棋盘规格" data-i18n-aria-label="MainForm_groupBoard" title="棋盘规格" data-i18n-title="MainForm_groupBoard">
+            <option value="19">19×19</option>
+            <option value="13">13×13</option>
+            <option value="9">9×9</option>
+            <option value="custom" data-i18n="MainForm_rdoCustomBoard">自定义</option>
+          </select>
+          <span class="mini-dims"><input id="mini-board-width" type="number" min="2" max="25" data-control="board-width" aria-label="棋盘宽度" data-i18n-aria-label="WebView_boardWidth"><b>×</b><input id="mini-board-height" type="number" min="2" max="25" data-control="board-height" aria-label="棋盘高度" data-i18n-aria-label="WebView_boardHeight"></span>
+        </div>
+
+        <span class="mini-label" data-i18n="MiniMode_boardSelect">选盘</span>
+        <div class="mini-control mini-board-select">
+          <button type="button" data-command="board.select" data-board-mode="inside" data-payload='{"mode":"inside"}' title="选择棋盘(点击棋盘内部)" data-i18n-title="MainForm_btnClickBoard"><span data-i18n="MainForm_btnClickBoard">选择棋盘(点击棋盘内部)</span></button>
+          <button type="button" data-command="board.select" data-board-mode="rectangle" data-payload='{"mode":"rectangle"}' title="框选棋盘" data-i18n-title="MainForm_btnCircleBoard" hidden><span data-i18n="MiniMode_circleBoard">框选棋盘</span></button>
+          <button type="button" data-command="board.select" data-board-mode="line1" data-payload='{"mode":"line1"}' title="框选1路线" data-i18n-title="MainForm_btnCircleRow1" hidden><span data-i18n="MiniMode_circleRow1">框选1路线</span></button>
+        </div>
+        <div class="mini-control mini-span-right"><label><input id="mini-show-on-board" type="checkbox" data-control="show-on-board"><span data-i18n="MainForm_chkShowInBoard">原棋盘上显示选点</span></label></div>
+
+        <i class="mini-divider" aria-hidden="true"></i>
+
+        <span class="mini-label" data-i18n="MiniMode_sync">同步</span>
+        <div class="mini-control mini-checks">
+          <label><input id="mini-two-way" type="checkbox" data-control="two-way"><span data-i18n="MainForm_chkBothSync">双向同步</span></label>
+          <label><input id="mini-auto-play" type="checkbox" data-control="auto-play"><span data-i18n="MainForm_chkAutoPlay">自动落子</span></label>
+        </div>
+        <span class="mini-label mini-label-right" data-i18n="MiniMode_color" title="执子颜色" data-i18n-title="WebView_stoneColor">执子</span>
+        <div class="mini-control">
+          <div class="mini-segments mini-grow" role="radiogroup" aria-label="执子颜色" data-i18n-aria-label="WebView_stoneColor"><label><input type="radio" name="mini-color" value="black" data-control="color"><span data-i18n="MainForm_radioBlack">执黑</span></label><label><input type="radio" name="mini-color" value="white" data-control="color"><span data-i18n="MainForm_radioWhite">执白</span></label><label><input type="radio" name="mini-color" value="auto" data-control="color"><span data-i18n="MainForm_radioAutoPlayColor">自动</span></label></div>
+          <button type="button" class="mini-identity" data-command="identity.open"><span data-i18n="MainForm_btnFoxAutoPlayIdentity">身份</span></button>
+        </div>
+
+        <span class="mini-label" data-i18n="WebView_moveMode">落子方式</span>
+        <div class="mini-control">
+          <div class="mini-segments mini-grow" role="radiogroup" aria-label="落子方式" data-i18n-aria-label="WebView_moveMode"><label><input type="radio" name="mini-placement" value="direct" data-control="placement"><span data-i18n="MainForm_radioAutoPlayMoveFirst">一选落子</span></label><label><input type="radio" name="mini-placement" value="engine" data-control="placement"><span data-i18n="MainForm_radioAutoPlayMoveGma">引擎决策落子</span></label></div>
+        </div>
+        <span class="mini-label mini-label-right" data-i18n="MiniMode_engine">引擎</span>
+        <div class="mini-control mini-engine">
+          <label title="每手用时" data-i18n-title="MainForm_lblTime"><span data-i18n="MiniMode_aiTime">用时</span><input id="mini-ai-time" type="number" min="1" data-control="ai-time"><span class="mini-unit" data-i18n="WebView_seconds">秒</span></label>
+          <label title="最大计算量(选填)" data-i18n-title="MainForm_lblTotalVisits"><span data-i18n="MiniMode_totalVisits">总计算</span><input id="mini-playouts" class="mini-wide-number" type="number" min="0" data-control="playouts" placeholder="选填" data-i18n-placeholder="MiniMode_optional"></label>
+          <label title="首选计算量(选填)" data-i18n-title="MainForm_lblBestMoveVisits"><span data-i18n="MiniMode_bestVisits">首选</span><input id="mini-first-policy" class="mini-wide-number" type="number" min="0" data-control="first-policy" placeholder="选填" data-i18n-placeholder="MiniMode_optional"></label>
+        </div>
+      </div>
+
+      <div class="mini-actions">
+        <button type="button" class="primary mini-text-action" data-command="sync.quick"><i class="icon">&#xE945;</i><span id="mini-quick-label" data-i18n="WebView_quickSync">快速同步</span></button>
+        <button type="button" class="mini-text-action" data-command="sync.continuous"><i class="mini-live" aria-hidden="true"></i><span id="mini-continuous-label" data-i18n="WebView_continuousSync">持续同步</span></button>
+        <button type="button" class="mini-text-action" data-command="sync.once" title="单次同步" data-i18n-title="MainForm_btnOneTimeSync"><span data-i18n="MainForm_btnOneTimeSync">单次同步</span></button>
+        <button type="button" class="mini-text-action" data-command="sync.toggleAnalysis"><span id="mini-analysis-label" data-i18n="WebView_pauseAnalysis">暂停分析</span></button>
+        <span class="mini-spacer"></span>
+        <button type="button" class="mini-icon-action" data-command="sync.swapOrder" aria-label="交换顺序" data-i18n-aria-label="MainForm_btnExchange"><i class="icon">&#xE8AB;</i></button>
+        <button type="button" class="mini-icon-action" data-command="sync.rebuild" aria-label="强制重建" data-i18n-aria-label="MainForm_btnForceRebuild"><i class="icon">&#xE90F;</i></button>
+        <button type="button" class="mini-icon-action danger" data-command="sync.clearBoard" aria-label="清空棋盘" data-i18n-aria-label="MainForm_btnClearBoard"><i class="icon">&#xE74D;</i></button>
+      </div>
+    </div>
   </div>
 
   <div class="modal-layer" id="modal-layer" hidden>

@@ -36,6 +36,7 @@ namespace readboard
         public bool PlacementRegionResolved { get; set; }
         public bool Maximized { get; set; }
         public string MaximizeLabel { get; set; }
+        public bool MiniMode { get; set; }
     }
 
     internal sealed class ReadBoardControlCenterState

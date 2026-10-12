@@ -32,6 +32,8 @@ namespace readboard
         private bool hostCommunicationEstablished;
 
         private const int WmNcHitTest = 0x0084;
+        private const int WmSysCommand = 0x0112;
+        private const int ScMaximize = 0xF030;
         internal const int WsThickFrame = 0x00040000;
         internal const int WsMinimizeBox = 0x00020000;
         internal const int WsMaximizeBox = 0x00010000;
@@ -51,14 +53,20 @@ namespace readboard
             get
             {
                 CreateParams parameters = base.CreateParams;
-                parameters.Style = ResolveWebViewWindowStyle(parameters.Style);
+                parameters.Style = ResolveWebViewWindowStyle(
+                    parameters.Style,
+                    webViewWindowModeRuntime != null && webViewWindowModeRuntime.MiniMode);
                 return parameters;
             }
         }
 
-        internal static int ResolveWebViewWindowStyle(int style)
+        // Mini Mode drops WS_THICKFRAME as well: WebView2's non-client region support
+        // offers top-edge resize hits whenever the root window is sizable.
+        internal static int ResolveWebViewWindowStyle(int style, bool miniMode)
         {
-            return style | WsThickFrame | WsMinimizeBox | WsMaximizeBox;
+            return miniMode
+                ? (style | WsMinimizeBox) & ~(WsThickFrame | WsMaximizeBox)
+                : style | WsThickFrame | WsMinimizeBox | WsMaximizeBox;
         }
 
         internal enum WebViewRuntimePromptChoice
@@ -213,8 +221,6 @@ namespace readboard
         private void InitializeWebViewShell()
         {
             FormBorderStyle = FormBorderStyle.None;
-            MaximizeBox = true;
-            TopMost = false;
             ApplySavedWebViewWindowBounds();
 
             webView = new WebView2
@@ -230,42 +236,12 @@ namespace readboard
 
         private void ApplySavedWebViewWindowBounds()
         {
-            AppConfig config = Program.CurrentContext.Config;
-            int dpi = Math.Max(96, DeviceDpi);
-            Size minimumClientSize = WebViewWindowLayoutPolicy.ScaleLogicalSize(
-                WebViewWindowLayoutPolicy.MinimumLogicalClientSize,
-                dpi);
-            Size desiredClientSize = WebViewWindowLayoutPolicy.ScaleLogicalSize(
-                new Size(config.WindowClientWidth, config.WindowClientHeight),
-                dpi);
-            Size minimumSize = SizeFromClientSize(minimumClientSize);
-            Size desiredSize = SizeFromClientSize(desiredClientSize);
-            Point desiredLocation = config.WindowPosX == -1 || config.WindowPosY == -1
-                ? Location
-                : new Point(config.WindowPosX, config.WindowPosY);
-            Rectangle workingArea = Screen.FromPoint(desiredLocation).WorkingArea;
-            Rectangle desiredBounds = new Rectangle(desiredLocation, desiredSize);
-            Bounds = WebViewWindowLayoutPolicy.ClampBoundsToWorkingArea(
-                desiredBounds,
-                workingArea,
-                minimumSize);
-            MinimumSize = new Size(
-                Math.Min(minimumSize.Width, workingArea.Width),
-                Math.Min(minimumSize.Height, workingArea.Height));
-            if (config.WindowMaximized)
-                WindowState = FormWindowState.Maximized;
+            webViewWindowModeRuntime.Initialize(Program.CurrentContext.Config);
         }
 
         private void UpdateWebViewMinimumSizeForCurrentDpi()
         {
-            Size minimumClientSize = WebViewWindowLayoutPolicy.ScaleLogicalSize(
-                WebViewWindowLayoutPolicy.MinimumLogicalClientSize,
-                DeviceDpi);
-            Size minimumSize = SizeFromClientSize(minimumClientSize);
-            Rectangle workingArea = Screen.FromControl(this).WorkingArea;
-            MinimumSize = new Size(
-                Math.Min(minimumSize.Width, workingArea.Width),
-                Math.Min(minimumSize.Height, workingArea.Height));
+            webViewWindowModeRuntime.RefreshForDpi();
         }
 
         private async void InitializeWebViewAsync(object sender, EventArgs e)
@@ -420,7 +396,17 @@ namespace readboard
         {
             WebViewWindowIntent windowIntent;
             if (WebViewWindowCommandRuntime.TryCreateIntent(command, out windowIntent))
+            {
+                if (windowIntent == WebViewWindowIntent.ToggleMaximize && webViewWindowModeRuntime.MiniMode)
+                    return false;
                 return webViewWindowCommandRuntime.Apply(windowIntent);
+            }
+
+            WebViewWindowModeIntent modeIntent;
+            if (TryCreateWebViewWindowModeIntent(command, out modeIntent))
+                return webViewWindowModeRuntime.Apply(
+                    modeIntent,
+                    delegate(WebViewPage page) { NavigateWebViewPage(page); });
 
             switch (command.Type)
             {
@@ -595,6 +581,35 @@ namespace readboard
             return true;
         }
 
+        internal static bool TryCreateWebViewWindowModeIntent(
+            ReadBoardUiCommand command,
+            out WebViewWindowModeIntent intent)
+        {
+            intent = null;
+            if (command == null)
+                return false;
+
+            switch (command.Type)
+            {
+                case "window.enterMiniMode":
+                    if (!HasEmptyPayload(command.Payload))
+                        return false;
+                    intent = WebViewWindowModeIntent.EnterMini();
+                    return true;
+                case "window.exitMiniMode":
+                {
+                    if (!HasSingleAllowedString(command.Payload, "page", "controlCenter", "settings", "rules"))
+                        return false;
+                    WebViewPage page;
+                    WebViewPageNames.TryParse(command.Payload.GetProperty("page").GetString(), out page);
+                    intent = WebViewWindowModeIntent.ExitMini(page);
+                    return true;
+                }
+                default:
+                    return false;
+            }
+        }
+
         private static bool IsValidWebViewCommand(ReadBoardUiCommand command)
         {
             if (command == null || string.IsNullOrWhiteSpace(command.Type))
@@ -622,6 +637,12 @@ namespace readboard
                 {
                     WebViewNavigationIntent navigationIntent;
                     return TryCreateWebViewNavigationIntent(command, out navigationIntent);
+                }
+                case "window.enterMiniMode":
+                case "window.exitMiniMode":
+                {
+                    WebViewWindowModeIntent modeIntent;
+                    return TryCreateWebViewWindowModeIntent(command, out modeIntent);
                 }
                 case "board.select":
                     return HasSingleAllowedString(command.Payload, "mode", "inside", "rectangle", "line1");
@@ -1094,10 +1115,86 @@ namespace readboard
             }
         }
 
+        private sealed class MainFormWebViewWindowModeAdapter : IWebViewWindowModeAdapter
+        {
+            private readonly MainForm owner;
+
+            public MainFormWebViewWindowModeAdapter(MainForm owner)
+            {
+                this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            }
+
+            public int Dpi { get { return Math.Max(96, owner.DeviceDpi); } }
+
+            public WebViewWindowState State
+            {
+                get
+                {
+                    if (owner.WindowState == FormWindowState.Maximized)
+                        return WebViewWindowState.Maximized;
+                    if (owner.WindowState == FormWindowState.Minimized)
+                        return WebViewWindowState.Minimized;
+                    return WebViewWindowState.Normal;
+                }
+            }
+
+            public Rectangle Bounds { get { return owner.Bounds; } }
+
+            public Rectangle RestoreBounds { get { return owner.RestoreBounds; } }
+
+            public Size ClientSize { get { return owner.ClientSize; } }
+
+            public Size NonClientSize { get { return owner.SizeFromClientSize(Size.Empty); } }
+
+            public Rectangle VirtualScreen { get { return SystemInformation.VirtualScreen; } }
+
+            public Rectangle GetWorkingArea(Point location)
+            {
+                return Screen.FromPoint(location).WorkingArea;
+            }
+
+            public int GetMonitorDpi(Point location)
+            {
+                return Math.Max(96, (int)Math.Round(DisplayScaling.GetScaleForPoint(location) * 96));
+            }
+
+            public void SetState(WebViewWindowState state)
+            {
+                owner.ApplyWebViewWindowState(state);
+            }
+
+            public void SetSizeLimits(Size minimum, Size maximum)
+            {
+                owner.MaximumSize = Size.Empty;
+                owner.MinimumSize = minimum;
+                owner.MaximumSize = maximum;
+            }
+
+            public void SetBounds(Rectangle bounds)
+            {
+                owner.Bounds = bounds;
+            }
+
+            public void ApplyChrome(bool miniMode)
+            {
+                owner.TopMost = miniMode;
+                owner.MaximizeBox = !miniMode;
+                // CreateParams reads the runtime's mode; reapply the frame style now.
+                owner.UpdateStyles();
+            }
+        }
+
         protected override void WndProc(ref Message m)
         {
+            bool miniMode = webViewWindowModeRuntime != null && webViewWindowModeRuntime.MiniMode;
+            if (miniMode
+                && m.Msg == WmSysCommand
+                && (m.WParam.ToInt64() & 0xFFF0) == ScMaximize)
+                return;
+
             base.WndProc(ref m);
             if (m.Msg != WmNcHitTest
+                || miniMode
                 || m.Result != (IntPtr)HtClient)
                 return;
 
@@ -1212,7 +1309,8 @@ namespace readboard
                     PlacementRegionResolved = controlCenter.PlacementRegionResolved,
                     Maximized = WindowState == FormWindowState.Maximized,
                     MaximizeLabel = ResolveWebViewMessage(
-                        WindowState == FormWindowState.Maximized ? "WebView_restore" : "WebView_maximize")
+                        WindowState == FormWindowState.Maximized ? "WebView_restore" : "WebView_maximize"),
+                    MiniMode = webViewWindowModeRuntime.MiniMode
                 },
                 ControlCenter = BuildControlCenterState(targetWindowValid == true),
                 Settings = GetWebViewSettingsState(),

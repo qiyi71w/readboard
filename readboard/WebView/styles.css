@@ -92,7 +92,8 @@
   --control-center-group-padding: clamp(2px, calc(2.75vh - 15.7px), 8px);
   font-size: 14px;
 }
-.awaiting-state .app-shell {
+.awaiting-state .app-shell,
+.awaiting-state .mini-shell {
   visibility: hidden;
 }
 
@@ -203,6 +204,84 @@ html.emergency .app-shell {
 .window-controls button { width: var(--title-height); min-height: 0; padding: 0; border: 0; border-radius: 0; -webkit-app-region: no-drag; }
 .window-controls .icon { font-size: 16px; }
 .window-controls button:last-child:hover { color: #fff; background: var(--window-close-hover); }
+
+.app-shell[hidden], .mini-shell[hidden] { display: none; }
+.mini-shell { position: absolute; inset: 0; display: grid; grid-template-rows: 32px minmax(0, 1fr); width: 100%; height: 100%; min-width: 0; min-height: 0; background: var(--surface-background); font-size: 13px; }
+.mini-titlebar { display: flex; min-width: 0; align-items: center; gap: 10px; height: 32px; padding-left: 10px; border-bottom: 1px solid var(--border); white-space: nowrap; -webkit-app-region: drag; }
+.mini-titlebar img { flex: 0 0 auto; width: 16px; height: 16px; }
+.mini-status { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: 8px; overflow: hidden; }
+.mini-status > span { display: inline-flex; flex: 0 1 auto; min-width: 0; align-items: center; overflow: hidden; }
+.mini-status b { overflow: hidden; text-overflow: ellipsis; }
+.mini-sync b { font-weight: 600; }
+.mini-sync b.good { color: var(--success); }
+.mini-status > .mini-stones, .mini-status > .mini-clock { flex-shrink: 0; color: var(--secondary-text); }
+.mini-stones b, .mini-clock b { color: var(--primary-text); font-weight: 500; font-variant-numeric: tabular-nums; }
+.mini-clock { gap: 4px; }
+.mini-clock .icon { font-size: 12px; }
+.mini-titlebar .dot { width: 8px; height: 8px; margin-right: 5px; }
+.mini-lights { display: flex; flex: 0 0 auto; gap: 10px; color: var(--secondary-text); font-size: 12px; }
+.mini-lights > span { display: inline-flex; align-items: center; }
+.mini-window-controls { display: flex; flex: 0 0 auto; height: 100%; }
+.mini-window-controls button { display: inline-flex; align-items: center; gap: 5px; height: 32px; min-height: 0; padding: 0 9px; border: 0; border-radius: 0; background: transparent; font-size: 13px; -webkit-app-region: no-drag; }
+.mini-window-controls .icon { font-size: 14px; }
+.mini-window-controls .mini-icon-button { justify-content: center; width: 36px; padding: 0; }
+.mini-window-controls .mini-close:hover { color: #fff; background: var(--window-close-hover); }
+.mini-rule { align-self: center; width: 1px; height: 16px; margin: 0 2px; background: var(--line); }
+.mini-preference-status { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border: 1px solid var(--success-border); border-radius: 10px; color: var(--success-text); background: var(--success-background); font-size: 12px; font-weight: 500; }
+.mini-preference-status[hidden] { display: none; }
+.mini-preference-status .icon { display: none; font-size: 12px; }
+.mini-preference-status.not-saved { border-color: var(--warning-border); color: var(--warning-text); background: var(--warning-background); }
+.mini-preference-status.not-saved .icon { display: inline-block; color: var(--warning); }
+
+.mini-body { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; overflow: hidden; }
+.mini-form { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1.2fr); grid-template-rows: 30px 30px 9px 30px 30px; align-items: center; min-width: 0; padding: 6px 12px; }
+.mini-label { padding-right: 8px; color: var(--secondary-text); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.mini-label-right, .mini-span-right { display: flex; align-self: stretch; align-items: center; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--line); }
+.mini-span-right { grid-column: 3 / 5; }
+.mini-control { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.mini-grow { flex: 1 1 auto; min-width: 0; }
+.mini-divider { grid-column: 1 / -1; height: 1px; background: var(--line); }
+.mini-body .icon { font-size: 14px; }
+.mini-body button { height: 26px; min-height: 26px; padding: 0 9px; border-radius: 5px; font-size: 13px; }
+.mini-body select, .mini-body input[type="number"] { height: 26px; border: 1px solid var(--border); border-radius: 5px; background: var(--input-background); }
+.mini-body select { padding: 0 4px; }
+.mini-body input[type="number"] { padding: 0 6px; font-variant-numeric: tabular-nums; appearance: textfield; }
+/* WebView2 on Windows reserves ~15px for the spin buttons even when invisible; the mini inputs cannot spare it. */
+.mini-body input[type="number"]::-webkit-inner-spin-button, .mini-body input[type="number"]::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
+.mini-body select:disabled, .mini-body input[type="number"]:disabled { color: var(--disabled-text); border-color: var(--disabled-border); background: var(--disabled-background); cursor: default; }
+.mini-body label { display: inline-flex; min-width: 0; align-items: center; gap: 4px; white-space: nowrap; }
+.mini-body label:has(input:disabled) { color: var(--disabled-text); cursor: default; }
+.mini-body input[type="radio"], .mini-body input[type="checkbox"] { flex: 0 0 auto; margin: 0; accent-color: var(--accent); }
+.mini-body input[type="checkbox"]:disabled { accent-color: var(--disabled-selected-indicator); }
+.mini-body [data-i18n]:not(option), #mini-quick-label, #mini-continuous-label, #mini-analysis-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-board-size { flex: 0 0 auto; width: 104px; }
+.mini-dims { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; color: var(--secondary-text); }
+.mini-dims b { font-weight: 400; }
+.mini-dims input { width: 44px; text-align: center; }
+.mini-board-select button { display: inline-flex; flex: 1 1 auto; min-width: 0; align-items: center; justify-content: center; gap: 4px; padding: 0 4px; }
+.mini-board-select button[hidden] { display: none; }
+.mini-checks { gap: 16px; }
+.mini-segments { display: flex; height: 26px; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.mini-segments label { flex: 1 1 0; justify-content: center; padding: 0 6px; border-right: 1px solid var(--border); cursor: pointer; }
+.mini-segments label:last-child { border-right: 0; }
+.mini-segments label:has(input:checked) { color: var(--accent); background: var(--choice-background); font-weight: 600; }
+.mini-segments label:has(input:checked:disabled) { color: var(--disabled-text); background: var(--disabled-selected-background); font-weight: 400; }
+.mini-segments:has(input:disabled) { border-color: var(--disabled-border); background: var(--disabled-background); }
+.mini-segments label:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.mini-segments input { position: absolute; opacity: 0; pointer-events: none; }
+.mini-identity { flex: 0 0 auto; }
+.mini-engine { gap: 6px; }
+.mini-engine input { flex: 0 0 auto; width: 42px; }
+.mini-engine .mini-wide-number { width: 48px; }
+.mini-unit { flex: 0 0 auto; color: var(--secondary-text); }
+.mini-actions { display: flex; min-width: 0; align-items: center; gap: 5px; padding: 8px 12px; border-top: 1px solid var(--border); background: var(--sidebar-background); }
+.mini-actions .mini-text-action { display: inline-flex; flex: 0 1 auto; min-width: 88px; align-items: center; justify-content: center; gap: 5px; padding: 0 6px; }
+.mini-actions .primary { min-width: 104px; }
+.mini-actions .running:not(.primary) { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.mini-live { display: none; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+.mini-actions .running .mini-live { display: inline-block; }
+.mini-spacer { flex: 1 1 auto; }
+.mini-actions .mini-icon-action { display: inline-flex; flex: 0 0 auto; width: 32px; padding: 0; align-items: center; justify-content: center; }
 
 .sidebar { grid-row: 2 / 4; min-height: 0; padding: var(--sidebar-pad-block) var(--sidebar-pad-inline); border-right: 1px solid var(--border); background: var(--sidebar-background); overflow: hidden; }
 .sidebar nav, .quick-actions { display: grid; gap: var(--sidebar-gap); }
@@ -434,6 +513,29 @@ html.emergency .modal-layer { min-width: 700px; min-height: 433px; }
 .empty-state p { margin: 0; color: var(--secondary-text); }
 .dialog-copy h3 { margin-top: 0; }
 .dialog-copy p { line-height: 1.7; }
+
+/* Mini mode: dialogs replace the panel below the 32px title bar; the window keeps its fixed size and only the body scrolls. */
+html.mini-mode .modal-layer { top: 32px; height: auto; place-items: stretch; background: var(--surface-background); }
+html.mini-mode .modal { width: 100%; height: 100%; max-height: none; grid-template-rows: 30px minmax(0, 1fr) 42px; border: 0; border-radius: 0; box-shadow: none; font-size: 13px; }
+html.mini-mode .modal > header { padding: 0 6px 0 12px; }
+html.mini-mode .modal h2 { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+html.mini-mode .modal > header button { flex: 0 0 auto; width: 30px; min-width: 30px; height: 30px; min-height: 30px; }
+html.mini-mode .modal > header .icon { font-size: 14px; }
+html.mini-mode .modal .modal-body { min-height: 0; padding: 8px 12px; overflow: auto; }
+html.mini-mode .modal-actions { gap: 6px; padding: 0 12px; }
+html.mini-mode .modal-actions button { height: 28px; min-height: 28px; padding: 0 12px; }
+html.mini-mode .modal .dialog-copy h3 { margin: 0 0 4px; font-size: 14px; }
+html.mini-mode .modal .dialog-copy p { margin: 0 0 6px; line-height: 1.5; }
+html.mini-mode .modal .dialog-copy p:last-child { margin-bottom: 0; }
+html.mini-mode .modal-message { min-height: 0; }
+html.mini-mode .modal.identity .modal-body { grid-template-rows: none; align-content: start; gap: 6px; padding: 6px 12px; overflow: auto; }
+html.mini-mode .identity-list-label { display: none; }
+html.mini-mode .candidate-list { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: none; overflow: visible; }
+html.mini-mode .candidate { min-height: 30px; padding: 3px 10px; }
+html.mini-mode .saved-pill { padding: 1px 8px; }
+html.mini-mode .empty-state { min-height: 0; padding: 8px 12px; }
+html.mini-mode .empty-state .icon { font-size: 20px; }
+html.mini-mode .empty-state h3 { margin: 4px 0 2px; font-size: 14px; }
 
 #log-list, .candidate-list, .modal-body {
   scrollbar-width: thin;

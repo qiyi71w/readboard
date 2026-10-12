@@ -68,6 +68,7 @@ namespace readboard
         private bool hostedUpdatePackageV2Supported = false;
         private readonly WebViewStatePublisher webViewStatePublisher;
         private readonly WebViewWindowCommandRuntime webViewWindowCommandRuntime;
+        private readonly WebViewWindowModeRuntime webViewWindowModeRuntime;
         private readonly WebViewUpdateCheckJourney webViewUpdateCheckJourney;
         private readonly MainFormShutdownCoordinator shutdownCoordinator;
         private readonly YikeContextRuntime yikeContextRuntime;
@@ -893,6 +894,8 @@ namespace readboard
             this.webViewStatePublisher = new WebViewStatePublisher(PostWebViewStateCore);
             this.webViewWindowCommandRuntime = new WebViewWindowCommandRuntime(
                 new MainFormWebViewWindowAdapter(this));
+            this.webViewWindowModeRuntime = new WebViewWindowModeRuntime(
+                new MainFormWebViewWindowModeAdapter(this));
             this.webViewUpdateCheckJourney = new WebViewUpdateCheckJourney(
                 OnWebViewUpdateCheckObservation);
             this.shutdownCoordinator = new MainFormShutdownCoordinator(

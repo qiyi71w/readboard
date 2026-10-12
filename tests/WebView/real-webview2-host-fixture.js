@@ -992,9 +992,14 @@ class RealWebView2HostFixture {
     );
   }
 
+  // Mini Mode repeats Control Center commands inside #mini-shell; these host tests drive the full shell and its dialogs.
+  fullModeCommand(type) {
+    return this.page.locator(`[data-command="${type}"]:not(#mini-shell [data-command])`);
+  }
+
   async closeFromShell() {
     const startIndex = this.host.transcript.length;
-    await this.page.locator('[data-command="window.close"]').click();
+    await this.fullModeCommand("window.close").click();
     await this.host.waitForOrderedLines(SHUTDOWN_LINES, startIndex);
     const exitResult = await this.process.waitForExit();
     if (exitResult.code !== 0) {
