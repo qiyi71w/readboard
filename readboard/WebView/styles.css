@@ -236,7 +236,7 @@ html.emergency .app-shell {
 .mini-body { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; overflow: hidden; }
 .mini-form { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1.25fr); grid-template-rows: 30px 30px 9px 30px 30px; align-items: center; min-width: 0; padding: 6px 12px; }
 .mini-label { padding-right: 8px; color: var(--secondary-text); font-size: 12px; font-weight: 500; white-space: nowrap; }
-.mini-label-right, .mini-span-right { display: flex; align-self: stretch; align-items: center; margin-left: 14px; padding-left: 14px; border-left: 1px solid var(--line); }
+.mini-label-right, .mini-span-right { display: flex; align-self: stretch; align-items: center; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--line); }
 .mini-span-right { grid-column: 3 / 5; }
 .mini-control { display: flex; min-width: 0; align-items: center; gap: 6px; }
 .mini-grow { flex: 1 1 auto; min-width: 0; }
@@ -258,7 +258,7 @@ html.emergency .app-shell {
 .mini-dims { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; color: var(--secondary-text); }
 .mini-dims b { font-weight: 400; }
 .mini-dims input { width: 44px; text-align: center; }
-.mini-board-select button { display: inline-flex; flex: 1 1 auto; min-width: 0; align-items: center; justify-content: center; gap: 4px; padding: 0 6px; }
+.mini-board-select button { display: inline-flex; flex: 1 1 auto; min-width: 0; align-items: center; justify-content: center; gap: 4px; padding: 0 4px; }
 .mini-board-select button[hidden] { display: none; }
 .mini-checks { gap: 16px; }
 .mini-segments { display: flex; height: 26px; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
