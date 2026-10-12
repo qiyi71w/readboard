@@ -820,3 +820,328 @@ test("mini title bar and full-mode entry send window mode commands with exact pa
   ]);
 });
 
+function languageText(language) {
+  const file = path.resolve(__dirname, `../../readboard/language_${language}.txt`);
+  const text = {};
+  for (const line of fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "").split(/\r?\n/)) {
+    const separator = line.indexOf("=");
+    if (separator > 0) text[line.slice(0, separator)] = line.slice(separator + 1);
+  }
+  return text;
+}
+
+function miniControlCenter(overrides = {}) {
+  return {
+    platform: "fox",
+    boardSize: "19",
+    boardWidth: 19,
+    boardHeight: 19,
+    twoWaySync: true,
+    autoPlay: true,
+    color: "auto",
+    placement: "direct",
+    aiTime: 2,
+    playouts: "",
+    firstPolicy: "",
+    showOnBoard: false,
+    configurationEnabled: true,
+    customBoardSizeEnabled: false,
+    customBoardDimensionsEnabled: false,
+    twoWaySyncEnabled: true,
+    autoPlayToggleEnabled: true,
+    colorEnabled: true,
+    autoColorEnabled: true,
+    placementEnabled: true,
+    aiTimeEnabled: true,
+    playoutsEnabled: true,
+    firstPolicyEnabled: true,
+    identityEnabled: true,
+    showOnBoardEnabled: true,
+    boardSelectionInsideEnabled: true,
+    boardSelectionRectangleEnabled: false,
+    boardSelectionLine1Enabled: false,
+    quickSyncEnabled: true,
+    continuousSyncEnabled: true,
+    oneTimeSyncEnabled: true,
+    analysisToggleEnabled: true,
+    swapOrderEnabled: true,
+    forceRebuildEnabled: true,
+    clearBoardEnabled: true,
+    quickSyncActive: false,
+    continuousSyncActive: false,
+    analysisRunning: false,
+    quickSyncLabel: "快速同步",
+    continuousSyncLabel: "持续同步 (200ms)",
+    analysisLabel: "继续分析",
+    preferencesSaved: true,
+    preferencesStatus: "偏好已保存",
+    persistenceError: null,
+    ...overrides
+  };
+}
+
+function miniSnapshot(controlOverrides = {}, extra = {}) {
+  return { ...hostedSnapshot({ miniMode: true }), controlCenter: miniControlCenter(controlOverrides), ...extra };
+}
+
+test("mini panel values and availability follow snapshot enablement", async ({ page }) => {
+  await page.setViewportSize({ width: 680, height: 218 });
+  await openHostedShell(page);
+  const mini = selector => page.locator(`#mini-body ${selector}`);
+  const color = value => mini(`input[name="mini-color"][value="${value}"]`);
+  const placement = value => mini(`input[name="mini-placement"][value="${value}"]`);
+
+  await publish(page, miniSnapshot({
+    platform: "yike", boardSize: "13", twoWaySync: false, autoPlay: false, color: "black", placement: "engine",
+    aiTime: 3, playouts: "800", showOnBoard: true,
+    autoPlayToggleEnabled: false, colorEnabled: false, autoColorEnabled: false, placementEnabled: false,
+    aiTimeEnabled: false, playoutsEnabled: false, firstPolicyEnabled: false, identityEnabled: false, showOnBoardEnabled: false
+  }));
+  await expect(mini("#mini-platform")).toHaveValue("yike");
+  await expect(mini("#mini-platform")).toBeEnabled();
+  await expect(mini("#mini-board-size")).toHaveValue("13");
+  await expect(mini('#mini-board-size option[value="custom"]')).toBeDisabled();
+  await expect(mini("#mini-board-width")).toBeDisabled();
+  await expect(mini("#mini-board-width")).toHaveValue("19");
+  await expect(mini("#mini-two-way")).not.toBeChecked();
+  await expect(mini("#mini-auto-play")).toBeDisabled();
+  await expect(color("black")).toBeChecked();
+  for (const value of ["black", "white", "auto"]) await expect(color(value)).toBeDisabled();
+  await expect(placement("engine")).toBeChecked();
+  for (const value of ["direct", "engine"]) await expect(placement(value)).toBeDisabled();
+  await expect(mini("#mini-ai-time")).toHaveValue("3");
+  for (const id of ["ai-time", "playouts", "first-policy"]) await expect(mini(`#mini-${id}`)).toBeDisabled();
+  await expect(mini("#mini-playouts")).toHaveValue("800");
+  await expect(mini('[data-command="identity.open"]')).toBeDisabled();
+  await expect(mini("#mini-show-on-board")).toBeChecked();
+  await expect(mini("#mini-show-on-board")).toBeDisabled();
+
+  await publish(page, miniSnapshot({
+    platform: "yike", placement: "engine", color: "white",
+    autoColorEnabled: false, firstPolicyEnabled: false, identityEnabled: false
+  }));
+  await expect(mini("#mini-auto-play")).toBeEnabled();
+  await expect(mini("#mini-auto-play")).toBeChecked();
+  await expect(color("black")).toBeEnabled();
+  await expect(color("white")).toBeChecked();
+  await expect(color("auto")).toBeDisabled();
+  await expect(mini('[data-command="identity.open"]')).toBeDisabled();
+  for (const value of ["direct", "engine"]) await expect(placement(value)).toBeEnabled();
+  await expect(mini("#mini-ai-time")).toBeEnabled();
+  await expect(mini("#mini-playouts")).toBeEnabled();
+  await expect(mini("#mini-first-policy")).toBeDisabled();
+
+  await publish(page, miniSnapshot({ configurationEnabled: false }));
+  await expect(color("auto")).toBeEnabled();
+  await expect(color("auto")).toBeChecked();
+  await expect(mini('[data-command="identity.open"]')).toBeEnabled();
+  await expect(mini("#mini-first-policy")).toBeEnabled();
+  await expect(mini("#mini-platform")).toBeDisabled();
+  await expect(mini("#mini-board-size")).toBeDisabled();
+
+  const inside = mini('[data-board-mode="inside"]');
+  const manual = [mini('[data-board-mode="rectangle"]'), mini('[data-board-mode="line1"]')];
+  await expect(inside).toBeVisible();
+  await expect(inside).toBeEnabled();
+  for (const button of manual) await expect(button).toBeHidden();
+
+  const manualPlatform = {
+    platform: "otherForeground", boardSize: "custom", boardWidth: 21, boardHeight: 17,
+    customBoardSizeEnabled: true, customBoardDimensionsEnabled: true, identityEnabled: false, autoColorEnabled: false,
+    boardSelectionInsideEnabled: false, boardSelectionRectangleEnabled: true, boardSelectionLine1Enabled: true
+  };
+  await publish(page, miniSnapshot(manualPlatform));
+  await expect(mini("#mini-board-size")).toHaveValue("custom");
+  await expect(mini('#mini-board-size option[value="custom"]')).toBeEnabled();
+  await expect(mini("#mini-board-width")).toBeEnabled();
+  await expect(mini("#mini-board-width")).toHaveValue("21");
+  await expect(mini("#mini-board-height")).toHaveValue("17");
+  await expect(inside).toBeHidden();
+  for (const button of manual) {
+    await expect(button).toBeVisible();
+    await expect(button).toBeEnabled();
+  }
+
+  await publish(page, miniSnapshot({
+    ...manualPlatform, continuousSyncActive: true,
+    boardSelectionRectangleEnabled: false, boardSelectionLine1Enabled: false
+  }));
+  await expect(inside).toBeHidden();
+  for (const button of manual) {
+    await expect(button).toBeVisible();
+    await expect(button).toBeDisabled();
+  }
+
+  await publish(page, miniSnapshot({ platform: "sina" }));
+  await expect(inside).toBeVisible();
+  for (const button of manual) await expect(button).toBeHidden();
+});
+
+test("mini controls post the same commands and payloads as full mode", async ({ page }) => {
+  await openHostedShell(page);
+  const control = { autoPlay: false, customBoardSizeEnabled: true, customBoardDimensionsEnabled: true };
+  const run = async (miniMode, steps) => {
+    await page.setViewportSize(miniMode ? { width: 680, height: 218 } : { width: 1100, height: 680 });
+    await publish(page, { ...miniSnapshot(control), shell: hostedSnapshot({ miniMode }).shell });
+    await page.evaluate(() => { window.__readboardPostedMessages.length = 0; });
+    await steps(selector => page.locator(`${miniMode ? "#mini-shell" : ".app-shell"} ${selector}`));
+    return page.evaluate(() => structuredClone(window.__readboardPostedMessages));
+  };
+  const fill = (locator, value) => locator.fill(value);
+  const buttons = ['[data-board-mode="inside"]', '[data-command="identity.open"]', '[data-command="sync.quick"]',
+    '[data-command="sync.continuous"]', '[data-command="sync.once"]', '[data-command="sync.toggleAnalysis"]',
+    '[data-command="sync.swapOrder"]', '[data-command="sync.rebuild"]', '[data-command="sync.clearBoard"]'];
+
+  const full = await run(false, async $ => {
+    await $('input[name="platform"][value="yike"]').check();
+    await $('input[name="boardSize"][value="custom"]').check();
+    await fill($("#board-width"), "13");
+    await fill($("#board-height"), "11");
+    await $("#two-way").uncheck();
+    await $("#auto-play").check();
+    await $('label:has(input[name="color"][value="white"])').click();
+    await $('label:has(input[name="placement"][value="engine"])').click();
+    await fill($("#ai-time"), "5");
+    await fill($("#playouts"), "100");
+    await fill($("#first-policy"), "50");
+    await $("#show-on-board").check();
+    for (const button of buttons) await $(button).click();
+  });
+  const mini = await run(true, async $ => {
+    await $("#mini-platform").selectOption("yike");
+    await $("#mini-board-size").selectOption("custom");
+    await fill($("#mini-board-width"), "13");
+    await fill($("#mini-board-height"), "11");
+    await $("#mini-two-way").uncheck();
+    await $("#mini-auto-play").check();
+    await $('label:has(input[name="mini-color"][value="white"])').click();
+    await $('label:has(input[name="mini-placement"][value="engine"])').click();
+    await fill($("#mini-ai-time"), "5");
+    await fill($("#mini-playouts"), "100");
+    await fill($("#mini-first-policy"), "50");
+    await $("#mini-show-on-board").check();
+    for (const button of buttons) await $(button).click();
+  });
+
+  expect(full).toHaveLength(21);
+  expect(full[0]).toEqual({ type: "control.update", payload: { key: "platform", value: "yike" } });
+  expect(full[20]).toEqual({ type: "sync.clearBoard", payload: {} });
+  expect(mini).toEqual(full);
+});
+
+test("mini action bar shows interval-free running labels from the snapshot text", async ({ page }) => {
+  await page.setViewportSize({ width: 680, height: 218 });
+  await openHostedShell(page);
+  const text = languageText("cn");
+  const continuous = page.locator('#mini-body [data-command="sync.continuous"]');
+
+  await publish(page, miniSnapshot({
+    quickSyncActive: true, continuousSyncActive: true, analysisRunning: true,
+    quickSyncLabel: "停止快速同步", continuousSyncLabel: "停止持续同步 (200ms)", analysisLabel: "暂停分析"
+  }, { text }));
+  await expect(page.locator("#mini-quick-label")).toHaveText(text.WebView_stopQuickSync);
+  await expect(page.locator("#mini-continuous-label")).toHaveText(text.WebView_stopContinuousSync);
+  await expect(page.locator("#mini-analysis-label")).toHaveText(text.WebView_pauseAnalysis);
+  await expect(continuous).toHaveAttribute("title", "停止持续同步 (200ms)");
+  await expect(continuous).toHaveAttribute("aria-pressed", "true");
+  await expect(continuous.locator(".mini-live")).toBeVisible();
+
+  await publish(page, miniSnapshot({}, { text }));
+  await expect(page.locator("#mini-quick-label")).toHaveText(text.WebView_quickSync);
+  await expect(page.locator("#mini-continuous-label")).toHaveText(text.WebView_continuousSync);
+  await expect(page.locator("#mini-analysis-label")).toHaveText(text.WebView_resumeAnalysis);
+  await expect(continuous).toHaveAttribute("title", "持续同步 (200ms)");
+  await expect(continuous.locator(".mini-live")).toBeHidden();
+});
+
+test("mini title bar shows the unsaved preference state and a short saved flash", async ({ page }) => {
+  await page.clock.install();
+  await page.setViewportSize({ width: 680, height: 218 });
+  await openHostedShell(page);
+  const text = languageText("cn");
+  const chip = page.locator("#mini-preferences-status");
+
+  await publish(page, miniSnapshot({}, { text }));
+  await expect(chip).toBeHidden();
+
+  await publish(page, miniSnapshot({
+    preferencesSaved: false, preferencesStatus: text.WebView_preferencesNotSaved, persistenceError: "disk full"
+  }, { text }));
+  await expect(chip).toBeVisible();
+  await expect(chip).toHaveClass(/not-saved/);
+  await expect(page.locator("#mini-preferences-text")).toHaveText(text.MiniMode_notSaved);
+  await expect(chip).toHaveAttribute("title", "disk full");
+
+  await publish(page, miniSnapshot({}, { text }));
+  await expect(chip).toBeVisible();
+  await expect(chip).not.toHaveClass(/not-saved/);
+  await expect(page.locator("#mini-preferences-text")).toHaveText(text.WebView_saved);
+  await page.clock.fastForward(2000);
+  await expect(chip).toBeHidden();
+});
+
+for (const language of ["cn", "en", "jp", "kr"]) {
+  test(`mini panel labels fit without truncation in ${language}`, async ({ page }) => {
+    await page.setViewportSize({ width: 680, height: 218 });
+    await openHostedShell(page);
+    const text = languageText(language);
+    const widest = {
+      platform: "otherForeground", boardSize: "custom", autoPlay: true,
+      customBoardSizeEnabled: true, customBoardDimensionsEnabled: true, identityEnabled: false, autoColorEnabled: false,
+      boardSelectionInsideEnabled: false, boardSelectionRectangleEnabled: true, boardSelectionLine1Enabled: true,
+      quickSyncActive: true, continuousSyncActive: true
+    };
+    const states = [
+      { ...widest, analysisRunning: true },
+      { ...widest, analysisRunning: false },
+      { boardSelectionInsideEnabled: true }
+    ];
+    for (const control of states) {
+      await publish(page, miniSnapshot(control, { language, text }));
+      await page.evaluate(() => document.fonts.ready);
+      const report = await page.evaluate(() => {
+        const body = document.querySelector("#mini-body");
+        const visible = element => element.getClientRects().length > 0;
+        const canvas = document.createElement("canvas").getContext("2d");
+        const measure = (element, value) => {
+          const style = getComputedStyle(element);
+          canvas.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          return canvas.measureText(value).width;
+        };
+        const clipped = [...body.querySelectorAll("[data-i18n]:not(option), .mini-label, #mini-quick-label, #mini-continuous-label, #mini-analysis-label")]
+          .filter(element => visible(element) && element.scrollWidth > element.clientWidth)
+          .map(element => ({ text: element.textContent, shown: element.clientWidth, needed: element.scrollWidth }));
+        const selects = [...body.querySelectorAll("select")].flatMap(select => {
+          const style = getComputedStyle(select);
+          const room = select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 20;
+          return [...select.options]
+            .map(option => ({ text: option.textContent, room, needed: measure(select, option.textContent) }))
+            .filter(option => option.needed > option.room);
+        });
+        const inputs = [...body.querySelectorAll('input[type="number"]')].filter(visible).map(input => {
+          const style = getComputedStyle(input);
+          return {
+            id: input.id,
+            room: input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+            needed: measure(input, input.value || input.placeholder),
+            appearance: style.appearance
+          };
+        });
+        return {
+          clipped,
+          selects,
+          inputs,
+          bodyOverflow: body.scrollHeight > body.clientHeight || body.scrollWidth > body.clientWidth,
+          documentOverflow: document.documentElement.scrollWidth > 680 || document.documentElement.scrollHeight > 218
+        };
+      });
+      expect(report.clipped, JSON.stringify(control)).toEqual([]);
+      expect(report.selects, JSON.stringify(control)).toEqual([]);
+      expect(report.inputs.filter(input => input.needed > input.room)).toEqual([]);
+      expect(report.inputs.every(input => input.appearance === "textfield")).toBe(true);
+      expect(report.bodyOverflow).toBe(false);
+      expect(report.documentOverflow).toBe(false);
+    }
+  });
+}
+

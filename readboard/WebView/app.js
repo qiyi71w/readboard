@@ -149,6 +149,7 @@
   let preferenceSavedHideTimer = 0;
   const preferenceSavedFlashMs = 2000;
   let sidebarIcons = false;
+  let miniManualBoardSelection = false;
 
   function resolveSidebarWidth(width) {
     if (width >= sidebarWideMinWidth) return sidebarWide;
@@ -218,7 +219,7 @@
       const text = label && label.textContent.trim();
       if (text) button.title = text;
     });
-    $$(".mini-icon-button").forEach(button => {
+    $$(".mini-icon-button, .mini-icon-action").forEach(button => {
       button.title = button.getAttribute("aria-label") || "";
     });
   }
@@ -283,6 +284,12 @@
     });
     $$('[data-i18n-aria-label]').forEach(element => {
       element.setAttribute("aria-label", t(element.dataset.i18nAriaLabel, element.getAttribute("aria-label")));
+    });
+    $$('[data-i18n-title]').forEach(element => {
+      element.title = t(element.dataset.i18nTitle, element.title);
+    });
+    $$('[data-i18n-placeholder]').forEach(element => {
+      element.placeholder = t(element.dataset.i18nPlaceholder, element.placeholder);
     });
     document.title = `ReadBoard / ${t("MainForm_title", "棋盘同步工具")}`;
     localizedText = state?.text;
@@ -465,6 +472,66 @@
     $("[data-command='sync.toggleAnalysis']")?.setAttribute("aria-pressed", String(Boolean(control.analysisRunning)));
   }
 
+  function renderMiniControls() {
+    const control = state.controlCenter || {};
+    $("#mini-platform").value = control.platform || "fox";
+    $("#mini-board-size").value = String(control.boardSize || "19");
+    setValue("#mini-board-width", control.boardWidth ?? 19);
+    setValue("#mini-board-height", control.boardHeight ?? 19);
+    setChecked("#mini-two-way", control.twoWaySync);
+    setChecked("#mini-auto-play", control.autoPlay);
+    setChecked("#mini-show-on-board", control.showOnBoard);
+    $$('input[name="mini-color"]').forEach(input => {
+      input.checked = input.value === control.color;
+    });
+    $$('input[name="mini-placement"]').forEach(input => {
+      input.checked = input.value === (control.placement || "direct");
+    });
+    setValue("#mini-ai-time", control.aiTime ?? 2);
+    setValue("#mini-playouts", control.playouts ?? "");
+    setValue("#mini-first-policy", control.firstPolicy ?? "");
+
+    setDisabled("#mini-platform, #mini-board-size", !control.configurationEnabled);
+    setDisabled('#mini-board-size option[value="custom"]', !control.customBoardSizeEnabled);
+    setDisabled("#mini-board-width, #mini-board-height", !control.customBoardDimensionsEnabled);
+    setDisabled("#mini-two-way", !control.twoWaySyncEnabled);
+    setDisabled("#mini-auto-play", !control.autoPlayToggleEnabled);
+    setDisabled('input[name="mini-color"][value="black"], input[name="mini-color"][value="white"]', !control.colorEnabled);
+    setDisabled('input[name="mini-color"][value="auto"]', !control.autoColorEnabled);
+    setDisabled('input[name="mini-placement"]', !control.placementEnabled);
+    setDisabled("#mini-ai-time", !control.aiTimeEnabled);
+    setDisabled("#mini-playouts", !control.playoutsEnabled);
+    setDisabled("#mini-first-policy", !control.firstPolicyEnabled);
+    setDisabled("#mini-show-on-board", !control.showOnBoardEnabled);
+
+    // Board-selection buttons share data-command selectors with full mode, so their
+    // disabled state is already set; visibility follows whichever group is enabled and
+    // keeps the last group while sync disables all three.
+    const insideEnabled = Boolean(control.boardSelectionInsideEnabled);
+    const manualEnabled = Boolean(control.boardSelectionRectangleEnabled || control.boardSelectionLine1Enabled);
+    if (insideEnabled !== manualEnabled) miniManualBoardSelection = manualEnabled;
+    $('#mini-body [data-board-mode="inside"]').hidden = miniManualBoardSelection;
+    $$('#mini-body [data-board-mode="rectangle"], #mini-body [data-board-mode="line1"]').forEach(button => {
+      button.hidden = !miniManualBoardSelection;
+    });
+
+    setMiniAction("sync.quick", "mini-quick-label", control.quickSyncActive,
+      control.quickSyncActive ? "WebView_stopQuickSync" : "WebView_quickSync", control.quickSyncLabel);
+    setMiniAction("sync.continuous", "mini-continuous-label", control.continuousSyncActive,
+      control.continuousSyncActive ? "WebView_stopContinuousSync" : "WebView_continuousSync", control.continuousSyncLabel);
+    setMiniAction("sync.toggleAnalysis", "mini-analysis-label", control.analysisRunning,
+      control.analysisRunning ? "WebView_pauseAnalysis" : "WebView_resumeAnalysis", control.analysisLabel);
+  }
+
+  function setMiniAction(command, labelId, active, key, tooltip) {
+    const label = document.getElementById(labelId);
+    label.textContent = t(key, label.textContent);
+    const button = $(`#mini-body [data-command="${command}"]`);
+    button.title = tooltip || label.textContent;
+    button.setAttribute("aria-pressed", String(Boolean(active)));
+    if (command !== "sync.toggleAnalysis") button.classList.toggle("running", Boolean(active));
+  }
+
 
   function cssValue(value) {
     return String(value).replace(/["\\]/g, "\\$&");
@@ -645,8 +712,6 @@
   function escapeAttr(value) { return escapeHtml(value); }
 
   function renderPreferenceStatus() {
-    const el = $("#preferences-status");
-    if (!el) return;
     const control = state.controlCenter || {};
     const settings = state.settings || {};
     const controlDirty = control.preferencesSaved === false;
@@ -658,39 +723,53 @@
         preferenceSavedHideTimer = 0;
       }
       preferenceChipDirty = true;
-      el.hidden = false;
-      el.className = "preference-status not-saved";
-      el.textContent = controlDirty
+      const status = controlDirty
         ? (control.preferencesStatus || settings.dirtyStatus || "")
         : (settings.dirtyStatus || "");
-      el.title = controlDirty ? (control.persistenceError || el.textContent) : el.textContent;
+      showPreferenceStatus(true, status, controlDirty ? (control.persistenceError || status) : status);
       return;
     }
     const justSaved = preferenceChipDirty;
     preferenceChipDirty = false;
     if (justSaved) {
-      el.hidden = false;
-      el.className = "preference-status";
-      el.textContent = control.preferencesStatus || "";
-      el.title = "";
+      showPreferenceStatus(false, control.preferencesStatus || "", "");
       clearTimeout(preferenceSavedHideTimer);
       preferenceSavedHideTimer = setTimeout(() => {
         preferenceSavedHideTimer = 0;
         const nextControl = (state && state.controlCenter) || {};
         const nextSettings = (state && state.settings) || {};
         if (nextControl.preferencesSaved === false || nextSettings.dirty) return;
-        el.hidden = true;
-        el.textContent = "";
-        el.title = "";
+        hidePreferenceStatus();
       }, preferenceSavedFlashMs);
       return;
     }
-    if (!preferenceSavedHideTimer) {
-      el.hidden = true;
-      el.className = "preference-status";
-      el.textContent = "";
-      el.title = "";
-    }
+    if (!preferenceSavedHideTimer) hidePreferenceStatus();
+  }
+
+  function showPreferenceStatus(notSaved, status, reason) {
+    const full = $("#preferences-status");
+    full.hidden = false;
+    full.className = `preference-status${notSaved ? " not-saved" : ""}`;
+    full.textContent = status;
+    full.title = reason;
+    const mini = $("#mini-preferences-status");
+    mini.hidden = false;
+    mini.classList.toggle("not-saved", notSaved);
+    text("mini-preferences-text", notSaved ? t("MiniMode_notSaved", "未保存") : t("WebView_saved", "已保存"));
+    mini.title = notSaved ? reason : status;
+  }
+
+  function hidePreferenceStatus() {
+    const full = $("#preferences-status");
+    full.hidden = true;
+    full.className = "preference-status";
+    full.textContent = "";
+    full.title = "";
+    const mini = $("#mini-preferences-status");
+    mini.hidden = true;
+    mini.classList.remove("not-saved");
+    text("mini-preferences-text", "");
+    mini.title = "";
   }
 
   function render() {
@@ -702,6 +781,7 @@
     renderShell();
     renderMiniShell();
     renderControlCenter();
+    renderMiniControls();
     renderSettings();
     renderPreferenceStatus();
     renderLogs();
@@ -755,7 +835,7 @@
       send("identity.select", { candidateId: input.value });
       return;
     }
-    const key = input.id || input.name;
+    const key = input.dataset.control || input.id || input.name;
     if (key) send("control.update", { key, value: input.type === "checkbox" ? input.checked : input.value });
   });
 
