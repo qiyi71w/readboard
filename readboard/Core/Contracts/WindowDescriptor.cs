@@ -6,7 +6,6 @@ namespace readboard
     {
         public IntPtr Handle { get; set; }
         public string ClassName { get; set; }
-        public string ProcessName { get; set; }
         public string Title { get; set; }
         public PixelRect Bounds { get; set; }
         // Physical screen bounds of this HWND's client area, distinct from its outer frame.

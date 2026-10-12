@@ -188,15 +188,14 @@ namespace readboard
         private static bool IsBrowserBackgroundCapture(BoardCaptureRequest request, WindowDescriptor window)
         {
             return request.SyncMode == SyncMode.Background
-                && IsBrowserWindowClass(window.ClassName)
-                && (string.Equals(window.ProcessName, "chrome", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(window.ProcessName, "msedge", StringComparison.OrdinalIgnoreCase));
+                && IsBrowserWindowClass(window.ClassName);
         }
 
-        internal static bool IsBrowserWindowClass(string className)
+        private static bool IsBrowserWindowClass(string className)
         {
             return string.Equals(className, "Chrome_RenderWidgetHostHWND", StringComparison.Ordinal)
-                || string.Equals(className, "Chrome_WidgetWin_1", StringComparison.Ordinal);
+                || string.Equals(className, "Chrome_WidgetWin_1", StringComparison.Ordinal)
+                || string.Equals(className, "MozillaWindowClass", StringComparison.Ordinal);
         }
 
         private Bitmap CaptureWindowBitmap(BoardCapturePlan plan, BoardCaptureRequest request)
@@ -294,7 +293,6 @@ namespace readboard
             window.IsDpiAware = true;
             window.DpiScale = platform.GetScaleForPoint(new Point(selection.X + selection.Width / 2, selection.Y + selection.Height / 2));
             window.IsJavaWindow = false;
-            window.ProcessName = null;
             return window;
         }
 
@@ -333,7 +331,6 @@ namespace readboard
             {
                 Handle = window.Handle,
                 ClassName = window.ClassName,
-                ProcessName = window.ProcessName,
                 Title = window.Title,
                 Bounds = CloneRect(window.Bounds),
                 ClientBounds = CloneRect(window.ClientBounds),
@@ -394,14 +391,12 @@ namespace readboard
                 return false;
 
             string className = GetWindowClassName(handle);
-            string resolvedClassName = string.IsNullOrEmpty(className) ? GetSeedClassName(seed) : className;
             PixelRect bounds = new PixelRect(rect.Left, rect.Top, width, height);
             bool isDpiAware = GetSupportDpiState(handle);
             descriptor = new WindowDescriptor
             {
                 Handle = handle,
-                ClassName = resolvedClassName,
-                ProcessName = GetBrowserProcessName(handle, className),
+                ClassName = className,
                 Title = GetSeedTitle(seed, handle),
                 Bounds = bounds,
                 ClientBounds = GetPhysicalClientBounds(handle),
@@ -410,7 +405,7 @@ namespace readboard
                     isDpiAware,
                     DisplayScaling.GetScaleForWindow(handle),
                     DisplayScaling.GetScaleForWindowBounds(bounds)),
-                IsJavaWindow = string.Equals(resolvedClassName, JavaFrameClassName, StringComparison.Ordinal)
+                IsJavaWindow = string.Equals(className, JavaFrameClassName, StringComparison.Ordinal)
             };
             return true;
         }
@@ -564,11 +559,6 @@ namespace readboard
             }
         }
 
-        private static string GetSeedClassName(WindowDescriptor seed)
-        {
-            return seed == null ? string.Empty : seed.ClassName;
-        }
-
         private static string GetSeedTitle(WindowDescriptor seed, IntPtr handle)
         {
             string title = GetWindowTitle(handle);
@@ -576,35 +566,6 @@ namespace readboard
                 return title;
 
             return seed == null ? string.Empty : seed.Title;
-        }
-
-        internal static string GetBrowserProcessName(IntPtr handle, string className)
-        {
-            if (!LegacyBoardCaptureService.IsBrowserWindowClass(className))
-                return string.Empty;
-
-            int processId;
-            GetWindowThreadProcessId(handle, out processId);
-            if (processId <= 0)
-                return string.Empty;
-
-            try
-            {
-                using (Process process = Process.GetProcessById(processId))
-                    return process.ProcessName;
-            }
-            catch (ArgumentException)
-            {
-                return string.Empty;
-            }
-            catch (InvalidOperationException)
-            {
-                return string.Empty;
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-                return string.Empty;
-            }
         }
 
         private static string GetWindowClassName(IntPtr handle)

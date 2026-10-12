@@ -9,11 +9,10 @@ namespace Readboard.VerificationTests.Capture
     public sealed class LegacyBoardCaptureAcceptanceMatrixTests
     {
         [Theory]
-        [InlineData("chrome", "Chrome_RenderWidgetHostHWND", 1d, 100)]
-        [InlineData("chrome", "Chrome_WidgetWin_1", 1.5d, -1200)]
-        [InlineData("msedge", "Chrome_RenderWidgetHostHWND", 1.5d, -1200)]
-        [InlineData("msedge", "Chrome_WidgetWin_1", 1d, 100)]
-        public void Capture_BrowserSamplesRecognizeCurrentBoardWithoutEnhancedCapture(string processName, string className, double scale, int originX)
+        [InlineData("Chrome_RenderWidgetHostHWND", 1d, 100)]
+        [InlineData("Chrome_WidgetWin_1", 1.5d, -1200)]
+        [InlineData("MozillaWindowClass", 1.5d, -1200)]
+        public void Capture_BrowserSamplesRecognizeCurrentBoardWithoutEnhancedCapture(string className, double scale, int originX)
         {
             ReplayFixture fixture = ReplayFixtureCatalog.LoadForeground5x5();
             PixelBuffer basePixels = fixture.CreateCaptureResult(ReplayVariant.Base).Frame.PixelBuffer;
@@ -21,7 +20,6 @@ namespace Readboard.VerificationTests.Capture
             using (Bitmap fullContent = new Bitmap(ordinary.Width, ordinary.Height))
             {
                 WindowDescriptor window = CreateWindow(new PixelRect(originX, 100, fullContent.Width, fullContent.Height), true, scale);
-                window.ProcessName = processName;
                 window.ClassName = className;
                 RecordingCapturePlatform platform = new RecordingCapturePlatform(ordinary, window, fullContentBitmap: fullContent);
                 LegacyBoardCaptureService service = new LegacyBoardCaptureService(platform);
@@ -64,27 +62,28 @@ namespace Readboard.VerificationTests.Capture
         }
 
         [Theory]
-        [InlineData("electron", "Chrome_WidgetWin_1", 3, false)]
-        [InlineData("msedgewebview2", "Chrome_RenderWidgetHostHWND", 3, false)]
-        [InlineData("cefclient", "Chrome_WidgetWin_1", 3, false)]
-        [InlineData("firefox", "Chrome_WidgetWin_1", 3, false)]
-        [InlineData(null, "Chrome_WidgetWin_1", 3, false)]
-        [InlineData("chrome", null, 3, false)]
-        [InlineData("chrome", "OtherWindow", 3, false)]
-        [InlineData("chrome", "Chrome_WidgetWin_1", 0, false)]
-        [InlineData("chrome", "Chrome_WidgetWin_1", 1, false)]
-        [InlineData("chrome", "Chrome_WidgetWin_1", 2, false)]
-        [InlineData("chrome", "Chrome_WidgetWin_1", 4, false)]
-        [InlineData("chrome", "Chrome_WidgetWin_1", 5, false)]
-        [InlineData("yike", "OtherWindow", 6, true)]
-        [InlineData("CHROME", "Chrome_WidgetWin_1", 3, true)]
-        public void Capture_OnlySupportedIdentityAndModeChangePixelSource(string processName, string className, int mode, bool fullContentExpected)
+        [InlineData("Chrome_RenderWidgetHostHWND", 3, true)]
+        [InlineData("Chrome_WidgetWin_1", 3, true)]
+        [InlineData("MozillaWindowClass", 3, true)]
+        [InlineData(null, 3, false)]
+        [InlineData("", 3, false)]
+        [InlineData("OtherWindow", 3, false)]
+        [InlineData("Chrome_WidgetWin_10", 3, false)]
+        [InlineData("Chrome_RenderWidgetHostHWND_Child", 3, false)]
+        [InlineData("PrefixMozillaWindowClass", 3, false)]
+        [InlineData("mozillawindowclass", 3, false)]
+        [InlineData("Chrome_WidgetWin_1", 0, false)]
+        [InlineData("MozillaWindowClass", 1, false)]
+        [InlineData("Chrome_RenderWidgetHostHWND", 2, false)]
+        [InlineData("MozillaWindowClass", 4, false)]
+        [InlineData("Chrome_WidgetWin_1", 5, false)]
+        [InlineData("OtherWindow", 6, true)]
+        public void Capture_OnlyExactLiveWindowClassAndModeChangePixelSource(string className, int mode, bool fullContentExpected)
         {
             using (Bitmap ordinary = CreateAllBlackBoardBitmap())
             using (Bitmap fullContent = CreateBoardBitmap())
             {
                 WindowDescriptor window = CreateWindow(new PixelRect(100, 100, 6, 6));
-                window.ProcessName = processName;
                 window.ClassName = className;
                 RecordingCapturePlatform platform = new RecordingCapturePlatform(ordinary, window, fullContentBitmap: fullContent);
                 BoardCaptureRequest request = CreateWindowRequest(false, false, false, window.Bounds, window.Bounds);
@@ -92,8 +91,7 @@ namespace Readboard.VerificationTests.Capture
                 if (request.SyncMode == SyncMode.Foreground)
                     request.SelectionBounds = CloneRect(window.Bounds);
                 // A stale browser seed must not override the current platform description.
-                request.Window.ProcessName = "chrome";
-                request.Window.ClassName = "Chrome_WidgetWin_1";
+                request.Window.ClassName = fullContentExpected ? "OtherWindow" : "Chrome_WidgetWin_1";
                 BoardCaptureResult capture = new LegacyBoardCaptureService(platform).Capture(request);
                 Assert.True(capture.Success, capture.FailureReason);
                 using (capture.Frame.Image)
@@ -101,15 +99,16 @@ namespace Readboard.VerificationTests.Capture
             }
         }
 
-        [Fact]
-        public void Capture_BrowserFailureDoesNotReturnPreviousFrameAndNextSampleRecovers()
+        [Theory]
+        [InlineData("Chrome_RenderWidgetHostHWND")]
+        [InlineData("MozillaWindowClass")]
+        public void Capture_BrowserFailureDoesNotReturnPreviousFrameAndNextSampleRecovers(string className)
         {
             using (Bitmap ordinary = CreateAllBlackBoardBitmap())
             using (Bitmap fullContent = CreateBoardBitmap())
             {
                 WindowDescriptor window = CreateWindow(new PixelRect(100, 100, 6, 6));
-                window.ProcessName = "msedge";
-                window.ClassName = "Chrome_RenderWidgetHostHWND";
+                window.ClassName = className;
                 RecordingCapturePlatform platform = new RecordingCapturePlatform(ordinary, window, fullContentBitmap: fullContent);
                 LegacyBoardCaptureService service = new LegacyBoardCaptureService(platform);
                 BoardCaptureRequest request = CreateWindowRequest(false, false, false, window.Bounds);
@@ -578,7 +577,6 @@ namespace Readboard.VerificationTests.Capture
                 resolved = new WindowDescriptor
                 {
                     Handle = descriptor.Handle,
-                    ProcessName = descriptor.ProcessName,
                     ClassName = descriptor.ClassName,
                     Bounds = new PixelRect(descriptor.Bounds.X, descriptor.Bounds.Y, descriptor.Bounds.Width, descriptor.Bounds.Height),
                     ClientBounds = CloneRect(descriptor.ClientBounds),

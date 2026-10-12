@@ -251,9 +251,9 @@ Capture -> Recognition -> BoardSnapshot -> OutboundBoardSnapshotEmitter
 
 `SyncSessionCoordinator` 管 transport 生命周期、锁保护的 session state、出站 dispatcher 和 payload 去重；`SyncSessionCoordinator.Orchestration.cs` 管一次同步、持续同步、落子、停止/清盘和诊断。
 
-Chrome / Edge 网页棋盘在“其他（后台）”中使用既有完整内容捕获（`PrintWindow` 的 `PW_RENDERFULLCONTENT = 0x2`）。每次窗口描述从实际 HWND 读取进程身份；仅 `chrome` / `msedge` 进程的 `Chrome_RenderWidgetHostHWND` 或 `Chrome_WidgetWin_1` 窗口采用该路径，种子描述不提供浏览器身份。初次探测、单次和持续采样均不依赖“增强截图”。原生失败返回捕获失败，不改用屏幕截图或激活窗口。
+“其他（后台）”按实际绑定 HWND 的窗口类选择既有完整内容捕获（`PrintWindow` 的 `PW_RENDERFULLCONTENT = 0x2`）：精确匹配 `Chrome_RenderWidgetHostHWND`、`Chrome_WidgetWin_1` 或 `MozillaWindowClass`，不检查进程品牌名单。采用这些类的 Chromium 浏览器、Firefox 及 Chromium 嵌入式程序均进入此路径；这不是对所有品牌、版本或 Electron/CEF/WebView2 容器的逐一认证。每次从当前 HWND 读取真实类名，不用种子类名补充缺失身份。初次探测、单次和持续采样均不依赖“增强截图”。原生失败返回捕获失败，不改用屏幕截图、缓存帧或激活窗口。
 
-该兼容范围要求浏览器未最小化、目标为当前标签页、棋盘正确框选且在屏幕内无遮挡；窗口无需拥有输入焦点。遮挡、最小化、后台标签页及网页后台落子不在此合同内。前台屏幕捕获、其他客户端后台路径和弈客既有完整内容捕获保持原有策略。组件回归见 `LegacyBoardCaptureAcceptanceMatrixTests`；真实浏览器、宿主输出及多屏 DPI 由候选原生验收单独证明。
+该兼容范围要求目标窗口未最小化、内容为当前显示页面、棋盘正确框选且在屏幕内无遮挡；窗口无需拥有输入焦点。Brave 已在完全遮挡时观察到旧帧，Firefox 在特定环境下遮挡仍更新不构成统一保证；本功能不检测黑图、卡帧或遮挡，也不保证自动断开或提示重选。遮挡、最小化、非活动标签页持续刷新及网页后台落子不在合同内。可见性限制不同于下述尺寸/DPI 导致的几何绑定失效。前台屏幕捕获、不匹配类的通用后台及 Fox、FoxBackgroundPlace、Tygem、Sina、Yike 专用模式保持原有策略，弈客继续复用同一完整内容 API。组件回归见 `LegacyBoardCaptureAcceptanceMatrixTests`；真实目标、宿主输出及多屏 DPI 由候选原生验收单独证明。
 
 “其他（后台）”的 `BackgroundSelectionBinding` 在框选校准、遮罩退出并解析 HWND 后建立；它保存相对该 HWND 客户区原点的物理像素选区，并关联选择请求、客户区尺寸和有效 DPI。捕获请求通过 `BackgroundSelection` 传递绑定，`SelectionBounds` 只用于前台屏幕选区。新选择、模式切换或目标替换会撤销旧绑定和未完成的异步结果；停止后重启同步保留仍有效的绑定。
 
