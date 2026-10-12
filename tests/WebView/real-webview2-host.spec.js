@@ -67,7 +67,7 @@ test("real Control Center exchanges version and platform state with its host", {
 test("real Control Center waits for authoritative analysis observations", { tag: "@host-extended" }, async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
-    const analysis = readBoard.page.locator('[data-command="sync.toggleAnalysis"]');
+    const analysis = readBoard.fullModeCommand("sync.toggleAnalysis");
     const analysisLabel = readBoard.page.locator("#analysis-label");
 
     await readBoard.host.sendLine("analysisState paused");
@@ -98,7 +98,7 @@ test("real Control Center waits for authoritative analysis observations", { tag:
 test("real Control Center waits for host analysis observations after pause", { tag: "@host-extended" }, async ({}, testInfo) => {
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
-    const analysis = readBoard.page.locator('[data-command="sync.toggleAnalysis"]');
+    const analysis = readBoard.fullModeCommand("sync.toggleAnalysis");
     const analysisLabel = readBoard.page.locator("#analysis-label");
 
     await readBoard.host.sendLine("analysisState running");
@@ -140,8 +140,8 @@ test("real Control Center manual autoplay color requires explicit selection per 
     };
     const cancelAutomaticSelection = async () => {
       await readBoard.page.locator('label:has(input[name="color"][value="auto"])').click();
-      await expect(readBoard.page.locator('[data-command="identity.close"]')).toBeVisible();
-      await readBoard.page.locator('[data-command="identity.close"]').click();
+      await expect(readBoard.fullModeCommand("identity.close")).toBeVisible();
+      await readBoard.fullModeCommand("identity.close").click();
       await expect(readBoard.page.locator("#modal-layer")).toBeHidden();
     };
 
@@ -219,7 +219,7 @@ test("real Control Center runtime authorization publishes one final snapshot per
       expect(await renderedState()).toEqual(snapshot);
       return snapshot;
     };
-    const identityButton = command => readBoard.page.locator(`[data-command="identity.${command}"]`);
+    const identityButton = command => readBoard.fullModeCommand(`identity.${command}`);
     const expectNoPlayers = async () => {
       await expect(readBoard.page.locator('input[name="candidate"]')).toHaveCount(0);
       await expect(identityButton("useOnce")).toBeDisabled();
@@ -318,7 +318,7 @@ test("real Settings Cancel discards its draft and leaves persisted configuration
     await syncInterval.press("Tab");
     await expect(readBoard.page.locator("#settings-dirty")).toHaveText("You have unsaved changes");
 
-    await readBoard.page.locator('[data-command="settings.cancel"]').click();
+    await readBoard.fullModeCommand("settings.cancel").click();
     await expect(readBoard.page.locator("#settings-dirty")).toHaveText("No unsaved changes");
     await expect(syncInterval).toHaveValue("200");
     expect(readPersistedSyncInterval(await readBoard.readConfigurationFiles())).toBe(200);
@@ -375,7 +375,7 @@ test("real Settings Save persists its draft across a fresh WebView2 profile rest
     await syncInterval.press("Tab");
     await expect(readBoard.page.locator("#settings-dirty")).toHaveText("You have unsaved changes");
 
-    await readBoard.page.locator('[data-command="settings.save"]').click();
+    await readBoard.fullModeCommand("settings.save").click();
     await expect(readBoard.page.locator("#settings-dirty")).toHaveText("No unsaved changes");
     expect(readPersistedSyncInterval(await readBoard.readConfigurationFiles())).toBe(350);
     expect(await readBoard.readConfigurationTransactionDirectories()).toEqual([]);
@@ -400,7 +400,7 @@ test("production shell close sends ordered shutdown and exits cleanly", { tag: "
   await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
     await readBoard.host.waitForExactLine("ready");
     await expect(readBoard.page.locator(".app-shell")).toBeVisible();
-    await expect(readBoard.page.locator('[data-command="window.close"]')).toBeVisible();
+    await expect(readBoard.fullModeCommand("window.close")).toBeVisible();
 
     const shutdown = await readBoard.closeFromShell();
 

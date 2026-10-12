@@ -52,7 +52,7 @@ test("native player input confirms identity through the real WebView2 bridge", {
   await withNativeFoxWindow(async nativeWindow => {
     await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
       await observeOperations(readBoard, testInfo, async ({ state, operate }) => {
-        const button = command => readBoard.page.locator(`[data-command="identity.${command}"]`);
+        const button = command => readBoard.fullModeCommand(`identity.${command}`);
         await operate("enable two-way", () => readBoard.page.locator("label:has(#two-way)").click(), { controlCenter: { twoWaySync: true } });
         await operate("enable autoplay", () => readBoard.page.locator("label:has(#auto-play)").click(), { controlCenter: { autoPlay: true } });
         await operate("first automatic identity selection", () => readBoard.page.locator('label:has(input[name="color"][value="auto"])').click(), {
@@ -87,14 +87,14 @@ test("platform change refreshes a destroyed native target in one final snapshot"
   await withNativeFoxWindow(async nativeWindow => {
     await withRealWebView2Host(publishDirectory, testInfo, async readBoard => {
       await readBoard.host.waitForExactLine("ready");
-      await readBoard.page.locator('[data-command="sync.quick"]').click();
+      await readBoard.fullModeCommand("sync.quick").click();
       await expect.poll(() => readBoard.page.evaluate(() => window.readboardPreview.getState().shell.targetWindowValid)).toBe(true);
-      await readBoard.page.locator('[data-command="sync.quick"]').click();
+      await readBoard.fullModeCommand("sync.quick").click();
       await expect.poll(() => readBoard.page.evaluate(() => window.readboardPreview.getState().controlCenter.quickSyncActive)).toBe(false);
       // Quick Sync honors the production auto-minimize preference; restore the real window before visual evidence.
-      await readBoard.page.locator('[data-command="window.maximize"]').click();
+      await readBoard.fullModeCommand("window.maximize").click();
       await expect.poll(() => readBoard.page.evaluate(() => window.readboardPreview.getState().shell.maximized)).toBe(true);
-      await readBoard.page.locator('[data-command="window.maximize"]').click();
+      await readBoard.fullModeCommand("window.maximize").click();
       await expect.poll(() => readBoard.page.evaluate(() => window.readboardPreview.getState().shell.maximized)).toBe(false);
       await nativeWindow.stop();
       await observeOperations(readBoard, testInfo, async ({ state, operate }) => {
