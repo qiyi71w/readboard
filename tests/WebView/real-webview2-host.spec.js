@@ -421,6 +421,6 @@ test("production shell close sends ordered shutdown and exits cleanly", { tag: "
       LanguagePreference: expect.stringMatching(/\S/)
     }));
     expect(configuration["config_readboard.txt"].split("_")).toHaveLength(12);
-    expect(configuration["config_readboard_others.txt"].split("_")).toHaveLength(23);
+    expect(configuration["config_readboard_others.txt"].split("_")).toHaveLength(26);
   });
 });
