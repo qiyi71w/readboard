@@ -1166,3 +1166,249 @@ for (const language of ["cn", "en", "jp", "kr"]) {
   });
 }
 
+function miniIdentity(text, count) {
+  return {
+    open: true,
+    dialogTitle: text.WebView_selectIdentity,
+    prompt: text.FoxAutoPlayIdentityDialog_lblPrompt,
+    detectedNicknamesLabel: text.FoxAutoPlayIdentityDialog_lblDetectedNicknames,
+    clearSavedLabel: text.FoxAutoPlayIdentityDialog_btnClearSavedIdentity,
+    cancelLabel: text.FoxAutoPlayIdentityDialog_btnCancel,
+    useOnceLabel: text.FoxAutoPlayIdentityDialog_btnUseOnce,
+    saveAndUseLabel: text.FoxAutoPlayIdentityDialog_btnSaveAndUse,
+    savedLabel: text.WebView_saved,
+    selectedId: "c1",
+    savedId: "c1",
+    hasSavedIdentity: true,
+    canUseOnce: true,
+    canSaveAndUse: true,
+    candidates: Array.from({ length: count }, (_, index) => ({ id: `c${index + 1}`, label: `野狐棋手Player${index + 1}` }))
+  };
+}
+
+function miniShowInBoardHint(text) {
+  return {
+    open: true,
+    kind: "showInBoardHint",
+    title: text.TipsForm_title,
+    message: text.WebView_showInBoardHintForeground,
+    detail: text.WebView_showInBoardHintRestore,
+    confirmLabel: text.TipsForm_btnConfirm,
+    dontShowAgainLabel: text.TipsForm_btnNotAskAgain
+  };
+}
+
+function miniMessageDialog(text, message = text.recgnizeFaild) {
+  return {
+    open: true,
+    kind: "message",
+    title: text.WebView_recognitionFailedTitle,
+    message,
+    confirmLabel: text.SettingsForm_btnConfirm,
+    cancelLabel: text.SettingsForm_btnCancel
+  };
+}
+
+async function miniModalLayout(page) {
+  return page.evaluate(() => {
+    const box = element => {
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height };
+    };
+    const hitAtCenter = element => {
+      const rect = element.getBoundingClientRect();
+      return document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    };
+    const onTop = element => element.contains(hitAtCenter(element));
+    const modal = document.querySelector("#modal");
+    const body = document.querySelector("#modal-body");
+    const header = modal.querySelector(":scope > header");
+    const actions = document.querySelector("#modal-actions");
+    const titlebar = document.querySelector(".mini-titlebar");
+    const layer = document.querySelector("#modal-layer");
+    const candidates = [...document.querySelectorAll("#modal .candidate")];
+    return {
+      modal: box(modal),
+      titlebar: box(titlebar),
+      header: box(header),
+      actions: box(actions),
+      body: box(body),
+      // The inert title bar is not hit-testable, so "visible" means the dialog layer does not cover it.
+      titlebarUncovered: [...titlebar.querySelectorAll(".mini-status, .mini-window-controls button")].every(element => !layer.contains(hitAtCenter(element))),
+      headerOnTop: onTop(header.querySelector("h2")),
+      actionsOnTop: [...actions.querySelectorAll("button")].every(onTop),
+      bodyScrolls: body.scrollHeight > body.clientHeight,
+      modalScrolls: modal.scrollHeight > modal.clientHeight,
+      candidateColumns: new Set(candidates.map(candidate => Math.round(candidate.getBoundingClientRect().left))).size,
+      documentOverflow: document.documentElement.scrollWidth > 680 || document.documentElement.scrollHeight > 218
+    };
+  });
+}
+
+function expectInMiniPanel(layout) {
+  expect(layout.titlebarUncovered).toBe(true);
+  expect(layout.modal.top).toBe(layout.titlebar.bottom);
+  expect(layout.modal).toMatchObject({ left: 0, right: 680, bottom: 218 });
+  expect(layout.header.height).toBe(30);
+  expect(layout.actions.height).toBe(42);
+  expect(layout.headerOnTop).toBe(true);
+  expect(layout.actionsOnTop).toBe(true);
+  expect(layout.modalScrolls).toBe(false);
+  expect(layout.documentOverflow).toBe(false);
+}
+
+for (const language of ["cn", "en", "jp", "kr"]) {
+  test(`mini dialogs replace the panel below the title bar in ${language}`, async ({ page }) => {
+    await page.setViewportSize({ width: 680, height: 218 });
+    await openHostedShell(page);
+    const text = languageText(language);
+    const show = async extra => {
+      await publish(page, miniSnapshot({}, { language, text, ...extra }));
+      await page.evaluate(() => document.fonts.ready);
+      return miniModalLayout(page);
+    };
+
+    const identity = await show({ identity: miniIdentity(text, 6) });
+    expectInMiniPanel(identity);
+    expect(identity.candidateColumns).toBe(3);
+    expect(identity.bodyScrolls).toBe(false);
+
+    for (const dialog of [miniShowInBoardHint(text), miniMessageDialog(text)]) {
+      const layout = await show({ dialog });
+      expectInMiniPanel(layout);
+      expect(layout.bodyScrolls).toBe(false);
+    }
+  });
+}
+
+test("mini dialog overflow scrolls only the content area", async ({ page }) => {
+  await page.setViewportSize({ width: 680, height: 218 });
+  await openHostedShell(page);
+  const text = languageText("cn");
+  const longMessage = Array.from({ length: 12 }, () => text.recgnizeFaild).join(" ");
+
+  for (const extra of [{ identity: miniIdentity(text, 15) }, { dialog: miniMessageDialog(text, longMessage) }]) {
+    await publish(page, miniSnapshot({}, { text, ...extra }));
+    const before = await miniModalLayout(page);
+    expectInMiniPanel(before);
+    expect(before.bodyScrolls).toBe(true);
+
+    await page.locator("#modal-body").evaluate(body => { body.scrollTop = body.scrollHeight; });
+    const after = await miniModalLayout(page);
+    expectInMiniPanel(after);
+    expect(after.header).toEqual(before.header);
+    expect(after.actions).toEqual(before.actions);
+    const lastVisible = await page.locator("#modal-body").evaluate(body => {
+      const last = body.lastElementChild.lastElementChild || body.lastElementChild;
+      return last.getBoundingClientRect().bottom <= body.getBoundingClientRect().bottom + 0.5;
+    });
+    expect(lastVisible).toBe(true);
+  }
+});
+
+test("mini panel stays non-interactive while a dialog is open", async ({ page }) => {
+  await page.setViewportSize({ width: 680, height: 218 });
+  await openHostedShell(page);
+  const text = languageText("cn");
+  const posted = () => page.evaluate(() => window.__readboardPostedMessages.splice(0));
+  const centerOf = selector => page.locator(selector).evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  });
+  const autoPlayPoint = await (async () => {
+    await publish(page, miniSnapshot());
+    return centerOf("#mini-auto-play");
+  })();
+
+  await publish(page, miniSnapshot({}, { text, dialog: miniShowInBoardHint(text) }));
+  await posted();
+  const fullModePoint = await centerOf(".mini-full-mode");
+  await page.mouse.click(fullModePoint.x, fullModePoint.y);
+  await page.mouse.click(autoPlayPoint.x, autoPlayPoint.y);
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  const focusInsideModal = await page.evaluate(() => document.querySelector("#modal").contains(document.activeElement));
+  const panelFocusable = await page.evaluate(() => {
+    document.querySelector("#mini-platform").focus();
+    return document.activeElement === document.querySelector("#mini-platform");
+  });
+  expect(await posted()).toEqual([]);
+  expect(focusInsideModal).toBe(true);
+  expect(panelFocusable).toBe(false);
+
+  await publish(page, miniSnapshot({}, { text }));
+  await page.mouse.click(autoPlayPoint.x, autoPlayPoint.y);
+  expect((await posted()).map(message => message.type)).toEqual(["control.update"]);
+});
+
+test("mini dialogs post the same close commands as full mode", async ({ page }) => {
+  await openHostedShell(page);
+  const text = languageText("cn");
+  const closeSteps = [
+    [{ identity: miniIdentity(text, 2) }, '#modal > header [data-command="modal.close"]'],
+    [{ identity: miniIdentity(text, 2) }, '#modal-actions [data-command="identity.close"]'],
+    [{ dialog: miniShowInBoardHint(text) }, '#modal > header [data-command="modal.close"]'],
+    [{ dialog: miniShowInBoardHint(text) }, '#modal-actions [data-command="dialog.confirm"]'],
+    [{ dialog: miniShowInBoardHint(text) }, '#modal-actions [data-command="dialog.dontShowAgain"]'],
+    [{ dialog: miniMessageDialog(text) }, '#modal-actions [data-command="dialog.cancel"]'],
+    [{ dialog: miniMessageDialog(text) }, '#modal-actions [data-command="dialog.confirm"]']
+  ];
+  const run = async miniMode => {
+    await page.setViewportSize(miniMode ? { width: 680, height: 218 } : { width: 1100, height: 680 });
+    const sent = [];
+    for (const [extra, selector] of closeSteps) {
+      await publish(page, { ...miniSnapshot({}, { text, ...extra }), shell: hostedSnapshot({ miniMode }).shell });
+      await page.evaluate(() => { window.__readboardPostedMessages.length = 0; });
+      await page.locator(selector).click();
+      sent.push(...await page.evaluate(() => structuredClone(window.__readboardPostedMessages)));
+    }
+    return sent;
+  };
+
+  const full = await run(false);
+  expect(full.map(message => message.type)).toEqual([
+    "identity.close", "identity.close", "dialog.cancel", "dialog.confirm", "dialog.dontShowAgain", "dialog.cancel", "dialog.confirm"
+  ]);
+  expect(await run(true)).toEqual(full);
+});
+
+test("full-mode dialog presentation is unchanged and survives a mini round trip", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 680 });
+  await openHostedShell(page);
+  const text = languageText("cn");
+  const fullLayout = () => page.evaluate(() => {
+    const modal = document.querySelector("#modal").getBoundingClientRect();
+    const layer = document.querySelector("#modal-layer").getBoundingClientRect();
+    return {
+      modal: { width: modal.width, centerX: modal.left + modal.width / 2, centerY: modal.top + modal.height / 2 },
+      layer: { top: layer.top, height: layer.height },
+      appShellInert: document.querySelector(".app-shell").inert
+    };
+  });
+  const cases = [
+    [{ identity: miniIdentity(text, 6) }, 480],
+    [{ dialog: miniShowInBoardHint(text) }, 520],
+    [{ dialog: miniMessageDialog(text) }, 580]
+  ];
+
+  for (const [extra, pixels] of cases) {
+    const full = { ...miniSnapshot({}, { text, ...extra }), shell: hostedSnapshot({ miniMode: false }).shell };
+    await page.setViewportSize({ width: 1100, height: 680 });
+    await publish(page, full);
+    const expected = { modal: { width: pixels, centerX: 550, centerY: 340 }, layer: { top: 0, height: 680 }, appShellInert: true };
+    expect(await fullLayout()).toEqual(expected);
+
+    await page.setViewportSize({ width: 680, height: 218 });
+    await publish(page, { ...full, shell: hostedSnapshot({ miniMode: true }).shell });
+    expectInMiniPanel(await miniModalLayout(page));
+
+    await page.setViewportSize({ width: 1100, height: 680 });
+    await publish(page, full);
+    expect(await fullLayout()).toEqual(expected);
+  }
+
+  await publish(page, { ...hostedSnapshot({ miniMode: false }), text });
+  await expect(page.locator("#modal-layer")).toBeHidden();
+  expect(await page.evaluate(() => [document.querySelector(".app-shell").inert, document.querySelector("#mini-shell").inert])).toEqual([false, false]);
+});

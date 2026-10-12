@@ -604,8 +604,10 @@
     $("#modal-body").innerHTML = body;
     $("#modal-actions").innerHTML = actions;
     $("#modal").className = `modal ${kind}`;
-    $("#modal").style.width = size || "min(820px, calc(100vw - 48px))";
+    // Mini mode fills the panel below the title bar from CSS; the full-mode width would override it.
+    $("#modal").style.width = isMiniMode() ? "" : size || "min(820px, calc(100vw - 48px))";
     $(".app-shell").inert = true;
+    $("#mini-shell").inert = true;
     layer.hidden = false;
     if (wasHidden || !$("#modal").contains(document.activeElement)) {
       $("#modal [data-command], #modal button")?.focus();
@@ -616,6 +618,7 @@
     activeModal = null;
     $("#modal-layer").hidden = true;
     $(".app-shell").inert = false;
+    $("#mini-shell").inert = false;
     modalOpener?.focus();
     modalOpener = null;
   }

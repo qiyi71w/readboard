@@ -514,6 +514,28 @@ html.emergency .modal-layer { min-width: 700px; min-height: 433px; }
 .dialog-copy h3 { margin-top: 0; }
 .dialog-copy p { line-height: 1.7; }
 
+/* Mini mode: dialogs replace the panel below the 32px title bar; the window keeps its fixed size and only the body scrolls. */
+html.mini-mode .modal-layer { top: 32px; height: auto; place-items: stretch; background: var(--surface-background); }
+html.mini-mode .modal { width: 100%; height: 100%; max-height: none; grid-template-rows: 30px minmax(0, 1fr) 42px; border: 0; border-radius: 0; box-shadow: none; font-size: 13px; }
+html.mini-mode .modal > header { padding: 0 6px 0 12px; }
+html.mini-mode .modal h2 { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+html.mini-mode .modal > header button { flex: 0 0 auto; width: 30px; min-width: 30px; height: 30px; min-height: 30px; }
+html.mini-mode .modal .modal-body { min-height: 0; padding: 8px 12px; overflow: auto; }
+html.mini-mode .modal-actions { gap: 6px; padding: 0 12px; }
+html.mini-mode .modal-actions button { height: 28px; min-height: 28px; padding: 0 12px; }
+html.mini-mode .modal .dialog-copy h3 { margin: 0 0 4px; font-size: 14px; }
+html.mini-mode .modal .dialog-copy p { margin: 0 0 6px; line-height: 1.5; }
+html.mini-mode .modal .dialog-copy p:last-child { margin-bottom: 0; }
+html.mini-mode .modal-message { min-height: 0; }
+html.mini-mode .modal.identity .modal-body { grid-template-rows: none; align-content: start; gap: 6px; padding: 6px 12px; overflow: auto; }
+html.mini-mode .identity-list-label { display: none; }
+html.mini-mode .candidate-list { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: none; overflow: visible; }
+html.mini-mode .candidate { min-height: 30px; padding: 3px 10px; }
+html.mini-mode .saved-pill { padding: 1px 8px; }
+html.mini-mode .empty-state { min-height: 0; padding: 8px 12px; }
+html.mini-mode .empty-state .icon { font-size: 20px; }
+html.mini-mode .empty-state h3 { margin: 4px 0 2px; font-size: 14px; }
+
 #log-list, .candidate-list, .modal-body {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-color) transparent;
