@@ -234,7 +234,7 @@ html.emergency .app-shell {
 .mini-preference-status.not-saved .icon { display: inline-block; color: var(--warning); }
 
 .mini-body { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; overflow: hidden; }
-.mini-form { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1.25fr); grid-template-rows: 30px 30px 9px 30px 30px; align-items: center; min-width: 0; padding: 6px 12px; }
+.mini-form { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1.2fr); grid-template-rows: 30px 30px 9px 30px 30px; align-items: center; min-width: 0; padding: 6px 12px; }
 .mini-label { padding-right: 8px; color: var(--secondary-text); font-size: 12px; font-weight: 500; white-space: nowrap; }
 .mini-label-right, .mini-span-right { display: flex; align-self: stretch; align-items: center; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--line); }
 .mini-span-right { grid-column: 3 / 5; }
@@ -270,9 +270,9 @@ html.emergency .app-shell {
 .mini-segments label:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .mini-segments input { position: absolute; opacity: 0; pointer-events: none; }
 .mini-identity { flex: 0 0 auto; }
-.mini-engine { gap: 8px; }
+.mini-engine { gap: 6px; }
 .mini-engine input { flex: 0 0 auto; width: 42px; }
-.mini-engine .mini-wide-number { width: 50px; }
+.mini-engine .mini-wide-number { width: 48px; }
 .mini-unit { flex: 0 0 auto; color: var(--secondary-text); }
 .mini-actions { display: flex; min-width: 0; align-items: center; gap: 5px; padding: 8px 12px; border-top: 1px solid var(--border); background: var(--sidebar-background); }
 .mini-actions .mini-text-action { display: inline-flex; flex: 0 1 auto; min-width: 88px; align-items: center; justify-content: center; gap: 5px; padding: 0 6px; }
