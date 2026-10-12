@@ -8,6 +8,129 @@ namespace Readboard.VerificationTests.Capture
 {
     public sealed class LegacyBoardCaptureAcceptanceMatrixTests
     {
+        [Theory]
+        [InlineData("chrome", "Chrome_RenderWidgetHostHWND", 1d, 100)]
+        [InlineData("chrome", "Chrome_WidgetWin_1", 1.5d, -1200)]
+        [InlineData("msedge", "Chrome_RenderWidgetHostHWND", 1.5d, -1200)]
+        [InlineData("msedge", "Chrome_WidgetWin_1", 1d, 100)]
+        public void Capture_BrowserSamplesRecognizeCurrentBoardWithoutEnhancedCapture(string processName, string className, double scale, int originX)
+        {
+            ReplayFixture fixture = ReplayFixtureCatalog.LoadForeground5x5();
+            PixelBuffer basePixels = fixture.CreateCaptureResult(ReplayVariant.Base).Frame.PixelBuffer;
+            using (Bitmap ordinary = new Bitmap(basePixels.Width + 14, basePixels.Height + 22))
+            using (Bitmap fullContent = new Bitmap(ordinary.Width, ordinary.Height))
+            {
+                WindowDescriptor window = CreateWindow(new PixelRect(originX, 100, fullContent.Width, fullContent.Height), true, scale);
+                window.ProcessName = processName;
+                window.ClassName = className;
+                RecordingCapturePlatform platform = new RecordingCapturePlatform(ordinary, window, fullContentBitmap: fullContent);
+                LegacyBoardCaptureService service = new LegacyBoardCaptureService(platform);
+                LegacyBoardRecognitionService recognitionService = new LegacyBoardRecognitionService();
+                BoardCaptureRequest request = CreateWindowRequest(false, false, true, window.Bounds,
+                    new PixelRect(originX + 7, 111, basePixels.Width, basePixels.Height));
+                request.BoardSize = new BoardDimensions(fixture.BoardWidth, fixture.BoardHeight);
+                for (int sample = 0; sample < 3; sample++)
+                {
+                    request.IsInitialProbe = sample == 0;
+                    PixelBuffer pixels = fixture.CreateCaptureResult(sample == 2 ? ReplayVariant.Changed : ReplayVariant.Base).Frame.PixelBuffer;
+                    PaintReplay(fullContent, pixels, 7, 11);
+                    BoardCaptureResult capture = service.Capture(request);
+                    Assert.True(capture.Success, capture.FailureReason);
+                    using (capture.Frame.Image)
+                    {
+                        BoardRecognitionResult recognition = recognitionService.Recognize(new BoardRecognitionRequest
+                        {
+                            Frame = capture.Frame,
+                            InferLastMove = false
+                        });
+                        Assert.True(recognition.Success, recognition.FailureReason);
+                        Assert.Equal(sample == 2 ? fixture.ChangedProtocolLines : fixture.BaseProtocolLines, recognition.Snapshot.ProtocolLines);
+                        Assert.Equal(7, capture.Frame.Viewport.SourceBounds.X);
+                        Assert.Equal(11, capture.Frame.Viewport.SourceBounds.Y);
+                        Assert.True(capture.Frame.UsedPrintWindow);
+                        Assert.Equal(sample == 1, capture.Frame.HasSameContentAsPreviousCapture);
+                    }
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData("electron", "Chrome_WidgetWin_1", 3, false)]
+        [InlineData("msedgewebview2", "Chrome_RenderWidgetHostHWND", 3, false)]
+        [InlineData("cefclient", "Chrome_WidgetWin_1", 3, false)]
+        [InlineData("firefox", "Chrome_WidgetWin_1", 3, false)]
+        [InlineData(null, "Chrome_WidgetWin_1", 3, false)]
+        [InlineData("chrome", null, 3, false)]
+        [InlineData("chrome", "OtherWindow", 3, false)]
+        [InlineData("chrome", "Chrome_WidgetWin_1", 0, false)]
+        [InlineData("chrome", "Chrome_WidgetWin_1", 1, false)]
+        [InlineData("chrome", "Chrome_WidgetWin_1", 2, false)]
+        [InlineData("chrome", "Chrome_WidgetWin_1", 4, false)]
+        [InlineData("chrome", "Chrome_WidgetWin_1", 5, false)]
+        [InlineData("yike", "OtherWindow", 6, true)]
+        [InlineData("CHROME", "Chrome_WidgetWin_1", 3, true)]
+        public void Capture_OnlySupportedIdentityAndModeChangePixelSource(string processName, string className, int mode, bool fullContentExpected)
+        {
+            using (Bitmap ordinary = CreateAllBlackBoardBitmap())
+            using (Bitmap fullContent = CreateBoardBitmap())
+            {
+                WindowDescriptor window = CreateWindow(new PixelRect(100, 100, 6, 6));
+                window.ProcessName = processName;
+                window.ClassName = className;
+                RecordingCapturePlatform platform = new RecordingCapturePlatform(ordinary, window, fullContentBitmap: fullContent);
+                BoardCaptureRequest request = CreateWindowRequest(false, false, false, window.Bounds, window.Bounds);
+                request.SyncMode = (SyncMode)mode;
+                // A stale browser seed must not override the current platform description.
+                request.Window.ProcessName = "chrome";
+                request.Window.ClassName = "Chrome_WidgetWin_1";
+                BoardCaptureResult capture = new LegacyBoardCaptureService(platform).Capture(request);
+                Assert.True(capture.Success, capture.FailureReason);
+                using (capture.Frame.Image)
+                    Assert.Equal((fullContentExpected ? Color.White : Color.Black).ToArgb(), capture.Frame.Image.GetPixel(4, 1).ToArgb());
+            }
+        }
+
+        [Fact]
+        public void Capture_BrowserFailureDoesNotReturnPreviousFrameAndNextSampleRecovers()
+        {
+            using (Bitmap ordinary = CreateAllBlackBoardBitmap())
+            using (Bitmap fullContent = CreateBoardBitmap())
+            {
+                WindowDescriptor window = CreateWindow(new PixelRect(100, 100, 6, 6));
+                window.ProcessName = "msedge";
+                window.ClassName = "Chrome_RenderWidgetHostHWND";
+                RecordingCapturePlatform platform = new RecordingCapturePlatform(ordinary, window, fullContentBitmap: fullContent);
+                LegacyBoardCaptureService service = new LegacyBoardCaptureService(platform);
+                BoardCaptureRequest request = CreateWindowRequest(false, false, false, window.Bounds);
+                BoardCaptureResult first = service.Capture(request);
+                Assert.True(first.Success, first.FailureReason);
+                first.Frame.Image.Dispose();
+                platform.FailPrintWindow = true;
+                BoardCaptureResult failed = service.Capture(request);
+                Assert.False(failed.Success);
+                Assert.Equal(BoardCaptureFailureKind.CaptureFailed, failed.FailureKind);
+                Assert.Null(failed.Frame);
+                platform.FailPrintWindow = false;
+                fullContent.SetPixel(4, 1, Color.Red);
+                BoardCaptureResult recovered = service.Capture(request);
+                Assert.True(recovered.Success, recovered.FailureReason);
+                using (recovered.Frame.Image)
+                    Assert.Equal(Color.Red.ToArgb(), recovered.Frame.Image.GetPixel(4, 1).ToArgb());
+            }
+        }
+
+        private static void PaintReplay(Bitmap bitmap, PixelBuffer pixels, int offsetX, int offsetY)
+        {
+            for (int y = 0; y < pixels.Height; y++)
+            {
+                for (int x = 0; x < pixels.Width; x++)
+                {
+                    int index = y * pixels.Stride + x * 3;
+                    bitmap.SetPixel(x + offsetX, y + offsetY, Color.FromArgb(pixels.Pixels[index], pixels.Pixels[index + 1], pixels.Pixels[index + 2]));
+                }
+            }
+        }
+
         [Fact]
         public void Capture_EnhancedOffscreenWindowUsesPrintWindow()
         {
@@ -240,19 +363,22 @@ namespace Readboard.VerificationTests.Capture
         {
             private readonly Bitmap sourceBitmap;
             private readonly WindowDescriptor descriptor;
-            private readonly bool failPrintWindow;
+            public bool FailPrintWindow { get; set; }
             private readonly PixelRect virtualScreenBounds;
+            private readonly Bitmap fullContentBitmap;
 
             public RecordingCapturePlatform(
                 Bitmap sourceBitmap,
                 WindowDescriptor descriptor,
                 bool failPrintWindow = false,
-                PixelRect virtualScreenBounds = null)
+                PixelRect virtualScreenBounds = null,
+                Bitmap fullContentBitmap = null)
             {
                 this.sourceBitmap = sourceBitmap;
                 this.descriptor = descriptor;
-                this.failPrintWindow = failPrintWindow;
+                FailPrintWindow = failPrintWindow;
                 this.virtualScreenBounds = CloneRect(virtualScreenBounds) ?? new PixelRect(0, 0, 3840, 2160);
+                this.fullContentBitmap = fullContentBitmap;
             }
 
             public int WindowCalls { get; private set; }
@@ -273,6 +399,8 @@ namespace Readboard.VerificationTests.Capture
                 resolved = new WindowDescriptor
                 {
                     Handle = descriptor.Handle,
+                    ProcessName = descriptor.ProcessName,
+                    ClassName = descriptor.ClassName,
                     Bounds = new PixelRect(descriptor.Bounds.X, descriptor.Bounds.Y, descriptor.Bounds.Width, descriptor.Bounds.Height),
                     IsDpiAware = descriptor.IsDpiAware,
                     DpiScale = descriptor.DpiScale,
@@ -290,7 +418,7 @@ namespace Readboard.VerificationTests.Capture
             public Bitmap CapturePrintWindow(IntPtr handle)
             {
                 PrintWindowCalls++;
-                if (failPrintWindow)
+                if (FailPrintWindow)
                     return null;
                 return CloneBitmap();
             }
@@ -298,14 +426,14 @@ namespace Readboard.VerificationTests.Capture
             public Bitmap CapturePrintWindowFullContent(IntPtr handle)
             {
                 PrintWindowCalls++;
-                if (failPrintWindow)
+                if (FailPrintWindow)
                     return null;
-                return CloneBitmap();
+                return (Bitmap)(fullContentBitmap ?? sourceBitmap).Clone();
             }
 
             public Bitmap CaptureScreen(PixelRect bounds)
             {
-                throw new NotSupportedException();
+                return CloneBitmap();
             }
 
             private Bitmap CloneBitmap()

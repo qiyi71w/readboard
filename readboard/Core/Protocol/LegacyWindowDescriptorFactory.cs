@@ -24,6 +24,7 @@ namespace readboard
             {
                 Handle = handle,
                 ClassName = className,
+                ProcessName = Win32BoardCapturePlatform.GetBrowserProcessName(handle, className),
                 Title = GetWindowTitle(handle),
                 Bounds = bounds,
                 IsDpiAware = isDpiAware,

@@ -251,6 +251,10 @@ Capture -> Recognition -> BoardSnapshot -> OutboundBoardSnapshotEmitter
 
 `SyncSessionCoordinator` 管 transport 生命周期、锁保护的 session state、出站 dispatcher 和 payload 去重；`SyncSessionCoordinator.Orchestration.cs` 管一次同步、持续同步、落子、停止/清盘和诊断。
 
+Chrome / Edge 网页棋盘在“其他（后台）”中使用既有完整内容捕获（`PrintWindow` 的 `PW_RENDERFULLCONTENT = 0x2`）。每次窗口描述从实际 HWND 读取进程身份；仅 `chrome` / `msedge` 进程的 `Chrome_RenderWidgetHostHWND` 或 `Chrome_WidgetWin_1` 窗口采用该路径，种子描述不提供浏览器身份。初次探测、单次和持续采样均不依赖“增强截图”。原生失败返回捕获失败，不改用屏幕截图或激活窗口。
+
+该兼容范围要求浏览器未最小化、目标为当前标签页、棋盘正确框选且在屏幕内无遮挡；窗口无需拥有输入焦点。遮挡、最小化、后台标签页及网页后台落子不在此合同内。前台屏幕捕获、其他客户端后台路径和弈客既有完整内容捕获保持原有策略。组件回归见 `LegacyBoardCaptureAcceptanceMatrixTests`；真实浏览器、宿主输出及多屏 DPI 由候选原生验收单独证明。
+
 关键不变量：
 
 - `StopSyncSessionAndClearBoard` 是停止同步并清盘的单一协调操作，避免旧 worker 在清盘后继续发送 snapshot。

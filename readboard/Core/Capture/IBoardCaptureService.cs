@@ -179,7 +179,7 @@ namespace readboard
 
         private bool ShouldUsePrintWindow(BoardCaptureRequest request, WindowDescriptor window)
         {
-            if (request.SyncMode == SyncMode.Yike)
+            if (request.SyncMode == SyncMode.Yike || IsBrowserBackgroundCapture(request, window))
                 return true;
             if (window.IsJavaWindow)
                 return true;
@@ -209,11 +209,25 @@ namespace readboard
                 || bottom > screen.Y + screen.Height;
         }
 
+        private static bool IsBrowserBackgroundCapture(BoardCaptureRequest request, WindowDescriptor window)
+        {
+            return request.SyncMode == SyncMode.Background
+                && IsBrowserWindowClass(window.ClassName)
+                && (string.Equals(window.ProcessName, "chrome", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(window.ProcessName, "msedge", StringComparison.OrdinalIgnoreCase));
+        }
+
+        internal static bool IsBrowserWindowClass(string className)
+        {
+            return string.Equals(className, "Chrome_RenderWidgetHostHWND", StringComparison.Ordinal)
+                || string.Equals(className, "Chrome_WidgetWin_1", StringComparison.Ordinal);
+        }
+
         private Bitmap CaptureWindowBitmap(BoardCapturePlan plan, BoardCaptureRequest request)
         {
             if (plan.UsePrintWindow)
             {
-                return request.SyncMode == SyncMode.Yike
+                return request.SyncMode == SyncMode.Yike || IsBrowserBackgroundCapture(request, plan.Window)
                     ? platform.CapturePrintWindowFullContent(plan.Window.Handle)
                     : platform.CapturePrintWindow(plan.Window.Handle);
             }
@@ -304,6 +318,7 @@ namespace readboard
             window.IsDpiAware = true;
             window.DpiScale = platform.GetScaleForPoint(new Point(selection.X + selection.Width / 2, selection.Y + selection.Height / 2));
             window.IsJavaWindow = false;
+            window.ProcessName = null;
             return window;
         }
 
@@ -346,6 +361,7 @@ namespace readboard
             {
                 Handle = window.Handle,
                 ClassName = window.ClassName,
+                ProcessName = window.ProcessName,
                 Title = window.Title,
                 Bounds = CloneRect(window.Bounds),
                 IsDpiAware = window.IsDpiAware,
@@ -412,6 +428,7 @@ namespace readboard
             {
                 Handle = handle,
                 ClassName = resolvedClassName,
+                ProcessName = GetBrowserProcessName(handle, className),
                 Title = GetSeedTitle(seed, handle),
                 Bounds = bounds,
                 IsDpiAware = isDpiAware,
@@ -559,6 +576,35 @@ namespace readboard
                 return title;
 
             return seed == null ? string.Empty : seed.Title;
+        }
+
+        internal static string GetBrowserProcessName(IntPtr handle, string className)
+        {
+            if (!LegacyBoardCaptureService.IsBrowserWindowClass(className))
+                return string.Empty;
+
+            int processId;
+            GetWindowThreadProcessId(handle, out processId);
+            if (processId <= 0)
+                return string.Empty;
+
+            try
+            {
+                using (Process process = Process.GetProcessById(processId))
+                    return process.ProcessName;
+            }
+            catch (ArgumentException)
+            {
+                return string.Empty;
+            }
+            catch (InvalidOperationException)
+            {
+                return string.Empty;
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                return string.Empty;
+            }
         }
 
         private static string GetWindowClassName(IntPtr handle)

@@ -1440,6 +1440,7 @@ namespace readboard
             {
                 Handle = window.Handle,
                 ClassName = window.ClassName,
+                ProcessName = window.ProcessName,
                 Title = window.Title,
                 Bounds = CloneRect(window.Bounds),
                 IsDpiAware = window.IsDpiAware,
