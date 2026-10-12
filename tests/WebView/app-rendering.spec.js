@@ -975,14 +975,23 @@ test("mini panel values and availability follow snapshot enablement", async ({ p
   await publish(page, miniSnapshot({ platform: "sina" }));
   await expect(inside).toBeVisible();
   for (const button of manual) await expect(button).toBeHidden();
+
+  const actions = ["sync.quick", "sync.continuous", "sync.once", "sync.toggleAnalysis", "sync.swapOrder", "sync.rebuild", "sync.clearBoard"];
+  for (const command of actions) await expect(mini(`[data-command="${command}"]`)).toBeEnabled();
+  await publish(page, miniSnapshot({
+    quickSyncEnabled: false, continuousSyncEnabled: false, oneTimeSyncEnabled: false, analysisToggleEnabled: false,
+    swapOrderEnabled: false, forceRebuildEnabled: false, clearBoardEnabled: false
+  }));
+  for (const command of actions) await expect(mini(`[data-command="${command}"]`)).toBeDisabled();
 });
 
 test("mini controls post the same commands and payloads as full mode", async ({ page }) => {
   await openHostedShell(page);
   const control = { autoPlay: false, customBoardSizeEnabled: true, customBoardDimensionsEnabled: true };
-  const run = async (miniMode, steps) => {
+  const manualSelection = { boardSelectionInsideEnabled: false, boardSelectionRectangleEnabled: true, boardSelectionLine1Enabled: true };
+  const run = async (miniMode, steps, overrides = control) => {
     await page.setViewportSize(miniMode ? { width: 680, height: 218 } : { width: 1100, height: 680 });
-    await publish(page, { ...miniSnapshot(control), shell: hostedSnapshot({ miniMode }).shell });
+    await publish(page, { ...miniSnapshot(overrides), shell: hostedSnapshot({ miniMode }).shell });
     await page.evaluate(() => { window.__readboardPostedMessages.length = 0; });
     await steps(selector => page.locator(`${miniMode ? "#mini-shell" : ".app-shell"} ${selector}`));
     return page.evaluate(() => structuredClone(window.__readboardPostedMessages));
@@ -1027,6 +1036,18 @@ test("mini controls post the same commands and payloads as full mode", async ({ 
   expect(full[0]).toEqual({ type: "control.update", payload: { key: "platform", value: "yike" } });
   expect(full[20]).toEqual({ type: "sync.clearBoard", payload: {} });
   expect(mini).toEqual(full);
+
+  const clickManualSelection = async $ => {
+    await $('[data-board-mode="rectangle"]').click();
+    await $('[data-board-mode="line1"]').click();
+  };
+  const fullManual = await run(false, clickManualSelection, manualSelection);
+  const miniManual = await run(true, clickManualSelection, manualSelection);
+  expect(fullManual).toEqual([
+    { type: "board.select", payload: { mode: "rectangle" } },
+    { type: "board.select", payload: { mode: "line1" } }
+  ]);
+  expect(miniManual).toEqual(fullManual);
 });
 
 test("mini action bar shows interval-free running labels from the snapshot text", async ({ page }) => {
@@ -1068,13 +1089,13 @@ test("mini title bar shows the unsaved preference state and a short saved flash"
     preferencesSaved: false, preferencesStatus: text.WebView_preferencesNotSaved, persistenceError: "disk full"
   }, { text }));
   await expect(chip).toBeVisible();
-  await expect(chip).toHaveClass(/not-saved/);
+  await expect(chip.locator(".icon")).toBeVisible();
   await expect(page.locator("#mini-preferences-text")).toHaveText(text.MiniMode_notSaved);
   await expect(chip).toHaveAttribute("title", "disk full");
 
   await publish(page, miniSnapshot({}, { text }));
   await expect(chip).toBeVisible();
-  await expect(chip).not.toHaveClass(/not-saved/);
+  await expect(chip.locator(".icon")).toBeHidden();
   await expect(page.locator("#mini-preferences-text")).toHaveText(text.WebView_saved);
   await page.clock.fastForward(2000);
   await expect(chip).toBeHidden();
