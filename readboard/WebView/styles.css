@@ -520,6 +520,7 @@ html.mini-mode .modal { width: 100%; height: 100%; max-height: none; grid-templa
 html.mini-mode .modal > header { padding: 0 6px 0 12px; }
 html.mini-mode .modal h2 { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 html.mini-mode .modal > header button { flex: 0 0 auto; width: 30px; min-width: 30px; height: 30px; min-height: 30px; }
+html.mini-mode .modal > header .icon { font-size: 14px; }
 html.mini-mode .modal .modal-body { min-height: 0; padding: 8px 12px; overflow: auto; }
 html.mini-mode .modal-actions { gap: 6px; padding: 0 12px; }
 html.mini-mode .modal-actions button { height: 28px; min-height: 28px; padding: 0 12px; }
