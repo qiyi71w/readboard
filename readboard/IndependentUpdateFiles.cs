@@ -32,6 +32,9 @@ namespace readboard
         public string OperationId { get; set; }
         public string Phase { get; set; }
         public bool RestartAdopted { get; set; }
+        public string RestartRegistrationId { get; set; }
+        public int? HostProcessId { get; set; }
+        public DateTime? HostProcessStartTimeUtc { get; set; }
     }
 
     internal sealed class IndependentUpdateResult

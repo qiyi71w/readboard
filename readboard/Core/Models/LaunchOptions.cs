@@ -32,6 +32,7 @@ namespace readboard
         public bool? DiagnosticsEnabled { get; set; }
         public bool? CaptureEnabled { get; set; }
         public string ProcessSessionId { get; set; }
+        public string UpdateTransaction { get; set; }
 
         public bool ShouldEmitLoggingCapability
         {
@@ -64,6 +65,15 @@ namespace readboard
             int tcpPort;
             int.TryParse(args[6], out tcpPort);
             LoggingSuffix suffix = ParseLoggingSuffix(args);
+            string updateTransaction = null;
+            for (int i = 7; i < args.Length; i++)
+            {
+                if (args[i] != "--update-transaction") continue;
+                if (updateTransaction != null || i + 1 >= args.Length || IsFlag(args[i + 1])) return false;
+                updateTransaction = args[++i];
+                if (!System.IO.Path.IsPathFullyQualified(updateTransaction)
+                    || updateTransaction.IndexOfAny(new[] { '\r', '\n', '\t' }) >= 0 || args[4] == "1") return false;
+            }
             options = new LaunchOptions
             {
                 AiTime = args[1],
@@ -78,6 +88,7 @@ namespace readboard
                 LoggingContractVersion = suffix.ContractVersion,
                 DiagnosticsEnabled = suffix.DiagnosticsEnabled,
                 CaptureEnabled = suffix.CaptureEnabled,
+                UpdateTransaction = updateTransaction,
                 ProcessSessionId = processSessionIdFactory()
             };
             return true;

@@ -33,6 +33,8 @@ namespace readboard
         public void NotifyProtocolReady()
         {
             sessionCoordinator.NotifyReady(Program.playPonder);
+            updateProtocolReady = true;
+            NotifyUpdateUiReady();
             ApplyControlCenterSessionObservation(
                 new ControlCenterSessionObservation(
                     controlCenterRuntime.CaptureSessionObservationGeneration())

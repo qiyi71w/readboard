@@ -914,9 +914,11 @@ namespace readboard
                 new IndependentUpdateCommitter(
                     () => Program.language,
                     () => new[] { Program.CurrentContext.Logging?.LogRoot,
-                        webView?.CoreWebView2?.Environment.UserDataFolder }),
+                        webView?.CoreWebView2?.Environment.UserDataFolder },
+                    (sessionCoordinator as SyncSessionCoordinator)?.UpdateRestart),
                 PersistConfiguration,
                 OnIndependentUpdateObservation);
+            InitializeUpdateRestart();
             InitializeComponent();
             this.controlCenterRuntime = new ControlCenterRuntime(
                 ControlCenterPreferences.FromConfig(Program.CurrentConfig),

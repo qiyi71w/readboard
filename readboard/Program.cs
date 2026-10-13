@@ -200,7 +200,20 @@ namespace readboard
             LaunchOptions options;
             if (!LaunchOptions.TryParse(args, out options))
                 return;
-            try { IndependentUpdateFiles.AssertLaunchable(Path.GetDirectoryName(Environment.ProcessPath)); }
+            try
+            {
+                string install = Path.GetDirectoryName(Environment.ProcessPath);
+                IndependentUpdateFiles.AssertLaunchable(install);
+                if (options.UpdateTransaction != null)
+                {
+                    var request = IndependentUpdateRestart.ReadRequest(options.UpdateTransaction);
+                    var adoption = IndependentUpdateRestart.ReadAdoption(options.UpdateTransaction, request);
+                    if (adoption.RegistrationId == null || !IndependentUpdateRestart.IsAlive(
+                        adoption.HostProcessId.Value, adoption.HostProcessStartTimeUtc.Value))
+                        throw new InvalidDataException("No adopted live host for this transaction.");
+                    IndependentUpdateRestart.ReadLaunchResult(options.UpdateTransaction, install);
+                }
+            }
             catch (Exception exception)
             {
                 string key = "IndependentUpdate_unsettled";
@@ -430,6 +443,12 @@ namespace readboard
             langItems["IndependentUpdate_rollbackFailed"] = "恢复失败，禁止启动此目录。请保留更新记录和备份并进行恢复。";
             langItems["IndependentUpdate_cancelled"] = "更新已取消，原版本未修改。";
             langItems["IndependentUpdate_unavailable"] = "未安排自动重连。确认安装目录可用后，请从宿主重新打开 ReadBoard。";
+            langItems["IndependentUpdate_waiting"] = "安装结果已确定，正在等待宿主重新打开并确认连接。";
+            langItems["IndependentUpdate_connected"] = "ReadBoard 已重新连接。同步与自动落子保持关闭。";
+            langItems["IndependentUpdate_hostExited"] = "宿主已退出，未恢复连接。安装结果不受影响。";
+            langItems["IndependentUpdate_startFailed"] = "安装已结束，但 ReadBoard 未能重新启动。请检查安装结果后手动打开。";
+            langItems["IndependentUpdate_handshakeFailed"] = "安装已结束，但未确认新连接。不会重新安装或回滚已安装版本。";
+            langItems["IndependentUpdate_confirmRestart"] = "更新将停止同步并退出 ReadBoard。宿主支持后台重新打开；若连接恢复失败，更新器会保留安装结果。已保存设置会保留，未保存草稿不会保存。继续下载并安装吗？";
             langItems["IndependentUpdate_recoveryLocation"] = "保留的恢复位置：";
             langItems["IndependentUpdate_manualOnly"] = "此更新不能独立安装，请使用手动下载。";
             langItems["IndependentUpdate_unsettled"] = "存在未结算或无效的更新事务，ReadBoard 无法启动。请保留记录并先恢复安装。";

@@ -16,11 +16,13 @@ namespace readboard
     {
         private readonly Func<string> language;
         private readonly Func<IEnumerable<string>> userDirectories;
+        private readonly IndependentUpdateRestartProtocol restart;
         private string preparedInstall;
         private string preparedOperation;
 
-        internal IndependentUpdateCommitter(Func<string> language, Func<IEnumerable<string>> userDirectories)
-        { this.language = language; this.userDirectories = userDirectories; }
+        internal IndependentUpdateCommitter(Func<string> language, Func<IEnumerable<string>> userDirectories,
+            IndependentUpdateRestartProtocol restart = null)
+        { this.language = language; this.userDirectories = userDirectories; this.restart = restart; }
 
         public async Task PrepareAsync(CancellationToken cancellationToken)
         {
@@ -79,6 +81,7 @@ namespace readboard
             string runnerDirectory = Path.Combine(operation, "runner");
             Process runner = null;
             bool accepted = false;
+            IndependentUpdateAdoption adoption = null;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -120,6 +123,8 @@ namespace readboard
                 { OperationId = operationId, Directories = preserved, Files = files.ToArray() });
                 string requestPath = Path.Combine(operation, "request.json");
                 IndependentUpdateFiles.Publish(requestPath, request);
+                adoption = restart == null ? new IndependentUpdateAdoption { OperationId = operationId }
+                    : await restart.PrepareAsync(requestPath, cancellationToken);
                 using var pipe = new NamedPipeServerStream("ReadBoard.Update." + operationId, PipeDirection.InOut, 1,
                     PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 var start = new ProcessStartInfo(Path.Combine(runnerDirectory, IndependentUpdateFiles.RunnerName))
@@ -137,19 +142,25 @@ namespace readboard
                 cancellationToken.ThrowIfCancellationRequested();
                 persistConfiguration();
                 cancellationToken.ThrowIfCancellationRequested();
+                IndependentUpdateFiles.Publish(Path.Combine(operation, "adoption.json"), adoption);
                 await writer.WriteLineAsync("COMMIT " + operationId);
                 // Once sent, resolve the updater's durable decision even when the user
                 // cancels concurrently. Never use cancellation as evidence of rejection.
                 string acknowledgement = await reader.ReadLineAsync();
                 if (acknowledgement != "ACCEPTED " + operationId) throw new IOException(DecodeError(acknowledgement));
                 var progress = IndependentUpdateFiles.Read<IndependentUpdateProgress>(Path.Combine(operation, "progress.json"));
-                if (progress.SchemaVersion != 1 || progress.OperationId != operationId || progress.RestartAdopted
+                if (progress.SchemaVersion != 1 || progress.OperationId != operationId
+                    || progress.RestartAdopted != (adoption.RegistrationId != null)
+                    || progress.RestartRegistrationId != adoption.RegistrationId
+                    || progress.HostProcessId != adoption.HostProcessId
+                    || progress.HostProcessStartTimeUtc != adoption.HostProcessStartTimeUtc
                     || !new[] { "committed", "waitingForExit" }.Contains(progress.Phase))
                     throw new InvalidDataException("Updater acceptance record does not match this operation.");
                 accepted = true;
             }
             finally
             {
+                if (!accepted) restart?.Cancel(operationId);
                 if (runner != null)
                 {
                     if (!accepted) await runner.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(35));

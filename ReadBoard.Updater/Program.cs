@@ -74,7 +74,8 @@ namespace ReadBoard.Updater
                     window.Post(() => { window.AllowClose = true; window.Close(); });
                     return;
                 }
-                window.Post(() => window.Finish(result));
+                window.Post(() => window.Finish(result, "waiting"));
+                CompleteRestart(requestPath, request, result, window);
             }
             catch (Exception exception)
             {
@@ -96,6 +97,50 @@ namespace ReadBoard.Updater
                 }));
             }
         }
+        private static void CompleteRestart(string path, IndependentUpdateRequest request, IndependentUpdateResult result, UpdateWindow window)
+        {
+            string outcome = "unavailable";
+            try
+            {
+                var progress = IndependentUpdateFiles.Read<IndependentUpdateProgress>(Path.Combine(Path.GetDirectoryName(path), "progress.json"));
+                if (!progress.RestartAdopted) { window.Post(() => window.Finish(result, outcome)); return; }
+                var adoption = IndependentUpdateRestart.ReadAdoption(path, request);
+                if (progress.SchemaVersion != 1 || progress.OperationId != request.OperationId
+                    || adoption.RegistrationId != progress.RestartRegistrationId || adoption.HostProcessId != progress.HostProcessId
+                    || adoption.HostProcessStartTimeUtc != progress.HostProcessStartTimeUtc)
+                    throw new InvalidDataException("Committed restart identity mismatch.");
+                outcome = "handshakeFailed";
+                var deadline = DateTime.UtcNow.AddMinutes(2);
+                string connectionPath = Path.Combine(Path.GetDirectoryName(path), "connection.json");
+                while (!window.IsDisposed && DateTime.UtcNow < deadline)
+                {
+                    if (!IndependentUpdateRestart.IsAlive(adoption.HostProcessId.Value, adoption.HostProcessStartTimeUtc.Value))
+                    { outcome = "hostExited"; break; }
+                    if (File.Exists(connectionPath))
+                    {
+                        var connection = IndependentUpdateRestart.ReadConnection(path, request, adoption);
+                        if (connection.State != "connected") { outcome = connection.State; break; }
+                        if (connection.ActualVersion != result.ActualVersion) break;
+                        string presentedPath = Path.Combine(Path.GetDirectoryName(path), "presented.json");
+                        if (File.Exists(presentedPath))
+                        {
+                            var presented = IndependentUpdateFiles.Read<IndependentUpdatePresented>(presentedPath);
+                            if (presented.SchemaVersion != 1 || presented.OperationId != request.OperationId
+                                || presented.RegistrationId != adoption.RegistrationId || presented.ProcessId != connection.ProcessId
+                                || presented.ProcessStartTimeUtc != connection.ProcessStartTimeUtc || presented.ActualVersion != result.ActualVersion)
+                                throw new InvalidDataException("Presentation identity mismatch.");
+                            window.Post(() => { window.AllowClose = true; window.Close(); });
+                            return;
+                        }
+                    }
+                    Thread.Sleep(100);
+                }
+            }
+            catch (Exception exception) when (exception is IOException || exception is JsonException || exception is InvalidOperationException)
+            { outcome = "handshakeFailed"; }
+            window.Post(() => window.Finish(result, outcome));
+        }
+
     }
 
     internal sealed class UpdateWindow : Form
@@ -142,12 +187,12 @@ namespace ReadBoard.Updater
                 k => localized.TryGetValue(k, out string value) ? value : null,
                 k => defaults.TryGetValue(k, out string value) ? value : null);
         }
-        internal void Finish(IndependentUpdateResult result)
+        internal void Finish(IndependentUpdateResult result, string connection = "unavailable")
         {
             string detail = result.Diagnostic;
             if (result.BackupDirectory != null) detail += Environment.NewLine + Resolve("IndependentUpdate_recoveryLocation") + Environment.NewLine + result.BackupDirectory;
             SetStatus("IndependentUpdate_" + result.State, detail);
-            status.AppendText(Environment.NewLine + Environment.NewLine + Resolve("IndependentUpdate_unavailable"));
+            status.AppendText(Environment.NewLine + Environment.NewLine + Resolve("IndependentUpdate_" + connection));
             AllowClose = true;
             close.Enabled = true;
             Show();

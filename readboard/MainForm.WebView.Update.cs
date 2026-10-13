@@ -86,6 +86,7 @@ namespace readboard
             {
                 Open = state.Open,
                 Status = state.Status,
+                ResultOperationId = state.ResultOperationId,
                 InstallEnabled = state.InstallEnabled,
                 OpenDownloadEnabled = state.OpenDownloadEnabled,
                 CloseEnabled = state.CloseEnabled,
@@ -349,7 +350,8 @@ namespace readboard
             }
 
             if (System.Windows.Forms.MessageBox.Show(this,
-                getLangStr("IndependentUpdate_confirm"), getLangStr("IndependentUpdate_caption"),
+                getLangStr((sessionCoordinator as SyncSessionCoordinator)?.UpdateRestart.Supported == true
+                    ? "IndependentUpdate_confirmRestart" : "IndependentUpdate_confirm"), getLangStr("IndependentUpdate_caption"),
                 System.Windows.Forms.MessageBoxButtons.OKCancel,
                 System.Windows.Forms.MessageBoxIcon.Warning) != System.Windows.Forms.DialogResult.OK)
                 return Task.CompletedTask;

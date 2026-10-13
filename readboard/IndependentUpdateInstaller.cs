@@ -41,6 +41,7 @@ namespace readboard
             if (!acquired) throw new IOException("Another update owns this installation.");
             bool oldMoved = false;
             bool claimed = false;
+            IndependentUpdateAdoption adoption = null;
             try
             {
                 IndependentUpdateFiles.AssertLaunchable(request.InstallDirectory, request.OperationId);
@@ -65,6 +66,9 @@ namespace readboard
                 ValidateData(request, data, staging);
                 Phase("prepared");
                 if (!acceptCommit()) return Finish("cancelled", "Preparation cancelled; the original installation is unchanged.");
+                string adoptionPath = Path.Combine(operation, "adoption.json");
+                // Missing adoption preserves standalone installer callers; no host is inferred.
+                adoption = File.Exists(adoptionPath) ? IndependentUpdateRestart.ReadAdoption(requestPath, request) : null;
                 Phase("committed");
                 // A missing acknowledgement never authorizes the source to exit. Waiting
                 // below then fails unchanged; a lost reply cannot turn into a live swap.
@@ -111,7 +115,13 @@ namespace readboard
             void Phase(string phase)
             {
                 IndependentUpdateFiles.Publish(Path.Combine(operation, "progress.json"), new IndependentUpdateProgress
-                { OperationId = request.OperationId, Phase = phase, RestartAdopted = false });
+                {
+                    OperationId = request.OperationId, Phase = phase,
+                    RestartAdopted = adoption?.RegistrationId != null,
+                    RestartRegistrationId = adoption?.RegistrationId,
+                    HostProcessId = adoption?.HostProcessId,
+                    HostProcessStartTimeUtc = adoption?.HostProcessStartTimeUtc
+                });
                 report(phase);
             }
 

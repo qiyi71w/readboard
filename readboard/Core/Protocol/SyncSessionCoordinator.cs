@@ -38,6 +38,7 @@ namespace readboard
         private SessionState sessionState;
         private IProtocolCommandHost host;
         private LoggingHandshakeController loggingHandshake;
+        internal IndependentUpdateRestartProtocol UpdateRestart { get; private set; }
 
         public SyncSessionCoordinator(IReadBoardTransport transport, IReadBoardProtocolAdapter protocolAdapter)
             : this(transport, protocolAdapter, TimeProvider.System)
@@ -61,6 +62,7 @@ namespace readboard
             this.timeProvider = timeProvider;
             outboundProtocolDispatcher = new OutboundProtocolDispatcher(transport, protocolAdapter);
             outboundBoardSnapshotEmitter = new OutboundBoardSnapshotEmitter(outboundProtocolDispatcher, protocolAdapter);
+            UpdateRestart = new IndependentUpdateRestartProtocol(outboundProtocolDispatcher.SendLegacyLine);
             sessionState = new SessionState();
         }
 
@@ -718,6 +720,7 @@ namespace readboard
         {
             if (!acceptingInboundProtocolMessages)
                 return;
+            if (UpdateRestart.Handle(rawLine)) return;
             if (loggingHandshake != null && loggingHandshake.TryHandleInbound(rawLine))
                 return;
             int receivedGeneration = Volatile.Read(ref inboundProtocolGeneration);

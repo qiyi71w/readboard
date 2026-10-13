@@ -366,7 +366,11 @@ namespace readboard
         private void CoreWebView2_NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             if (e.IsSuccess)
+            {
                 PostWebViewState();
+                updateUiReady = true;
+                NotifyUpdateUiReady();
+            }
         }
 
         private void CoreWebView2_WebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -410,6 +414,8 @@ namespace readboard
 
             switch (command.Type)
             {
+                case "update.presented":
+                    return AcknowledgeUpdatePresentation(command.Payload);
                 case "navigate":
                 {
                     WebViewNavigationIntent navigationIntent;

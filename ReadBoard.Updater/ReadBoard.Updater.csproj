@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="../readboard/IndependentUpdateFiles.cs" Link="IndependentUpdateFiles.cs" />
     <Compile Include="../readboard/IndependentUpdateInstaller.cs" Link="IndependentUpdateInstaller.cs" />
+    <Compile Include="../readboard/IndependentUpdateRestart.cs" Link="IndependentUpdateRestart.cs" />
     <Compile Include="../readboard/Core/Localization/SemanticMessage.cs" Link="SemanticMessage.cs" />
     <Content Include="../readboard/language_*.txt" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

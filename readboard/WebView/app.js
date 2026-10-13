@@ -876,6 +876,13 @@
     state = structuredClone(snapshot);
     document.body.classList.remove("awaiting-state");
     render();
+    if (state.update?.open && state.update.resultOperationId) {
+      const operationId = state.update.resultOperationId;
+      requestAnimationFrame(() => {
+        if (state.update?.open && state.update.resultOperationId === operationId)
+          send("update.presented", { operationId });
+      });
+    }
   }
 
 

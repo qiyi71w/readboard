@@ -7,6 +7,7 @@ namespace readboard
         public bool Open { get; set; }
 
         public string Status { get; set; }
+        public string ResultOperationId { get; set; }
         public bool InstallEnabled { get; set; }
         public bool OpenDownloadEnabled { get; set; }
         public bool CloseEnabled { get; set; }
