@@ -344,6 +344,7 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 ### 后台重启协议与记录
 
 每条 wire 使用 tab 分隔字段、LF 结尾，版本固定为字面 `1`，operation ID 为32位小写十六进制。七条命令为：
+原生 pipe 的 stdout 协议发送固定写入 LF，不使用 Windows 的默认 CRLF；每条消息和结尾在同一次写入中发出，避免并发消息交错。stderr 诊断保持原有格式。Java 对字段内 CR/LF 的严格拒绝不变。
 
 | 方向 | 命令及字段 |
 | --- | --- |

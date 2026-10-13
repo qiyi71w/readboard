@@ -88,14 +88,14 @@ namespace readboard
             if (!wasStarted)
             {
                 Console.OutputEncoding = Encoding.UTF8;
-                Console.WriteLine(line);
+                Console.Write(line + "\n");
                 return;
             }
 
             try
             {
                 Console.OutputEncoding = Encoding.UTF8;
-                Console.WriteLine(line);
+                Console.Write(line + "\n");
             }
             catch (IOException)
             {

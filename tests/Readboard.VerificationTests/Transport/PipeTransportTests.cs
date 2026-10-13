@@ -10,15 +10,25 @@ namespace Readboard.VerificationTests.Transport
 {
     public sealed class PipeTransportTests
     {
-        [Fact]
-        public void Send_WritesLineToStandardOutput()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Send_WritesLfTerminatedProtocolLines(bool started)
         {
             using ConsoleRedirect redirect = ConsoleRedirect.CaptureStdOut();
             using PipeTransport transport = new PipeTransport();
+            SetPrivateField(transport, "started", started);
+            SetPrivateField(transport, "running", started);
 
             transport.Send("ready");
+            transport.Send("readboardSelfUpdatePrepare\t1\t0123456789abcdef0123456789abcdef\tD:\\request.json");
+            transport.Send("readboardSelfUpdateReady\t1\t0123456789abcdef0123456789abcdef\tv3.2.0");
 
-            Assert.Equal("ready" + Environment.NewLine, redirect.ReadToEnd());
+            Assert.Equal(
+                "ready\n"
+                + "readboardSelfUpdatePrepare\t1\t0123456789abcdef0123456789abcdef\tD:\\request.json\n"
+                + "readboardSelfUpdateReady\t1\t0123456789abcdef0123456789abcdef\tv3.2.0\n",
+                redirect.ReadToEnd());
         }
 
         [Fact]
