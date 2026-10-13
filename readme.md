@@ -50,7 +50,7 @@ ReadBoard 通过截屏方式从外部围棋客户端窗口抓取棋盘画面，�
 
 | 分支 | UI 框架 | 版本线 | 系统要求 |
 | --- | --- | --- | --- |
-| `main` | WebView2 | v3.1.x | Windows 10 version 1809 (build 17763)+ |
+| `main` | WebView2 | v3.2.x | Windows 10 version 1809 (build 17763)+ |
 | `legacy/winforms` | WinForms | v3.0.x | 更早的 Windows 系统 |
 
 > [!NOTE]

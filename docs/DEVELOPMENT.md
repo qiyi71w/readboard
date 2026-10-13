@@ -10,7 +10,7 @@ ReadBoard 是 [LizzieYzy-Next](https://github.com/wimi321/lizzieyzy-next) 启动
 
 | 分支 | 可见 UI | 版本线 | 支持系统 |
 | --- | --- | --- | --- |
-| `main` | WebView2 | v3.1.x | Windows 10 version 1809（build 17763）及以上 |
+| `main` | WebView2 | v3.2.x | Windows 10 version 1809（build 17763）及以上 |
 | `legacy/winforms` | WinForms | v3.0.x | 更早的 Windows |
 
 本开发说明描述 `main`。简易版已经停止维护；WebView2 新功能不要回填到旧 WinForms 线，跨线修复应先在 `main` 落地，再按需移植。

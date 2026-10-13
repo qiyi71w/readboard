@@ -50,7 +50,7 @@ This repository maintains two release lines. Update checks automatically select 
 
 | Branch | UI framework | Version line | System requirement |
 | --- | --- | --- | --- |
-| `main` | WebView2 | v3.1.x | Windows 10 version 1809 (build 17763)+ |
+| `main` | WebView2 | v3.2.x | Windows 10 version 1809 (build 17763)+ |
 | `legacy/winforms` | WinForms | v3.0.x | Earlier Windows releases |
 
 > [!NOTE]
