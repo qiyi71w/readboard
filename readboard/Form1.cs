@@ -1032,16 +1032,29 @@ namespace readboard
             if (!isMannulCircle)
                 return TryCalibrateSelectionBounds();
 
-            ExpandManualSelectionBounds();
+            Rectangle expandedBounds;
+            if (!TryExpandManualSelectionBounds(
+                Rectangle.FromLTRB(selectionX1, selectionY1, ox2, oy2),
+                CreateCurrentBoardSize(), out expandedBounds))
+                return false;
+
+            UpdateSelectionBounds(expandedBounds.Left, expandedBounds.Top, expandedBounds.Right, expandedBounds.Bottom);
             return true;
         }
 
-        private void ExpandManualSelectionBounds()
+        internal static bool TryExpandManualSelectionBounds(
+            Rectangle selection, BoardDimensions boardSize, out Rectangle expandedBounds)
         {
-            BoardDimensions boardSize = CreateCurrentBoardSize();
-            int gapX = (int)Math.Round((ox2 - selectionX1) / ((boardSize.Width - 1) * 2f));
-            int gapY = (int)Math.Round((oy2 - selectionY1) / ((boardSize.Height - 1) * 2f));
-            UpdateSelectionBounds(selectionX1 - gapX, selectionY1 - gapY, ox2 + gapX, oy2 + gapY);
+            expandedBounds = Rectangle.Empty;
+            if (selection.Width <= 0 || selection.Height <= 0)
+                return false;
+
+            int gapX = (int)Math.Round(selection.Width / ((boardSize.Width - 1) * 2f));
+            int gapY = (int)Math.Round(selection.Height / ((boardSize.Height - 1) * 2f));
+            expandedBounds = Rectangle.FromLTRB(
+                selection.Left - gapX, selection.Top - gapY,
+                selection.Right + gapX, selection.Bottom + gapY);
+            return true;
         }
 
         private bool TryCalibrateSelectionBounds()

@@ -89,12 +89,16 @@ namespace Readboard.VerificationTests.Protocol
 
         private static SyncCoordinatorHostSnapshot CreateSnapshot(ReplayFixture fixture)
         {
+            WindowDescriptor window;
+            new StaticDescriptorFactory().TryCreate(new IntPtr(4242), out window);
+            PixelRect selection = new PixelRect(40, 60, 80, 80);
             return new SyncCoordinatorHostSnapshot
             {
                 SyncMode = SyncMode.Background,
                 BoardWidth = fixture.BoardWidth,
                 BoardHeight = fixture.BoardHeight,
-                SelectionBounds = new PixelRect(40, 60, 80, 80),
+                SelectionBounds = selection,
+                BackgroundSelection = BackgroundSelectionBinding.TryCreate(window, selection, 1),
                 SelectedWindowHandle = IntPtr.Zero,
                 DpiScale = 1f,
                 LegacyTypeToken = "5",
@@ -346,6 +350,7 @@ namespace Readboard.VerificationTests.Protocol
                 {
                     Handle = handle,
                     Bounds = new PixelRect(40, 60, 80, 80),
+                    ClientBounds = new PixelRect(40, 60, 80, 80),
                     ClassName = "ReplayBoard",
                     Title = "Replay",
                     IsDpiAware = true,
