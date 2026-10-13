@@ -343,7 +343,11 @@ test("real Settings Save persists its draft across a fresh WebView2 profile rest
     const selectPlatform = async value => {
       await readBoard.page.locator('.nav-item[data-page="controlCenter"]').click();
       await readBoard.page.locator(`input[name="platform"][value="${value}"]`).check();
-      await expect(readBoard.page.locator(`input[name="platform"][value="${value}"]`)).toBeChecked();
+      // The radio changes before the native platform preference finishes persisting.
+      await expect.poll(() => readBoard.page.evaluate(() => {
+        const control = window.readboardPreview.getState().controlCenter;
+        return { platform: control.platform, preferencesSaved: control.preferencesSaved };
+      })).toEqual({ platform: value, preferencesSaved: true });
       await readBoard.page.locator('.nav-item[data-page="settings"]').click();
     };
     const expectThresholds = async (expected, readOnly) => {

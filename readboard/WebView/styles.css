@@ -262,11 +262,12 @@ html.emergency .app-shell {
 .mini-board-select button[hidden] { display: none; }
 .mini-checks { gap: 16px; }
 .mini-segments { display: flex; height: 26px; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
-.mini-segments label { flex: 1 1 0; justify-content: center; padding: 0 6px; border-right: 1px solid var(--border); cursor: pointer; }
+.mini-segments label { position: relative; flex: 1 1 0; justify-content: center; padding: 0 6px; border-right: 1px solid var(--border); cursor: pointer; }
 .mini-segments label:last-child { border-right: 0; }
 .mini-segments label:has(input:checked) { color: var(--accent); background: var(--choice-background); font-weight: 600; }
+.mini-segments label:has(input:disabled) { background: var(--disabled-background); }
 .mini-segments label:has(input:checked:disabled) { color: var(--disabled-text); background: var(--disabled-selected-background); font-weight: 400; }
-.mini-segments:has(input:disabled) { border-color: var(--disabled-border); background: var(--disabled-background); }
+.mini-segments:not(:has(input:enabled)) { border-color: var(--disabled-border); background: var(--disabled-background); }
 .mini-segments label:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .mini-segments input { position: absolute; opacity: 0; pointer-events: none; }
 .mini-identity { flex: 0 0 auto; }
@@ -354,7 +355,7 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .placement-row .segments { flex: 1; max-width: 424px; }
 .placement-row .segments label { display: flex; flex: 1; min-width: 0; min-height: var(--control-center-control-height); align-items: center; justify-content: center; padding: 6px 10px; font-size: 14px; }
 .segments { display: flex; min-width: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.segments label { min-height: 37px; padding: 9px 18px; border-right: 1px solid var(--line); text-align: center; white-space: nowrap; }
+.segments label { position: relative; min-height: 37px; padding: 9px 18px; border-right: 1px solid var(--line); text-align: center; white-space: nowrap; }
 .segments label:last-child { border-right: 0; }
 .segments label:has(input:checked) { color: var(--accent); background: var(--accent-soft); }
 .segments input { position: absolute; opacity: 0; pointer-events: none; }
@@ -363,10 +364,10 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .page[data-page-panel="controlCenter"] input[type="number"]:disabled { color: var(--disabled-text); border-color: var(--disabled-border); background: var(--disabled-background); cursor: default; }
 .page[data-page-panel="controlCenter"] .choice-grid label:has(input:disabled) { border-color: var(--disabled-border); background: var(--disabled-background); }
 .page[data-page-panel="controlCenter"] .choice-grid label:has(input:checked:disabled) { background: var(--disabled-selected-background); }
-.page[data-page-panel="controlCenter"] .segments:has(input:disabled) { border-color: var(--disabled-border); background: var(--disabled-background); }
+.page[data-page-panel="controlCenter"] .segments:not(:has(input:enabled)) { border-color: var(--disabled-border); background: var(--disabled-background); }
 .page[data-page-panel="controlCenter"] .segments label:has(input:disabled) { border-color: var(--disabled-border); background: var(--disabled-background); }
 .page[data-page-panel="controlCenter"] .segments label:has(input:checked:disabled) { color: var(--disabled-text); background: var(--disabled-selected-background); }
-.page[data-page-panel="controlCenter"] .color-row:has(input:disabled) > b, .page[data-page-panel="controlCenter"] .placement-row:has(input:disabled) > b, .page[data-page-panel="controlCenter"] .board-size-row:has(input:disabled) > b { color: var(--disabled-text); }
+.page[data-page-panel="controlCenter"] .color-row:not(:has(input:enabled)) > b, .page[data-page-panel="controlCenter"] .placement-row:has(input:disabled) > b, .page[data-page-panel="controlCenter"] .board-size-row:has(input:disabled) > b { color: var(--disabled-text); }
 .engine-options { display: grid; min-width: 0; grid-template-rows: auto repeat(3, var(--control-center-control-height)); gap: var(--control-center-inner-gap); }
 .engine-options label { display: flex; min-height: var(--control-center-control-height); align-items: center; justify-content: space-between; gap: 12px; white-space: nowrap; }
 .engine-options .engine-value { display: grid; grid-template-columns: 138px 14px; align-items: center; gap: 5px; }
@@ -375,7 +376,7 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 
 .board-select-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) repeat(2, minmax(0, .9fr)) minmax(0, 1.25fr); align-items: center; gap: 8px; }
 .board-select-grid button { display: flex; min-width: 0; min-height: var(--control-center-control-height); align-items: center; justify-content: center; gap: 8px; padding-inline: 8px; white-space: nowrap; }
-.board-select-grid button.selected { color: var(--accent); border-color: var(--accent); }
+.board-select-grid button.selected:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 .board-select-grid label { display: flex; min-height: var(--control-center-control-height); align-items: center; white-space: nowrap; }
 .log-card { display: grid; min-height: 0; grid-template-rows: minmax(0, 1fr); padding: 5px 10px 4px; }
 #log-list { min-height: 0; height: 100%; overflow-y: auto; }

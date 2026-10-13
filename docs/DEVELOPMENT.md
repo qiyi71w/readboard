@@ -57,6 +57,8 @@ npm run test:webview
 
 `npm run test:webview` 会安装 Chromium，直接加载静态 WebView 文件，验证权威 snapshot 的动态文本、语言切换、设置校验、弹层和 accessibility 行为；它不启动 `readboard.exe`。
 
+禁用样式与分段选项焦点使用真实 DOM 的 computed style、鼠标和键盘交互验证，不逐字匹配 CSS 源码。覆盖部分禁用／整组禁用、深浅主题、完整／迷你模式，以及设置页滚动时标题栏留在视口内。
+
 ## 启动与调试
 
 ### 宿主启动参数
@@ -202,6 +204,11 @@ WebView 通过虚拟主机 `https://app.readboard/index.html` 加载静态资源
 
 一次性动作通过 `ControlCenterActionAdapter` 调用 coordinator。不要从 DOM 或 `MainForm` 增加第二套 enablement/动作状态机。
 
+控件的可用外观必须与 snapshot 的 enablement 一致，完整模式和迷你模式遵循相同规则：
+
+- 启用自动落子后，所有平台都允许手动执黑／执白；自动执色和身份仅用于野狐及野狐后台。单个选项禁用只将该选项置灰，整组背景和“执子颜色”标题只在整组无可用选项时置灰。
+- “其他（后台）／其他（前台）”使用框选棋盘或框选 1 路线，不支持点击棋盘内部选盘；同步空闲时这些框选入口可用。禁用的选盘按钮不得保留蓝色强调外观，迷你模式仍只显示适用的选盘入口。
+
 自动落子授权的边界：
 
 - Runtime 管启用周期、当次选择与接受的观察；`FoxIdentitySelection` 管身份和房间代次；`FoxMatchBarLiveRecognition` 管玩家名单缓存；coordinator 管同步 operation、宿主授权账本与出站串行化。
@@ -223,6 +230,8 @@ WebView 通过虚拟主机 `https://app.readboard/index.html` 加载静态资源
 Save 的顺序固定为：校验 → overlay 到最新活动配置 → 持久化 → 替换活动配置 → 应用 language/theme/background-analysis effect → 发布。校验或持久化失败时不能执行 effect。Settings Save 不得改变主窗口 client size，也不得重新引入旧 `ApplyMainFormUi` 布局路径。
 
 设置、规则说明和关于页按实际内容溢出自动滚动，不依赖 `dense` / `dense-y` 布局断点。验证窗口从大到小、再从小到大跨越 680 CSS px 高度时，滚轮仍能到达底部操作区；内容完全容纳时不显示多余滚动条。控制中心继续保持独立日志滚动。
+
+分段选项的透明原生 radio 必须以各自的 label 为定位容器，随设置页内容一起滚动。鼠标点击颜色模式及键盘方向键切换只能按需滚动内容页，不得滚动整页或将标题栏移出视口；完整模式与迷你模式共用这一定位约束。
 
 识别参数输入项下方显示两条调参提示：识别过多时降低对应颜色偏差或增大占比，识别丢失时反向调整。复用 `SettingsForm_lblTips1` / `SettingsForm_lblTips2`，使用普通帮助文字、不加提示边框；四种语言资源与 `Program.AddDefaultLangItems` 同步维护。
 
@@ -401,6 +410,7 @@ npm run test:webview:host:extended
 - `extended`：其余宿主用例，包含 Settings Cancel、分析状态（含暂停）、自动落子逐次授权、单次最终快照、原生身份输入、失效目标窗口刷新和有序 shutdown。
 - `playwright.host.config.js` 统一发现 `tests/WebView/**/real-webview2-*.spec.js`。每个用例必须标记 `@host-core` 或 `@host-extended`；两组互斥且非空，新增文件遵循同一命名规则。检查器比较文件、describe 层级和标题组成的具体集合，不以数量替代覆盖。
 - 两组单 worker、零 retry；禁止 `test.only`。执行 reporter 将 skip、fixme 和预期失败视为失败，不能用跳过获得成功结果。
+- 切换平台后，以 `window.readboardPreview.getState()` 中的平台值及 `preferencesSaved` 等待 C# 权威快照，再读取落盘文件或检查事务目录。radio 的本地 checked 状态早于原生持久化完成，不能作为保存完成信号。
 - `npm run test:webview:host:guards` 覆盖集合完整性和结果汇总的失败路径，不启动 Windows 宿主。
 - CI 保留 required check 名称 `WebView2 Host E2E Core`，其结果汇总 coverage、build、core 和 extended；所有分组均须成功。只有变更检测明确输出 `run_heavy=false` 时允许纯文档等变更跳过。
 - `READBOARD_PUBLISH_DIRECTORY` 可指向已经 publish 的目录，避免重复构建；未设置时会 fresh publish。
