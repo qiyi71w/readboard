@@ -86,6 +86,24 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Theory]
+        [InlineData("request")]
+        [InlineData("missing-plan")]
+        [InlineData("corrupt-plan")]
+        public void TerminalReplayStillRequiresOriginalImmutableEvidence(string fault)
+        {
+            using var fixture = new RecoveryFixture("installed");
+            var installer = new IndependentUpdateInstaller();
+            installer.Execute(fixture.RequestPath, () => false, () => { }, _ => { });
+            byte[] terminal = File.ReadAllBytes(Path.Combine(fixture.Operation, "result.json"));
+            if (fault == "request") File.AppendAllText(fixture.RequestPath, " ");
+            else if (fault == "missing-plan") File.Delete(Path.Combine(fixture.Operation, "recovery.json"));
+            else File.WriteAllText(Path.Combine(fixture.Operation, "recovery.json"), "{broken");
+            Assert.ThrowsAny<Exception>(() => installer.Execute(fixture.RequestPath, () => true, () => { }, _ => { }));
+            Assert.Equal(terminal, File.ReadAllBytes(Path.Combine(fixture.Operation, "result.json")));
+            Assert.True(Directory.Exists(fixture.Backup));
+        }
+
+        [Theory]
         [InlineData("plan-operation")]
         [InlineData("request")]
         [InlineData("corrupt-progress")]

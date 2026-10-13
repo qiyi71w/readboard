@@ -180,6 +180,11 @@ namespace readboard
             var active = IndependentUpdateFiles.Read<IndependentUpdateActive>(Path.Combine(Path.GetDirectoryName(operation), "active.json"));
             if (active.SchemaVersion != 1 || active.OperationId != request.OperationId)
                 throw new InvalidDataException("Recovery does not own the active operation.");
+            string planPath = Path.Combine(operation, "recovery.json");
+            var plan = File.Exists(planPath) ? IndependentUpdateFiles.Read<IndependentUpdateRecoveryPlan>(planPath) : null;
+            if (plan != null && (plan.SchemaVersion != 1 || plan.OperationId != request.OperationId
+                || plan.RequestSha256 != HashFile(requestPath) || plan.DataSha256 != HashFile(Path.Combine(operation, "data.json"))))
+                throw new InvalidDataException("Recovery plan no longer binds the immutable request and data ownership.");
             string resultPath = Path.Combine(operation, "result.json");
             if (File.Exists(resultPath))
             {
@@ -187,6 +192,8 @@ namespace readboard
                 if (prior.SchemaVersion != 1 || prior.OperationId != request.OperationId
                     || prior.InstallDirectory != request.InstallDirectory
                     || !new[] { "installed", "failedUnchanged", "rolledBack", "rollbackFailed", "cancelled" }.Contains(prior.State)
+                    || (prior.BackupDirectory != null && prior.BackupDirectory != backup)
+                    || (new[] { "installed", "rolledBack" }.Contains(prior.State) && plan == null)
                     || (prior.State == "installed" && prior.ActualVersion != request.TargetTag)
                     || (new[] { "failedUnchanged", "rolledBack", "cancelled" }.Contains(prior.State)
                         && prior.ActualVersion != "v" + request.SourceVersion.TrimStart('v'))
@@ -197,10 +204,7 @@ namespace readboard
                 return prior;
             }
             var progress = IndependentUpdateFiles.Read<IndependentUpdateProgress>(Path.Combine(operation, "progress.json"));
-            var plan = IndependentUpdateFiles.Read<IndependentUpdateRecoveryPlan>(Path.Combine(operation, "recovery.json"));
-            if (plan.SchemaVersion != 1 || plan.OperationId != request.OperationId
-                || plan.RequestSha256 != HashFile(requestPath) || plan.DataSha256 != HashFile(Path.Combine(operation, "data.json"))
-                || progress.SchemaVersion != 1 || progress.OperationId != request.OperationId
+            if (plan == null || progress.SchemaVersion != 1 || progress.OperationId != request.OperationId
                 || !new[] { "preservingData", "movingOld", "movingNew", "installed", "rollingBack" }.Contains(progress.Phase)
                 || progress.RestartAdopted != plan.RestartAdopted
                 || progress.RestartRegistrationId != plan.RestartRegistrationId
