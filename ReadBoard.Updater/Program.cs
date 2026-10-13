@@ -136,7 +136,8 @@ namespace ReadBoard.Updater
                     Thread.Sleep(100);
                 }
             }
-            catch (Exception exception) when (exception is IOException || exception is JsonException || exception is InvalidOperationException)
+            catch (Exception exception) when (exception is IOException || exception is JsonException
+                || exception is InvalidOperationException || exception is System.ComponentModel.Win32Exception)
             { outcome = "handshakeFailed"; }
             window.Post(() => window.Finish(result, outcome));
         }

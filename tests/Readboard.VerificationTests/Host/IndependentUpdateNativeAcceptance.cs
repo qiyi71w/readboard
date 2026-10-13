@@ -64,7 +64,8 @@ public static class IndependentUpdateNativeAcceptance
             var observe = (Action<IndependentUpdateObservation>)Delegate.CreateDelegate(typeof(Action<IndependentUpdateObservation>), form,
                 typeof(MainForm).GetMethod("OnIndependentUpdateObservation", flags));
             var journey = new IndependentUpdateJourney(downloader, new HostedUpdatePackageVerifier(),
-                new IndependentUpdateCommitter(() => Program.language, () => new[] { Program.CurrentContext.Logging?.LogRoot }),
+                new IndependentUpdateCommitter(() => Program.language, () => new[] { Program.CurrentContext.Logging?.LogRoot },
+                    ((SyncSessionCoordinator)typeof(MainForm).GetField("sessionCoordinator", flags).GetValue(form)).UpdateRestart),
                 form.PersistConfiguration, observe);
             typeof(MainForm).GetField("independentUpdateJourney", flags).SetValue(form, journey);
             string asset = Path.GetFileName(package);
