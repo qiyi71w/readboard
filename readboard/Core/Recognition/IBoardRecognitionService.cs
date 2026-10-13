@@ -53,6 +53,18 @@ namespace readboard
                 return BoardRecognitionResult.CreateFailure(BoardRecognitionFailureKind.InvalidBoardArea, failureReason);
 
             BoardSnapshot snapshot = AnalyzeBoard(request, pixels, viewport, thresholds);
+            // Sampling uses cropped-image coordinates; publish the native source origin.
+            PixelRect capturedSource = request.Frame.Viewport == null ? null : request.Frame.Viewport.SourceBounds;
+            if (request.Frame.SyncMode == SyncMode.Background && capturedSource != null
+                && capturedSource.Width == pixels.Width && capturedSource.Height == pixels.Height)
+            {
+                viewport.SourceBounds.X += capturedSource.X;
+                viewport.SourceBounds.Y += capturedSource.Y;
+                if (viewport.FirstIntersectionX.HasValue)
+                    viewport.FirstIntersectionX += capturedSource.X;
+                if (viewport.FirstIntersectionY.HasValue)
+                    viewport.FirstIntersectionY += capturedSource.Y;
+            }
             ReuseSnapshotBackingIfUnchanged(snapshot);
             snapshot.NeedsPrintWindowFallback = ShouldRequestPrintWindowFallback(request.Frame, snapshot);
             BoardRecognitionResult result = CreateSuccessResult(snapshot, viewport, false);

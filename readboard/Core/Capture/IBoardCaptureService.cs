@@ -79,6 +79,12 @@ namespace readboard
             Bitmap output = null;
             try
             {
+                if (request.SyncMode == SyncMode.Background
+                    && !IsCropWithinWindow(plan.SourceBounds, new PixelRect(0, 0, source.Width, source.Height)))
+                {
+                    request.BackgroundSelection.Invalidate();
+                    return BoardCaptureResult.CreateFailure(BoardCaptureFailureKind.InvalidSelection, "Selection is outside the captured image.");
+                }
                 output = BitmapProjection.CreateProjectedBitmap(source, plan.SourceBounds);
                 BoardFrame frame = BuildFrame(request, plan.Window, plan.SourceBounds, plan.ScreenBounds, output, plan.UsePrintWindow);
                 output = null;
@@ -97,17 +103,37 @@ namespace readboard
             plan = null;
             IntPtr handle = GetWindowHandle(request.Window);
             if (handle == IntPtr.Zero)
+            {
+                if (request.BackgroundSelection != null)
+                    request.BackgroundSelection.Invalidate();
                 return BoardCaptureResult.CreateFailure(BoardCaptureFailureKind.WindowUnavailable, "Target window handle is missing.");
+            }
 
             WindowDescriptor liveWindow;
             if (!platform.TryDescribeWindow(handle, request.Window, out liveWindow))
+            {
+                if (request.BackgroundSelection != null)
+                    request.BackgroundSelection.Invalidate();
                 return BoardCaptureResult.CreateFailure(BoardCaptureFailureKind.WindowUnavailable, "Failed to resolve the target window.");
+            }
 
-            CropResolution crop = ResolveWindowCrop(request, liveWindow);
+            PixelRect screenSelection = null;
+            if (request.SyncMode == SyncMode.Background)
+            {
+                BackgroundSelectionBinding binding = request.BackgroundSelection;
+                if (binding == null)
+                    return BoardCaptureResult.CreateFailure(BoardCaptureFailureKind.InvalidSelection, "Background capture requires a bound selection.");
+                if (binding.Handle != handle || !binding.TryProject(liveWindow, out screenSelection))
+                {
+                    binding.Invalidate();
+                    return BoardCaptureResult.CreateFailure(BoardCaptureFailureKind.InvalidSelection, "Background selection requires reselection.");
+                }
+            }
+
+            bool usePrintWindow = ShouldUsePrintWindow(request, liveWindow, screenSelection);
+            CropResolution crop = ResolveWindowCrop(liveWindow, screenSelection, usePrintWindow);
             if (crop == null)
                 return BoardCaptureResult.CreateFailure(BoardCaptureFailureKind.InvalidSelection, "Selection is outside the target window.");
-
-            bool usePrintWindow = ShouldUsePrintWindow(request, liveWindow);
             plan = new BoardCapturePlan
             {
                 Window = liveWindow,
@@ -119,67 +145,30 @@ namespace readboard
             return null;
         }
 
-        private CropResolution ResolveWindowCrop(BoardCaptureRequest request, WindowDescriptor window)
+        private static CropResolution ResolveWindowCrop(WindowDescriptor window, PixelRect screenSelection, bool usePrintWindow)
         {
-            PixelRect selection = CloneRect(request.SelectionBounds);
-            PixelRect fullWindow = new PixelRect(0, 0, window.Bounds.Width, window.Bounds.Height);
-            if (!IsPositiveRect(selection))
+            if (screenSelection == null)
                 return new CropResolution
                 {
-                    SourceBounds = fullWindow,
+                    SourceBounds = new PixelRect(0, 0, window.Bounds.Width, window.Bounds.Height),
                     ScreenBounds = CloneRect(window.Bounds)
                 };
 
-            CropResolution screenCrop = TryResolveScreenRelativeCrop(selection, window);
-            if (screenCrop != null)
-                return screenCrop;
-
-            CropResolution localCrop = TryResolveLocalCrop(selection, window);
-            if (localCrop != null)
-                return localCrop;
-
-            return null;
-        }
-
-        private CropResolution TryResolveScreenRelativeCrop(PixelRect selection, WindowDescriptor window)
-        {
-            double scale = GetEffectiveScale(window);
-            int offsetX = selection.X - window.Bounds.X;
-            int offsetY = selection.Y - window.Bounds.Y;
-            PixelRect candidate = window.IsDpiAware
-                ? new PixelRect(offsetX, offsetY, selection.Width, selection.Height)
-                : new PixelRect(
-                    DisplayScaling.ScaleCoordinateDown(offsetX, scale),
-                    DisplayScaling.ScaleCoordinateDown(offsetY, scale),
-                    DisplayScaling.ScaleSizeDown(selection.Width, scale),
-                    DisplayScaling.ScaleSizeDown(selection.Height, scale));
-
-            if (!IsCropWithinWindow(candidate, window.Bounds))
+            PixelRect sourceOrigin = usePrintWindow ? window.Bounds : window.ClientBounds;
+            PixelRect sourceBounds = DisplayScaling.ScreenToClientBounds(
+                screenSelection, sourceOrigin, window.IsDpiAware, GetEffectiveScale(window));
+            if (!IsPositiveRect(sourceBounds) || sourceBounds.X < 0 || sourceBounds.Y < 0)
                 return null;
-
             return new CropResolution
             {
-                SourceBounds = candidate,
-                ScreenBounds = CloneRect(selection)
+                SourceBounds = sourceBounds,
+                ScreenBounds = screenSelection
             };
         }
 
-        private CropResolution TryResolveLocalCrop(PixelRect selection, WindowDescriptor window)
+        private bool ShouldUsePrintWindow(BoardCaptureRequest request, WindowDescriptor window, PixelRect screenSelection)
         {
-            PixelRect candidate = new PixelRect(selection.X, selection.Y, selection.Width, selection.Height);
-            if (!IsCropWithinWindow(candidate, window.Bounds))
-                return null;
-
-            return new CropResolution
-            {
-                SourceBounds = candidate,
-                ScreenBounds = CreateScreenBounds(window, candidate)
-            };
-        }
-
-        private bool ShouldUsePrintWindow(BoardCaptureRequest request, WindowDescriptor window)
-        {
-            if (request.SyncMode == SyncMode.Yike)
+            if (request.SyncMode == SyncMode.Yike || IsBrowserBackgroundCapture(request, window))
                 return true;
             if (window.IsJavaWindow)
                 return true;
@@ -188,32 +177,32 @@ namespace readboard
             if (!allowEnhancedPath || !request.UseEnhancedCapture)
                 return false;
 
-            PixelRect screenBounds = CloneRect(request.SelectionBounds);
-            if (!IsPositiveRect(screenBounds))
-                screenBounds = CloneRect(window.Bounds);
-
+            PixelRect screenBounds = screenSelection ?? window.Bounds;
             PixelRect screen = platform.GetVirtualScreenBounds();
-            int bottom = screenBounds.Y + screenBounds.Height;
-            int right = screenBounds.X + screenBounds.Width;
-            if (IsPositiveRect(request.SelectionBounds))
-            {
-                return screenBounds.X < screen.X
-                    || screenBounds.Y < screen.Y
-                    || right > screen.X + screen.Width
-                    || bottom > screen.Y + screen.Height;
-            }
-
             return screenBounds.X < screen.X
-                || window.Bounds.Y < screen.Y
-                || right > screen.X + screen.Width
-                || bottom > screen.Y + screen.Height;
+                || screenBounds.Y < screen.Y
+                || (long)screenBounds.X + screenBounds.Width > (long)screen.X + screen.Width
+                || (long)screenBounds.Y + screenBounds.Height > (long)screen.Y + screen.Height;
+        }
+
+        private static bool IsBrowserBackgroundCapture(BoardCaptureRequest request, WindowDescriptor window)
+        {
+            return request.SyncMode == SyncMode.Background
+                && IsBrowserWindowClass(window.ClassName);
+        }
+
+        private static bool IsBrowserWindowClass(string className)
+        {
+            return string.Equals(className, "Chrome_RenderWidgetHostHWND", StringComparison.Ordinal)
+                || string.Equals(className, "Chrome_WidgetWin_1", StringComparison.Ordinal)
+                || string.Equals(className, "MozillaWindowClass", StringComparison.Ordinal);
         }
 
         private Bitmap CaptureWindowBitmap(BoardCapturePlan plan, BoardCaptureRequest request)
         {
             if (plan.UsePrintWindow)
             {
-                return request.SyncMode == SyncMode.Yike
+                return request.SyncMode == SyncMode.Yike || IsBrowserBackgroundCapture(request, plan.Window)
                     ? platform.CapturePrintWindowFullContent(plan.Window.Handle)
                     : platform.CapturePrintWindow(plan.Window.Handle);
             }
@@ -307,10 +296,6 @@ namespace readboard
             return window;
         }
 
-        private PixelRect CreateScreenBounds(WindowDescriptor window, PixelRect localBounds)
-        {
-            return DisplayScaling.ClientToScreenBounds(localBounds, window.Bounds, window.IsDpiAware, GetEffectiveScale(window));
-        }
 
         private static bool IsCropWithinWindow(PixelRect crop, PixelRect windowBounds)
         {
@@ -348,6 +333,7 @@ namespace readboard
                 ClassName = window.ClassName,
                 Title = window.Title,
                 Bounds = CloneRect(window.Bounds),
+                ClientBounds = CloneRect(window.ClientBounds),
                 IsDpiAware = window.IsDpiAware,
                 DpiScale = window.DpiScale,
                 IsJavaWindow = window.IsJavaWindow
@@ -405,23 +391,49 @@ namespace readboard
                 return false;
 
             string className = GetWindowClassName(handle);
-            string resolvedClassName = string.IsNullOrEmpty(className) ? GetSeedClassName(seed) : className;
             PixelRect bounds = new PixelRect(rect.Left, rect.Top, width, height);
             bool isDpiAware = GetSupportDpiState(handle);
             descriptor = new WindowDescriptor
             {
                 Handle = handle,
-                ClassName = resolvedClassName,
+                ClassName = className,
                 Title = GetSeedTitle(seed, handle),
                 Bounds = bounds,
+                ClientBounds = GetPhysicalClientBounds(handle),
                 IsDpiAware = isDpiAware,
                 DpiScale = DisplayScaling.ResolveWindowScale(
                     isDpiAware,
                     DisplayScaling.GetScaleForWindow(handle),
                     DisplayScaling.GetScaleForWindowBounds(bounds)),
-                IsJavaWindow = string.Equals(resolvedClassName, JavaFrameClassName, StringComparison.Ordinal)
+                IsJavaWindow = string.Equals(className, JavaFrameClassName, StringComparison.Ordinal)
             };
             return true;
+        }
+
+        internal static PixelRect GetPhysicalClientBounds(IntPtr handle)
+        {
+            // Query both client corners in a per-monitor-aware caller context so an
+            // unaware target cannot virtualize the physical screen geometry.
+            IntPtr previousContext = SetThreadDpiAwarenessContext(new IntPtr(-4));
+            if (previousContext == IntPtr.Zero)
+                return null;
+            try
+            {
+                RECT client;
+                if (!GetClientRect(handle, out client))
+                    return null;
+                Point topLeft = new Point(client.Left, client.Top);
+                Point bottomRight = new Point(client.Right, client.Bottom);
+                if (!ClientToScreen(handle, ref topLeft) || !ClientToScreen(handle, ref bottomRight))
+                    return null;
+                int width = bottomRight.X - topLeft.X;
+                int height = bottomRight.Y - topLeft.Y;
+                return width > 0 && height > 0 ? new PixelRect(topLeft.X, topLeft.Y, width, height) : null;
+            }
+            finally
+            {
+                SetThreadDpiAwarenessContext(previousContext);
+            }
         }
 
         public Bitmap CaptureWindow(IntPtr handle)
@@ -547,11 +559,6 @@ namespace readboard
             }
         }
 
-        private static string GetSeedClassName(WindowDescriptor seed)
-        {
-            return seed == null ? string.Empty : seed.ClassName;
-        }
-
         private static string GetSeedTitle(WindowDescriptor seed, IntPtr handle)
         {
             string title = GetWindowTitle(handle);
@@ -620,6 +627,17 @@ namespace readboard
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetClientRect(IntPtr handle, out RECT rect);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ClientToScreen(IntPtr handle, ref Point point);
 
         [DllImport("user32.dll")]
         private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);

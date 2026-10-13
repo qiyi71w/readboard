@@ -37,6 +37,7 @@ namespace readboard
             {
                 if (platformChanged)
                 {
+                    form.InvalidateBackgroundSelection();
                     if (preferences.Platform != SyncMode.Yike)
                         form.ClearYikeContext();
                     form.ResetMainWindowTitleProjection();

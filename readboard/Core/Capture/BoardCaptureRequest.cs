@@ -6,6 +6,7 @@ namespace readboard
         public SyncMode SyncMode { get; set; }
         public BoardDimensions BoardSize { get; set; }
         public PixelRect SelectionBounds { get; set; }
+        public BackgroundSelectionBinding BackgroundSelection { get; set; }
         public bool PreferPrintWindow { get; set; }
         public bool UseEnhancedCapture { get; set; }
         public bool IsInitialProbe { get; set; }

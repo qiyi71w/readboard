@@ -251,6 +251,18 @@ Capture -> Recognition -> BoardSnapshot -> OutboundBoardSnapshotEmitter
 
 `SyncSessionCoordinator` 管 transport 生命周期、锁保护的 session state、出站 dispatcher 和 payload 去重；`SyncSessionCoordinator.Orchestration.cs` 管一次同步、持续同步、落子、停止/清盘和诊断。
 
+“其他（后台）”按实际绑定 HWND 的窗口类选择既有完整内容捕获（`PrintWindow` 的 `PW_RENDERFULLCONTENT = 0x2`）：精确匹配 `Chrome_RenderWidgetHostHWND`、`Chrome_WidgetWin_1` 或 `MozillaWindowClass`，不检查进程品牌名单。采用这些类的 Chromium 浏览器、Firefox 及 Chromium 嵌入式程序均进入此路径；这不是对所有品牌、版本或 Electron/CEF/WebView2 容器的逐一认证。每次从当前 HWND 读取真实类名，不用种子类名补充缺失身份。初次探测、单次和持续采样均不依赖“增强截图”。原生失败返回捕获失败，不改用屏幕截图、缓存帧或激活窗口。
+
+该兼容范围要求目标窗口未最小化、内容为当前显示页面、棋盘正确框选且在屏幕内无遮挡；窗口无需拥有输入焦点。Brave 已在完全遮挡时观察到旧帧，Firefox 在特定环境下遮挡仍更新不构成统一保证；本功能不检测黑图、卡帧或遮挡，也不保证自动断开或提示重选。遮挡、最小化、非活动标签页持续刷新及网页后台落子不在合同内。可见性限制不同于下述尺寸/DPI 导致的几何绑定失效。前台屏幕捕获、不匹配类的通用后台及 Fox、FoxBackgroundPlace、Tygem、Sina、Yike 专用模式保持原有策略，弈客继续复用同一完整内容 API。组件回归见 `LegacyBoardCaptureAcceptanceMatrixTests`；真实目标、宿主输出及多屏 DPI 由候选原生验收单独证明。
+
+“其他（后台）”的 `BackgroundSelectionBinding` 在框选校准、遮罩退出并解析 HWND 后建立；它保存相对该 HWND 客户区原点的物理像素选区，并关联选择请求、客户区尺寸和有效 DPI。捕获请求通过 `BackgroundSelection` 传递绑定，`SelectionBounds` 只用于前台屏幕选区。新选择、模式切换或目标替换会撤销旧绑定和未完成的异步结果；停止后重启同步保留仍有效的绑定。
+
+手动框选必须具有正宽度和正高度；退化选区按识别失败处理并恢复主窗口，不启动后台窗口绑定。持续同步验收夹具也必须提供匹配目标 HWND、客户区矩形和 DPI 的 `BackgroundSelection`；仅设置屏幕 `SelectionBounds` 不满足后台同步启动条件。
+
+目标在同一显示器内平移且尺寸、DPI、棋盘相对布局不变时，每次捕获用实时几何投影选区，无需重新框选。尺寸/DPI 改变、HWND 失效或选区越界会拒绝旧绑定，必须重新选择；恢复旧尺寸也不会自动恢复已失效的绑定。滚动、缩放和内容重排需要用户重选，不自动追踪。
+
+`WindowDescriptor.ClientBounds` 是真实客户区的物理屏幕矩形，`Bounds` 保留窗口外框语义。GetDC 与 PrintWindow 分别按客户区和外框源图原点换算；`BoardViewport.SourceBounds` 是实际源图裁剪，`ScreenBounds` 是该帧的当前物理屏幕投影。通用后台落子从屏幕投影与客户区事实计算消息坐标，DPI-unaware 目标仅转换一次；Java 的既有屏幕点击使用该帧投影。不得把源图坐标直接当作客户区坐标，不承诺旧帧实时跟随窗口。Fox、Tygem、Sina、Yike 等专用模式保持原合同。
+
 关键不变量：
 
 - `StopSyncSessionAndClearBoard` 是停止同步并清盘的单一协调操作，避免旧 worker 在清盘后继续发送 snapshot。

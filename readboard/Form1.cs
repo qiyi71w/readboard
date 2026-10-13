@@ -50,6 +50,7 @@ namespace readboard
         private readonly Queue<Action> pendingProtocolCommands = new Queue<Action>();
         private readonly BackgroundSelectionWindowBindingCoordinator backgroundSelectionWindowBindingCoordinator =
             new BackgroundSelectionWindowBindingCoordinator();
+        private BackgroundSelectionBinding backgroundSelection;
         private FoxWindowContext lastFoxWindowContext = FoxWindowContext.Unknown();
         private YikeWindowContext lastYikeWindowContext = YikeWindowContext.Unknown();
         private IntPtr lastYikeContextWindowHandle = IntPtr.Zero;
@@ -94,6 +95,13 @@ namespace readboard
             selectionY1 = y1;
             ox2 = x2;
             oy2 = y2;
+        }
+
+        private void InvalidateBackgroundSelection()
+        {
+            backgroundSelectionWindowBindingCoordinator.Invalidate();
+            backgroundSelection?.Invalidate();
+            backgroundSelection = null;
         }
 
 
@@ -339,7 +347,8 @@ namespace readboard
                 SyncMode = syncMode,
                 BoardWidth = controlCenter.BoardWidth,
                 BoardHeight = controlCenter.BoardHeight,
-                SelectionBounds = BuildCaptureSelectionBounds(),
+                SelectionBounds = syncMode == SyncMode.Foreground ? BuildCaptureSelectionBounds() : null,
+                BackgroundSelection = syncMode == SyncMode.Background ? backgroundSelection : null,
                 SelectedWindowHandle = hwnd,
                 DpiScale = factor,
                 LegacyTypeToken = ((int)syncMode).ToString(),
@@ -591,6 +600,7 @@ namespace readboard
                 ClearYikeContext();
             if (hwnd != handle)
             {
+                InvalidateBackgroundSelection();
                 controlCenterRuntime.InvalidateWindowEvidence();
             }
             hwnd = handle;
@@ -999,6 +1009,7 @@ namespace readboard
         //static extern void BlockInput(bool Block);
         public void Snap(int x1, int y1, int x2, int y2)
         {
+            InvalidateBackgroundSelection();
             UpdateSelectionBounds(
                 Math.Min(x1, x2),
                 Math.Min(y1, y2),
@@ -1021,16 +1032,29 @@ namespace readboard
             if (!isMannulCircle)
                 return TryCalibrateSelectionBounds();
 
-            ExpandManualSelectionBounds();
+            Rectangle expandedBounds;
+            if (!TryExpandManualSelectionBounds(
+                Rectangle.FromLTRB(selectionX1, selectionY1, ox2, oy2),
+                CreateCurrentBoardSize(), out expandedBounds))
+                return false;
+
+            UpdateSelectionBounds(expandedBounds.Left, expandedBounds.Top, expandedBounds.Right, expandedBounds.Bottom);
             return true;
         }
 
-        private void ExpandManualSelectionBounds()
+        internal static bool TryExpandManualSelectionBounds(
+            Rectangle selection, BoardDimensions boardSize, out Rectangle expandedBounds)
         {
-            BoardDimensions boardSize = CreateCurrentBoardSize();
-            int gapX = (int)Math.Round((ox2 - selectionX1) / ((boardSize.Width - 1) * 2f));
-            int gapY = (int)Math.Round((oy2 - selectionY1) / ((boardSize.Height - 1) * 2f));
-            UpdateSelectionBounds(selectionX1 - gapX, selectionY1 - gapY, ox2 + gapX, oy2 + gapY);
+            expandedBounds = Rectangle.Empty;
+            if (selection.Width <= 0 || selection.Height <= 0)
+                return false;
+
+            int gapX = (int)Math.Round(selection.Width / ((boardSize.Width - 1) * 2f));
+            int gapY = (int)Math.Round(selection.Height / ((boardSize.Height - 1) * 2f));
+            expandedBounds = Rectangle.FromLTRB(
+                selection.Left - gapX, selection.Top - gapY,
+                selection.Right + gapX, selection.Bottom + gapY);
+            return true;
         }
 
         private bool TryCalibrateSelectionBounds()
@@ -1053,13 +1077,23 @@ namespace readboard
 
         private void BeginResolveBackgroundSelectionWindowAsync()
         {
-            System.Drawing.Point selectionCenter = new System.Drawing.Point((selectionX1 + ox2) / 2, (selectionY1 + oy2) / 2);
+            PixelRect selection = BuildCaptureSelectionBounds();
+            System.Drawing.Point selectionCenter = new System.Drawing.Point(selection.X + selection.Width / 2, selection.Y + selection.Height / 2);
             backgroundSelectionWindowBindingCoordinator.Start(
                 selectionCenter,
                 WindowFromPoint,
-                delegate(IntPtr handle)
+                delegate(IntPtr handle, int requestId)
                 {
+                    if (CurrentSyncType != TYPE_BACKGROUND || isShuttingDown)
+                        return;
+                    WindowDescriptor window;
+                    BackgroundSelectionBinding binding = new LegacyWindowDescriptorFactory().TryCreate(handle, out window)
+                        ? BackgroundSelectionBinding.TryCreate(window, selection, requestId)
+                        : null;
                     SetSelectedWindowHandle(handle);
+                    backgroundSelection = binding;
+                    if (binding == null)
+                        ShowWebViewMessage("WebView_recognitionFailedTitle", "recgnizeFaild");
                     ResetMainWindowTitle();
                 },
                 delegate
@@ -1380,6 +1414,7 @@ namespace readboard
 
         private void ApplyNativeBoardSelection(ControlCenterBoardSelectionMode mode)
         {
+            InvalidateBackgroundSelection();
             if (mode == ControlCenterBoardSelectionMode.Inside)
             {
                 mouseHook.Enabled = true;

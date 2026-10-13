@@ -870,38 +870,6 @@ namespace Readboard.VerificationTests.Protocol
                 transport.SentLines.GetRange(0, 7));
         }
 
-        [Fact]
-        public void CreateCaptureRequest_UsesEnhancedCaptureFlagFromHostSnapshot()
-        {
-            RecordingTransport transport = new RecordingTransport();
-            SyncSessionCoordinator coordinator = new SyncSessionCoordinator(transport, new LegacyProtocolAdapter());
-            Assembly assembly = typeof(SyncSessionCoordinator).Assembly;
-            Type runtimeType = RequireType(assembly, "readboard.SyncSessionRuntimeDependencies");
-            Type hostInterfaceType = RequireType(assembly, "readboard.ISyncCoordinatorHost");
-            Type snapshotType = RequireType(assembly, "readboard.SyncCoordinatorHostSnapshot");
-            Type descriptorInterfaceType = RequireType(assembly, "readboard.IWindowDescriptorFactory");
-
-            object snapshot = CreateSnapshot(snapshotType, SyncMode.Background, new IntPtr(5151));
-            SetProperty(snapshot, "UseEnhancedCapture", true);
-            HostRecorder hostRecorder = new HostRecorder(snapshot);
-            object host = CreateProxy(hostInterfaceType, hostRecorder.HandleCall);
-            DescriptorFactoryRecorder descriptorFactoryRecorder = new DescriptorFactoryRecorder();
-            object descriptorFactory = CreateProxy(descriptorInterfaceType, descriptorFactoryRecorder.HandleCall);
-            object runtime = Activator.CreateInstance(runtimeType);
-            SetProperty(runtime, "Host", host);
-            SetProperty(runtime, "CaptureService", new SequencedCaptureService(CreateFrame()));
-            SetProperty(runtime, "RecognitionService", new SequencedRecognitionService(CreateResult("re=background")));
-            SetProperty(runtime, "PlacementService", new PassivePlacementService());
-            SetProperty(runtime, "OverlayService", new PassiveOverlayService());
-            SetProperty(runtime, "WindowDescriptorFactory", descriptorFactory);
-
-            Invoke(coordinator, "AttachRuntime", runtime);
-
-            BoardCaptureRequest request = (BoardCaptureRequest)Invoke(coordinator, "CreateCaptureRequest", runtime, snapshot);
-
-            Assert.NotNull(request);
-            Assert.True(request.UseEnhancedCapture);
-        }
 
         [Fact]
         public void TryStartKeepSync_StartsBackgroundWorkerThread()
@@ -2257,6 +2225,10 @@ namespace Readboard.VerificationTests.Protocol
             SetProperty(snapshot, "BoardWidth", 19);
             SetProperty(snapshot, "BoardHeight", 19);
             SetProperty(snapshot, "SelectionBounds", new PixelRect(10, 20, 190, 190));
+            if (syncMode == SyncMode.Background)
+                SetProperty(snapshot, "BackgroundSelection", BackgroundSelectionBinding.TryCreate(
+                    new WindowDescriptor { Handle = handle, ClientBounds = new PixelRect(100, 200, 190, 190), DpiScale = 1d },
+                    new PixelRect(100, 200, 190, 190), 1));
             SetProperty(snapshot, "SelectedWindowHandle", handle);
             SetProperty(snapshot, "DpiScale", 1f);
             SetProperty(snapshot, "LegacyTypeToken", "0");
@@ -2533,8 +2505,10 @@ namespace Readboard.VerificationTests.Protocol
         private sealed class WebViewHostRecorder : ISyncCoordinatorHost, IWebViewSyncCoordinatorHost
         {
             public int RuntimeFrameClearedCount { get; private set; }
+            public SyncCoordinatorHostSnapshot Snapshot { get; set; } = new SyncCoordinatorHostSnapshot();
+            public BoardViewport LastViewport { get; private set; }
 
-            public SyncCoordinatorHostSnapshot CaptureSnapshot() { return new SyncCoordinatorHostSnapshot(); }
+            public SyncCoordinatorHostSnapshot CaptureSnapshot() { return Snapshot; }
             public long AllocateSessionObservationGeneration() { return 0; }
             public void UpdateSelectedWindowHandle(IntPtr handle, long observationGeneration) { }
             public void OnKeepSyncStarted(long observationGeneration) { }
@@ -2564,6 +2538,7 @@ namespace Readboard.VerificationTests.Protocol
                 bool placementRegionResolved,
                 long observationGeneration)
             {
+                LastViewport = frame.Viewport;
             }
         }
 
@@ -2892,6 +2867,7 @@ namespace Readboard.VerificationTests.Protocol
                 {
                     Handle = (IntPtr)args[0],
                     Bounds = new PixelRect(100, 200, 190, 190),
+                    ClientBounds = new PixelRect(100, 200, 190, 190),
                     ClassName = "FoxBoard",
                     Title = "Fox",
                     IsDpiAware = true,

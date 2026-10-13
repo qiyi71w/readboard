@@ -63,6 +63,7 @@ namespace readboard
         public int BoardWidth { get; set; }
         public int BoardHeight { get; set; }
         public PixelRect SelectionBounds { get; set; }
+        public BackgroundSelectionBinding BackgroundSelection { get; set; }
         public IntPtr SelectedWindowHandle { get; set; }
         public int? FoxMoveNumber { get; set; }
         public float DpiScale { get; set; }

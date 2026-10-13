@@ -130,6 +130,24 @@ namespace readboard
 
         private bool TryResolveBounds(BoardFrame frame, PlacementPathKind path, out PixelRect bounds)
         {
+            if (frame.SyncMode == SyncMode.Background)
+            {
+                bounds = null;
+                PixelRect clientBounds = frame.Window == null ? null : frame.Window.ClientBounds;
+                PixelRect screenBounds = frame.Viewport.ScreenBounds;
+                if (!IsUsable(clientBounds) || !IsUsable(screenBounds))
+                    return false;
+
+                bounds = path == PlacementPathKind.Foreground
+                    ? screenBounds
+                    : new PixelRect(
+                        screenBounds.X - clientBounds.X,
+                        screenBounds.Y - clientBounds.Y,
+                        screenBounds.Width,
+                        screenBounds.Height);
+                return true;
+            }
+
             if (path == PlacementPathKind.Foreground)
                 return TryResolveScreenBounds(frame, out bounds);
             return TryResolveClientBounds(frame, out bounds);
@@ -165,18 +183,10 @@ namespace readboard
             if (frame != null && frame.SyncMode == SyncMode.Yike)
                 return TryResolveYikeRenderWidgetClientBounds(frame, out bounds);
 
-            if (ShouldPreferScreenBoundsForBackground(frame) && TryResolveClientBoundsFromScreen(frame, out bounds))
-                return true;
-
             bounds = frame.Viewport.SourceBounds;
             if (IsUsable(bounds))
                 return true;
             return TryResolveClientBoundsFromScreen(frame, out bounds);
-        }
-
-        private static bool ShouldPreferScreenBoundsForBackground(BoardFrame frame)
-        {
-            return frame != null && frame.SyncMode == SyncMode.Background;
         }
 
         private static bool TryResolveClientBoundsFromScreen(BoardFrame frame, out PixelRect bounds)
@@ -224,6 +234,9 @@ namespace readboard
             PlacementPathKind path,
             PixelRect bounds)
         {
+            if (request.Frame.SyncMode == SyncMode.Background)
+                return BuildBackgroundPlacementPoint(request, path, bounds);
+
             PlacementPoint explicitPoint;
             if (TryBuildExplicitPlacementPoint(request, bounds, out explicitPoint))
             {
@@ -254,6 +267,37 @@ namespace readboard
             return new PlacementPoint(
                 DisplayScaling.ScaleClientCoordinateForPostMessage(x, isDpiAware, dpiScale),
                 DisplayScaling.ScaleClientCoordinateForPostMessage(y, isDpiAware, dpiScale));
+        }
+
+        private static PlacementPoint BuildBackgroundPlacementPoint(
+            MovePlacementRequest request,
+            PlacementPathKind path,
+            PixelRect bounds)
+        {
+            PlacementPoint point;
+            if (!TryBuildExplicitPlacementPoint(request, bounds, out point))
+            {
+                BoardViewport viewport = request.Frame.Viewport;
+                double cellWidth = IsUsable(viewport.SourceBounds) && viewport.CellWidth > 0d
+                    ? viewport.CellWidth * bounds.Width / viewport.SourceBounds.Width
+                    : bounds.Width / (double)request.Frame.BoardSize.Width;
+                double cellHeight = IsUsable(viewport.SourceBounds) && viewport.CellHeight > 0d
+                    ? viewport.CellHeight * bounds.Height / viewport.SourceBounds.Height
+                    : bounds.Height / (double)request.Frame.BoardSize.Height;
+                point = new PlacementPoint(
+                    (int)Math.Round(bounds.X + cellWidth * (request.Move.X + 0.5d)),
+                    (int)Math.Round(bounds.Y + cellHeight * (request.Move.Y + 0.5d)));
+            }
+
+            // Bounds and projected source offsets are physical pixels. Only HWND
+            // messages for DPI-unaware targets need conversion to logical pixels.
+            if (path == PlacementPathKind.Foreground || request.Frame.Window.IsDpiAware)
+                return point;
+
+            double scale = ResolveBackgroundDpiScale(request.Frame.Window);
+            return new PlacementPoint(
+                DisplayScaling.ScaleCoordinateDown(point.X, scale),
+                DisplayScaling.ScaleCoordinateDown(point.Y, scale));
         }
 
         private static bool TryBuildExplicitPlacementPoint(

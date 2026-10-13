@@ -26,6 +26,7 @@ namespace readboard
                 ClassName = className,
                 Title = GetWindowTitle(handle),
                 Bounds = bounds,
+                ClientBounds = Win32BoardCapturePlatform.GetPhysicalClientBounds(handle),
                 IsDpiAware = isDpiAware,
                 DpiScale = DisplayScaling.ResolveWindowScale(
                     isDpiAware,
