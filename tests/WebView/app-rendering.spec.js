@@ -703,6 +703,115 @@ test("clears color radio selection on empty snapshot without lingering checked s
   expect(commands).toHaveLength(1);
 });
 
+for (const theme of ["light", "dark"]) {
+  for (const miniMode of [false, true]) {
+    test(`shows partial and complete color disablement in ${theme} ${miniMode ? "mini" : "full"} mode`, async ({ page }) => {
+      await page.setViewportSize(miniMode ? { width: 680, height: 218 } : { width: 1100, height: 680 });
+      await openHostedShell(page);
+      const snapshot = hostedSnapshot({ theme, miniMode });
+      snapshot.controlCenter = miniControlCenter({
+        platform: "otherBackground", color: "", autoColorEnabled: false, identityEnabled: false,
+        boardSelectionInsideEnabled: false, boardSelectionRectangleEnabled: true, boardSelectionLine1Enabled: true
+      });
+      await publish(page, snapshot);
+      const surface = page.locator(miniMode ? "#mini-body" : '.page[data-page-panel="controlCenter"]');
+      const colorName = miniMode ? "mini-color" : "color";
+      const black = surface.locator(`input[name="${colorName}"][value="black"]`);
+      const white = surface.locator(`input[name="${colorName}"][value="white"]`);
+      const auto = surface.locator(`input[name="${colorName}"][value="auto"]`);
+      const blackLabel = surface.locator(`label:has(input[name="${colorName}"][value="black"])`);
+      const whiteLabel = surface.locator(`label:has(input[name="${colorName}"][value="white"])`);
+      const autoLabel = surface.locator(`label:has(input[name="${colorName}"][value="auto"])`);
+      const group = blackLabel.locator("..");
+      const identity = surface.locator('[data-command="identity.open"]');
+      const disabledColor = await identity.evaluate(element => getComputedStyle(element).color);
+      const disabledBackground = await identity.evaluate(element => getComputedStyle(element).backgroundColor);
+      const disabledBorder = await identity.evaluate(element => getComputedStyle(element).borderTopColor);
+
+      await expect(black).toBeEnabled();
+      await expect(white).toBeEnabled();
+      await expect(auto).toBeDisabled();
+      await expect(identity).toBeDisabled();
+      await expect(blackLabel).not.toHaveCSS("color", disabledColor);
+      await expect(whiteLabel).not.toHaveCSS("color", disabledColor);
+      await expect(autoLabel).toHaveCSS("color", disabledColor);
+      await expect(autoLabel).toHaveCSS("background-color", disabledBackground);
+      await expect(group).not.toHaveCSS("background-color", disabledBackground);
+      if (!miniMode) {
+        await expect(surface.locator(".color-row > b")).not.toHaveCSS("color", disabledColor);
+        const inside = surface.locator('[data-board-mode="inside"]');
+        await expect(inside).toBeDisabled();
+        await expect(inside).toHaveCSS("color", disabledColor);
+        await expect(inside).toHaveCSS("border-top-color", disabledBorder);
+      }
+      await blackLabel.click();
+      await expect(black).toBeChecked();
+      await whiteLabel.click();
+      await expect(white).toBeChecked();
+      // Deliver the pointer click without waiting for this intentionally disabled control to enable.
+      await autoLabel.click({ force: true });
+      await expect(white).toBeChecked();
+
+      Object.assign(snapshot.controlCenter, { autoPlay: false, color: "white", colorEnabled: false });
+      await publish(page, snapshot);
+      await expect(black).toBeDisabled();
+      await expect(white).toBeDisabled();
+      await expect(blackLabel).toHaveCSS("color", disabledColor);
+      await expect(whiteLabel).toHaveCSS("color", disabledColor);
+      await expect(group).toHaveCSS("background-color", disabledBackground);
+      await expect(whiteLabel).not.toHaveCSS("background-color", disabledBackground);
+      if (!miniMode) await expect(surface.locator(".color-row > b")).toHaveCSS("color", disabledColor);
+      await blackLabel.click({ force: true });
+      await expect(white).toBeChecked();
+
+      Object.assign(snapshot.controlCenter, {
+        platform: "fox", autoPlay: true, color: "", colorEnabled: true, autoColorEnabled: true,
+        identityEnabled: true, boardSelectionInsideEnabled: true,
+        boardSelectionRectangleEnabled: false, boardSelectionLine1Enabled: false
+      });
+      await publish(page, snapshot);
+      await expect(auto).toBeEnabled();
+      await expect(identity).toBeEnabled();
+      await expect(autoLabel).not.toHaveCSS("color", disabledColor);
+      await expect(group).not.toHaveCSS("background-color", disabledBackground);
+      if (!miniMode) {
+        const inside = surface.locator('[data-board-mode="inside"]');
+        await expect(inside).toBeEnabled();
+        await expect(inside).not.toHaveCSS("color", disabledColor);
+      }
+    });
+  }
+}
+
+test("theme radio focus scrolls settings without moving the titlebar", async ({ page }) => {
+  await page.goto(baseUrl + "/index.html");
+  await page.locator('.nav-item[data-page="settings"]').click();
+  const panel = page.locator('.page[data-page-panel="settings"]');
+  const titlebar = page.locator(".titlebar");
+  const assertChromeVisible = async () => {
+    await expect.poll(() => titlebar.evaluate(element => element.getBoundingClientRect().top)).toBe(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await expect(titlebar.locator('[data-command="window.close"]')).toBeInViewport();
+  };
+  for (const viewport of [{ width: 1100, height: 760 }, { width: 1100, height: 680 }, { width: 700, height: 433 }, { width: 1100, height: 760 }]) {
+    await page.setViewportSize(viewport);
+    await afterViewportResize(page);
+    await panel.evaluate(element => { element.scrollTop = element.scrollHeight; });
+    for (const theme of ["dark", "light", "system"]) {
+      await page.locator(`.appearance-theme label:has(input[value="${theme}"])`).click();
+      await expect(page.locator(`input[name="theme"][value="${theme}"]`)).toBeChecked();
+      await assertChromeVisible();
+    }
+    await page.locator('input[name="theme"]:checked').press("ArrowRight");
+    await expect(page.locator('input[name="theme"][value="dark"]')).toBeChecked();
+    await assertChromeVisible();
+    const save = page.locator('[data-command="settings.save"]');
+    await save.scrollIntoViewIfNeeded();
+    await expect(save).toBeInViewport();
+    await assertChromeVisible();
+  }
+});
+
 function hostedSnapshot(shell) {
   return {
     page: "controlCenter",

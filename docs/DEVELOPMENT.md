@@ -57,6 +57,8 @@ npm run test:webview
 
 `npm run test:webview` 会安装 Chromium，直接加载静态 WebView 文件，验证权威 snapshot 的动态文本、语言切换、设置校验、弹层和 accessibility 行为；它不启动 `readboard.exe`。
 
+禁用样式与分段选项焦点使用真实 DOM 的 computed style、鼠标和键盘交互验证，不逐字匹配 CSS 源码。覆盖部分禁用／整组禁用、深浅主题、完整／迷你模式，以及设置页滚动时标题栏留在视口内。
+
 ## 启动与调试
 
 ### 宿主启动参数
@@ -408,6 +410,7 @@ npm run test:webview:host:extended
 - `extended`：其余宿主用例，包含 Settings Cancel、分析状态（含暂停）、自动落子逐次授权、单次最终快照、原生身份输入、失效目标窗口刷新和有序 shutdown。
 - `playwright.host.config.js` 统一发现 `tests/WebView/**/real-webview2-*.spec.js`。每个用例必须标记 `@host-core` 或 `@host-extended`；两组互斥且非空，新增文件遵循同一命名规则。检查器比较文件、describe 层级和标题组成的具体集合，不以数量替代覆盖。
 - 两组单 worker、零 retry；禁止 `test.only`。执行 reporter 将 skip、fixme 和预期失败视为失败，不能用跳过获得成功结果。
+- 切换平台后，以 `window.readboardPreview.getState()` 中的平台值及 `preferencesSaved` 等待 C# 权威快照，再读取落盘文件或检查事务目录。radio 的本地 checked 状态早于原生持久化完成，不能作为保存完成信号。
 - `npm run test:webview:host:guards` 覆盖集合完整性和结果汇总的失败路径，不启动 Windows 宿主。
 - CI 保留 required check 名称 `WebView2 Host E2E Core`，其结果汇总 coverage、build、core 和 extended；所有分组均须成功。只有变更检测明确输出 `run_heavy=false` 时允许纯文档等变更跳过。
 - `READBOARD_PUBLISH_DIRECTORY` 可指向已经 publish 的目录，避免重复构建；未设置时会 fresh publish。
