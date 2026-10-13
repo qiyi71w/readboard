@@ -67,7 +67,7 @@ namespace Readboard.VerificationTests.Host
             await journey.StartAsync(Request);
             journey.Dispose();
             Assert.False(download.Cleaned);
-            Assert.Single(observations.Where(item => item.Stage == IndependentUpdateStage.Committed));
+            Assert.Single(observations, item => item.Stage == IndependentUpdateStage.Committed);
         }
 
         [Fact]

@@ -16,10 +16,16 @@ namespace ReadBoard.Updater
         [STAThread]
         private static void Main(string[] args)
         {
-            if (args.Length != 2 || args[0] != "--request") return;
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            if (args.Length == 1 && args[0] == "--probe")
+            {
+                using var probe = new UpdateWindow("cn");
+                probe.CreateControl();
+                return;
+            }
+            if (args.Length != 2 || args[0] != "--request") { Environment.ExitCode = 1; return; }
             IndependentUpdateRequest request;
             try
             {
@@ -98,12 +104,12 @@ namespace ReadBoard.Updater
         private readonly Dictionary<string, string> defaults;
         private readonly TextBox status;
         private readonly Button close;
-        internal bool AllowClose { get; set; }
+        internal bool AllowClose;
 
         internal UpdateWindow(string language)
         {
-            defaults = Load("cn");
-            localized = Load(language);
+            defaults = LoadCatalog("cn");
+            localized = LoadCatalog(language);
             AutoScaleMode = AutoScaleMode.Dpi;
             AutoScaleDimensions = new SizeF(96, 96);
             Font = SystemFonts.MessageBoxFont;
@@ -149,7 +155,7 @@ namespace ReadBoard.Updater
         private string Resolve(string key) => SemanticMessageResolver.Resolve(SemanticMessage.Create(key),
             k => localized.TryGetValue(k, out string value) ? value : null,
             k => defaults.TryGetValue(k, out string value) ? value : null);
-        private static Dictionary<string, string> Load(string language)
+        private static Dictionary<string, string> LoadCatalog(string language)
         {
             var result = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (string line in File.ReadLines(Path.Combine(AppContext.BaseDirectory, "language_" + language + ".txt")))

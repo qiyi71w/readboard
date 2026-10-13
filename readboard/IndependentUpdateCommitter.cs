@@ -59,6 +59,7 @@ namespace readboard
                     using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                     await input.CopyToAsync(output, cancellationToken);
                 }
+                IndependentUpdateFiles.VerifyRuntimeDependencies(runnerDirectory, "ReadBoard.Updater");
                 string ownedPackage = Path.Combine(operation, packageRequest.AssetName);
                 File.Copy(packagePath, ownedPackage, false);
                 using var sourceProcess = Process.GetCurrentProcess();
@@ -74,6 +75,7 @@ namespace readboard
                 var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 // WebView2's default application-owned profile is next to the executable.
                 directories.Add("readboard.exe.WebView2");
+                directories.Add("debug-diagnostics");
                 foreach (string directory in userDirectories())
                 {
                     if (string.IsNullOrWhiteSpace(directory) || !IndependentUpdateFiles.IsWithin(install, directory)) continue;

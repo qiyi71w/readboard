@@ -171,7 +171,15 @@ namespace readboard
         {
             AssertNoReparse(path);
             byte[] bytes = File.ReadAllBytes(path);
-            using (JsonDocument document = JsonDocument.Parse(bytes)) ValidateJsonObject(document.RootElement);
+            using (JsonDocument document = JsonDocument.Parse(bytes))
+            {
+                ValidateJsonObject(document.RootElement);
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException("Update record must be a JSON object.");
+                foreach (var property in typeof(T).GetProperties())
+                    if (!document.RootElement.TryGetProperty(JsonNamingPolicy.CamelCase.ConvertName(property.Name), out _))
+                        throw new InvalidDataException("Missing update record field: " + property.Name);
+            }
             return JsonSerializer.Deserialize<T>(bytes, JsonOptions) ?? throw new InvalidDataException("Empty update record.");
         }
 
@@ -297,12 +305,48 @@ namespace readboard
             }
             if (required.Any(name => !paths.Contains(name)) || ReadVersion(directory) != targetTag)
                 throw new InvalidDataException("Release payload is incomplete or has another version.");
+            VerifyRuntimeDependencies(directory, "readboard");
+            VerifyRuntimeDependencies(Path.Combine(directory, "updater"), "ReadBoard.Updater");
             foreach (string file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
             {
                 AssertNoReparse(file);
                 string relative = Path.GetRelativePath(directory, file).Replace('\\', '/');
                 if (relative != ManifestName && !paths.Contains(relative))
                     throw new InvalidDataException("Unlisted release file: " + relative);
+            }
+        }
+
+        internal static void VerifyRuntimeDependencies(string directory, string assemblyName)
+        {
+            using var runtime = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(directory, assemblyName + ".runtimeconfig.json")));
+            JsonElement options = runtime.RootElement.GetProperty("runtimeOptions");
+            if (options.TryGetProperty("framework", out _) || options.TryGetProperty("frameworks", out _)
+                || !options.TryGetProperty("includedFrameworks", out JsonElement included)
+                || !included.EnumerateArray().Any(item => item.GetProperty("name").GetString() == "Microsoft.NETCore.App")
+                || !included.EnumerateArray().Any(item => item.GetProperty("name").GetString() == "Microsoft.WindowsDesktop.App"))
+                throw new InvalidDataException("The release runtime must be self-contained.");
+            using var dependencies = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(directory, assemblyName + ".deps.json")));
+            string target = dependencies.RootElement.GetProperty("runtimeTarget").GetProperty("name").GetString();
+            if (target == null || !target.EndsWith("/win-x64", StringComparison.Ordinal))
+                throw new InvalidDataException("The release runtime must target win-x64.");
+            JsonElement packages = dependencies.RootElement.GetProperty("targets").GetProperty(target);
+            foreach (JsonProperty package in packages.EnumerateObject())
+            {
+                foreach (string group in new[] { "runtime", "native", "resources" })
+                {
+                    if (!package.Value.TryGetProperty(group, out JsonElement assets)) continue;
+                    foreach (JsonProperty asset in assets.EnumerateObject())
+                    {
+                        ValidateRelativePath(asset.Name);
+                        string relative = group == "resources"
+                            ? asset.Value.GetProperty("locale").GetString() + "/" + Path.GetFileName(asset.Name)
+                            : Path.GetFileName(asset.Name);
+                        ValidateRelativePath(relative);
+                        string path = Path.Combine(directory, relative.Replace('/', Path.DirectorySeparatorChar));
+                        AssertNoReparse(path);
+                        if (!File.Exists(path)) throw new InvalidDataException("Missing runtime dependency: " + relative);
+                    }
+                }
             }
         }
     }

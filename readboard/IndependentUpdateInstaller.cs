@@ -61,6 +61,7 @@ namespace readboard
                 Phase("preparing");
                 ExtractPromotedPackage(request, staging);
                 IndependentUpdateFiles.VerifyPayload(staging, request.TargetTag);
+                ProbeNextUpdater(staging);
                 var data = IndependentUpdateFiles.Read<IndependentUpdateData>(Path.Combine(operation, "data.json"));
                 ValidateData(request, data, staging);
                 Phase("prepared");
@@ -131,6 +132,22 @@ namespace readboard
                 report(state);
                 return result;
             }
+        }
+
+        private static void ProbeNextUpdater(string staging)
+        {
+            string directory = Path.Combine(staging, "updater");
+            var start = new ProcessStartInfo(Path.Combine(directory, IndependentUpdateFiles.RunnerName))
+            { UseShellExecute = false, WorkingDirectory = directory, CreateNoWindow = true };
+            start.ArgumentList.Add("--probe");
+            using var process = Process.Start(start) ?? throw new IOException("Next updater could not start.");
+            if (!process.WaitForExit(15000))
+            {
+                process.Kill();
+                process.WaitForExit();
+                throw new IOException("Next updater did not finish its runtime probe.");
+            }
+            if (process.ExitCode != 0) throw new IOException("Next updater runtime probe failed.");
         }
 
         private static void ExtractPromotedPackage(IndependentUpdateRequest request, string staging)
