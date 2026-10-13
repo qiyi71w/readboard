@@ -222,7 +222,7 @@ namespace Readboard.VerificationTests.Host
                 else
                 {
                     Assert.Equal("failedUnchanged", Execute().State);
-                    Assert.Equal(new[] { "preparing" }, phases);
+                    Assert.Equal(new[] { "preparing", "failedUnchanged" }, phases);
                 }
                 Assert.False(accepted); Assert.False(committed); Assert.False(waited);
                 Assert.False(source.HasExited);
