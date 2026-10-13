@@ -17,6 +17,8 @@ namespace readboard
 
     internal interface IIndependentUpdateCommitter
     {
+        Task PrepareAsync(CancellationToken cancellationToken);
+        void CleanupPreparation();
         Task CommitAsync(HostedUpdateRequest request, string packagePath, Action persistConfiguration, CancellationToken cancellationToken);
     }
 
@@ -29,6 +31,7 @@ namespace readboard
         private readonly Action<IndependentUpdateObservation> observe;
         private CancellationTokenSource cancellation;
         private bool committed;
+        private bool resolvingCommit;
         private bool disposed;
         internal int Generation { get; private set; }
         internal bool CanStart => !disposed && cancellation == null && !committed;
@@ -52,6 +55,9 @@ namespace readboard
             string package = null;
             try
             {
+                Emit(IndependentUpdateStage.Preparing, "IndependentUpdate_preparing");
+                await committer.PrepareAsync(source.Token);
+                source.Token.ThrowIfCancellationRequested();
                 Emit(IndependentUpdateStage.Downloading, "Update_downloadingPackage");
                 package = await downloader.DownloadAsync(request, source.Token);
                 source.Token.ThrowIfCancellationRequested();
@@ -59,6 +65,7 @@ namespace readboard
                 await Task.Run(() => verifier.Verify(request, package, source.Token), source.Token);
                 source.Token.ThrowIfCancellationRequested();
                 Emit(IndependentUpdateStage.Preparing, "IndependentUpdate_preparing");
+                resolvingCommit = true;
                 await committer.CommitAsync(request, package, persistConfiguration, source.Token);
                 // The committer returns only for a persisted acceptance. Cancellation
                 // after its COMMIT send is resolved by that acknowledgement, not this token.
@@ -71,7 +78,9 @@ namespace readboard
             }
             catch (Exception exception)
             {
-                if (!source.IsCancellationRequested)
+                if (source.IsCancellationRequested && resolvingCommit)
+                    Emit(IndependentUpdateStage.Cancelled, "IndependentUpdate_cancelled");
+                else if (!source.IsCancellationRequested)
                     Emit(IndependentUpdateStage.Failed, "IndependentUpdate_failedUnchanged", exception.Message);
             }
             finally
@@ -80,7 +89,10 @@ namespace readboard
                 {
                     try { downloader.Cleanup(request, package); }
                     catch (Exception exception) { System.Diagnostics.Trace.TraceError(exception.ToString()); }
+                    try { committer.CleanupPreparation(); }
+                    catch (Exception exception) { System.Diagnostics.Trace.TraceError(exception.ToString()); }
                 }
+                resolvingCommit = false;
                 if (ReferenceEquals(cancellation, source)) cancellation = null;
                 source.Dispose();
             }
@@ -96,6 +108,9 @@ namespace readboard
         {
             if (committed || cancellation == null) return false;
             cancellation.Cancel();
+            // During the handshake cancellation is a request, not a known outcome.
+            // Keep the existing dialog until the updater's durable decision resolves.
+            if (resolvingCommit) return true;
             ++Generation;
             observe(new IndependentUpdateObservation(Generation, IndependentUpdateStage.Cancelled, SemanticMessage.Create("IndependentUpdate_cancelled")));
             return true;

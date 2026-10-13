@@ -320,7 +320,13 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 
 棋盘 snapshot 出站顺序不可随意调整：窗口 context → 可选 `forceRebuild` → 可选 `foxMoveNumber` → `lastMoveSource` → 棋盘行 → `end`。
 
-WebView2 托管更新还要求宿主声明 `readboardUpdatePackageV2Supported`。ReadBoard 只负责检查、下载、SHA-256/ZIP 校验并发送 `readboardUpdateReady`；收到该 handoff 后，替换、回滚和重启归宿主所有。
+主线 About 更新由 ReadBoard 独立更新器完成，不要求宿主能力、pipe 或会话，也不发送旧 `readboardUpdateReady` 安装交接。中央通道检查、资产命名及手动下载保持原契约；本轮安装完成后不自动重连。
+
+更新器及完整 self-contained 依赖先复制到安装目录外，再下载和校验候选。更新器重新校验包 hash、完整载荷和实际版本，确认旧配置成功保存后持久提交。提交前失败保持旧窗口可用；提交后更新器独占记录及包，按 PID 和创建时间等待旧进程退出，再复制最终三份配置、备份旧目录并切换完整 staging。普通切换失败恢复旧目录；恢复失败保留 backup 并阻止半成品启动。
+
+事务位于安装目录同父 `.readboard-update-<规范化安装路径 SHA256>/<operationId>`；旧程序写 request/data，更新器单写 active/progress/result。未知、损坏或未结算记录阻止新安装；中断事务恢复由后续恢复流程处理。用户数据保留集合来自实际日志和 WebView owner，外部数据原位不动，Settings Draft 不隐式 Save。
+
+本地与 CI 发布入口均包含 `updater/` 和完整 hash manifest；不得只复制更新器 exe。原生验收 startup hook 仅属于验证程序集，不进入发布包，也不能跳过 UI 确认或产品校验。
 
 ## 配置
 

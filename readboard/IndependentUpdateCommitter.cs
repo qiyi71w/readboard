@@ -16,50 +16,72 @@ namespace readboard
     {
         private readonly Func<string> language;
         private readonly Func<IEnumerable<string>> userDirectories;
+        private string preparedInstall;
+        private string preparedOperation;
 
         internal IndependentUpdateCommitter(Func<string> language, Func<IEnumerable<string>> userDirectories)
         { this.language = language; this.userDirectories = userDirectories; }
 
-        public async Task CommitAsync(HostedUpdateRequest packageRequest, string packagePath,
-            Action persistConfiguration, CancellationToken cancellationToken)
+        public async Task PrepareAsync(CancellationToken cancellationToken)
         {
             string install = IndependentUpdateFiles.CanonicalDirectory(Path.GetDirectoryName(Environment.ProcessPath));
             IndependentUpdateFiles.AssertLaunchable(install);
             IndependentUpdateFiles.ProbeWritable(install);
             IndependentUpdateFiles.ProbeWritable(Path.GetDirectoryName(install));
-            string operationId = Guid.NewGuid().ToString("N");
-            string operation = IndependentUpdateFiles.OperationDirectory(install, operationId);
+            if (preparedOperation != null) throw new InvalidOperationException("An updater is already prepared.");
+            preparedInstall = install;
+            preparedOperation = IndependentUpdateFiles.OperationDirectory(install, Guid.NewGuid().ToString("N"));
+            string runnerDirectory = Path.Combine(preparedOperation, "runner");
+            cancellationToken.ThrowIfCancellationRequested();
+            var payload = IndependentUpdateFiles.Read<IndependentUpdatePayload>(Path.Combine(install, IndependentUpdateFiles.ManifestName));
+            if (payload.SchemaVersion != 1 || payload.Version != IndependentUpdateFiles.ReadVersion(install) || payload.Files == null)
+                throw new InvalidDataException("Installed updater payload identity is missing or invalid.");
+            string[] required = { IndependentUpdateFiles.RunnerName, "ReadBoard.Updater.dll", "ReadBoard.Updater.deps.json",
+                "ReadBoard.Updater.runtimeconfig.json", "coreclr.dll", "hostfxr.dll", "hostpolicy.dll", "System.Private.CoreLib.dll",
+                "System.Windows.Forms.dll", "language_cn.txt", "language_en.txt", "language_jp.txt", "language_kr.txt" };
+            if (required.Any(name => !payload.Files.ContainsKey("updater/" + name)))
+                throw new InvalidDataException("Installed updater runtime is incomplete.");
+            Directory.CreateDirectory(runnerDirectory);
+            foreach (var file in payload.Files.Where(item => item.Key.StartsWith("updater/", StringComparison.Ordinal)))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                IndependentUpdateFiles.ValidateRelativePath(file.Key);
+                string source = Path.Combine(install, file.Key.Replace('/', Path.DirectorySeparatorChar));
+                string target = Path.Combine(runnerDirectory, file.Key.Substring(8).Replace('/', Path.DirectorySeparatorChar));
+                IndependentUpdateFiles.AssertNoReparse(source);
+                using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
+                if (Convert.ToHexString(SHA256.HashData(input)).ToLowerInvariant() != file.Value)
+                    throw new InvalidDataException("Installed updater dependency failed verification: " + file.Key);
+                input.Position = 0;
+                Directory.CreateDirectory(Path.GetDirectoryName(target));
+                using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                await input.CopyToAsync(output, cancellationToken);
+            }
+            IndependentUpdateFiles.VerifyRuntimeDependencies(runnerDirectory, "ReadBoard.Updater");
+        }
+
+        public void CleanupPreparation()
+        {
+            string operation = preparedOperation;
+            preparedOperation = null;
+            preparedInstall = null;
+            // Progress belongs exclusively to the updater, including failed preparation.
+            if (operation != null && !File.Exists(Path.Combine(operation, "progress.json")) && Directory.Exists(operation))
+                Directory.Delete(operation, true);
+        }
+
+        public async Task CommitAsync(HostedUpdateRequest packageRequest, string packagePath,
+            Action persistConfiguration, CancellationToken cancellationToken)
+        {
+            string install = preparedInstall ?? throw new InvalidOperationException("Updater has not been prepared.");
+            string operation = preparedOperation;
+            string operationId = Path.GetFileName(operation);
             string runnerDirectory = Path.Combine(operation, "runner");
             Process runner = null;
             bool accepted = false;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var payload = IndependentUpdateFiles.Read<IndependentUpdatePayload>(Path.Combine(install, IndependentUpdateFiles.ManifestName));
-                if (payload.SchemaVersion != 1 || payload.Version != IndependentUpdateFiles.ReadVersion(install) || payload.Files == null)
-                    throw new InvalidDataException("Installed updater payload identity is missing or invalid.");
-                string[] required = { IndependentUpdateFiles.RunnerName, "ReadBoard.Updater.dll", "ReadBoard.Updater.deps.json",
-                    "ReadBoard.Updater.runtimeconfig.json", "coreclr.dll", "hostfxr.dll", "hostpolicy.dll", "System.Private.CoreLib.dll",
-                    "System.Windows.Forms.dll", "language_cn.txt", "language_en.txt", "language_jp.txt", "language_kr.txt" };
-                if (required.Any(name => !payload.Files.ContainsKey("updater/" + name)))
-                    throw new InvalidDataException("Installed updater runtime is incomplete.");
-                Directory.CreateDirectory(runnerDirectory);
-                foreach (var file in payload.Files.Where(item => item.Key.StartsWith("updater/", StringComparison.Ordinal)))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    IndependentUpdateFiles.ValidateRelativePath(file.Key);
-                    string source = Path.Combine(install, file.Key.Replace('/', Path.DirectorySeparatorChar));
-                    string target = Path.Combine(runnerDirectory, file.Key.Substring(8).Replace('/', Path.DirectorySeparatorChar));
-                    IndependentUpdateFiles.AssertNoReparse(source);
-                    using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
-                    if (Convert.ToHexString(SHA256.HashData(input)).ToLowerInvariant() != file.Value)
-                        throw new InvalidDataException("Installed updater dependency failed verification: " + file.Key);
-                    input.Position = 0;
-                    Directory.CreateDirectory(Path.GetDirectoryName(target));
-                    using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                    await input.CopyToAsync(output, cancellationToken);
-                }
-                IndependentUpdateFiles.VerifyRuntimeDependencies(runnerDirectory, "ReadBoard.Updater");
                 string ownedPackage = Path.Combine(operation, packageRequest.AssetName);
                 File.Copy(packagePath, ownedPackage, false);
                 using var sourceProcess = Process.GetCurrentProcess();
@@ -135,8 +157,7 @@ namespace readboard
                 }
                 // A runner that has written progress owns these records and its private
                 // package. Preserve them across disposal and precommit error reporting.
-                if (!accepted && !File.Exists(Path.Combine(operation, "progress.json")) && Directory.Exists(operation))
-                    Directory.Delete(operation, true);
+                if (!accepted) CleanupPreparation();
             }
         }
 

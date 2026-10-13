@@ -102,6 +102,49 @@ namespace Readboard.VerificationTests.Host
             await first;
         }
 
+        [Fact]
+        public async Task MissingRunnerFailsBeforeDownloadAndReleasesPreparation()
+        {
+            var download = new Download();
+            var commit = new Commit { PrepareFailure = new FileNotFoundException("runner missing") };
+            var observations = new List<IndependentUpdateObservation>();
+            using var journey = new IndependentUpdateJourney(download, new FakeVerifier(), commit, () => { }, observations.Add);
+            await journey.StartAsync(Request);
+            Assert.Equal(0, download.Starts);
+            Assert.False(commit.Accepted);
+            Assert.True(commit.PreparationCleaned);
+            Assert.True(journey.CanStart);
+            Assert.Equal(IndependentUpdateStage.Failed, observations.Last().Stage);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task CancellationDuringHandshakeWaitsForDurableDecision(bool accepted)
+        {
+            var download = new Download();
+            download.Completion.SetResult("package.zip");
+            var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var decision = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var commit = new Commit { Work = async token =>
+            {
+                entered.SetResult();
+                await decision.Task;
+                if (!accepted) token.ThrowIfCancellationRequested();
+            } };
+            var observations = new List<IndependentUpdateObservation>();
+            using var journey = new IndependentUpdateJourney(download, new FakeVerifier(), commit, () => { }, observations.Add);
+            Task run = journey.StartAsync(Request);
+            await entered.Task;
+            Assert.True(journey.Cancel());
+            Assert.DoesNotContain(observations, item => item.Stage == IndependentUpdateStage.Cancelled);
+            Assert.False(journey.CanStart);
+            decision.SetResult();
+            await run;
+            Assert.Equal(accepted ? IndependentUpdateStage.Committed : IndependentUpdateStage.Cancelled, observations.Last().Stage);
+            Assert.Equal(!accepted, download.Cleaned);
+        }
+
         private sealed class Download : IHostedUpdatePackageDownloader
         {
             internal readonly TaskCompletionSource<string> Completion = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -118,8 +161,23 @@ namespace Readboard.VerificationTests.Host
         private sealed class Commit : IIndependentUpdateCommitter
         {
             internal bool Accepted;
-            public Task CommitAsync(HostedUpdateRequest request, string path, Action persist, CancellationToken token)
-            { token.ThrowIfCancellationRequested(); persist(); Accepted = true; return Task.CompletedTask; }
+            internal Func<CancellationToken, Task> Work;
+            internal Exception PrepareFailure;
+            internal bool PreparationCleaned;
+            public Task PrepareAsync(CancellationToken token)
+            {
+                token.ThrowIfCancellationRequested();
+                if (PrepareFailure != null) throw PrepareFailure;
+                return Task.CompletedTask;
+            }
+            public void CleanupPreparation() { PreparationCleaned = true; }
+            public async Task CommitAsync(HostedUpdateRequest request, string path, Action persist, CancellationToken token)
+            {
+                token.ThrowIfCancellationRequested();
+                persist();
+                if (Work != null) await Work(token);
+                Accepted = true;
+            }
         }
     }
 }
