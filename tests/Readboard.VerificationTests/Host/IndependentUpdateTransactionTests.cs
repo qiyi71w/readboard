@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Threading;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using readboard;
 using Xunit;
 
@@ -159,6 +161,93 @@ namespace Readboard.VerificationTests.Host
                 Assert.True(Directory.Exists(fixture.Backup));
             }
             finally { release.Set(); owner.Join(); }
+        }
+
+        [Theory]
+        [InlineData(true, true)]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        [InlineData(false, false)]
+        public void ExistingInstallationDeleteRightsGatePreparationBeforeCommit(bool denyDelete, bool denyDeleteChild)
+        {
+            string root = Path.Combine(Path.GetTempPath(), "readboard-permissions-" + Guid.NewGuid().ToString("N"));
+            string install = Path.Combine(root, "app");
+            Directory.CreateDirectory(install);
+            var parentInfo = new DirectoryInfo(root);
+            var installInfo = new DirectoryInfo(install);
+            DirectorySecurity parentAcl = parentInfo.GetAccessControl();
+            DirectorySecurity installAcl = installInfo.GetAccessControl();
+            using var identity = WindowsIdentity.GetCurrent();
+            Process source = null;
+            try
+            {
+                string executable = Path.Combine(install, "readboard.exe");
+                File.Copy(Path.Combine(Environment.SystemDirectory, "cmd.exe"), executable);
+                string preferences = Path.Combine(install, "config.readboard.json");
+                File.WriteAllText(preferences, "saved preferences");
+                byte[] original = File.ReadAllBytes(executable);
+                source = Process.Start(new ProcessStartInfo(executable)
+                {
+                    Arguments = "/d /q /c set /p readboardInput=", UseShellExecute = false,
+                    WorkingDirectory = install,
+                    RedirectStandardInput = true, RedirectStandardOutput = true, CreateNoWindow = true
+                });
+                string id = Guid.NewGuid().ToString("N");
+                string operation = IndependentUpdateFiles.OperationDirectory(install, id);
+                Directory.CreateDirectory(operation);
+                string requestPath = Path.Combine(operation, "request.json");
+                IndependentUpdateFiles.Publish(requestPath, new IndependentUpdateRequest
+                {
+                    OperationId = id, SourceVersion = "v3.1.9", TargetTag = "v3.2.0",
+                    AssetName = "readboard-webview2-v3.2.0.zip", ExpectedSha256 = new string('a', 64),
+                    PackagePath = Path.Combine(operation, "readboard-webview2-v3.2.0.zip"),
+                    InstallDirectory = install, SourceProcessId = source.Id,
+                    SourceProcessStartTimeUtc = source.StartTime.ToUniversalTime(), Language = "en"
+                });
+                if (denyDeleteChild) Deny(parentInfo, FileSystemRights.DeleteSubdirectoriesAndFiles);
+                if (denyDelete) Deny(installInfo, FileSystemRights.Delete);
+                bool accepted = false, committed = false, waited = false;
+                var phases = new List<string>();
+                var installer = new IndependentUpdateInstaller(waitForExit: _ => waited = true);
+                IndependentUpdateResult Execute() => installer.Execute(requestPath,
+                    () => { accepted = true; return true; }, () => committed = true,
+                    phase => { phases.Add(phase); if (phase == "preparing") throw new IOException("Stop after permission admission."); });
+                if (denyDelete && denyDeleteChild)
+                {
+                    Assert.Throws<UnauthorizedAccessException>(() => Execute());
+                    Assert.Empty(phases);
+                    Assert.False(File.Exists(Path.Combine(operation, "progress.json")));
+                    Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(operation), "active.json")));
+                }
+                else
+                {
+                    Assert.Equal("failedUnchanged", Execute().State);
+                    Assert.Equal(new[] { "preparing" }, phases);
+                }
+                Assert.False(accepted); Assert.False(committed); Assert.False(waited);
+                Assert.False(source.HasExited);
+                Assert.Equal(original, File.ReadAllBytes(executable));
+                Assert.Equal("saved preferences", File.ReadAllText(preferences));
+                source.StandardInput.Close(); source.WaitForExit();
+                if (denyDelete && denyDeleteChild)
+                { parentInfo.SetAccessControl(parentAcl); installInfo.SetAccessControl(installAcl); }
+                string moved = Path.Combine(root, "renamed");
+                Directory.Move(install, moved);
+                Directory.Move(moved, install);
+            }
+            finally
+            {
+                parentInfo.SetAccessControl(parentAcl); installInfo.SetAccessControl(installAcl);
+                if (source != null) { if (!source.HasExited) { source.Kill(); source.WaitForExit(); } source.Dispose(); }
+                Directory.Delete(root, true);
+            }
+            void Deny(DirectoryInfo directory, FileSystemRights rights)
+            {
+                DirectorySecurity acl = directory.GetAccessControl();
+                acl.AddAccessRule(new FileSystemAccessRule(identity.User, rights, InheritanceFlags.None,
+                    PropagationFlags.None, AccessControlType.Deny));
+                directory.SetAccessControl(acl);
+            }
         }
 
         private sealed class RecoveryFixture : IDisposable

@@ -324,6 +324,8 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 
 更新器及完整 self-contained 依赖先复制到安装目录外，再下载和校验候选。更新器重新校验包 hash、完整载荷和实际版本，确认旧配置成功保存后持久提交。提交前失败保持旧窗口可用；提交后更新器独占记录及包，按 PID 和创建时间等待旧进程退出，再复制最终三份配置、备份旧目录并切换完整 staging。普通切换失败恢复旧目录；恢复失败保留 backup 并阻止半成品启动。
 
+源进程Prepare与外置更新器准备阶段都保留创建写入探测，并通过Windows目录句柄请求实际安装目录的DELETE访问及父目录的FILE_ADD_SUBDIRECTORY访问。DELETE是否可由父目录DELETE_CHILD授权由Windows判定；不自行近似计算ACL，不修改权限、不提权、不试rename活安装目录。探测句柄立即释放，稳定权限不足在COMMIT/ACCEPTED前拒绝，旧窗口仍可使用并手动下载。此预检只证明检查时的访问条件；之后外部权限变化或退出后文件锁仍遵循原有failedUnchanged/rollback恢复契约。
+
 无宿主调试路径保留 stdin 打开时，正常关闭仍通过 transport Stop 取消 Windows 阻塞读取。`CancelSynchronousIo` 引起的读取取消由连接代次判定：主动关闭不再触发断链回调，当前活跃连接上的意外取消仍通知断链。
 
 事务位于安装目录同父 `.readboard-update-<规范化安装路径 SHA256>/<operationId>`；旧程序写 request/data，更新器单写 active/progress/result/recovery。未知、损坏或未结算记录阻止新安装。用户数据保留集合来自实际日志和 WebView owner，外部数据原位不动，Settings Draft 不隐式 Save。

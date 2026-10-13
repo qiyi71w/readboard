@@ -66,6 +66,7 @@ namespace readboard
                 IndependentUpdateFiles.AssertLaunchable(request.InstallDirectory, request.OperationId);
                 IndependentUpdateFiles.ProbeWritable(request.InstallDirectory);
                 IndependentUpdateFiles.ProbeWritable(Path.GetDirectoryName(request.InstallDirectory));
+                IndependentUpdateFiles.ProbeReplaceableInstallation(request.InstallDirectory);
                 IndependentUpdateFiles.AssertNoReparse(operation);
                 if (Directory.Exists(staging) || Directory.Exists(backup)) throw new IOException("Update staging or backup already exists.");
                 // Bind the live source before accepting a request, including the actual executable path.

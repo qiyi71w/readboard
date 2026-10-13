@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -284,6 +287,32 @@ namespace readboard
             string probe = Path.Combine(directory, ".readboard-probe-" + Guid.NewGuid().ToString("N"));
             using (new FileStream(probe, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose)) { }
         }
+
+        internal static void ProbeReplaceableInstallation(string install)
+        {
+            AssertNoReparse(install);
+            // Windows evaluates DELETE including the parent's DELETE_CHILD grant.
+            // Requesting access neither renames the live directory nor changes its ACL.
+            ProbeDirectoryAccess(install, 0x00010000); // DELETE
+            ProbeDirectoryAccess(Path.GetDirectoryName(install), 0x00000004); // FILE_ADD_SUBDIRECTORY
+        }
+
+        private static void ProbeDirectoryAccess(string directory, uint access)
+        {
+            using SafeFileHandle handle = CreateFileW(directory, access,
+                FileShare.ReadWrite | FileShare.Delete, IntPtr.Zero, FileMode.Open,
+                0x02000000, IntPtr.Zero); // FILE_FLAG_BACKUP_SEMANTICS opens a directory.
+            if (!handle.IsInvalid) return;
+            int error = Marshal.GetLastWin32Error();
+            var cause = new Win32Exception(error);
+            if (error == 5) throw new UnauthorizedAccessException(cause.Message + ": " + directory, cause);
+            throw new IOException(cause.Message + ": " + directory, cause);
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+        private static extern SafeFileHandle CreateFileW(string fileName, uint desiredAccess,
+            FileShare shareMode, IntPtr securityAttributes, FileMode creationDisposition,
+            uint flagsAndAttributes, IntPtr templateFile);
 
         internal static void VerifyPayload(string directory, string targetTag)
         {

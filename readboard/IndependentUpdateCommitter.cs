@@ -30,6 +30,7 @@ namespace readboard
             IndependentUpdateFiles.AssertLaunchable(install);
             IndependentUpdateFiles.ProbeWritable(install);
             IndependentUpdateFiles.ProbeWritable(Path.GetDirectoryName(install));
+            IndependentUpdateFiles.ProbeReplaceableInstallation(install);
             if (preparedOperation != null) throw new InvalidOperationException("An updater is already prepared.");
             preparedInstall = install;
             preparedOperation = IndependentUpdateFiles.OperationDirectory(install, Guid.NewGuid().ToString("N"));
