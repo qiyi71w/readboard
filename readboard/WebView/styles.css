@@ -262,7 +262,7 @@ html.emergency .app-shell {
 .mini-board-select button[hidden] { display: none; }
 .mini-checks { gap: 16px; }
 .mini-segments { display: flex; height: 26px; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
-.mini-segments label { flex: 1 1 0; justify-content: center; padding: 0 6px; border-right: 1px solid var(--border); cursor: pointer; }
+.mini-segments label { position: relative; flex: 1 1 0; justify-content: center; padding: 0 6px; border-right: 1px solid var(--border); cursor: pointer; }
 .mini-segments label:last-child { border-right: 0; }
 .mini-segments label:has(input:checked) { color: var(--accent); background: var(--choice-background); font-weight: 600; }
 .mini-segments label:has(input:disabled) { background: var(--disabled-background); }
@@ -355,7 +355,7 @@ input[type="number"] { height: 37px; padding: 0 10px; border: 1px solid var(--bo
 .placement-row .segments { flex: 1; max-width: 424px; }
 .placement-row .segments label { display: flex; flex: 1; min-width: 0; min-height: var(--control-center-control-height); align-items: center; justify-content: center; padding: 6px 10px; font-size: 14px; }
 .segments { display: flex; min-width: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.segments label { min-height: 37px; padding: 9px 18px; border-right: 1px solid var(--line); text-align: center; white-space: nowrap; }
+.segments label { position: relative; min-height: 37px; padding: 9px 18px; border-right: 1px solid var(--line); text-align: center; white-space: nowrap; }
 .segments label:last-child { border-right: 0; }
 .segments label:has(input:checked) { color: var(--accent); background: var(--accent-soft); }
 .segments input { position: absolute; opacity: 0; pointer-events: none; }
