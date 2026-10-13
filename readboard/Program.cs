@@ -216,6 +216,26 @@ namespace readboard
             }
             catch (Exception exception)
             {
+                try
+                {
+                    string install = Path.GetDirectoryName(Environment.ProcessPath);
+                    string root = IndependentUpdateFiles.RecordRoot(install);
+                    var active = IndependentUpdateFiles.Read<IndependentUpdateActive>(Path.Combine(root, "active.json"));
+                    if (active.SchemaVersion != 1) throw new InvalidDataException("Unknown active update.");
+                    string operation = IndependentUpdateFiles.OperationDirectory(install, active.OperationId);
+                    string requestPath = Path.Combine(operation, "request.json");
+                    var request = IndependentUpdateFiles.Read<IndependentUpdateRequest>(requestPath);
+                    IndependentUpdateFiles.ValidateRequest(request);
+                    if (request.OperationId != active.OperationId || !string.Equals(request.InstallDirectory, install, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException("Recovery belongs to another installation.");
+                    var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(operation, "runner", IndependentUpdateFiles.RunnerName))
+                    { UseShellExecute = true, WorkingDirectory = Path.Combine(operation, "runner") };
+                    start.ArgumentList.Add("--recover");
+                    start.ArgumentList.Add(requestPath);
+                    using var updater = System.Diagnostics.Process.Start(start);
+                    if (updater != null) return;
+                }
+                catch { /* Keep the startup block and show the original diagnostic. */ }
                 string key = "IndependentUpdate_unsettled";
                 string text = null;
                 string catalog = Path.Combine(AppContext.BaseDirectory, "language_" + options.Language + ".txt");

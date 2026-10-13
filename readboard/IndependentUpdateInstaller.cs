@@ -9,10 +9,26 @@ using System.Threading;
 
 namespace readboard
 {
+    internal sealed class IndependentUpdateRecoveryPlan
+    {
+        public int SchemaVersion { get; set; } = 1;
+        public string OperationId { get; set; }
+        public string RequestSha256 { get; set; }
+        public string DataSha256 { get; set; }
+        public Dictionary<string, string> OriginalFiles { get; set; }
+        public Dictionary<string, string> PreparedFiles { get; set; }
+        public bool RestartAdopted { get; set; }
+        public string RestartRegistrationId { get; set; }
+        public int? HostProcessId { get; set; }
+        public DateTime? HostProcessStartTimeUtc { get; set; }
+    }
+
     // The updater is the only writer of active/progress/result records. All calls run
     // on its one installation thread: the named mutex is thread-affine on Windows.
     internal sealed class IndependentUpdateInstaller
     {
+        // Validation may observe/pause a durable boundary; production has no observer.
+        internal static Action<string> DurableCheckpoint;
         private readonly Action<string, string> moveDirectory;
         private readonly Action<IndependentUpdateRequest> waitForExit;
 
@@ -44,6 +60,9 @@ namespace readboard
             IndependentUpdateAdoption adoption = null;
             try
             {
+                if (File.Exists(Path.Combine(operation, "progress.json"))
+                    || File.Exists(Path.Combine(operation, "result.json")))
+                    return Recover(requestPath, request, operation, staging, backup, report);
                 IndependentUpdateFiles.AssertLaunchable(request.InstallDirectory, request.OperationId);
                 IndependentUpdateFiles.ProbeWritable(request.InstallDirectory);
                 IndependentUpdateFiles.ProbeWritable(Path.GetDirectoryName(request.InstallDirectory));
@@ -78,6 +97,18 @@ namespace readboard
                 AssertFilesReleased(request.InstallDirectory);
                 Phase("preservingData");
                 PreserveFinalData(request, data, staging);
+                // Freeze both complete directory identities only after source exit and
+                // final user-data migration. This record is never advanced or rewritten.
+                IndependentUpdateFiles.Publish(Path.Combine(operation, "recovery.json"), new IndependentUpdateRecoveryPlan
+                {
+                    OperationId = request.OperationId,
+                    RequestSha256 = HashFile(requestPath),
+                    DataSha256 = HashFile(Path.Combine(operation, "data.json")),
+                    OriginalFiles = Snapshot(request.InstallDirectory), PreparedFiles = Snapshot(staging),
+                    RestartAdopted = adoption?.RegistrationId != null,
+                    RestartRegistrationId = adoption?.RegistrationId, HostProcessId = adoption?.HostProcessId,
+                    HostProcessStartTimeUtc = adoption?.HostProcessStartTimeUtc
+                });
                 Phase("movingOld");
                 moveDirectory(request.InstallDirectory, backup);
                 oldMoved = true;
@@ -123,6 +154,7 @@ namespace readboard
                     HostProcessStartTimeUtc = adoption?.HostProcessStartTimeUtc
                 });
                 report(phase);
+                DurableCheckpoint?.Invoke(phase);
             }
 
             IndependentUpdateResult Finish(string state, string diagnostic)
@@ -140,6 +172,142 @@ namespace readboard
                 report(state);
                 return result;
             }
+        }
+
+        private IndependentUpdateResult Recover(string requestPath, IndependentUpdateRequest request,
+            string operation, string staging, string backup, Action<string> report)
+        {
+            var active = IndependentUpdateFiles.Read<IndependentUpdateActive>(Path.Combine(Path.GetDirectoryName(operation), "active.json"));
+            if (active.SchemaVersion != 1 || active.OperationId != request.OperationId)
+                throw new InvalidDataException("Recovery does not own the active operation.");
+            string resultPath = Path.Combine(operation, "result.json");
+            if (File.Exists(resultPath))
+            {
+                var prior = IndependentUpdateFiles.Read<IndependentUpdateResult>(resultPath);
+                if (prior.SchemaVersion != 1 || prior.OperationId != request.OperationId
+                    || prior.InstallDirectory != request.InstallDirectory
+                    || !new[] { "installed", "failedUnchanged", "rolledBack", "rollbackFailed", "cancelled" }.Contains(prior.State)
+                    || (prior.State == "installed" && prior.ActualVersion != request.TargetTag)
+                    || (new[] { "failedUnchanged", "rolledBack", "cancelled" }.Contains(prior.State)
+                        && prior.ActualVersion != "v" + request.SourceVersion.TrimStart('v'))
+                    || (prior.State != "rollbackFailed" && (prior.ActualVersion == null
+                        || prior.ActualVersion != IndependentUpdateFiles.ReadVersion(request.InstallDirectory))))
+                    throw new InvalidDataException("Invalid terminal recovery record.");
+                report(prior.State);
+                return prior;
+            }
+            var progress = IndependentUpdateFiles.Read<IndependentUpdateProgress>(Path.Combine(operation, "progress.json"));
+            var plan = IndependentUpdateFiles.Read<IndependentUpdateRecoveryPlan>(Path.Combine(operation, "recovery.json"));
+            if (plan.SchemaVersion != 1 || plan.OperationId != request.OperationId
+                || plan.RequestSha256 != HashFile(requestPath) || plan.DataSha256 != HashFile(Path.Combine(operation, "data.json"))
+                || progress.SchemaVersion != 1 || progress.OperationId != request.OperationId
+                || !new[] { "preservingData", "movingOld", "movingNew", "installed", "rollingBack" }.Contains(progress.Phase)
+                || progress.RestartAdopted != plan.RestartAdopted
+                || progress.RestartRegistrationId != plan.RestartRegistrationId
+                || progress.HostProcessId != plan.HostProcessId || progress.HostProcessStartTimeUtc != plan.HostProcessStartTimeUtc)
+                throw new InvalidDataException("Recovery plan or committed identity does not match.");
+            if (plan.RestartAdopted)
+            {
+                var adoption = IndependentUpdateRestart.ReadAdoption(requestPath, request);
+                if (adoption.RegistrationId == null || adoption.RegistrationId != plan.RestartRegistrationId
+                    || adoption.HostProcessId != plan.HostProcessId || adoption.HostProcessStartTimeUtc != plan.HostProcessStartTimeUtc)
+                    throw new InvalidDataException("Recovery restart identity does not match.");
+            }
+            else if (plan.RestartRegistrationId != null || plan.HostProcessId != null || plan.HostProcessStartTimeUtc != null)
+                throw new InvalidDataException("Recovery contains an unadopted restart identity.");
+            if (IndependentUpdateRestart.IsAlive(request.SourceProcessId, request.SourceProcessStartTimeUtc))
+                throw new IOException("The original ReadBoard process is still running; recovery cannot replace it.");
+
+            bool hasInstall = Directory.Exists(request.InstallDirectory);
+            bool hasBackup = Directory.Exists(backup);
+            bool hasStaging = Directory.Exists(staging);
+            string state;
+            if (hasInstall && !hasBackup && hasStaging && progress.Phase != "installed" && progress.Phase != "rollingBack")
+            {
+                MatchSnapshot(request.InstallDirectory, plan.OriginalFiles);
+                MatchSnapshot(staging, plan.PreparedFiles);
+                AssertFilesReleased(request.InstallDirectory);
+                SetPhase("movingOld");
+                moveDirectory(request.InstallDirectory, backup);
+                SetPhase("movingNew");
+                moveDirectory(staging, request.InstallDirectory);
+                state = "installed";
+            }
+            else if (!hasInstall && hasBackup && hasStaging)
+            {
+                MatchSnapshot(backup, plan.OriginalFiles);
+                MatchSnapshot(staging, plan.PreparedFiles);
+                SetPhase("movingNew");
+                moveDirectory(staging, request.InstallDirectory);
+                state = "installed";
+            }
+            else if (hasInstall && hasBackup && !hasStaging)
+            {
+                MatchSnapshot(backup, plan.OriginalFiles);
+                MatchSnapshot(request.InstallDirectory, plan.PreparedFiles);
+                state = "installed";
+            }
+            else if (hasInstall && !hasBackup && progress.Phase == "rollingBack")
+            {
+                MatchSnapshot(request.InstallDirectory, plan.OriginalFiles);
+                state = "rolledBack";
+            }
+            else throw new InvalidDataException("Directory ownership cannot be proven; all recovery material was retained.");
+
+            string expected = state == "installed" ? request.TargetTag : "v" + request.SourceVersion.TrimStart('v');
+            if (IndependentUpdateFiles.ReadVersion(request.InstallDirectory) != expected)
+                throw new InvalidDataException("Recovered directory version does not match the immutable plan.");
+            SetPhase(state == "installed" ? "installed" : "rollingBack");
+            var result = new IndependentUpdateResult
+            {
+                OperationId = request.OperationId, State = state, ActualVersion = expected,
+                InstallDirectory = request.InstallDirectory, Diagnostic = "",
+                BackupDirectory = Directory.Exists(backup) ? backup : null
+            };
+            IndependentUpdateFiles.Publish(resultPath, result);
+            report(state);
+            return result;
+
+            void SetPhase(string phase)
+            {
+                progress.Phase = phase;
+                IndependentUpdateFiles.Publish(Path.Combine(operation, "progress.json"), progress);
+                report(phase);
+            }
+        }
+
+        private static string HashFile(string path)
+        {
+            IndependentUpdateFiles.AssertNoReparse(path);
+            using var stream = File.OpenRead(path);
+            return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        }
+
+        private static Dictionary<string, string> Snapshot(string directory)
+        {
+            var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Visit(directory);
+            return files;
+            void Visit(string current)
+            {
+                IndependentUpdateFiles.AssertNoReparse(current);
+                foreach (string entry in Directory.EnumerateFileSystemEntries(current))
+                {
+                    IndependentUpdateFiles.AssertNoReparse(entry);
+                    string relative = Path.GetRelativePath(directory, entry).Replace('\\', '/');
+                    IndependentUpdateFiles.ValidateRelativePath(relative);
+                    if (Directory.Exists(entry)) { files.Add(relative + "/", ""); Visit(entry); }
+                    else files.Add(relative, HashFile(entry));
+                }
+            }
+        }
+
+        private static void MatchSnapshot(string directory, Dictionary<string, string> expected)
+        {
+            if (expected == null || expected.Count == 0) throw new InvalidDataException("Missing directory identity.");
+            var actual = Snapshot(directory);
+            if (actual.Count != expected.Count || expected.Any(item => !actual.TryGetValue(item.Key, out string hash) || hash != item.Value))
+                throw new InvalidDataException("Recovery directory evidence differs from the frozen plan: " + directory);
         }
 
         private static void ProbeNextUpdater(string staging)

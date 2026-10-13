@@ -25,7 +25,9 @@ namespace ReadBoard.Updater
                 probe.CreateControl();
                 return;
             }
-            if (args.Length != 2 || args[0] != "--request") { Environment.ExitCode = 1; return; }
+            bool recovery = args.Length == 0 || (args.Length == 2 && args[0] == "--recover");
+            if (args.Length == 0) args = new[] { "--recover", Path.Combine(AppContext.BaseDirectory, "..", "request.json") };
+            if (args.Length != 2 || (args[0] != "--request" && args[0] != "--recover")) { Environment.ExitCode = 1; return; }
             IndependentUpdateRequest request;
             try
             {
@@ -38,19 +40,29 @@ namespace ReadBoard.Updater
             window.Shown += (_, _) =>
             {
                 window.Hide();
-                var thread = new Thread(() => Execute(args[1], request, window)) { IsBackground = false };
+                var thread = new Thread(() => Execute(args[1], request, window, recovery)) { IsBackground = false };
                 thread.Start();
             };
             Application.Run(window);
         }
 
-        private static void Execute(string requestPath, IndependentUpdateRequest request, UpdateWindow window)
+        private static void Execute(string requestPath, IndependentUpdateRequest request, UpdateWindow window, bool recovery)
         {
-            bool committed = false;
+            bool committed = recovery;
             using var pipe = new NamedPipeClientStream(".", "ReadBoard.Update." + request.OperationId,
                 PipeDirection.InOut, PipeOptions.CurrentUserOnly);
             try
             {
+                if (recovery)
+                {
+                    window.Post(() => { window.Show(); window.SetStatus("IndependentUpdate_installing", RecoveryLocation(requestPath)); });
+                    if (!File.Exists(Path.Combine(Path.GetDirectoryName(requestPath), "progress.json")))
+                        throw new InvalidDataException("No durable transaction exists to recover.");
+                    var recovered = new IndependentUpdateInstaller().Execute(requestPath,
+                        () => throw new InvalidOperationException("Recovery cannot submit another installation."), () => { }, _ => { });
+                    CompleteRestart(requestPath, request, recovered, window);
+                    return;
+                }
                 pipe.Connect(15000);
                 using var reader = new StreamReader(pipe, Encoding.UTF8, false, 1024, true);
                 using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 1024, true) { AutoFlush = true };
@@ -64,10 +76,10 @@ namespace ReadBoard.Updater
                     () =>
                     {
                         committed = true;
-                        window.Post(() => { window.Show(); window.SetStatus("IndependentUpdate_installing", null); });
+                        window.Post(() => { window.Show(); window.SetStatus("IndependentUpdate_installing", RecoveryLocation(requestPath)); });
                         writer.WriteLine("ACCEPTED " + request.OperationId);
                     },
-                    phase => { if (committed) window.Post(() => window.SetStatus("IndependentUpdate_installing", null)); });
+                    phase => { if (committed) window.Post(() => window.SetStatus("IndependentUpdate_installing", RecoveryLocation(requestPath))); });
                 if (!committed)
                 {
                     writer.WriteLine("ERROR " + JsonSerializer.Serialize(result.Diagnostic));
@@ -97,6 +109,8 @@ namespace ReadBoard.Updater
                 }));
             }
         }
+        private static string RecoveryLocation(string requestPath) => Path.Combine(Path.GetDirectoryName(requestPath), "runner", IndependentUpdateFiles.RunnerName);
+
         private static void CompleteRestart(string path, IndependentUpdateRequest request, IndependentUpdateResult result, UpdateWindow window)
         {
             string outcome = "unavailable";
