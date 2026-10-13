@@ -868,6 +868,40 @@ async function publish(page, snapshot) {
   await page.evaluate(payload => window.__readboardWebViewMessageHandler({ data: { type: "state", payload } }), snapshot);
 }
 
+test("acknowledges update result only after its visible render and suppresses stale snapshots", async ({ page }) => {
+  await openHostedShell(page);
+  const snapshot = hostedSnapshot({ version: "v3.2.0" });
+  const operationId = "0123456789abcdef0123456789abcdef";
+  snapshot.update = {
+    open: true, status: "notice", resultOperationId: operationId,
+    dialogTitle: "ReadBoard update", title: "Installed v3.2.0", detail: "Connected to host", doneLabel: "Done"
+  };
+  await page.evaluate(payload => {
+    const original = window.chrome.webview.postMessage;
+    window.__presentedViews = [];
+    window.chrome.webview.postMessage = message => {
+      if (message.type === "update.presented") window.__presentedViews.push({
+        text: document.querySelector("#modal-body").textContent,
+        visible: !document.querySelector("#modal-layer").hidden,
+        operation: message.payload.operationId
+      });
+      original(message);
+    };
+    window.__readboardWebViewMessageHandler({ data: { type: "state", payload } });
+    const closed = structuredClone(payload); closed.update.open = false;
+    window.__readboardWebViewMessageHandler({ data: { type: "state", payload: closed } });
+  }, snapshot);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  expect(await page.evaluate(() => window.__presentedViews)).toEqual([]);
+  await publish(page, snapshot);
+  await expect(page.locator("#modal-body")).toContainText("Installed v3.2.0");
+  await expect.poll(() => page.evaluate(() => window.__presentedViews.length)).toBe(1);
+  const view = await page.evaluate(() => window.__presentedViews[0]);
+  expect(view).toMatchObject({ visible: true, operation: operationId });
+  expect(view.text).toContain("Installed v3.2.0");
+  expect(view.text).toContain("Connected to host");
+});
+
 test("renders only the mini shell from shell.miniMode without the emergency layout", async ({ page }) => {
   await page.setViewportSize({ width: 680, height: 218 });
   await openHostedShell(page);

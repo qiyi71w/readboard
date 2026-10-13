@@ -639,6 +639,12 @@ namespace readboard
                 case "update.install":
                 case "update.openDownload":
                     return HasEmptyPayload(command.Payload);
+                case "update.presented":
+                    if (command.Payload.ValueKind != JsonValueKind.Object || CountProperties(command.Payload) != 1
+                        || !command.Payload.TryGetProperty("operationId", out var operation)
+                        || operation.ValueKind != JsonValueKind.String) return false;
+                    try { IndependentUpdateFiles.ValidateOperationId(operation.GetString()); return true; }
+                    catch (InvalidDataException) { return false; }
                 case "navigate":
                 {
                     WebViewNavigationIntent navigationIntent;

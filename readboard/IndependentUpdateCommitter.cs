@@ -127,11 +127,7 @@ namespace readboard
                     : await restart.PrepareAsync(requestPath, cancellationToken);
                 using var pipe = new NamedPipeServerStream("ReadBoard.Update." + operationId, PipeDirection.InOut, 1,
                     PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-                var start = new ProcessStartInfo(Path.Combine(runnerDirectory, IndependentUpdateFiles.RunnerName))
-                { UseShellExecute = false, WorkingDirectory = runnerDirectory };
-                start.ArgumentList.Add("--request");
-                start.ArgumentList.Add(requestPath);
-                runner = Process.Start(start) ?? throw new IOException("Updater could not start.");
+                runner = StartRunner(runnerDirectory, requestPath);
                 using var preparationTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 preparationTimeout.CancelAfter(TimeSpan.FromMinutes(2));
                 await pipe.WaitForConnectionAsync(preparationTimeout.Token);
@@ -170,6 +166,18 @@ namespace readboard
                 // package. Preserve them across disposal and precommit error reporting.
                 if (!accepted) CleanupPreparation();
             }
+        }
+
+        internal static Process StartRunner(string runnerDirectory, string requestPath)
+        {
+            // The GUI updater communicates only through its private named pipe. Shell
+            // launch does not inherit the hosted source's standard handles, so the host
+            // reader can observe source EOF while the independent updater remains alive.
+            var start = new ProcessStartInfo(Path.Combine(runnerDirectory, IndependentUpdateFiles.RunnerName))
+            { UseShellExecute = true, WorkingDirectory = runnerDirectory };
+            start.ArgumentList.Add("--request");
+            start.ArgumentList.Add(requestPath);
+            return Process.Start(start) ?? throw new IOException("Updater could not start.");
         }
 
         private static string DecodeError(string line)

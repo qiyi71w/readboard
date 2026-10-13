@@ -72,6 +72,17 @@ namespace Readboard.VerificationTests.Host
             Assert.False(MainForm.TryParseWebViewCommand(json, out ReadBoardUiCommand command));
             Assert.False(MainForm.TryParseWebViewUpdateIntent(command, out _));
         }
+
+        [Theory]
+        [InlineData("{\"operationId\":\"0123456789abcdef0123456789abcdef\"}", true)]
+        [InlineData("{\"operationId\":\"WRONG\"}", false)]
+        [InlineData("{\"operationId\":null}", false)]
+        [InlineData("{\"operationId\":\"0123456789abcdef0123456789abcdef\",\"extra\":true}", false)]
+        [InlineData("{\"operationId\":\"0123456789abcdef0123456789abcdef\",\"operationId\":\"0123456789abcdef0123456789abcdef\"}", false)]
+        public void PresentedCommand_RequiresExactlyOneOperationIdentity(string payload, bool valid)
+        {
+            Assert.Equal(valid, MainForm.TryParseWebViewCommand("{\"type\":\"update.presented\",\"payload\":" + payload + "}", out _));
+        }
         [Theory]
         [InlineData(0, true)]
         [InlineData(1, true)]

@@ -878,10 +878,11 @@
     render();
     if (state.update?.open && state.update.resultOperationId) {
       const operationId = state.update.resultOperationId;
-      requestAnimationFrame(() => {
-        if (state.update?.open && state.update.resultOperationId === operationId)
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (state.update?.open && state.update.resultOperationId === operationId
+            && activeModal === "update" && !$("#modal-layer").hidden)
           send("update.presented", { operationId });
-      });
+      }));
     }
   }
 
