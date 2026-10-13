@@ -529,7 +529,7 @@ namespace Readboard.VerificationTests.Transport
         {
             public override System.Text.Encoding Encoding => System.Text.Encoding.UTF8;
 
-            public override void WriteLine(string value)
+            public override void Write(string value)
             {
                 throw new IOException("Simulated console write failure");
             }
