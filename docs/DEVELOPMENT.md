@@ -202,6 +202,11 @@ WebView 通过虚拟主机 `https://app.readboard/index.html` 加载静态资源
 
 一次性动作通过 `ControlCenterActionAdapter` 调用 coordinator。不要从 DOM 或 `MainForm` 增加第二套 enablement/动作状态机。
 
+控件的可用外观必须与 snapshot 的 enablement 一致，完整模式和迷你模式遵循相同规则：
+
+- 启用自动落子后，所有平台都允许手动执黑／执白；自动执色和身份仅用于野狐及野狐后台。单个选项禁用只将该选项置灰，整组背景和“执子颜色”标题只在整组无可用选项时置灰。
+- “其他（后台）／其他（前台）”使用框选棋盘或框选 1 路线，不支持点击棋盘内部选盘；同步空闲时这些框选入口可用。禁用的选盘按钮不得保留蓝色强调外观，迷你模式仍只显示适用的选盘入口。
+
 自动落子授权的边界：
 
 - Runtime 管启用周期、当次选择与接受的观察；`FoxIdentitySelection` 管身份和房间代次；`FoxMatchBarLiveRecognition` 管玩家名单缓存；coordinator 管同步 operation、宿主授权账本与出站串行化。
