@@ -320,13 +320,46 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 
 棋盘 snapshot 出站顺序不可随意调整：窗口 context → 可选 `forceRebuild` → 可选 `foxMoveNumber` → `lastMoveSource` → 棋盘行 → `end`。
 
-主线 About 更新由 ReadBoard 独立更新器完成，不要求宿主能力、pipe 或会话，也不发送旧 `readboardUpdateReady` 安装交接。中央通道检查、资产命名及手动下载保持原契约；本轮安装完成后不自动重连。
+主线 About 更新由 ReadBoard 独立更新器完成，不要求宿主能力、pipe 或会话，也不发送旧 `readboardUpdateReady` 安装交接。中央通道检查、资产命名及手动下载保持原契约；支持后台重启的原生宿主可在安装后重新连接。无能力、拒绝或准备应答超时只影响重连，安装仍由独立更新器完成，结果明确显示未安排重连。
 
 更新器及完整 self-contained 依赖先复制到安装目录外，再下载和校验候选。更新器重新校验包 hash、完整载荷和实际版本，确认旧配置成功保存后持久提交。提交前失败保持旧窗口可用；提交后更新器独占记录及包，按 PID 和创建时间等待旧进程退出，再复制最终三份配置、备份旧目录并切换完整 staging。普通切换失败恢复旧目录；恢复失败保留 backup 并阻止半成品启动。
 
 无宿主调试路径保留 stdin 打开时，正常关闭仍通过 transport Stop 取消 Windows 阻塞读取。`CancelSynchronousIo` 引起的读取取消由连接代次判定：主动关闭不再触发断链回调，当前活跃连接上的意外取消仍通知断链。
 
 事务位于安装目录同父 `.readboard-update-<规范化安装路径 SHA256>/<operationId>`；旧程序写 request/data，更新器单写 active/progress/result。未知、损坏或未结算记录阻止新安装；中断事务恢复由后续恢复流程处理。用户数据保留集合来自实际日志和 WebView owner，外部数据原位不动，Settings Draft 不隐式 Save。
+
+### 后台重启协议与记录
+
+每条 wire 使用 tab 分隔字段、LF 结尾，版本固定为字面 `1`，operation ID 为32位小写十六进制。七条命令为：
+
+| 方向 | 命令及字段 |
+| --- | --- |
+| 宿主 → ReadBoard | `readboardSelfUpdateRestartSupported`, `1` |
+| ReadBoard → 宿主 | `readboardSelfUpdatePrepare`, `1`, operationId, request.json绝对路径 |
+| 宿主 → ReadBoard | `readboardSelfUpdatePrepared`, `1`, operationId |
+| 宿主 → ReadBoard | `readboardSelfUpdateRejected`, `1`, operationId, `busy/staleSession/invalidRequest/unavailable` |
+| ReadBoard → 宿主 | `readboardSelfUpdateCancel`, `1`, operationId |
+| 新ReadBoard → 宿主 | `readboardSelfUpdateReady`, `1`, operationId, 实际`vX.Y.Z` |
+| 宿主 → 新ReadBoard | `readboardSelfUpdateConnected`, `1`, operationId |
+
+准备应答期限为5秒。取消/超时后的迟到接受不授权重启；安装提交前源程序发布采用记录，更新器将采用的registrationId及宿主PID/UTC创建时间持久写入progress后才确认接受。更新器通过shell启动隔离源pipe句柄，仅使用当前用户私有named pipe完成PREPARED/COMMIT/ACCEPTED握手；源进程退出后，宿主reader必须能收到真实EOF。
+
+所有新增JSON均在原operation目录中，采用camelCase、UTF-8、schemaVersion=1、原子发布；每份都有operationId，未知/重复字段、错误类型或身份不匹配拒绝。request字段保持不变：
+
+| 文件 / 单写者 | 除schemaVersion、operationId外的字段 |
+| --- | --- |
+| registration.json / 宿主 | registrationId、hostProcessId、hostProcessStartTimeUtc、sourceProcessId、sourceProcessStartTimeUtc、installDirectory、requestSha256 |
+| adoption.json / 原ReadBoard | registrationId、hostProcessId、hostProcessStartTimeUtc；不安排重启时三者均null |
+| progress.json / 更新器 | phase、restartAdopted、restartRegistrationId、hostProcessId、hostProcessStartTimeUtc；提交后保留同一采用身份 |
+| connection.json / 宿主 | registrationId、state、processId、processStartTimeUtc、actualVersion |
+| presented.json / 新ReadBoard | registrationId、processId、processStartTimeUtc、actualVersion |
+
+registrationId同样是32位小写十六进制，requestSha256绑定原始不可变request字节。连接结果区分connected、unavailable、hostExited、startFailed、handshakeFailed；无宿主或宿主已退由更新器根据采用记录与PID+创建时间显示状态，不伪写宿主connection.json。connected必须带实际新进程身份与版本。安装result.json始终归更新器；连接失败不改安装终态、不重复安装或回滚已安装版本。
+
+宿主同时等待可启动安装终态、原进程退出、原reader退出，再复用原生factory；重复打开合并、宿主退出撤销重启、旧回调不能清除新实例。新启动保留七个位置参数及日志后缀，追加`--update-transaction <request.json>`。新程序校验安装目录、记录、实际版本及采用宿主身份，普通ready与UI就绪后才发本轮Ready。宿主确认后，新UI显示实际安装结果；DOM可见绘制后发`update.presented`，新进程写presented，更新器核对全部身份后关闭。新会话不恢复同步、自动落子或待落子授权。
+
+聚焦回归包含IndependentUpdateRestartTests、IndependentUpdateProcessTests、UpdateBridgeTests及WebView的result-presented用例。真实ReadBoard/更新器/FakeHost成功只证明C#端到端移交；Java宿主全链、真实缩放与双仓发布候选仍需各自原生验收。
+
 
 本地与 CI 发布入口均包含 `updater/` 和完整 hash manifest；不得只复制更新器 exe。原生验收 startup hook 仅属于验证程序集，不进入发布包，也不能跳过 UI 确认或产品校验。
 
