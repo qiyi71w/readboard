@@ -73,11 +73,21 @@ namespace readboard
                 };
                 IndependentUpdateFiles.ValidateRequest(request);
                 var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 // WebView2's default application-owned profile is next to the executable.
                 directories.Add("readboard.exe.WebView2");
                 directories.Add("debug-diagnostics");
                 foreach (string directory in userDirectories())
                 {
+                    if (!string.IsNullOrWhiteSpace(directory)
+                        && string.Equals(Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar), install, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // RollingFileSink owns only these streams and archive/capture
+                        // directories when logging is configured at the product root.
+                        files.UnionWith(new[] { "app.log", "trace.log", "crash.log" });
+                        directories.UnionWith(new[] { "archive", "capture" });
+                        continue;
+                    }
                     if (string.IsNullOrWhiteSpace(directory) || !IndependentUpdateFiles.IsWithin(install, directory)) continue;
                     string relative = Path.GetRelativePath(install, directory).Replace('\\', '/');
                     IndependentUpdateFiles.ValidateRelativePath(relative);
@@ -85,7 +95,7 @@ namespace readboard
                 }
                 string[] preserved = directories.Where(path => !directories.Any(parent => path.StartsWith(parent + "/", StringComparison.OrdinalIgnoreCase))).ToArray();
                 IndependentUpdateFiles.Publish(Path.Combine(operation, "data.json"), new IndependentUpdateData
-                { OperationId = operationId, Directories = preserved });
+                { OperationId = operationId, Directories = preserved, Files = files.ToArray() });
                 string requestPath = Path.Combine(operation, "request.json");
                 IndependentUpdateFiles.Publish(requestPath, request);
                 using var pipe = new NamedPipeServerStream("ReadBoard.Update." + operationId, PipeDirection.InOut, 1,

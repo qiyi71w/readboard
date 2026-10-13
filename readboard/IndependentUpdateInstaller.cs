@@ -40,7 +40,6 @@ namespace readboard
             catch (AbandonedMutexException) { acquired = true; }
             if (!acquired) throw new IOException("Another update owns this installation.");
             bool oldMoved = false;
-            bool adopted = false;
             bool claimed = false;
             try
             {
@@ -67,7 +66,6 @@ namespace readboard
                 Phase("prepared");
                 if (!acceptCommit()) return Finish("cancelled", "Preparation cancelled; the original installation is unchanged.");
                 Phase("committed");
-                adopted = true;
                 // A missing acknowledgement never authorizes the source to exit. Waiting
                 // below then fails unchanged; a lost reply cannot turn into a live swap.
                 committed();
@@ -88,7 +86,7 @@ namespace readboard
             {
                 if (!claimed) throw;
                 string diagnostic = exception.Message;
-                if (!oldMoved) return Finish(adopted ? "failedUnchanged" : "failedUnchanged", diagnostic);
+                if (!oldMoved) return Finish("failedUnchanged", diagnostic);
                 try
                 {
                     Phase("rollingBack");
@@ -189,10 +187,10 @@ namespace readboard
 
         private static void ValidateData(IndependentUpdateRequest request, IndependentUpdateData data, string staging)
         {
-            if (data.SchemaVersion != 1 || data.OperationId != request.OperationId || data.Directories == null)
+            if (data.SchemaVersion != 1 || data.OperationId != request.OperationId || data.Directories == null || data.Files == null)
                 throw new InvalidDataException("Invalid user data ownership record.");
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (string relative in data.Directories)
+            foreach (string relative in data.Directories.Concat(data.Files))
             {
                 IndependentUpdateFiles.ValidateRelativePath(relative);
                 if (!names.Add(relative) || File.Exists(Path.Combine(staging, relative)) || Directory.Exists(Path.Combine(staging, relative))
@@ -216,6 +214,11 @@ namespace readboard
             {
                 string old = Path.Combine(request.InstallDirectory, directory);
                 if (Directory.Exists(old)) IndependentUpdateFiles.CopyTree(old, Path.Combine(staging, directory));
+            }
+            foreach (string file in data.Files)
+            {
+                string old = Path.Combine(request.InstallDirectory, file);
+                if (File.Exists(old)) File.Copy(old, Path.Combine(staging, file), false);
             }
         }
 

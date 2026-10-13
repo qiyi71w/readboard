@@ -56,6 +56,7 @@ namespace readboard
         public int SchemaVersion { get; set; } = 1;
         public string OperationId { get; set; }
         public string[] Directories { get; set; } = Array.Empty<string>();
+        public string[] Files { get; set; } = Array.Empty<string>();
     }
 
     internal sealed class IndependentUpdatePayload
