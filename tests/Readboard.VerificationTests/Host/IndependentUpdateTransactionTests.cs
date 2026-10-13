@@ -230,16 +230,22 @@ namespace Readboard.VerificationTests.Host
                 Assert.Equal("saved preferences", File.ReadAllText(preferences));
                 source.StandardInput.Close(); source.WaitForExit();
                 if (denyDelete && denyDeleteChild)
-                { parentInfo.SetAccessControl(parentAcl); installInfo.SetAccessControl(installAcl); }
+                { Restore(parentInfo, parentAcl); Restore(installInfo, installAcl); }
                 string moved = Path.Combine(root, "renamed");
                 Directory.Move(install, moved);
                 Directory.Move(moved, install);
             }
             finally
             {
-                parentInfo.SetAccessControl(parentAcl); installInfo.SetAccessControl(installAcl);
+                Restore(parentInfo, parentAcl); Restore(installInfo, installAcl);
                 if (source != null) { if (!source.HasExited) { source.Kill(); source.WaitForExit(); } source.Dispose(); }
                 Directory.Delete(root, true);
+            }
+            void Restore(DirectoryInfo directory, DirectorySecurity original)
+            {
+                var restored = new DirectorySecurity();
+                restored.SetSecurityDescriptorBinaryForm(original.GetSecurityDescriptorBinaryForm());
+                directory.SetAccessControl(restored);
             }
             void Deny(DirectoryInfo directory, FileSystemRights rights)
             {

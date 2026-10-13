@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -291,28 +293,52 @@ namespace readboard
         internal static void ProbeReplaceableInstallation(string install)
         {
             AssertNoReparse(install);
-            // Windows evaluates DELETE including the parent's DELETE_CHILD grant.
-            // Requesting access neither renames the live directory nor changes its ACL.
-            ProbeDirectoryAccess(install, 0x00010000); // DELETE
-            ProbeDirectoryAccess(Path.GetDirectoryName(install), 0x00000004); // FILE_ADD_SUBDIRECTORY
+            string parent = Path.GetDirectoryName(install);
+            using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query | TokenAccessLevels.Duplicate);
+            if (!DuplicateToken(identity.AccessToken, 2, out SafeAccessTokenHandle token))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            using (token)
+            {
+                // Windows permits removal through either DELETE or the parent's DELETE_CHILD.
+                // AccessCheck evaluates the real token/descriptor without opening a live cwd for DELETE.
+                if ((!HasDirectoryAccess(install, 0x00010000, token) // DELETE
+                        && !HasDirectoryAccess(parent, 0x00000040, token)) // FILE_DELETE_CHILD
+                    || !HasDirectoryAccess(parent, 0x00000004, token)) // FILE_ADD_SUBDIRECTORY
+                    throw new UnauthorizedAccessException(new Win32Exception(5).Message + ": " + install);
+            }
         }
 
-        private static void ProbeDirectoryAccess(string directory, uint access)
+        private static bool HasDirectoryAccess(string directory, uint access, SafeAccessTokenHandle token)
         {
-            using SafeFileHandle handle = CreateFileW(directory, access,
-                FileShare.ReadWrite | FileShare.Delete, IntPtr.Zero, FileMode.Open,
-                0x02000000, IntPtr.Zero); // FILE_FLAG_BACKUP_SEMANTICS opens a directory.
-            if (!handle.IsInvalid) return;
+            byte[] descriptor = new DirectoryInfo(directory).GetAccessControl(
+                AccessControlSections.Access | AccessControlSections.Owner | AccessControlSections.Group)
+                .GetSecurityDescriptorBinaryForm();
+            var mapping = new DirectoryGenericMapping
+            { Read = 0x00120089, Write = 0x00120116, Execute = 0x001200a0, All = 0x001f01ff };
+            uint length = 0;
+            if (AccessCheck(descriptor, token, access, ref mapping, null, ref length, out _, out bool allowed))
+                return allowed;
             int error = Marshal.GetLastWin32Error();
-            var cause = new Win32Exception(error);
-            if (error == 5) throw new UnauthorizedAccessException(cause.Message + ": " + directory, cause);
-            throw new IOException(cause.Message + ": " + directory, cause);
+            if (error != 122) throw new Win32Exception(error);
+            byte[] privileges = new byte[length];
+            if (!AccessCheck(descriptor, token, access, ref mapping, privileges, ref length, out _, out allowed))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            return allowed;
         }
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
-        private static extern SafeFileHandle CreateFileW(string fileName, uint desiredAccess,
-            FileShare shareMode, IntPtr securityAttributes, FileMode creationDisposition,
-            uint flagsAndAttributes, IntPtr templateFile);
+        [StructLayout(LayoutKind.Sequential)]
+        private struct DirectoryGenericMapping { internal uint Read, Write, Execute, All; }
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DuplicateToken(SafeAccessTokenHandle existingToken, int impersonationLevel,
+            out SafeAccessTokenHandle duplicateToken);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool AccessCheck(byte[] securityDescriptor, SafeAccessTokenHandle token,
+            uint desiredAccess, ref DirectoryGenericMapping genericMapping, byte[] privilegeSet,
+            ref uint privilegeSetLength, out uint grantedAccess, [MarshalAs(UnmanagedType.Bool)] out bool accessStatus);
 
         internal static void VerifyPayload(string directory, string targetTag)
         {
