@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>ReadBoard.Updater</AssemblyName>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <ApplicationManifest>../readboard/Properties/app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../readboard/IndependentUpdateFiles.cs" Link="IndependentUpdateFiles.cs" />
+    <Compile Include="../readboard/IndependentUpdateInstaller.cs" Link="IndependentUpdateInstaller.cs" />
+    <Compile Include="../readboard/Core/Localization/SemanticMessage.cs" Link="SemanticMessage.cs" />
+    <Content Include="../readboard/language_*.txt" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -428,11 +428,6 @@ namespace readboard
             SendProtocolMessage(protocolAdapter.CreateVersionMessage(version));
         }
 
-        public bool SendReadboardUpdateReady(string tag, string absoluteZipPath)
-        {
-            return outboundProtocolDispatcher.TrySend(
-                protocolAdapter.CreateReadboardUpdateReadyMessage(tag, absoluteZipPath));
-        }
 
         public void SendSync()
         {
@@ -776,17 +771,6 @@ namespace readboard
                     return currentHost.HandleVersionRequest;
                 case ProtocolMessageKind.Quit:
                     return currentHost.HandleQuitRequest;
-                case ProtocolMessageKind.ReadboardUpdateSupported:
-                    return currentHost.HandleReadboardUpdateSupported;
-                case ProtocolMessageKind.ReadboardUpdatePackageV2Supported:
-                    return currentHost.HandleReadboardUpdatePackageV2Supported;
-                case ProtocolMessageKind.ReadboardUpdateInstalling:
-                    return currentHost.HandleReadboardUpdateInstalling;
-                case ProtocolMessageKind.ReadboardUpdateCancelled:
-                    return currentHost.HandleReadboardUpdateCancelled;
-                case ProtocolMessageKind.ReadboardUpdateFailed:
-                    return () => currentHost.HandleReadboardUpdateFailed(
-                        message.RawText.Substring(ProtocolKeywords.ReadboardUpdateFailedPrefix.Length));
                 default:
                     return null;
             }

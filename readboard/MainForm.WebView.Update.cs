@@ -15,9 +15,7 @@ namespace readboard
         private UpdateCheckResult webViewUpdateResult;
         private Uri webViewManualDownloadUri = GetWebViewManualDownloadUri();
         private bool webViewUpdateInitialized;
-        private bool webViewHostedInstallFallbackActive;
-        private bool webViewHostedUpdateHostInstalling;
-        private int webViewHostedUpdateGeneration;
+        private int webViewUpdateGeneration;
 
         internal void InitializeWebViewUpdateBridge()
         {
@@ -256,7 +254,7 @@ namespace readboard
 
             return webViewUpdateCheckJourney.StartAsync(
                 token => updateChecker.CheckAsync(token),
-                CanOfferWebViewHostedInstallForCurrentProcess);
+                CanOfferWebViewInstallForCurrentProcess);
         }
 
         private void OnWebViewUpdateCheckObservation(WebViewUpdateCheckObservation observation)
@@ -268,8 +266,6 @@ namespace readboard
             {
                 case WebViewUpdateCheckObservationKind.Started:
                     InitializeWebViewUpdateBridge();
-                    webViewHostedInstallFallbackActive = false;
-                    webViewHostedUpdateHostInstalling = false;
                     webViewUpdateResult = null;
                     webViewManualDownloadUri = GetWebViewManualDownloadUri();
                     webViewUpdateState = new ReadBoardUpdateUiState
@@ -318,19 +314,15 @@ namespace readboard
             if (webViewUpdateState.Open && !webViewUpdateState.CloseEnabled)
                 return true;
 
-            if (hostedUpdateJourney != null && hostedUpdateJourney.Cancel())
-            {
-                webViewHostedUpdateHostInstalling = false;
+            if (independentUpdateJourney != null && independentUpdateJourney.Cancel())
                 return false;
-            }
-            if (processing && hostedUpdateJourney != null)
+            if (processing && independentUpdateJourney != null)
                 return true;
 
-            int journeyGeneration = hostedUpdateJourney == null ? 0 : hostedUpdateJourney.Generation;
-            if (journeyGeneration >= webViewHostedUpdateGeneration)
-                webViewHostedUpdateGeneration = journeyGeneration + 1;
+            int journeyGeneration = independentUpdateJourney == null ? 0 : independentUpdateJourney.Generation;
+            if (journeyGeneration >= webViewUpdateGeneration)
+                webViewUpdateGeneration = journeyGeneration + 1;
             webViewUpdateCheckJourney.Cancel();
-            webViewHostedUpdateHostInstalling = false;
             webViewUpdateState = CreateClosedWebViewUpdateState();
             return true;
         }
@@ -350,19 +342,23 @@ namespace readboard
             }
             InitializeWebViewUpdateBridge();
             UpdateCheckResult result = webViewUpdateResult;
-            if (!CanOfferWebViewHostedInstallForCurrentProcess(result))
+            if (!CanOfferWebViewInstallForCurrentProcess(result))
             {
                 OpenWebViewUpdateDownload();
                 return Task.CompletedTask;
             }
 
-            webViewHostedUpdateHostInstalling = false;
+            if (System.Windows.Forms.MessageBox.Show(this,
+                getLangStr("IndependentUpdate_confirm"), getLangStr("IndependentUpdate_caption"),
+                System.Windows.Forms.MessageBoxButtons.OKCancel,
+                System.Windows.Forms.MessageBoxIcon.Warning) != System.Windows.Forms.DialogResult.OK)
+                return Task.CompletedTask;
             HostedUpdateRequest request = new HostedUpdateRequest(
                 result.Tag,
                 result.AssetName,
                 result.AssetDownloadUrl,
                 result.AssetSha256);
-            return hostedUpdateJourney.StartAsync(request);
+            return independentUpdateJourney.StartAsync(request);
         }
 
         internal void OpenWebViewUpdateDownload()
@@ -382,125 +378,55 @@ namespace readboard
             }
         }
 
-        private void OnHostedUpdateObservation(HostedUpdateObservation observation)
+        private void OnIndependentUpdateObservation(IndependentUpdateObservation observation)
         {
-            if (observation == null)
-                return;
-
+            if (observation == null) return;
             InvokeUiHostAction(delegate
             {
-                if (isShuttingDown || IsDisposed || Disposing)
-                    return;
-                ApplyHostedUpdateObservation(observation);
-            });
-        }
-
-        private void ApplyHostedUpdateObservation(HostedUpdateObservation observation)
-        {
-            if (observation.Generation < webViewHostedUpdateGeneration)
-                return;
-            webViewHostedUpdateGeneration = observation.Generation;
-
-            switch (observation.Stage)
-            {
-                case HostedUpdateStage.Downloading:
-                    SetWebViewUpdateProcessing(observation.Message, 0);
-                    break;
-                case HostedUpdateStage.Verifying:
-                    SetWebViewUpdateProcessing(observation.Message, 1);
-                    break;
-                case HostedUpdateStage.NotifyingHost:
-                    SetWebViewUpdateProcessing(observation.Message, 1);
-                    break;
-                case HostedUpdateStage.WaitingForHostInstall:
-                    if (webViewHostedInstallFallbackActive || webViewHostedUpdateHostInstalling)
-                        return;
-                    SetWebViewUpdateProcessing(observation.Message, 2);
-                    break;
-                case HostedUpdateStage.HostInstalling:
-                    if (webViewHostedInstallFallbackActive)
-                        return;
-                    webViewHostedUpdateHostInstalling = true;
-                    SetWebViewUpdateProcessing(observation.Message, 3);
-                    break;
-                case HostedUpdateStage.HostCancelled:
-                case HostedUpdateStage.HostFailed:
-                case HostedUpdateStage.HostTimedOut:
-                    ActivateWebViewManualDownloadFallback(observation.Message);
-                    break;
-                case HostedUpdateStage.Cancelled:
-                    webViewHostedInstallFallbackActive = false;
-                    webViewHostedUpdateHostInstalling = false;
-                    webViewUpdateState = CreateClosedWebViewUpdateState();
-                    PostWebViewState();
-                    break;
-                case HostedUpdateStage.Failed:
-                    ActivateWebViewManualDownloadFallback(observation.Message);
-                    break;
-                case HostedUpdateStage.Rejected:
-                    if (string.Equals(
-                        observation.Message.Key,
-                        "Update_handoffAlreadySent",
-                        StringComparison.Ordinal))
-                        ActivateWebViewManualDownloadFallback(observation.Message);
-                    else
+                if (isShuttingDown || IsDisposed || Disposing) return;
+                if (observation.Stage != IndependentUpdateStage.Committed && observation.Generation < webViewUpdateGeneration) return;
+                webViewUpdateGeneration = observation.Generation;
+                switch (observation.Stage)
+                {
+                    case IndependentUpdateStage.Downloading:
+                        SetWebViewUpdateProcessing(observation.Message, 0);
+                        break;
+                    case IndependentUpdateStage.Verifying:
+                        SetWebViewUpdateProcessing(observation.Message, 1);
+                        break;
+                    case IndependentUpdateStage.Preparing:
+                        SetWebViewUpdateProcessing(observation.Message, 2);
+                        break;
+                    case IndependentUpdateStage.Committed:
+                        SetWebViewUpdateProcessing(observation.Message, 3);
+                        shutdown();
+                        break;
+                    case IndependentUpdateStage.Cancelled:
+                        webViewUpdateState = CreateClosedWebViewUpdateState();
                         PostWebViewState();
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(observation.Stage));
-            }
-        }
-
-        internal void MarkWebViewHostedUpdateInstalling()
-        {
-            if (hostedUpdateJourney != null)
-                hostedUpdateJourney.MarkHostInstalling();
-        }
-
-        internal void MarkWebViewHostedUpdateCancelled()
-        {
-            if (hostedUpdateJourney != null)
-                hostedUpdateJourney.MarkHostCancelled();
-        }
-
-        internal void MarkWebViewHostedUpdateFailed(string message)
-        {
-            if (hostedUpdateJourney != null)
-                hostedUpdateJourney.MarkHostFailed(message);
+                        break;
+                    case IndependentUpdateStage.Failed:
+                        ActivateWebViewManualDownloadFallback(observation.Message);
+                        break;
+                    default: throw new ArgumentOutOfRangeException(nameof(observation.Stage));
+                }
+            });
         }
 
         internal void DisposeWebViewUpdateBridge()
         {
-            if (hostedUpdateJourney != null)
-            {
-                int journeyGeneration = hostedUpdateJourney.Generation;
-                if (journeyGeneration >= webViewHostedUpdateGeneration)
-                    webViewHostedUpdateGeneration = journeyGeneration + 1;
-                hostedUpdateJourney.Dispose();
-            }
+            independentUpdateJourney?.Dispose();
             webViewUpdateCheckJourney.Cancel();
-            webViewHostedUpdateHostInstalling = false;
         }
 
-        internal static bool CanOfferWebViewHostedInstall(
-            TransportKind transportKind,
-            bool protocolSessionActive,
-            bool hostSupportsUpdate,
-            bool hostSupportsPackageV2,
-            UpdateCheckResult result)
+        internal static bool CanOfferWebViewInstall(UpdateCheckResult result)
         {
-            return transportKind == TransportKind.Pipe &&
-                protocolSessionActive &&
-                hostSupportsUpdate &&
-                result != null &&
-                HostedUpdatePackageVerifier.IsSupportedFileName(
-                    result.Tag,
-                    result.AssetName,
-                    hostSupportsPackageV2) &&
+            return result != null && result.Status == UpdateCheckStatus.UpdateAvailable &&
                 !string.IsNullOrWhiteSpace(result.Tag) &&
-                !string.IsNullOrWhiteSpace(result.AssetName) &&
-                !string.IsNullOrWhiteSpace(result.AssetDownloadUrl) &&
-                !string.IsNullOrWhiteSpace(result.AssetSha256);
+                result.AssetName == "readboard-webview2-" + result.Tag + ".zip" &&
+                Uri.TryCreate(result.AssetDownloadUrl, UriKind.Absolute, out Uri download) &&
+                download.Scheme == Uri.UriSchemeHttps &&
+                System.Text.RegularExpressions.Regex.IsMatch(result.AssetSha256 ?? "", "^[0-9a-f]{64}$");
         }
 
         internal static Uri GetWebViewManualDownloadUri()
@@ -580,7 +506,7 @@ namespace readboard
                         ReleaseNotesMessages = channelMessages,
                         TitleMessage = hostedInstallAvailable
                             ? null
-                            : SemanticMessage.Create("WebView_hostedInstallUnsupported"),
+                            : SemanticMessage.Create("IndependentUpdate_manualOnly"),
                         DetailMessages = channelMessages,
                         MessageMessage = hostedInstallAvailable
                             ? null
@@ -688,7 +614,7 @@ namespace readboard
 
         internal static bool IsWebViewUpdateProcessingCloseEnabled(int activeStep)
         {
-            return activeStep < 2;
+            return activeStep < 3;
         }
 
         private void SetWebViewUpdateProcessing(
@@ -708,8 +634,8 @@ namespace readboard
                 {
                     CreateWebViewUpdateStep(SemanticMessage.Create("WebView_updateStepDownload"), activeStep, 0),
                     CreateWebViewUpdateStep(SemanticMessage.Create("WebView_updateStepVerify"), activeStep, 1),
-                    CreateWebViewUpdateStep(SemanticMessage.Create("WebView_updateStepNotifyHost"), activeStep, 2),
-                    CreateWebViewUpdateStep(SemanticMessage.Create("WebView_updateStepHostInstall"), activeStep, 3)
+                    CreateWebViewUpdateStep(SemanticMessage.Create("IndependentUpdate_preparing"), activeStep, 2),
+                    CreateWebViewUpdateStep(SemanticMessage.Create("IndependentUpdate_installing"), activeStep, 3)
                 }
             };
             PostWebViewState();
@@ -733,8 +659,6 @@ namespace readboard
                 throw new ArgumentNullException(nameof(message));
 
             SemanticMessage headline = new SemanticMessage(message.Key, message.Arguments);
-            webViewHostedInstallFallbackActive = true;
-            webViewHostedUpdateHostInstalling = false;
             webViewUpdateState = new ReadBoardUpdateUiState
             {
                 Open = true,
@@ -751,16 +675,9 @@ namespace readboard
             PostWebViewState();
         }
 
-        private bool CanOfferWebViewHostedInstallForCurrentProcess(UpdateCheckResult result)
+        private bool CanOfferWebViewInstallForCurrentProcess(UpdateCheckResult result)
         {
-            return hostedUpdateJourney != null &&
-                hostedUpdateJourney.CanStartHostedInstall &&
-                CanOfferWebViewHostedInstall(
-                    launchOptions.TransportKind,
-                    sessionCoordinator.IsProtocolSessionActive,
-                    hostedUpdateSupported,
-                    hostedUpdatePackageV2Supported,
-                    result);
+            return independentUpdateJourney != null && independentUpdateJourney.CanStart && CanOfferWebViewInstall(result);
         }
 
         private static ReadBoardUpdateUiState CreateClosedWebViewUpdateState()

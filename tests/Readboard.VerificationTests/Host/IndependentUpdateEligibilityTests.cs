@@ -3,34 +3,26 @@ using Xunit;
 
 namespace Readboard.VerificationTests.Host
 {
-    public sealed class HostedUpdateEligibilityTests
+    public sealed class IndependentUpdateEligibilityTests
     {
         private const string PromotedSha256 =
             "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
         [Theory]
-        [InlineData("readboard-github-release-v3.0.9.zip", "v3.0.9", false, true)]
-        [InlineData("readboard-github-release-v3.0.9.zip", "v3.0.9", true, true)]
-        [InlineData("readboard-webview2-v3.1.0.zip", "v3.1.0", false, false)]
-        [InlineData("readboard-webview2-v3.1.0.zip", "v3.1.0", true, true)]
-        [InlineData("readboard-v3.1.0.zip", "v3.1.0", true, false)]
-        [InlineData("readboard-webview2-v3.1.1.zip", "v3.1.0", true, false)]
-        public void HostedInstallEligibility_RequiresV2ForWebView2Packages(
+        [InlineData("readboard-github-release-v3.0.9.zip", "v3.0.9", false)]
+        [InlineData("readboard-webview2-v3.1.0.zip", "v3.1.0", true)]
+        [InlineData("readboard-v3.1.0.zip", "v3.1.0", false)]
+        [InlineData("readboard-webview2-v3.1.1.zip", "v3.1.0", false)]
+        public void InstallEligibility_RequiresMatchingMainPackage(
             string assetName,
             string versionTag,
-            bool packageV2Supported,
             bool expected)
         {
             var result = CreateResult(versionTag, assetName, PromotedSha256);
 
             Assert.Equal(
                 expected,
-                MainForm.CanOfferWebViewHostedInstall(
-                    TransportKind.Pipe,
-                    true,
-                    true,
-                    packageV2Supported,
-                    result));
+                MainForm.CanOfferWebViewInstall(result));
         }
 
         [Theory]
@@ -38,7 +30,7 @@ namespace Readboard.VerificationTests.Host
         [InlineData("", false)]
         [InlineData(" ", false)]
         [InlineData(PromotedSha256, true)]
-        public void HostedInstallEligibility_RequiresPromotedSha256(
+        public void InstallEligibility_RequiresPromotedSha256(
             string assetSha256,
             bool expected)
         {
@@ -49,12 +41,7 @@ namespace Readboard.VerificationTests.Host
 
             Assert.Equal(
                 expected,
-                MainForm.CanOfferWebViewHostedInstall(
-                    TransportKind.Pipe,
-                    true,
-                    true,
-                    true,
-                    result));
+                MainForm.CanOfferWebViewInstall(result));
         }
 
         private static UpdateCheckResult CreateResult(
@@ -64,6 +51,7 @@ namespace Readboard.VerificationTests.Host
         {
             return new UpdateCheckResult
             {
+                Status = UpdateCheckStatus.UpdateAvailable,
                 Tag = versionTag,
                 AssetName = assetName,
                 AssetDownloadUrl =

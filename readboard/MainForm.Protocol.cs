@@ -208,21 +208,6 @@ namespace readboard
             shutdown();
         }
 
-        void IProtocolCommandHost.HandleReadboardUpdateSupported()
-        {
-            hostedUpdateSupported = true;
-        }
-
-        void IProtocolCommandHost.HandleReadboardUpdatePackageV2Supported()
-        {
-            hostedUpdatePackageV2Supported = true;
-        }
-
-        void IProtocolCommandHost.HandleReadboardUpdateInstalling()
-        {
-            MarkWebViewHostedUpdateInstalling();
-        }
-
         void IAnalysisStateProtocolHost.HandleAnalysisState(bool running)
         {
             ApplyControlCenterSessionObservation(
@@ -231,14 +216,5 @@ namespace readboard
                     .WithAnalysisState(running, true));
         }
 
-        void IProtocolCommandHost.HandleReadboardUpdateCancelled()
-        {
-            MarkWebViewHostedUpdateCancelled();
-        }
-
-        void IProtocolCommandHost.HandleReadboardUpdateFailed(string message)
-        {
-            MarkWebViewHostedUpdateFailed(message ?? string.Empty);
-        }
     }
 }

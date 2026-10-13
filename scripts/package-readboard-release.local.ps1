@@ -15,6 +15,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectRoot = Join-Path $repoRoot 'readboard'
 $projectFile = Join-Path $projectRoot 'readboard.csproj'
+$updaterProject = Join-Path $repoRoot 'ReadBoard.Updater\ReadBoard.Updater.csproj'
 $assemblyInfoPath = Join-Path $projectRoot 'Properties\AssemblyInfo.cs'
 
 $publishRuntimeIdentifier = 'win-x64'
@@ -53,6 +54,19 @@ $requiredBuildFiles = @(
     'WebView\lizziey.ico',
     'WebView\fonts\InterVariable.woff2',
     'WebView\fonts\LICENSE-Inter.txt'
+    'updater\ReadBoard.Updater.exe'
+    'updater\ReadBoard.Updater.dll'
+    'updater\ReadBoard.Updater.deps.json'
+    'updater\ReadBoard.Updater.runtimeconfig.json'
+    'updater\coreclr.dll'
+    'updater\hostfxr.dll'
+    'updater\hostpolicy.dll'
+    'updater\System.Private.CoreLib.dll'
+    'updater\System.Windows.Forms.dll'
+    'updater\language_cn.txt'
+    'updater\language_en.txt'
+    'updater\language_jp.txt'
+    'updater\language_kr.txt'
 )
 
 function Get-ReleaseVersion {
@@ -186,6 +200,11 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) {
         throw "发布失败，dotnet 退出码: $LASTEXITCODE"
     }
+    $updaterOutput = Join-Path $BuildOutputDir 'updater'
+    dotnet publish $updaterProject -c $Configuration -r $publishRuntimeIdentifier --self-contained true --nologo -v m -o $updaterOutput "-p:Version=$($versionInfo.NumericVersion)"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Updater publish failed: $LASTEXITCODE"
+    }
 }
 
 Assert-PathExists -Path $BuildOutputDir -Label '发布输出目录（dotnet publish 未产出或 BuildOutputDir 路径配置错误）'
@@ -204,6 +223,14 @@ if ($numericVersion -ge [Version]'3.1.0') {
     $webView2LoaderDestination = Join-Path $releaseAppDirectory 'WebView2Loader.dll'
     Copy-Item -LiteralPath $webView2LoaderSource -Destination $webView2LoaderDestination -Force
 }
+$payloadFiles = [ordered]@{}
+foreach ($file in Get-ChildItem -LiteralPath $releaseAppDirectory -Recurse -File | Sort-Object FullName) {
+    $relative = [System.IO.Path]::GetRelativePath($releaseAppDirectory, $file.FullName).Replace('\', '/')
+    if ($relative -eq 'update-payload.json') { continue }
+    $payloadFiles[$relative] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+$payloadManifest = [ordered]@{ schemaVersion = 1; version = $versionInfo.TagVersion; files = $payloadFiles }
+$payloadManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $releaseAppDirectory 'update-payload.json') -Encoding utf8NoBOM
 $packageTimestampUtc = [DateTime]::UtcNow
 Update-ReleaseArtifactTimestamps -ReleaseDirectory $releaseDirectory -TimestampUtc $packageTimestampUtc
 if ($SkipZip) {
@@ -228,3 +255,4 @@ Write-Output "PackageZip=$releaseZipPath"
 Write-Output "PackageVersion=$($versionInfo.TagVersion)"
 Write-Output "PackageSha256=$releaseSha256"
 Write-Output "PackageChecksumFile=$releaseChecksumPath"
+Write-Output "PackageUpdater=$(Join-Path $releaseAppDirectory 'updater\ReadBoard.Updater.exe')"

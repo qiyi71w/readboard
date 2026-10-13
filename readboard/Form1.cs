@@ -43,7 +43,7 @@ namespace readboard
         private readonly ControlCenterRuntime controlCenterRuntime;
         private readonly UiThreadInvoker uiThreadInvoker;
         private readonly SerialBackgroundWorkQueue placeRequestQueue;
-        private HostedUpdateJourney hostedUpdateJourney;
+        private IndependentUpdateJourney independentUpdateJourney;
         private readonly object placeProtocolSyncRoot = new object();
         private readonly object protocolCommandSyncRoot = new object();
         private readonly GitHubUpdateChecker updateChecker = new GitHubUpdateChecker();
@@ -65,8 +65,6 @@ namespace readboard
         private bool isShuttingDown = false;
         private bool closeRequestedBeforeHandle = false;
         private bool webViewWindowBoundsAppliedAfterHandle = false;
-        private bool hostedUpdateSupported = false;
-        private bool hostedUpdatePackageV2Supported = false;
         private readonly WebViewStatePublisher webViewStatePublisher;
         private readonly WebViewWindowCommandRuntime webViewWindowCommandRuntime;
         private readonly WebViewWindowModeRuntime webViewWindowModeRuntime;
@@ -881,10 +879,6 @@ namespace readboard
             get { return isShuttingDown; }
         }
 
-        internal bool HostedUpdateSupported
-        {
-            get { return hostedUpdateSupported; }
-        }
 
         internal MainForm(
             LaunchOptions launchOptions,
@@ -914,15 +908,15 @@ namespace readboard
                 new MainFormYikeContextAdapter(this));
             this.uiThreadInvoker = new UiThreadInvoker(this);
             this.placeRequestQueue = new SerialBackgroundWorkQueue("ReadboardPlaceRequestQueue");
-            this.hostedUpdateJourney = new HostedUpdateJourney(
+            this.independentUpdateJourney = new IndependentUpdateJourney(
                 new HostedUpdatePackageDownloader(),
                 new HostedUpdatePackageVerifier(),
-                delegate(string tag, string zipPath)
-                {
-                    return this.sessionCoordinator.SendReadboardUpdateReady(tag, zipPath);
-                },
-                new HostedUpdateResponseTimeoutScheduler(),
-                OnHostedUpdateObservation);
+                new IndependentUpdateCommitter(
+                    () => Program.language,
+                    () => new[] { Program.CurrentContext.Logging?.LogRoot,
+                        webView?.CoreWebView2?.Environment.UserDataFolder }),
+                PersistConfiguration,
+                OnIndependentUpdateObservation);
             InitializeComponent();
             this.controlCenterRuntime = new ControlCenterRuntime(
                 ControlCenterPreferences.FromConfig(Program.CurrentConfig),

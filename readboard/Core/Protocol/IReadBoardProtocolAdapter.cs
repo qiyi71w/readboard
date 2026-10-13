@@ -48,6 +48,5 @@ namespace readboard
         ProtocolMessage CreateResumePonderMessage();
         ProtocolMessage CreateStopAutoPlayMessage();
         ProtocolMessage CreatePassMessage();
-        ProtocolMessage CreateReadboardUpdateReadyMessage(string tag, string absoluteZipPath);
     }
 }

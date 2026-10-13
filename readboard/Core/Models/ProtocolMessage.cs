@@ -9,15 +9,10 @@ namespace readboard
         VersionRequest = 4,
         Quit = 5,
         ForceRebuild = 6,
-        ReadboardUpdateSupported = 7,
-        ReadboardUpdateInstalling = 8,
-        ReadboardUpdateCancelled = 9,
-        ReadboardUpdateFailed = 10,
         YikeContext = 11,
         YikeGeometry = 12,
         YikeBrowserSyncStop = 13,
         AnalysisState = 14,
-        ReadboardUpdatePackageV2Supported = 15
     }
 
     internal sealed class ProtocolMessage

@@ -7,42 +7,14 @@ namespace Readboard.VerificationTests.Host
     public sealed class UpdateBridgeTests
     {
         [Fact]
-        public void HostedInstall_RequiresPipeActiveCapabilityAndCompleteAsset()
+        public void IndependentInstall_RequiresOnlyCompleteAsset()
         {
             UpdateCheckResult result = CreateResult();
-
-            Assert.True(MainForm.CanOfferWebViewHostedInstall(
-                TransportKind.Pipe,
-                true,
-                true,
-                false,
-                result));
-            Assert.False(MainForm.CanOfferWebViewHostedInstall(
-                TransportKind.Tcp,
-                true,
-                true,
-                false,
-                result));
-            Assert.False(MainForm.CanOfferWebViewHostedInstall(
-                TransportKind.Pipe,
-                false,
-                true,
-                false,
-                result));
-            Assert.False(MainForm.CanOfferWebViewHostedInstall(
-                TransportKind.Pipe,
-                true,
-                false,
-                false,
-                result));
-
+            result.Status = UpdateCheckStatus.UpdateAvailable;
+            result.AssetName = "readboard-webview2-" + result.Tag + ".zip";
+            Assert.True(MainForm.CanOfferWebViewInstall(result));
             result.AssetDownloadUrl = null;
-            Assert.False(MainForm.CanOfferWebViewHostedInstall(
-                TransportKind.Pipe,
-                true,
-                true,
-                false,
-                result));
+            Assert.False(MainForm.CanOfferWebViewInstall(result));
         }
 
         [Fact]
@@ -103,9 +75,9 @@ namespace Readboard.VerificationTests.Host
         [Theory]
         [InlineData(0, true)]
         [InlineData(1, true)]
-        [InlineData(2, false)]
+        [InlineData(2, true)]
         [InlineData(3, false)]
-        public void HostedProcessing_CloseCapabilityFollowsReadBoardOwnershipStage(
+        public void IndependentProcessing_CloseCapabilityFollowsPersistedCommit(
             int activeStep,
             bool expected)
         {
@@ -154,7 +126,7 @@ namespace Readboard.VerificationTests.Host
             Assert.Equal("manual", manual.Status);
             Assert.False(manual.InstallEnabled);
             Assert.True(manual.OpenDownloadEnabled);
-            Assert.Equal("WebView_hostedInstallUnsupported", manual.TitleMessage.Key);
+            Assert.Equal("IndependentUpdate_manualOnly", manual.TitleMessage.Key);
             Assert.Equal("WebView_manualDownload", manual.MessageMessage.Key);
         }
 

@@ -287,24 +287,6 @@ namespace Readboard.VerificationTests.Architecture
                 actual);
         }
 
-        [Fact]
-        public void LegacyWireContract_UpdateReadyHasThreeOrderedTabFields()
-        {
-            LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
-            string line = adapter.Serialize(
-                adapter.CreateReadboardUpdateReadyMessage(
-                    "v3.1.0",
-                    @"C:\updates\readboard-webview2-v3.1.0.zip"));
-
-            string[] fields = line.Split('\t');
-
-            Assert.Equal(3, fields.Length);
-            Assert.Equal("readboardUpdateReady", fields[0]);
-            Assert.Equal("v3.1.0", fields[1]);
-            Assert.Equal(@"C:\updates\readboard-webview2-v3.1.0.zip", fields[2]);
-            Assert.DoesNotContain("\r", line);
-            Assert.DoesNotContain("\n", line);
-        }
 
         [Fact]
         public void LegacyWireContract_InboundCapabilityTokensRemainDistinct()
@@ -312,11 +294,6 @@ namespace Readboard.VerificationTests.Architecture
             LegacyProtocolAdapter adapter = new LegacyProtocolAdapter();
             var cases = new[]
             {
-                ("readboardUpdateSupported", ProtocolMessageKind.ReadboardUpdateSupported),
-                ("readboardUpdatePackageV2Supported", ProtocolMessageKind.ReadboardUpdatePackageV2Supported),
-                ("readboardUpdateInstalling", ProtocolMessageKind.ReadboardUpdateInstalling),
-                ("readboardUpdateCancelled", ProtocolMessageKind.ReadboardUpdateCancelled),
-                ("readboardUpdateFailed\tbad zip", ProtocolMessageKind.ReadboardUpdateFailed),
                 ("analysisState running", ProtocolMessageKind.AnalysisState),
                 ("analysisState paused", ProtocolMessageKind.AnalysisState)
             };
@@ -571,17 +548,16 @@ namespace Readboard.VerificationTests.Architecture
         }
 
         [Theory]
-        [InlineData("readboard-github-release-v3.0.9.zip", "v3.0.9", false, true)]
-        [InlineData("readboard-webview2-v3.1.0.zip", "v3.1.0", false, false)]
-        [InlineData("readboard-webview2-v3.1.0.zip", "v3.1.0", true, true)]
-        public void HostedUpdateContract_UsesV1AndV2AssetGates(
+        [InlineData("readboard-github-release-v3.0.9.zip", "v3.0.9", false)]
+        [InlineData("readboard-webview2-v3.1.0.zip", "v3.1.0", true)]
+        public void IndependentUpdateContract_UsesMainAssetIdentity(
             string assetName,
             string tag,
-            bool packageV2Supported,
             bool expected)
         {
             UpdateCheckResult result = new UpdateCheckResult
             {
+                Status = UpdateCheckStatus.UpdateAvailable,
                 Tag = tag,
                 AssetName = assetName,
                 AssetDownloadUrl = "https://github.com/qiyi71w/readboard/releases/download/" + tag + "/" + assetName,
@@ -590,12 +566,7 @@ namespace Readboard.VerificationTests.Architecture
 
             Assert.Equal(
                 expected,
-                MainForm.CanOfferWebViewHostedInstall(
-                    TransportKind.Pipe,
-                    true,
-                    true,
-                    packageV2Supported,
-                    result));
+                MainForm.CanOfferWebViewInstall(result));
         }
 
         [Fact]

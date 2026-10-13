@@ -117,6 +117,16 @@ jobs:
           $packageZip = Get-PackageOutputValue -Name 'PackageZip'
           $packageChecksumFile = Get-PackageOutputValue -Name 'PackageChecksumFile'
           $packageSha256 = Get-PackageOutputValue -Name 'PackageSha256'
+          $packageUpdater = Get-PackageOutputValue -Name 'PackageUpdater'
+          if (-not (Test-Path -LiteralPath $packageUpdater -PathType Leaf)) {
+              throw "Package is missing its independent updater: $packageUpdater"
+          }
+          $updaterDirectory = Split-Path -Parent $packageUpdater
+          foreach ($dependency in @('ReadBoard.Updater.dll', 'ReadBoard.Updater.deps.json', 'ReadBoard.Updater.runtimeconfig.json', 'coreclr.dll', 'hostfxr.dll', 'hostpolicy.dll', 'System.Private.CoreLib.dll', 'System.Windows.Forms.dll')) {
+              if (-not (Test-Path -LiteralPath (Join-Path $updaterDirectory $dependency) -PathType Leaf)) {
+                  throw "Independent updater dependency is missing: $dependency"
+              }
+          }
           foreach ($path in @($packageZip, $packageChecksumFile)) {
               if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path -LiteralPath $path)) {
                   throw "Packaging script did not produce the expected release asset: $path"

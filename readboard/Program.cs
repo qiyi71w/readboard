@@ -200,6 +200,21 @@ namespace readboard
             LaunchOptions options;
             if (!LaunchOptions.TryParse(args, out options))
                 return;
+            try { IndependentUpdateFiles.AssertLaunchable(Path.GetDirectoryName(Environment.ProcessPath)); }
+            catch (Exception exception)
+            {
+                string key = "IndependentUpdate_unsettled";
+                string text = null;
+                string catalog = Path.Combine(AppContext.BaseDirectory, "language_" + options.Language + ".txt");
+                if (File.Exists(catalog))
+                    foreach (string line in File.ReadLines(catalog))
+                        if (line.StartsWith(key + "=", StringComparison.Ordinal)) text = line.Substring(key.Length + 1);
+                MessageBox.Show(SemanticMessageResolver.Resolve(
+                    SemanticMessage.CreateWithDiagnostic(key, exception.Message),
+                    _ => text, _ => "存在未结算或无效的更新事务，ReadBoard 无法启动。请保留记录并先恢复安装。"),
+                    "ReadBoard", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
             using (LoggingRuntime logging = LoggingRuntime.Start(options))
             {
@@ -405,6 +420,19 @@ namespace readboard
 
         private static void AddDefaultLangItems()
         {
+            langItems["IndependentUpdate_caption"] = "ReadBoard 更新";
+            langItems["IndependentUpdate_confirm"] = "更新将停止当前同步并退出 ReadBoard。本轮未安排自动重连；安装完成后请从宿主重新打开。已保存的设置会保留，未保存的设置草稿不会保存。继续下载并安装吗？";
+            langItems["IndependentUpdate_preparing"] = "正在准备独立更新器；仍可取消。";
+            langItems["IndependentUpdate_installing"] = "正在安装，请等待结果。关闭窗口不会中止替换。";
+            langItems["IndependentUpdate_installed"] = "安装完成。";
+            langItems["IndependentUpdate_failedUnchanged"] = "更新失败，原版本未修改。";
+            langItems["IndependentUpdate_rolledBack"] = "更新失败，已恢复原版本。";
+            langItems["IndependentUpdate_rollbackFailed"] = "恢复失败，禁止启动此目录。请保留更新记录和备份并进行恢复。";
+            langItems["IndependentUpdate_cancelled"] = "更新已取消，原版本未修改。";
+            langItems["IndependentUpdate_unavailable"] = "未安排自动重连。确认安装目录可用后，请从宿主重新打开 ReadBoard。";
+            langItems["IndependentUpdate_recoveryLocation"] = "保留的恢复位置：";
+            langItems["IndependentUpdate_manualOnly"] = "此更新不能独立安装，请使用手动下载。";
+            langItems["IndependentUpdate_unsettled"] = "存在未结算或无效的更新事务，ReadBoard 无法启动。请保留记录并先恢复安装。";
             langItems["WebView_navControlCenter"] = "控制中心";
             langItems["WebView_windowControls"] = "窗口控制";
             langItems["WebView_minimize"] = "最小化";
@@ -546,12 +574,9 @@ namespace readboard
             langItems["WebView_syncFailedTitle"] = "无法同步";
             langItems["WebView_recognitionFailedTitle"] = "识别失败";
             langItems["WebView_updateFetching"] = "正在获取最新版本信息…";
-            langItems["WebView_hostedInstallUnsupported"] = "当前宿主不支持托管安装";
             langItems["WebView_manualDownload"] = "可打开 Release 页面手动下载更新。";
             langItems["WebView_updateStepDownload"] = "下载更新包";
             langItems["WebView_updateStepVerify"] = "校验更新包";
-            langItems["WebView_updateStepNotifyHost"] = "通知宿主";
-            langItems["WebView_updateStepHostInstall"] = "宿主安装";
             langItems["WebView_candidateRowNumber"] = "玩家行 {0}";
             langItems["WebView_candidateLeftSeat"] = "左座 {0}";
             langItems["WebView_candidateRightSeat"] = "右座 {0}";

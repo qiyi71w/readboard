@@ -12,11 +12,6 @@ namespace readboard
         void HandleStopInBoardRequest();
         void HandleVersionRequest();
         void HandleQuitRequest();
-        void HandleReadboardUpdateSupported();
-        void HandleReadboardUpdatePackageV2Supported();
-        void HandleReadboardUpdateInstalling();
-        void HandleReadboardUpdateCancelled();
-        void HandleReadboardUpdateFailed(string message);
     }
 
     internal interface IAnalysisStateProtocolHost

@@ -94,7 +94,7 @@ namespace Readboard.VerificationTests
         }
 
         [Fact]
-        public void Start_DispatchesHostedUpdateLifecycleCommandsThroughHostCallbacks()
+        public void OldHostedInstallationMessagesCannotDriveMainInstallation()
         {
             FakeTransport transport = new FakeTransport();
             CapturingHost host = new CapturingHost();
@@ -108,12 +108,7 @@ namespace Readboard.VerificationTests
             transport.Emit("readboardUpdateCancelled");
             transport.Emit("readboardUpdateFailed\tbad zip");
 
-            Assert.Equal(5, host.DispatchCount);
-            Assert.Equal(1, host.ReadboardUpdateSupportedCount);
-            Assert.Equal(1, host.ReadboardUpdatePackageV2SupportedCount);
-            Assert.Equal(1, host.ReadboardUpdateInstallingCount);
-            Assert.Equal(1, host.ReadboardUpdateCancelledCount);
-            Assert.Equal("bad zip", host.LastReadboardUpdateFailedMessage);
+            Assert.Equal(0, host.DispatchCount);
         }
 
         [Fact]
@@ -683,11 +678,6 @@ namespace Readboard.VerificationTests
         {
             public int DispatchCount { get; private set; }
             public MoveRequest LastMoveRequest { get; private set; }
-            public int ReadboardUpdateSupportedCount { get; private set; }
-            public int ReadboardUpdatePackageV2SupportedCount { get; private set; }
-            public int ReadboardUpdateInstallingCount { get; private set; }
-            public int ReadboardUpdateCancelledCount { get; private set; }
-            public string LastReadboardUpdateFailedMessage { get; private set; }
             public bool? AnalysisRunning { get; private set; }
 
 
@@ -723,30 +713,6 @@ namespace Readboard.VerificationTests
             {
             }
 
-            public void HandleReadboardUpdateSupported()
-            {
-                ReadboardUpdateSupportedCount++;
-            }
-
-            public void HandleReadboardUpdatePackageV2Supported()
-            {
-                ReadboardUpdatePackageV2SupportedCount++;
-            }
-
-            public void HandleReadboardUpdateInstalling()
-            {
-                ReadboardUpdateInstallingCount++;
-            }
-
-            public void HandleReadboardUpdateCancelled()
-            {
-                ReadboardUpdateCancelledCount++;
-            }
-
-            public void HandleReadboardUpdateFailed(string message)
-            {
-                LastReadboardUpdateFailedMessage = message;
-            }
 
             public void HandleStopInBoardRequest()
             {

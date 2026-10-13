@@ -338,25 +338,6 @@ namespace Readboard.VerificationTests.Protocol
                 QuitCount++;
             }
 
-            public void HandleReadboardUpdateSupported()
-            {
-            }
-
-            public void HandleReadboardUpdatePackageV2Supported()
-            {
-            }
-
-            public void HandleReadboardUpdateInstalling()
-            {
-            }
-
-            public void HandleReadboardUpdateCancelled()
-            {
-            }
-
-            public void HandleReadboardUpdateFailed(string message)
-            {
-            }
 
             public void HandleStopInBoardRequest()
             {
@@ -407,25 +388,6 @@ namespace Readboard.VerificationTests.Protocol
                 QuitCount++;
             }
 
-            public void HandleReadboardUpdateSupported()
-            {
-            }
-
-            public void HandleReadboardUpdatePackageV2Supported()
-            {
-            }
-
-            public void HandleReadboardUpdateInstalling()
-            {
-            }
-
-            public void HandleReadboardUpdateCancelled()
-            {
-            }
-
-            public void HandleReadboardUpdateFailed(string message)
-            {
-            }
 
             public void HandleStopInBoardRequest()
             {

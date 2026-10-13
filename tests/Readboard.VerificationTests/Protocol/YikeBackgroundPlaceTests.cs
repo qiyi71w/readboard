@@ -660,25 +660,6 @@ namespace Readboard.VerificationTests.Protocol
             {
             }
 
-            public void HandleReadboardUpdateSupported()
-            {
-            }
-
-            public void HandleReadboardUpdatePackageV2Supported()
-            {
-            }
-
-            public void HandleReadboardUpdateInstalling()
-            {
-            }
-
-            public void HandleReadboardUpdateCancelled()
-            {
-            }
-
-            public void HandleReadboardUpdateFailed(string message)
-            {
-            }
         }
 
         private sealed class RequestFrameCaptureService : IBoardCaptureService
