@@ -33,9 +33,21 @@ namespace ReadBoard.Updater
             {
                 request = IndependentUpdateFiles.Read<IndependentUpdateRequest>(args[1]);
                 IndependentUpdateFiles.ValidateRequest(request);
-                if (IndependentUpdateFiles.IsWithin(request.InstallDirectory, AppContext.BaseDirectory)) return;
+                if (IndependentUpdateFiles.IsWithin(request.InstallDirectory, AppContext.BaseDirectory))
+                    throw new InvalidDataException("The updater must run from its retained external directory.");
             }
-            catch { return; }
+            catch (Exception exception)
+            {
+                Environment.ExitCode = 1;
+                using var failure = new UpdateWindow("cn");
+                failure.Shown += (_, _) => failure.Finish(new IndependentUpdateResult
+                {
+                    State = "rollbackFailed", Diagnostic = exception.Message,
+                    BackupDirectory = Path.GetDirectoryName(Path.GetFullPath(args[1]))
+                });
+                Application.Run(failure);
+                return;
+            }
             using var window = new UpdateWindow(request.Language);
             window.Shown += (_, _) =>
             {

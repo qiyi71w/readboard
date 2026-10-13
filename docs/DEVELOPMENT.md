@@ -326,7 +326,20 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 
 无宿主调试路径保留 stdin 打开时，正常关闭仍通过 transport Stop 取消 Windows 阻塞读取。`CancelSynchronousIo` 引起的读取取消由连接代次判定：主动关闭不再触发断链回调，当前活跃连接上的意外取消仍通知断链。
 
-事务位于安装目录同父 `.readboard-update-<规范化安装路径 SHA256>/<operationId>`；旧程序写 request/data，更新器单写 active/progress/result。未知、损坏或未结算记录阻止新安装；中断事务恢复由后续恢复流程处理。用户数据保留集合来自实际日志和 WebView owner，外部数据原位不动，Settings Draft 不隐式 Save。
+事务位于安装目录同父 `.readboard-update-<规范化安装路径 SHA256>/<operationId>`；旧程序写 request/data，更新器单写 active/progress/result/recovery。未知、损坏或未结算记录阻止新安装。用户数据保留集合来自实际日志和 WebView owner，外部数据原位不动，Settings Draft 不隐式 Save。
+
+### 中断恢复入口
+
+提交后的状态窗口显示安装目录外的 `runner/ReadBoard.Updater.exe` 完整路径。保留整个事务目录；即使安装目录暂时不存在，也可以直接运行该 exe（无参数时读取上一级的 `request.json`），或运行 `ReadBoard.Updater.exe --recover <request.json绝对路径>`。主程序通过正常启动参数启动时，发现残留事务会转入该保留更新器，不进入棋盘业务。无参数主程序仍不启动独立棋盘。
+
+源进程实际退出、最终配置及已知用户数据复制完成后，更新器原子发布一次 `recovery.json`：schemaVersion=1、operationId、原始 request/data 字节 SHA-256、旧目录与完整待安装目录的文件 SHA-256/目录清单，以及已提交的 restartAdopted/registrationId/宿主进程身份。它是更新器私有恢复证据，不扩展 request、progress 或宿主 wire。恢复先取得原安装的全局 mutex，再校验该计划、操作身份、严格进度记录、PID+UTC创建时间和实际目录内容。
+
+- 旧目录仍在且 staging 完整：完成原事务的备份和替换。
+- 旧目录已进入 backup、安装目录暂缺且 staging 完整：将已验证 staging 就位。
+- 新目录已就位、backup 有效、结果尚未发布：验证两者后发布原操作的 installed 结果。
+- 回滚已经完成但结果未发布：验证旧目录后发布 rolledBack。
+
+目录存在或版本相同本身不是恢复证据。没有完整计划、记录损坏、操作不匹配、内容与冻结证据不同、原源进程仍活跃或安装 mutex 被占用时，保留全部材料并明确阻止恢复；不要删除 backup 或重新下载另一包绕过残留记录。已发布且身份/实际版本匹配的终态重复打开仅呈现结果，不重装。结果与连接仍分别显示，连接失败不回滚新版本。保留有效 backup；程序中断恢复不承诺断电、坏盘或任意修改后的自动修复。
 
 ### 后台重启协议与记录
 
@@ -361,7 +374,11 @@ registrationId同样是32位小写十六进制，requestSha256绑定原始不可
 聚焦回归包含IndependentUpdateRestartTests、IndependentUpdateProcessTests、UpdateBridgeTests及WebView的result-presented用例。真实ReadBoard/更新器/FakeHost成功只证明C#端到端移交；Java宿主全链、真实缩放与双仓发布候选仍需各自原生验收。
 
 
-本地与 CI 发布入口均包含 `updater/` 和完整 hash manifest；不得只复制更新器 exe。原生验收 startup hook 仅属于验证程序集，不进入发布包，也不能跳过 UI 确认或产品校验。
+本地与 CI 共用 `scripts/package-readboard-release.local.ps1`，产物仍为 `readboard-webview2-vX.Y.Z.zip`，顶层 `readboard/`。主程序完整 self-contained win-x64 载荷之外，`updater/` 包含 `ReadBoard.Updater.exe/.dll/.deps.json/.runtimeconfig.json`、完整 .NET/WinForms 运行依赖和四语言目录文件；根 `update-payload.json` 的 files 映射覆盖所有分发文件的 SHA-256。不得只复制更新器 exe，也不依赖 Java、开发机 .NET SDK 或源 checkout。WebView2 Evergreen 仍为主程序既有要求，更新器状态窗口不需要 WebView2。
+
+准备时从已安装载荷 manifest 验证并复制完整 updater 到私有 runner，再验证运行依赖；目标包在源退出前验证 SHA-256、ZIP 路径、manifest、实际版本、依赖闭包，并真实运行下一版更新器 `--probe`。缺更新器、运行 DLL、依赖清单中的文件或 hash 不符均拒绝提交，旧程序继续可用。发布包必须携带下一次更新所需的 updater；本地验收已用同一源码的实际 v3.1.9→v3.2.0→v3.2.1 发布形状载荷完成两次更新，第二次运行器全部277个文件与安装所得B包相符。中途真实终止处于 movingNew 的A更新器后，从安装目录外保留位置启动并完成原操作；B/C真实程序均读取保存的375ms偏好，未保存777ms草稿未提交。历史宿主安装器（3bb428bb6fa4cf03495be708fbaa6a9b628ccbec）实际安装B的完整782文件ZIP并保留旧目录，证明bootstrap布局兼容，不代表远程CI或发布已执行。
+
+原生验收 startup hook 仅属于外置验证程序集，不进入发布包，也不能跳过 UI 确认或产品校验。安装器的内部 `DurableCheckpoint` 委托默认null；绑定runner/op/进程身份的验证observer可在阶段原子发布后暂停，供外部终止该自有进程，不能改写事务或代做目录移动。
 
 ## 配置
 

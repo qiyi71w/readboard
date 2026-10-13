@@ -65,6 +65,27 @@ namespace Readboard.VerificationTests.Host
         }
 
         [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void InvalidTerminalRecordBlocksReplayAndPreservesInstalledFiles(bool corruptJson)
+        {
+            using var fixture = new RecoveryFixture("installed");
+            string path = Path.Combine(fixture.Operation, "result.json");
+            if (corruptJson) File.WriteAllText(path, "{broken");
+            else IndependentUpdateFiles.Publish(path, new IndependentUpdateResult
+            {
+                OperationId = Guid.NewGuid().ToString("N"), State = "installed",
+                ActualVersion = fixture.Request.TargetTag, InstallDirectory = fixture.Install,
+                Diagnostic = "", BackupDirectory = fixture.Backup
+            });
+            byte[] original = File.ReadAllBytes(path);
+            Assert.ThrowsAny<Exception>(() => new IndependentUpdateInstaller().Execute(fixture.RequestPath, () => true, () => { }, _ => { }));
+            Assert.Equal(original, File.ReadAllBytes(path));
+            Assert.Equal("new program", File.ReadAllText(Path.Combine(fixture.Install, "readboard.exe")));
+            Assert.Equal("old program", File.ReadAllText(Path.Combine(fixture.Backup, "readboard.exe")));
+        }
+
+        [Theory]
         [InlineData("plan-operation")]
         [InlineData("request")]
         [InlineData("corrupt-progress")]
