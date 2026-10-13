@@ -2,11 +2,20 @@
 
 日期: 2026-05-01
 
+## 适用范围与主线替代关系
+
+本文保留 2026-05-01 的托管更新设计、方案取舍和实施记录。下文的宿主安装能力门槛、二次确认、目录替换、结果提示及对应 UI、测试和交付步骤，现仅用于理解已发布旧客户端的托管安装路径；当前 WebView2 主线已由 [DEVELOPMENT 的独立更新契约](../DEVELOPMENT.md#宿主协议边界)取代。
+
+- 当前主线由 ReadBoard 一次确认、下载和校验，随包分发的独立更新器在旧进程退出后完成备份、替换和失败恢复；进度与结果由 ReadBoard 主窗口或更新器呈现。
+- 安装资格不依赖旧宿主能力、pipe 或有效宿主会话。宿主仅可提供[后台重启协调](../DEVELOPMENT.md#后台重启协议与记录)，无能力或连接失败只影响自动重连，不转回宿主安装或二次确认。
+- 尚未升级到含独立更新器版本的已发布 ReadBoard 仍使用原安装方式，这是 bootstrap 边界；宿主旧安装入口也继续服务受支持的 `legacy-windows` 客户端，不是当前主线的 fallback。
+- 下文的 latest API、单一资产前缀和初版轻量校验是当时设计；后续[更新通道与旧系统维护线设计](2026-07-13-update-channels-and-legacy-release-design.md)规定的中央通道、资产命名、SHA-256、ZIP 安全与平台约束继续有效。bootstrap 包保持既有可识别的包名和顶层布局，当前主线完整载荷另须包含独立更新器及其依赖。
+
 ## 背景
 
-当前 `readboard` 的检查更新弹窗只把“去下载”按钮指向 GitHub release 页面。`docs/specs/2026-04-24-update-download-link.md` 明确把 in-app download、installer execution、auto-update 列为不在范围内。
+当时 `readboard` 的检查更新弹窗只把“去下载”按钮指向 GitHub release 页面。`docs/specs/2026-04-24-update-download-link.md` 明确把 in-app download、installer execution、auto-update 列为不在范围内。
 
-这次需求重新打开该范围，但只针对 LizzieYzy-Next 内置的 Windows 原生 `readboard/`。用户仍从 `readboard` 自己的检查更新弹窗点更新，实际替换由宿主 LizzieYzy-Next 完成。
+本次历史设计重新打开该范围，但只针对 LizzieYzy-Next 内置的 Windows 原生 `readboard/`。用户仍从 `readboard` 自己的检查更新弹窗点更新，实际替换由宿主 LizzieYzy-Next 完成。
 
 ## 目标
 
@@ -41,7 +50,7 @@ readboard 在检查更新弹窗中下载 release zip 到用户缓存目录，校
 
 优点是职责边界清楚：子进程不替换自己，宿主掌握安装目录和生命周期。缺点是要同时改 readboard 和 LizzieYzy-Next，并新增一个协议消息。
 
-采用。
+当时采用；当前主线的安装所有权已按上文切换到进程外独立更新器，不是在运行中的 readboard 内直接覆盖自身。
 
 ### 方案 C: 改为全量 LizzieYzy-Next 更新器
 
@@ -52,6 +61,8 @@ readboard 按钮触发宿主全量更新 LizzieYzy-Next，包括主程序和内�
 不采用。
 
 ## 用户流程
+
+以下为旧客户端的托管流程；当前主线使用上文的一次确认与独立安装流程。
 
 1. 用户在 readboard 主窗口点击 `检查更新`。
 2. 如果发现新版本，弹窗显示版本、日期和 release notes。
@@ -77,6 +88,8 @@ readboard 按钮触发宿主全量更新 LizzieYzy-Next，包括主程序和内�
 `UpdateCheckResult` 增加可选字段保存 asset 下载 URL、asset 文件名和 asset size。`ReleaseUrl` 继续保留 release 页面 URL，兼容旧按钮路径。
 
 ### 宿主能力识别
+
+以下能力门槛仅适用于旧客户端的托管安装。当前主线的本地安装预检由独立更新器承担，后台重启能力不授予或剥夺安装资格。
 
 不修改现有启动参数。LizzieYzy-Next 在启动支持该功能的新版 readboard 后，通过现有 pipe 向 readboard 发送一条 inbound capability 消息：
 
@@ -110,6 +123,8 @@ readboardUpdateSupported
 readboard 不解压到宿主安装目录，只能解压到同一缓存目录下的 staging/preflight 目录，或仅通过 zip API 做结构校验。
 
 ### 通知宿主
+
+以下是保留给旧客户端的安装交接；当前主线不发送 `readboardUpdateReady`，也不以此作为失败 fallback。
 
 新增一条 outbound wire 文本：
 
@@ -149,7 +164,7 @@ readboardUpdateFailed\t<message>
 
 ## LizzieYzy-Next 侧设计
 
-宿主新增 readboard 更新安装服务，职责只限 Windows 原生 `readboard/`：
+旧协议入口的宿主更新安装服务职责只限 Windows 原生 `readboard/`。以下替换职责用于旧客户端及 bootstrap，不适用于当前主线的后台重启协调：
 
 1. 解析 `readboardUpdateReady`。
 2. 校验版本和 zip 路径：
@@ -179,6 +194,8 @@ readboardUpdateFailed\t<message>
 
 ## 错误处理
 
+以下宿主确认、能力不足与替换错误处理属于旧托管路径；当前主线区分独立安装结果与连接恢复结果，由 ReadBoard 一侧呈现。
+
 - GitHub latest API 失败：保持现有“检查更新失败”路径。
 - 找不到可自动安装 asset：按钮继续打开 release 页面。
 - 下载失败：弹窗显示失败，按钮恢复可点击，保留手动下载入口。
@@ -190,7 +207,7 @@ readboardUpdateFailed\t<message>
 
 ## UI 文案
 
-readboard 更新弹窗新增状态，不新增单独设置项：
+旧托管流程的 readboard 更新弹窗新增以下状态，不新增单独设置项；当前主线不使用宿主安装等待或取消状态：
 
 - `去下载`: 旧路径，打开 GitHub release 页。
 - `下载并安装`: 有匹配 asset，且当前宿主已发送 `readboardUpdateSupported`。
@@ -211,6 +228,8 @@ readboard 更新弹窗新增状态，不新增单独设置项：
 - 不把安装目录写进 readboard 配置。
 
 ## 测试计划
+
+以下为历史托管安装的测试计划。仍使用旧入口的客户端保留相应兼容验证；当前主线应验证独立安装资格与可选后台重启，不沿用旧 capability 门槛、宿主二次确认或旧 wire 交接断言。
 
 readboard 仓库：
 
@@ -240,6 +259,8 @@ LizzieYzy-Next 仓库：
 - 验证更新后宿主仍能启动原生同步工具并完成 `version` 握手。
 
 ## 交付顺序
+
+以下记录原托管设计的交付顺序，不是当前主线独立更新的实施步骤。
 
 1. readboard: 扩展 update result、release asset 解析、下载和预检，但保留旧浏览器下载 fallback。
 2. readboard: 新增 `readboardUpdateReady` 协议发送和弹窗状态。

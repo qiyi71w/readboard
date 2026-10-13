@@ -1,24 +1,30 @@
 # ReadBoard 更新通道与旧系统维护线设计
 
+## 当前适用范围
+
+本文的中央通道、发布晋升、资产命名、SHA-256 与 ZIP 安全校验、Windows/WebView2 平台和 `legacy/winforms` 维护线契约继续有效。主线安装所有权已切换为 [DEVELOPMENT 的独立更新契约](../DEVELOPMENT.md#宿主协议边界)：ReadBoard 一次确认并自行安装，结果由 ReadBoard 主窗口或独立更新器呈现；宿主只提供可选的[后台重启协调](../DEVELOPMENT.md#后台重启协议与记录)。旧安装能力、pipe 或会话不再决定当前主线安装资格。
+
+下文托管安装 v1/v2 规则继续约束尚未升级的已发布客户端和受支持的 `legacy-windows` 客户端，包括旧客户端首次安装带独立更新器版本的 bootstrap；它们不是当前主线的安装 fallback。v3.0.9/v3.1.0 过渡顺序及首次晋升前置保留为历史发布设计。
+
 ## 背景
 
 v3.0.9 是最后一个使用现有 WinForms UI、明确支持旧版 Windows 的稳定版本。v3.1.0 起主线切换到 WebView2 UI，当前目标框架最低为 Windows 10 version 1809（build 17763）。项目后续保留独立的 WinForms 维护线，选择性回移修复和部分新功能。
 
-现有更新器直接请求 GitHub `/releases/latest`，无法区分 WebView2 主线和旧系统维护线。现有 ReadBoard 与 LizzieYzy-Next 的托管安装器还共同硬编码了 `readboard-github-release-<tag>.zip`，因此仅修改 Release 包名会破坏宿主安装。
+本设计制定时的更新器直接请求 GitHub `/releases/latest`，无法区分 WebView2 主线和旧系统维护线。当时 ReadBoard 与 LizzieYzy-Next 的托管安装器还共同硬编码了 `readboard-github-release-<tag>.zip`，因此仅修改 Release 包名会破坏宿主安装。
 
 ## 目标
 
 - 根据当前 Windows 版本自动选择唯一兼容的更新通道。
 - 让 v3.0.x WinForms 维护线和 v3.1.0+ WebView2 主线独立发布。
 - 防止旧系统和旧客户端自动安装 WebView2 主线包。
-- 保留 LizzieYzy-Next 托管替换安装，并明确新旧宿主的能力边界。
+- 为旧客户端和 bootstrap 保留 LizzieYzy-Next 托管替换安装，并明确新旧宿主的能力边界；当前主线使用独立更新器。
 - 建立可审查、可撤回且不会提前暴露未发布版本的 Release 流程。
 - 建立 Windows、WSL 和全部 worktree 共用的 ReadBoard Release skill。
 
 ## 已核对的既有契约
 
-- `docs/specs/2026-05-01-readboard-hosted-auto-update-design.md`：ReadBoard 下载、校验并通知宿主，LizzieYzy-Next 负责替换安装；ReadBoard 不自我替换。
-- `docs/specs/2026-04-24-update-download-link.md`：无托管安装能力时保留手动下载路径。
+- `docs/specs/2026-05-01-readboard-hosted-auto-update-design.md`：旧托管路径由 ReadBoard 下载、校验并通知宿主，LizzieYzy-Next 负责替换安装；当前主线安装所有权已由上文 DEVELOPMENT 契约取代。
+- `docs/specs/2026-04-24-update-download-link.md`：旧托管路径无安装能力时保留手动下载；当前主线保留手动下载入口，但不因旧宿主缺少能力而禁止独立安装。
 - WebView2 工作树的 `docs/specs/2026-07-08-webview2-ui-shell-design.md`：主线使用 Evergreen Runtime，不回退旧 WinForms UI，最低目标为 Windows 10 version 1809。
 - WebView2 设计文档当前使用的 `legacy/win7` 已过时，实施时必须改为 `legacy/winforms`。
 - 现有本地 `readboard-github-packaging` skill 只存在于 Windows 主工作副本且仍描述 .NET Framework 4.8/x86/MSBuild 契约，不能作为当前发布流程依据。
@@ -118,6 +124,8 @@ v3.0.9 是最后一个使用现有 WinForms UI、明确支持旧版 Windows 的�
 
 ## 托管安装兼容
 
+本节的能力声明、安装交接和宿主前置只适用于旧托管客户端与 bootstrap。当前主线不发送 `readboardUpdateReady`；其安装资格来自可安装的更新结果、更新器可用性与本地预检，后台重启是否可用只影响连接恢复。
+
 ### v1
 
 - 宿主声明：`readboardUpdateSupported`
@@ -130,9 +138,9 @@ v3.0.9 是最后一个使用现有 WinForms UI、明确支持旧版 Windows 的�
 - `readboardUpdateReady\t<tag>\t<absolute-path>` 保持不变。
 - 宿主只接受两种明确前缀，不放宽为任意 ZIP 名称。
 
-ReadBoard 只有收到 v2 能力后才为 WebView2 命名资产提供“下载并安装”。旧宿主仍可安装 v3.0.x 资产；面对 WebView2 资产时只提供手动下载。
+仍使用托管安装的旧 ReadBoard 只有收到 v2 能力后才为 WebView2 命名资产提供“下载并安装”。对这些旧客户端，旧宿主仍可安装 v3.0.x 资产；面对 WebView2 资产时只提供手动下载。首次升级到带独立更新器的版本仍遵守该 bootstrap 限制；升级后的当前主线独立安装不要求 v1/v2 能力，旧宿主仅影响自动重连。
 
-包含 v2 能力的 LizzieYzy-Next 必须先发布并完成真实安装验证，之后才能把 v3.1.0 晋升到 `main`。
+历史 v3.1.0 首次晋升前置：包含 v2 能力的 LizzieYzy-Next 必须先发布并完成真实安装验证，之后才能把 v3.1.0 晋升到 `main`。后续主线包继续保持旧宿主可识别的包名和顶层布局以支持 bootstrap，并包含下一次独立更新需要的完整更新器载荷。
 
 ## WebView2 Runtime 分发
 
@@ -219,7 +227,7 @@ skill 负责：
 - 通道 schema：有效范围、重叠范围、无匹配范围、未知 schema、非法状态、非法 SHA-256。
 - 更新比较：低于、等于、高于通道版本；active 和 retired 组合。
 - Release 解析：draft、prerelease、tag 不匹配、资产缺失、非 HTTPS URL。
-- 下载校验：SHA-256 成功与失败、失败后删除临时文件、校验顺序早于宿主通知。
-- 宿主能力：v1 旧包、v1 新包回退、v2 新旧包、非法包名拒绝。
+- 下载校验：SHA-256 成功与失败、失败后删除临时文件；旧托管路径必须先校验再通知宿主，当前主线必须先校验再提交独立安装。
+- 旧托管/bootstrap 宿主能力：v1 旧包、v1 新包回退、v2 新旧包、非法包名拒绝；这些用例不作为当前主线安装资格断言。
 - 发布 workflow：tag/程序集版本/changelog/资产名一致，Release 描述来自 `docs/releases/<tag>.md`。
-- 跨仓库集成：使用真实 LizzieYzy-Next v2 宿主完成 WebView2 包下载、通知、替换和重新启动验证。
+- 旧托管/bootstrap 跨仓库集成：使用真实 LizzieYzy-Next v2 宿主完成 WebView2 包下载、通知、替换和重新启动验证。当前主线另按 DEVELOPMENT 验证独立安装及可选后台重启，旧安装器验证不能代替该闭环。
