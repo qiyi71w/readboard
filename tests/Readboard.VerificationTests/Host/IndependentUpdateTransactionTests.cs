@@ -237,14 +237,14 @@ namespace Readboard.VerificationTests.Host
             }
             finally
             {
-                Restore(parentInfo, parentAcl); Restore(installInfo, installAcl);
-                if (source != null) { if (!source.HasExited) { source.Kill(); source.WaitForExit(); } source.Dispose(); }
+                try { Restore(parentInfo, parentAcl); Restore(installInfo, installAcl); }
+                finally { if (source != null) { if (!source.HasExited) { source.Kill(); source.WaitForExit(); } source.Dispose(); } }
                 Directory.Delete(root, true);
             }
             void Restore(DirectoryInfo directory, DirectorySecurity original)
             {
                 var restored = new DirectorySecurity();
-                restored.SetSecurityDescriptorBinaryForm(original.GetSecurityDescriptorBinaryForm());
+                restored.SetSecurityDescriptorBinaryForm(original.GetSecurityDescriptorBinaryForm(), AccessControlSections.Access);
                 directory.SetAccessControl(restored);
             }
             void Deny(DirectoryInfo directory, FileSystemRights rights)
