@@ -190,6 +190,13 @@ namespace readboard
                     NotifyUnexpectedDisconnect(gen);
                     return;
                 }
+                catch (OperationCanceledException)
+                {
+                    // CancelSynchronousIo interrupts Windows stdin during Stop.
+                    // The generation guard distinguishes shutdown from a live failure.
+                    NotifyUnexpectedDisconnect(gen);
+                    return;
+                }
 
                 if (line == null)
                 {

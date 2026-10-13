@@ -113,11 +113,13 @@ namespace Readboard.VerificationTests.Transport
             }
         }
 
-        [Fact]
-        public void Stop_WhenRunning_DoesNotRaiseDisconnectedEvent()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Stop_WhenRunning_DoesNotRaiseDisconnectedEvent(bool cancelledRead)
         {
             using PipeTransport transport = new PipeTransport();
-            using BlockingReadStream stream = new BlockingReadStream();
+            using BlockingReadStream stream = new BlockingReadStream(cancelledRead);
             using StreamReader reader = new StreamReader(stream, System.Text.Encoding.UTF8);
 
             int disconnectedCount = 0;
@@ -448,6 +450,12 @@ namespace Readboard.VerificationTests.Transport
         {
             private readonly ManualResetEventSlim readStarted = new ManualResetEventSlim(false);
             private readonly ManualResetEventSlim unblock = new ManualResetEventSlim(false);
+            private readonly bool cancelledRead;
+
+            public BlockingReadStream(bool cancelledRead = false)
+            {
+                this.cancelledRead = cancelledRead;
+            }
 
             public ManualResetEventSlim ReadStarted => readStarted;
 
@@ -460,6 +468,7 @@ namespace Readboard.VerificationTests.Transport
             {
                 readStarted.Set();
                 unblock.Wait();
+                if (cancelledRead) throw new OperationCanceledException("Windows synchronous read cancelled");
                 return 0;
             }
 
