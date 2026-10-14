@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Windows.Forms;
 using Xunit;
 using readboard;
 
@@ -741,9 +742,14 @@ namespace Readboard.VerificationTests
         {
             using (LegacyConfigWorkspace workspace = LegacyConfigWorkspace.Create())
             {
+                var bounds = SystemInformation.VirtualScreen;
+                int missingX = checked(bounds.Right + 100), missingY = checked(bounds.Bottom + 100);
+                foreach (Screen screen in Screen.AllScreens)
+                    Assert.False(screen.Bounds.Contains(missingX, missingY));
                 File.WriteAllText(
                     workspace.PathFor("config.readboard.json"),
-                    "{\"ProtocolVersion\":\"220430\",\"MachineKey\":\"MACHINE-001\",\"WindowPosX\":4096,\"WindowPosY\":240,\"BoardWidth\":19,\"BoardHeight\":19}");
+                    JsonSerializer.Serialize(new { ProtocolVersion, MachineKey = FixtureMachineKey,
+                        WindowPosX = missingX, WindowPosY = missingY, BoardWidth = 19, BoardHeight = 19 }));
                 DualFormatAppConfigStore store = new DualFormatAppConfigStore(workspace.RootPath, FixtureMachineKey, ProtocolVersion);
 
                 AppConfigLoadResult result = store.Load();

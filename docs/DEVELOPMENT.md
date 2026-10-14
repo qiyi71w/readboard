@@ -446,6 +446,8 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 
 异步测试使用 `VerificationCompletion` 的有界等待，不要增加 `Thread.Sleep`。
 
+缺失显示器配置回归应从当前 VirtualScreen 边界外生成保存坐标，并确认该点不在任何实际屏幕内；不把固定的第二屏坐标假定为无效。
+
 自动落子故障序列（[#87](https://github.com/qiyi71w/readboard/issues/87)）：
 
 ```powershell
