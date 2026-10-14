@@ -14,6 +14,63 @@ namespace Readboard.VerificationTests.Host
     public sealed class IndependentUpdateTransactionTests
     {
         [Theory]
+        [InlineData("claimed")]
+        [InlineData("preparing")]
+        [InlineData("prepared")]
+        [InlineData("committed")]
+        [InlineData("waitingForExit")]
+        [InlineData("preservingData")]
+        public void InterruptedEarlyPhaseSettlesUnchangedAndRestoresLaunchability(string phase)
+        {
+            using var fixture = new RecoveryFixture("movingOld");
+            fixture.MakeEarly(phase);
+            File.WriteAllText(Path.Combine(fixture.Install, "config.readboard.json"), "final shutdown preferences");
+            var installer = new IndependentUpdateInstaller();
+            var result = installer.Execute(fixture.RequestPath, () => throw new Exception("No second install"), () => throw new Exception("No recommit"), _ => { });
+            Assert.Equal("failedUnchanged", result.State);
+            Assert.Equal(fixture.Request.OperationId, result.OperationId);
+            Assert.Equal("old program", File.ReadAllText(Path.Combine(fixture.Install, "readboard.exe")));
+            Assert.Equal("final shutdown preferences", File.ReadAllText(Path.Combine(fixture.Install, "config.readboard.json")));
+            Assert.True(Directory.Exists(fixture.Staging));
+            Assert.False(Directory.Exists(fixture.Backup));
+            IndependentUpdateFiles.AssertLaunchable(fixture.Install);
+            byte[] terminal = File.ReadAllBytes(Path.Combine(fixture.Operation, "result.json"));
+            Assert.Equal("failedUnchanged", installer.Execute(fixture.RequestPath, () => false, () => { }, _ => { }).State);
+            Assert.Equal(terminal, File.ReadAllBytes(Path.Combine(fixture.Operation, "result.json")));
+        }
+
+        [Theory]
+        [InlineData("live-source")]
+        [InlineData("backup")]
+        [InlineData("request")]
+        [InlineData("data")]
+        [InlineData("preparation")]
+        [InlineData("missing-preparation")]
+        [InlineData("payload")]
+        [InlineData("active")]
+        [InlineData("phase")]
+        [InlineData("adoption")]
+        public void UnprovenEarlyRecoveryRetainsEvidenceAndBlocksStartup(string fault)
+        {
+            using var fixture = new RecoveryFixture("movingOld", liveSource: fault == "live-source");
+            fixture.MakeEarly("waitingForExit");
+            if (fault == "backup") Directory.CreateDirectory(fixture.Backup);
+            if (fault == "request") File.AppendAllText(fixture.RequestPath, " ");
+            if (fault == "data") File.AppendAllText(Path.Combine(fixture.Operation, "data.json"), " ");
+            if (fault == "preparation") File.WriteAllText(Path.Combine(fixture.Operation, "preparation.json"), "{}");
+            if (fault == "missing-preparation") File.Delete(Path.Combine(fixture.Operation, "preparation.json"));
+            if (fault == "payload") File.WriteAllText(Path.Combine(fixture.Install, "obsolete.dll"), "altered dependency");
+            if (fault == "active") IndependentUpdateFiles.Publish(Path.Combine(Path.GetDirectoryName(fixture.Operation), "active.json"), new IndependentUpdateActive { OperationId = Guid.NewGuid().ToString("N") });
+            if (fault == "phase") IndependentUpdateFiles.Publish(Path.Combine(fixture.Operation, "progress.json"), new IndependentUpdateProgress { OperationId = fixture.Request.OperationId, Phase = "movingNew" });
+            if (fault == "adoption") IndependentUpdateFiles.Publish(Path.Combine(fixture.Operation, "progress.json"), new IndependentUpdateProgress { OperationId = fixture.Request.OperationId, Phase = "waitingForExit", RestartAdopted = true });
+            Assert.ThrowsAny<Exception>(() => new IndependentUpdateInstaller().Execute(fixture.RequestPath, () => false, () => { }, _ => { }));
+            Assert.False(File.Exists(Path.Combine(fixture.Operation, "result.json")));
+            Assert.Equal("old program", File.ReadAllText(Path.Combine(fixture.Install, "readboard.exe")));
+            Assert.True(Directory.Exists(fixture.Staging));
+            Assert.ThrowsAny<Exception>(() => IndependentUpdateFiles.AssertLaunchable(fixture.Install));
+        }
+
+        [Theory]
         [InlineData("../escape.dll")]
         [InlineData("C:/escape.dll")]
         [InlineData("file.dll:stream")]
@@ -22,6 +79,7 @@ namespace Readboard.VerificationTests.Host
         [InlineData("dir//file")]
         [InlineData("dir/./file")]
         [InlineData("dir/COM1.dll")]
+        [InlineData("PROGRA~1/file.dll")]
         public void WindowsAliasesCannotBecomePackagePaths(string path)
         {
             Assert.Throws<InvalidDataException>(() => readboard.IndependentUpdateFiles.ValidateRelativePath(path));
@@ -204,6 +262,7 @@ namespace Readboard.VerificationTests.Host
                     InstallDirectory = install, SourceProcessId = source.Id,
                     SourceProcessStartTimeUtc = source.StartTime.ToUniversalTime(), Language = "en"
                 });
+                IndependentUpdateFiles.Publish(Path.Combine(operation, "data.json"), new IndependentUpdateData { OperationId = id });
                 if (denyDeleteChild) Deny(parentInfo, FileSystemRights.DeleteSubdirectoriesAndFiles);
                 if (denyDelete) Deny(installInfo, FileSystemRights.Delete);
                 bool accepted = false, committed = false, waited = false;
@@ -307,6 +366,19 @@ namespace Readboard.VerificationTests.Host
                 IndependentUpdateFiles.Publish(RequestPath, Request);
                 Plan.RequestSha256 = Hash(RequestPath);
                 IndependentUpdateFiles.Publish(Path.Combine(Operation, "recovery.json"), Plan);
+            }
+            internal void MakeEarly(string phase)
+            {
+                File.Delete(Path.Combine(Operation, "recovery.json"));
+                var immutable = Inventory(Install);
+                foreach (string name in IndependentUpdateFiles.ConfigurationFiles) immutable.Remove(name);
+                IndependentUpdateFiles.Publish(Path.Combine(Operation, "preparation.json"), new IndependentUpdatePreparation
+                {
+                    OperationId = Request.OperationId, InstallDirectory = Install,
+                    RequestSha256 = Hash(RequestPath), DataSha256 = Hash(Path.Combine(Operation, "data.json")), ImmutableFiles = immutable
+                });
+                if (phase == "claimed") File.Delete(Path.Combine(Operation, "progress.json"));
+                else IndependentUpdateFiles.Publish(Path.Combine(Operation, "progress.json"), new IndependentUpdateProgress { OperationId = Request.OperationId, Phase = phase });
             }
             private static string Hash(string file) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))).ToLowerInvariant();
             private static Dictionary<string, string> Inventory(string directory)

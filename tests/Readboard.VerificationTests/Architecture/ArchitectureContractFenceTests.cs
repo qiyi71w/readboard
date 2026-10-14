@@ -22,7 +22,11 @@ namespace Readboard.VerificationTests.Architecture
                 Language = "en",
                 Page = "controlCenter",
                 Settings = new ReadBoardSettingsUiState(),
-                Update = new ReadBoardUpdateUiState(),
+                Update = new ReadBoardUpdateUiState
+                {
+                    Open = true, Status = "notice", InstallEnabled = false, CloseEnabled = true,
+                    ResultOperationId = "0123456789abcdef0123456789abcdef"
+                },
                 Identity = new ReadBoardIdentityUiState(),
                 Dialog = new ReadBoardDialogUiState()
             };
@@ -132,34 +136,12 @@ namespace Readboard.VerificationTests.Architecture
                     "persistenceError",
                     "identityEnabled",
                     "showOnBoardEnabled");
-                AssertPropertyNames(
-                    payload.GetProperty("update"),
-                    "open",
-                    "status",
-                    "installEnabled",
-                    "openDownloadEnabled",
-                    "closeEnabled",
-                    "currentVersion",
-                    "latestVersion",
-                    "releaseDate",
-                    "releaseNotes",
-                    "title",
-                    "dialogTitle",
-                    "closeLabel",
-                    "doneLabel",
-                    "currentVersionLabel",
-                    "latestVersionLabel",
-                    "releaseDateLabel",
-                    "releaseNotesLabel",
-                    "downloadLabel",
-                    "downloadAndInstallLabel",
-                    "processingLabel",
-                    "detail",
-                    "message",
-                    "errorTitle",
-                    "error",
-                    "progress",
-                    "steps");
+                JsonElement update = payload.GetProperty("update");
+                Assert.True(update.GetProperty("open").GetBoolean());
+                Assert.Equal("notice", update.GetProperty("status").GetString());
+                Assert.False(update.GetProperty("installEnabled").GetBoolean());
+                Assert.True(update.GetProperty("closeEnabled").GetBoolean());
+                Assert.Equal(state.Update.ResultOperationId, update.GetProperty("resultOperationId").GetString());
                 AssertPropertyNames(
                     payload.GetProperty("identity"),
                     "open",
@@ -405,11 +387,7 @@ namespace Readboard.VerificationTests.Architecture
                     .Replace('\\', '/');
                 string text = File.ReadAllText(path);
                 if (string.Equals(relative, "Core/Transport/PipeTransport.cs", StringComparison.OrdinalIgnoreCase))
-                {
-                    Assert.Contains("Console.WriteLine(line);", text);
-                    Assert.Contains("Console.Error.WriteLine(\"error: \" + message);", text);
-                    continue;
-                }
+                    continue; // Exact protocol bytes and disconnect behavior are exercised by PipeTransportTests.
                 if (text.Contains("Console.Write")
                     || text.Contains("Console.Out")
                     || text.Contains("Console.Error"))

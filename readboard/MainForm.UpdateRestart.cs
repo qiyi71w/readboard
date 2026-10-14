@@ -51,12 +51,20 @@ namespace readboard
                 {
                     Open = true, Status = "notice", CloseEnabled = true, ResultOperationId = operation,
                     CurrentVersion = result.ActualVersion,
-                    TitleMessage = SemanticMessage.Create("IndependentUpdate_" + result.State),
+                    TitleMessage = result.State switch
+                    {
+                        "installed" => SemanticMessage.Create("IndependentUpdate_installed"),
+                        "rolledBack" => SemanticMessage.Create("IndependentUpdate_rolledBack"),
+                        "failedUnchanged" => SemanticMessage.Create("IndependentUpdate_failedUnchanged"),
+                        _ => throw new InvalidDataException("Installation result is not launchable.")
+                    },
                     DetailMessages = new[] { SemanticMessage.CreateWithDiagnostic("IndependentUpdate_connected", result.Diagnostic) }
                 };
                 PostWebViewState();
             }
             catch (IOException) { }
+            catch (InvalidDataException) { }
+            catch (UnauthorizedAccessException) { }
             catch (JsonException) { }
         }
 
@@ -65,9 +73,15 @@ namespace readboard
             if (pendingUpdatePresentation == null || updateResultPresented || payload.ValueKind != JsonValueKind.Object
                 || !payload.TryGetProperty("operationId", out var operation) || operation.ValueKind != JsonValueKind.String
                 || operation.GetString() != pendingUpdatePresentation.OperationId) return false;
-            IndependentUpdateFiles.Publish(Path.Combine(Path.GetDirectoryName(launchOptions.UpdateTransaction), "presented.json"), pendingUpdatePresentation);
-            updateResultPresented = true;
-            return true;
+            try
+            {
+                IndependentUpdateFiles.Publish(Path.Combine(Path.GetDirectoryName(launchOptions.UpdateTransaction), "presented.json"), pendingUpdatePresentation);
+                updateResultPresented = true;
+                return true;
+            }
+            catch (IOException) { return false; }
+            catch (InvalidDataException) { return false; }
+            catch (UnauthorizedAccessException) { return false; }
         }
     }
 }

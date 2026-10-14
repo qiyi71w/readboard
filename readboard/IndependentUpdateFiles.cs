@@ -89,14 +89,16 @@ namespace readboard
             WriteIndented = true
         };
 
-        internal static void ValidateRelativePath(string path)
+        internal static void ValidateRelativePath(string path) => ValidatePathSegments(path, allowTilde: false);
+
+        private static void ValidatePathSegments(string path, bool allowTilde)
         {
             if (string.IsNullOrEmpty(path) || path.Contains('\\') || path.StartsWith('/') || path.EndsWith('/'))
                 throw new InvalidDataException("Unsafe relative path: " + path);
             foreach (string part in path.Split('/'))
             {
                 if (part.Length == 0 || part == "." || part == ".." || part.EndsWith(' ') || part.EndsWith('.')
-                    || part.Any(c => c < 32 || "<>:\"|?*~".Contains(c))
+                    || part.Any(c => c < 32 || "<>:\"|?*".Contains(c) || (!allowTilde && c == '~'))
                     || Regex.IsMatch(part.Split('.')[0], @"^(CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³])$", RegexOptions.IgnoreCase))
                     throw new InvalidDataException("Unsafe Windows path: " + path);
             }
@@ -110,10 +112,22 @@ namespace readboard
             string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
             if (full == Path.GetPathRoot(full)) throw new InvalidDataException("An installation cannot be a volume root.");
             string relative = full.Substring(Path.GetPathRoot(full).Length).Replace('\\', '/');
-            ValidateRelativePath(relative);
+            ValidatePathSegments(relative, allowTilde: true);
             AssertNoReparse(full);
-            return full;
+            // Resolve existing 8.3 aliases before deriving the installation mutex/record key.
+            // Recovery also needs this identity while the installation itself is absent.
+            string existing = full;
+            while (!Directory.Exists(existing)) existing = Path.GetDirectoryName(existing);
+            uint length = GetLongPathName(existing, null, 0);
+            if (length == 0) throw new IOException("Cannot resolve installation directory identity.", new Win32Exception(Marshal.GetLastWin32Error()));
+            var resolved = new StringBuilder((int)length);
+            if (GetLongPathName(existing, resolved, length) == 0)
+                throw new IOException("Cannot resolve installation directory identity.", new Win32Exception(Marshal.GetLastWin32Error()));
+            return Path.TrimEndingDirectorySeparator(Path.Combine(resolved.ToString(), full.Substring(existing.Length).TrimStart(Path.DirectorySeparatorChar)));
         }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern uint GetLongPathName(string shortPath, StringBuilder longPath, uint length);
 
         internal static bool IsWithin(string root, string path)
         {
@@ -176,11 +190,16 @@ namespace readboard
             AssertNoReparse(package);
         }
 
-        internal static T Read<T>(string path)
+        internal static FileStream OpenReadRecord(string path)
         {
             AssertNoReparse(path);
-            byte[] bytes = File.ReadAllBytes(path);
-            using (JsonDocument document = JsonDocument.Parse(bytes))
+            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        }
+
+        internal static T Read<T>(string path)
+        {
+            using var stream = OpenReadRecord(path);
+            using (JsonDocument document = JsonDocument.Parse(stream))
             {
                 ValidateJsonObject(document.RootElement);
                 if (document.RootElement.ValueKind != JsonValueKind.Object)
@@ -188,8 +207,8 @@ namespace readboard
                 foreach (var property in typeof(T).GetProperties())
                     if (!document.RootElement.TryGetProperty(JsonNamingPolicy.CamelCase.ConvertName(property.Name), out _))
                         throw new InvalidDataException("Missing update record field: " + property.Name);
+                return document.RootElement.Deserialize<T>(JsonOptions) ?? throw new InvalidDataException("Empty update record.");
             }
-            return JsonSerializer.Deserialize<T>(bytes, JsonOptions) ?? throw new InvalidDataException("Empty update record.");
         }
 
         private static void ValidateJsonObject(JsonElement element)
@@ -218,7 +237,8 @@ namespace readboard
                     JsonSerializer.Serialize(stream, record, JsonOptions);
                     stream.Flush(true);
                 }
-                File.Move(temporary, path, true);
+                if (File.Exists(path)) File.Replace(temporary, path, null);
+                else File.Move(temporary, path);
             }
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }

@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace Readboard.VerificationTests
@@ -203,6 +204,51 @@ namespace Readboard.VerificationTests
             }
         }
 
+        [Fact]
+        public void SkipBuild_PackagesSelfContainedUpdaterWithVerifiedManifest()
+        {
+            using var workspace = PackagingWorkspace.Create("v3.2.0");
+            workspace.CreateBuildOutputs();
+            PackagingResult result = workspace.RunPackagingScript();
+            Assert.True(result.ExitCode == 0, result.Output);
+            using var archive = ZipFile.OpenRead(Path.Combine(workspace.ReleaseRoot, workspace.ExpectedZipFileName));
+            using var manifestStream = archive.GetEntry("readboard/update-payload.json").Open();
+            using var manifest = JsonDocument.Parse(manifestStream);
+            Assert.Equal(1, manifest.RootElement.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal("v3.2.0", manifest.RootElement.GetProperty("version").GetString());
+            var files = manifest.RootElement.GetProperty("files");
+            foreach (string name in UpdaterFiles)
+            {
+                string relative = "updater/" + name;
+                using var stream = archive.GetEntry("readboard/" + relative).Open();
+                Assert.Equal(Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant(), files.GetProperty(relative).GetString());
+            }
+        }
+
+        [Theory]
+        [InlineData("ReadBoard.Updater.exe")]
+        [InlineData("coreclr.dll")]
+        [InlineData("System.Windows.Forms.dll")]
+        [InlineData("language_kr.txt")]
+        public void SkipBuild_RejectsIncompleteUpdaterBeforeProducingPackage(string missing)
+        {
+            using var workspace = PackagingWorkspace.Create("v3.2.0");
+            workspace.CreateBuildOutputs();
+            File.Delete(Path.Combine(workspace.BuildOutputDir, "updater", missing));
+            PackagingResult result = workspace.RunPackagingScript();
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains(missing, result.Output);
+            Assert.Empty(Directory.GetFiles(workspace.ReleaseRoot, "*.zip"));
+        }
+
+        private static readonly string[] UpdaterFiles =
+        {
+            "ReadBoard.Updater.exe", "ReadBoard.Updater.dll", "ReadBoard.Updater.deps.json",
+            "ReadBoard.Updater.runtimeconfig.json", "coreclr.dll", "hostfxr.dll", "hostpolicy.dll",
+            "System.Private.CoreLib.dll", "System.Windows.Forms.dll",
+            "language_cn.txt", "language_en.txt", "language_jp.txt", "language_kr.txt"
+        };
+
         private sealed class PackagingWorkspace : IDisposable
         {
             private PackagingWorkspace(string rootPath)
@@ -296,6 +342,7 @@ namespace Readboard.VerificationTests
                 WriteFile("WebView\\lizziey.ico");
                 WriteFile("WebView\\fonts\\InterVariable.woff2");
                 WriteFile("WebView\\fonts\\LICENSE-Inter.txt");
+                foreach (string name in UpdaterFiles) WriteFile(Path.Combine("updater", name));
             }
 
             public void SetBuildOutputTimestamp(string relativePath, DateTime timestampUtc)
