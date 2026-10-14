@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -50,21 +53,96 @@ namespace Readboard.VerificationTests.Host
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern uint GetShortPathName(string path, StringBuilder shortPath, uint length);
 
-        [Fact]
-        public void AtomicPublicationPreservesHeldReaderSnapshotAndExposesNewRecord()
+        [Theory]
+        [InlineData("inherited")]
+        [InlineData("explicit-deny")]
+        [InlineData("protected")]
+        [InlineData("legacy-inheritance")]
+        public void AtomicPublicationPreservesHeldReaderSnapshotAndExposesNewRecord(string mode)
         {
+            using var identity = WindowsIdentity.GetCurrent();
+            SecurityIdentifier sid = identity.User;
+            var parent = new DirectorySecurity();
+            parent.SetAccessRuleProtection(true, false);
+            parent.SetOwner(sid);
+            parent.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl,
+                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                PropagationFlags.None, AccessControlType.Allow));
+            new DirectoryInfo(root).SetAccessControl(parent);
+
             string path = Path.Combine(root, "active.json");
             string first = new string('a', 32), second = new string('b', 32);
             IndependentUpdateFiles.Publish(path, new IndependentUpdateActive { OperationId = first });
-            byte[] security = new FileInfo(path).GetAccessControl().GetSecurityDescriptorBinaryForm();
+            bool deniedWrite = mode == "explicit-deny" || mode == "protected";
+            FileSecurity security = new FileInfo(path).GetAccessControl();
+            if (deniedWrite)
+            {
+                if (mode == "protected") security.SetAccessRuleProtection(true, true);
+                security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.WriteData, AccessControlType.Deny));
+                new FileInfo(path).SetAccessControl(security);
+            }
+            if (mode == "legacy-inheritance")
+            {
+                // Legacy ACLs can acquire AUTO_INHERITED during ReplaceFile without changing access.
+                var descriptor = new RawSecurityDescriptor(security.GetSecurityDescriptorBinaryForm(), 0);
+                descriptor.SetFlags(descriptor.ControlFlags & ~ControlFlags.DiscretionaryAclAutoInherited);
+                byte[] bytes = new byte[descriptor.BinaryLength];
+                descriptor.GetBinaryForm(bytes, 0);
+                Assert.True(SetFileSecurity(path, 4 /* DACL_SECURITY_INFORMATION */, bytes),
+                    "Setting isolated legacy DACL failed: " + Marshal.GetLastWin32Error());
+            }
+            security = new FileInfo(path).GetAccessControl();
+            var beforeRules = AccessRules(security);
+            Assert.Equal(mode == "protected", security.AreAccessRulesProtected);
+            Assert.Equal(sid, security.GetOwner(typeof(SecurityIdentifier)));
+            Assert.Equal(deniedWrite ? 2 : 1, beforeRules.Length);
+            if (deniedWrite)
+                Assert.Equal((sid.Value, FileSystemRights.WriteData, AccessControlType.Deny, false,
+                    InheritanceFlags.None, PropagationFlags.None), beforeRules[0]);
+            Assert.Equal((sid.Value, FileSystemRights.FullControl, AccessControlType.Allow, mode != "protected",
+                InheritanceFlags.None, PropagationFlags.None), beforeRules[^1]);
+            if (mode == "legacy-inheritance")
+                Assert.False(new RawSecurityDescriptor(security.GetSecurityDescriptorBinaryForm(), 0)
+                    .ControlFlags.HasFlag(ControlFlags.DiscretionaryAclAutoInherited));
+            AssertRecordAccess(path, deniedWrite);
             using var held = IndependentUpdateFiles.OpenReadRecord(path);
             IndependentUpdateFiles.Publish(path, new IndependentUpdateActive { OperationId = second });
             using var snapshot = JsonDocument.Parse(held);
             Assert.Equal(first, snapshot.RootElement.GetProperty("operationId").GetString());
             Assert.Equal(second, IndependentUpdateFiles.Read<IndependentUpdateActive>(path).OperationId);
-            Assert.Equal(security, new FileInfo(path).GetAccessControl().GetSecurityDescriptorBinaryForm());
+            FileSecurity after = new FileInfo(path).GetAccessControl();
+            Assert.Equal(security.GetOwner(typeof(SecurityIdentifier)), after.GetOwner(typeof(SecurityIdentifier)));
+            Assert.Equal(security.GetGroup(typeof(SecurityIdentifier)), after.GetGroup(typeof(SecurityIdentifier)));
+            Assert.Equal(security.AreAccessRulesProtected, after.AreAccessRulesProtected);
+            Assert.Equal(beforeRules, AccessRules(after));
+            AssertRecordAccess(path, deniedWrite);
             Assert.Empty(Directory.GetFiles(root, "*.tmp-*"));
         }
+
+        private static (string Sid, FileSystemRights Rights, AccessControlType Type, bool Inherited,
+            InheritanceFlags Inheritance, PropagationFlags Propagation)[] AccessRules(FileSecurity security) =>
+            security.GetAccessRules(true, true, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>()
+                .Select(rule => (rule.IdentityReference.Value, rule.FileSystemRights, rule.AccessControlType,
+                    rule.IsInherited, rule.InheritanceFlags, rule.PropagationFlags)).ToArray();
+
+        private static void AssertRecordAccess(string path, bool deniedWrite)
+        {
+            using (var readable = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                Assert.True(readable.CanRead);
+            if (deniedWrite)
+                Assert.Throws<UnauthorizedAccessException>(() =>
+                {
+                    using var unexpected = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+                });
+            else
+            {
+                using var writable = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+                Assert.True(writable.CanWrite);
+            }
+        }
+
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool SetFileSecurity(string path, uint information, byte[] descriptor);
 
         [Fact]
         public void PermanentReplacementDenialPreservesOriginalRecordAndPropagatesFailure()

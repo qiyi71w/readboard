@@ -331,6 +331,7 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 事务位于安装目录同父 `.readboard-update-<规范化安装路径 SHA256>/<operationId>`；旧程序写 request/data，更新器单写 active/progress/result/preparation/recovery。实际安装目录允许字面 `~`，已有 Windows 短路径别名先解析成长路径，以共享同一安装 mutex 和事务目录；包成员仍拒绝 `~`、路径穿越和 Windows 别名。未知、损坏或未结算记录阻止新安装。用户数据保留集合来自实际日志和 WebView owner，外部数据原位不动，Settings Draft 不隐式 Save。
 
 事务读取以只读、允许删除共享的句柄取得完整 JSON 快照；已有记录通过 `File.Replace` 原子发布，首次记录通过 `File.Move` 发布。已有读者继续读取原快照，新读者取得新记录；写入先 Flush，永久权限或共享冲突仍向调用者报告，保留原记录。
+事务替换的权限回归覆盖继承 ACL、自定义显式拒绝、受保护 ACL 和旧式继承描述符：逐项比较 owner/group、DACL 保护状态及有序 ACE，并实际打开文件验证原有允许/拒绝权限。Windows 可在替换时补记 `DACL_AUTO_INHERITED`，因此不把整个安全描述符的字节相等当作权限契约。
 
 ### 中断恢复入口
 
