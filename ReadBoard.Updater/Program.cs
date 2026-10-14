@@ -68,7 +68,8 @@ namespace ReadBoard.Updater
                 if (recovery)
                 {
                     window.Post(() => { window.Show(); window.SetStatus("IndependentUpdate_installing", RecoveryLocation(requestPath)); });
-                    if (!File.Exists(Path.Combine(Path.GetDirectoryName(requestPath), "progress.json")))
+                    if (!File.Exists(Path.Combine(Path.GetDirectoryName(requestPath), "progress.json")) &&
+                        !File.Exists(Path.Combine(Path.GetDirectoryName(requestPath), "preparation.json")))
                         throw new InvalidDataException("No durable transaction exists to recover.");
                     var recovered = new IndependentUpdateInstaller().Execute(requestPath,
                         () => throw new InvalidOperationException("Recovery cannot submit another installation."), () => { }, _ => { });
