@@ -338,6 +338,8 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 
 更新器在声明 active 前持久写入私有 `preparation.json`，绑定 operation、不可变 request/data 字节摘要、规范化安装目录和原安装的不可变文件清单。清单沿用现有目录快照，只排除明确归属的三份配置及 data.json 用户数据，不把未知程序文件当用户数据。尚未发布后期恢复计划时，preparing/prepared/committed/waitingForExit/preservingData 或 active 已写而 progress 未写的中断，在原进程确已退出、原载荷匹配、backup 不存在且协调身份有效时结算 failedUnchanged；保留 staging 和最终关闭配置，恢复旧安装可启动性。损坏或缺失准备证据不自动放行。
 
+源端清理从 preparation.json 存在起保留事务目录，即使 updater 尚未写入第一份 progress；只有仍由源端持有、没有这两类持久证据的准备目录才可清理。
+
 源进程实际退出、最终配置及已知用户数据复制完成后，更新器原子发布一次 `recovery.json`：schemaVersion=1、operationId、原始 request/data 字节 SHA-256、旧目录与完整待安装目录的文件 SHA-256/目录清单，以及已提交的 restartAdopted/registrationId/宿主进程身份。它是更新器私有恢复证据，不扩展 request、progress 或宿主 wire。恢复先取得原安装的全局 mutex，再校验该计划、操作身份、严格进度记录、PID+UTC创建时间和实际目录内容。
 
 - 旧目录仍在且 staging 完整：完成原事务的备份和替换。

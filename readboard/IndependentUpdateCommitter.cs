@@ -68,8 +68,9 @@ namespace readboard
             string operation = preparedOperation;
             preparedOperation = null;
             preparedInstall = null;
-            // Progress belongs exclusively to the updater, including failed preparation.
-            if (operation != null && !File.Exists(Path.Combine(operation, "progress.json")) && Directory.Exists(operation))
+            // The updater owns records from its first durable preparation snapshot.
+            if (operation != null && !File.Exists(Path.Combine(operation, "preparation.json"))
+                && !File.Exists(Path.Combine(operation, "progress.json")) && Directory.Exists(operation))
                 Directory.Delete(operation, true);
         }
 

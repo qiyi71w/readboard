@@ -16,6 +16,23 @@ namespace Readboard.VerificationTests.Host
         public IndependentUpdateRecordTests() => Directory.CreateDirectory(root);
         public void Dispose() => Directory.Delete(root, true);
 
+        [Theory]
+        [InlineData(null, false)]
+        [InlineData("preparation.json", true)]
+        [InlineData("progress.json", true)]
+        public void SourceCleanupRetainsRecordsOnceUpdaterOwnsPreparation(string record, bool retained)
+        {
+            string operation = Path.Combine(root, "operation");
+            Directory.CreateDirectory(operation);
+            File.WriteAllText(Path.Combine(operation, "request.json"), "immutable request");
+            if (record != null) File.WriteAllText(Path.Combine(operation, record), "durable updater evidence");
+            var committer = new IndependentUpdateCommitter(() => "en", () => Array.Empty<string>());
+            typeof(IndependentUpdateCommitter).GetField("preparedOperation", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(committer, operation);
+            committer.CleanupPreparation();
+            Assert.Equal(retained, Directory.Exists(operation));
+            if (retained) Assert.Equal("immutable request", File.ReadAllText(Path.Combine(operation, "request.json")));
+        }
+
         [Fact]
         public void LiteralTildeInstallationLaunchesAndSharesItsAliasIdentity()
         {
