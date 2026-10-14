@@ -102,6 +102,7 @@ namespace Readboard.VerificationTests.Host
         private static MainForm CreateForm(string request)
         {
             var form = (MainForm)RuntimeHelpers.GetUninitializedObject(typeof(MainForm));
+            GC.SuppressFinalize(form); // This record-boundary probe has no constructed WinForms resources.
             Assert.True(LaunchOptions.TryParse(new[] { "yzy", " ", " ", " ", "0", "en", "-1", "--update-transaction", request }, out var options));
             Field("launchOptions").SetValue(form, options);
             Field("updateReadySent").SetValue(form, true);
