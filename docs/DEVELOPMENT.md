@@ -332,6 +332,7 @@ dotnet test tests/Readboard.VerificationTests/Readboard.VerificationTests.csproj
 
 事务读取以只读、允许删除共享的句柄取得完整 JSON 快照；已有记录通过 `File.Replace` 原子发布，首次记录通过 `File.Move` 发布。已有读者继续读取原快照，新读者取得新记录；写入先 Flush，永久权限或共享冲突仍向调用者报告，保留原记录。
 事务替换的权限回归覆盖继承 ACL、自定义显式拒绝、受保护 ACL 和旧式继承描述符：逐项比较 owner/group、DACL 保护状态及有序 ACE，并实际打开文件验证原有允许/拒绝权限。Windows 可在替换时补记 `DACL_AUTO_INHERITED`，因此不把整个安全描述符的字节相等当作权限契约。
+权限夹具显式设置记录文件自身的 owner，再验证替换前后保持不变；父目录 owner 不决定新文件 owner，提升权限的进程令牌可能默认使用 Administrators 组。
 
 ### 中断恢复入口
 

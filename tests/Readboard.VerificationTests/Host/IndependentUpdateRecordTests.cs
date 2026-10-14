@@ -75,12 +75,14 @@ namespace Readboard.VerificationTests.Host
             IndependentUpdateFiles.Publish(path, new IndependentUpdateActive { OperationId = first });
             bool deniedWrite = mode == "explicit-deny" || mode == "protected";
             FileSecurity security = new FileInfo(path).GetAccessControl();
+            // Child ownership comes from the token default, not the parent directory owner.
+            security.SetOwner(sid);
             if (deniedWrite)
             {
                 if (mode == "protected") security.SetAccessRuleProtection(true, true);
                 security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.WriteData, AccessControlType.Deny));
-                new FileInfo(path).SetAccessControl(security);
             }
+            new FileInfo(path).SetAccessControl(security);
             if (mode == "legacy-inheritance")
             {
                 // Legacy ACLs can acquire AUTO_INHERITED during ReplaceFile without changing access.
