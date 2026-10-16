@@ -171,6 +171,10 @@ readboard.exe yzy " " " " " " 0 cn -1
 
 ## WebView2 UI 契约
 
+### 图标字体
+
+`.icon` 优先使用系统的 `Segoe Fluent Icons`，不可用时回退到 `Segoe MDL2 Assets`。Windows 10 默认不附带前者，必须保留后者以避免图标显示为缺字符号；两种字体的图标造型不保证完全一致。新增图标时应核对两种字体中的字符覆盖，静态页面和动态弹窗使用同一字体规则。
+
 ### JSON bridge 与 snapshot
 
 主要入口：
