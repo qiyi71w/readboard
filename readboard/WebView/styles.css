@@ -172,7 +172,7 @@ button:disabled { color: var(--disabled-text); border-color: var(--disabled-bord
 .primary:hover:not(:disabled), .primary:active:not(:disabled) { color: var(--primary-text-on-background); background: var(--primary-hover-background); }
 .danger, .danger-outline { color: var(--danger); }
 .danger-outline { border-color: var(--danger-border); }
-.icon { display: inline-block; flex: 0 0 auto; font-family: "Segoe Fluent Icons"; font-style: normal; font-size: 18px; line-height: 1; }
+.icon { display: inline-block; flex: 0 0 auto; font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets"; font-style: normal; font-size: 18px; line-height: 1; }
 .icon.small { font-size: 11px; }
 .dot { display: inline-block; flex: 0 0 auto; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; background: var(--disabled-text); vertical-align: 0; }
 .dot.good { background: var(--success); }
