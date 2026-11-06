@@ -190,6 +190,14 @@ namespace readboard
                     NotifyUnexpectedDisconnect(gen);
                     return;
                 }
+                catch (OperationCanceledException)
+                {
+                    // CancelSynchronousIo can cancel Console stdin reads during Stop.
+                    // The generation guard ignores expected shutdown and stale readers,
+                    // but still reports cancellation of a live connection as disconnect.
+                    NotifyUnexpectedDisconnect(gen);
+                    return;
+                }
 
                 if (line == null)
                 {
