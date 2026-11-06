@@ -113,20 +113,24 @@ namespace Readboard.VerificationTests.Transport
             }
         }
 
-        [Fact]
-        public void Stop_WhenRunning_DoesNotRaiseDisconnectedEvent()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Stop_WhenRunning_DoesNotRaiseDisconnectedEvent(bool cancelRead)
         {
             using PipeTransport transport = new PipeTransport();
-            using BlockingReadStream stream = new BlockingReadStream();
+            using BlockingReadStream stream = new BlockingReadStream(cancelRead);
             using StreamReader reader = new StreamReader(stream, System.Text.Encoding.UTF8);
 
             int disconnectedCount = 0;
             transport.Disconnected += (_, _) => Interlocked.Increment(ref disconnectedCount);
 
             int gen = 1;
+            Exception readException = null;
             Thread workerThread = new Thread(new ThreadStart(delegate
             {
-                InvokeReadLoop(transport, gen);
+                try { InvokeReadLoop(transport, gen); }
+                catch (Exception error) { readException = error; }
             }));
             workerThread.IsBackground = true;
             workerThread.Name = "PipeTransportTests.StopNoDisconnected";
@@ -148,6 +152,7 @@ namespace Readboard.VerificationTests.Transport
 
                 VerificationCompletion.Join(workerThread, "ReadLoop thread did not exit after Stop.");
 
+                Assert.Null(readException);
                 Assert.Equal(0, disconnectedCount);
                 Assert.False(transport.IsConnected);
             }
@@ -158,11 +163,13 @@ namespace Readboard.VerificationTests.Transport
             }
         }
 
-        [Fact]
-        public void ReadLoop_OnIOException_RaisesDisconnectedOnce_AndIsConnectedIsFalse()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ReadLoop_OnReadFailure_RaisesDisconnectedOnce_AndIsConnectedIsFalse(bool cancelRead)
         {
             using PipeTransport transport = new PipeTransport();
-            using ThrowingReadStream stream = new ThrowingReadStream();
+            using ThrowingReadStream stream = new ThrowingReadStream(cancelRead);
             using StreamReader reader = new StreamReader(stream, System.Text.Encoding.UTF8);
 
             int disconnectedCount = 0;
@@ -177,9 +184,11 @@ namespace Readboard.VerificationTests.Transport
             };
 
             int gen = 1;
+            Exception readException = null;
             Thread workerThread = new Thread(new ThreadStart(delegate
             {
-                InvokeReadLoop(transport, gen);
+                try { InvokeReadLoop(transport, gen); }
+                catch (Exception error) { readException = error; }
             }));
             workerThread.IsBackground = true;
             workerThread.Name = "PipeTransportTests.ReadLoopIoException";
@@ -194,8 +203,9 @@ namespace Readboard.VerificationTests.Transport
 
             try
             {
-                VerificationCompletion.Wait(disconnectedEvent, "Disconnected event was not raised on read IOException.");
-                VerificationCompletion.Join(workerThread, "ReadLoop thread did not exit after IOException.");
+                VerificationCompletion.Join(workerThread, "ReadLoop thread did not exit after read failure.");
+                Assert.Null(readException);
+                Assert.True(disconnectedEvent.IsSet, "Disconnected event was not raised on read failure.");
 
                 Assert.Equal(1, disconnectedCount);
                 Assert.False(isConnectedDuringCallback);
@@ -210,20 +220,24 @@ namespace Readboard.VerificationTests.Transport
             }
         }
 
-        [Fact]
-        public void OldReader_FromPreviousStart_DoesNotDisconnectFreshStart()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void OldReader_FromPreviousStart_DoesNotDisconnectFreshStart(bool cancelRead)
         {
             using PipeTransport transport = new PipeTransport();
-            using BlockingReadStream oldStream = new BlockingReadStream();
+            using BlockingReadStream oldStream = new BlockingReadStream(cancelRead);
             using StreamReader oldReader = new StreamReader(oldStream, System.Text.Encoding.UTF8);
 
             int disconnectedCount = 0;
             transport.Disconnected += (_, _) => Interlocked.Increment(ref disconnectedCount);
 
             int oldGen = 1;
+            Exception readException = null;
             Thread oldWorkerThread = new Thread(new ThreadStart(delegate
             {
-                InvokeReadLoop(transport, oldGen);
+                try { InvokeReadLoop(transport, oldGen); }
+                catch (Exception error) { readException = error; }
             }));
             oldWorkerThread.IsBackground = true;
             oldWorkerThread.Name = "PipeTransportTests.OldReader";
@@ -247,6 +261,7 @@ namespace Readboard.VerificationTests.Transport
                 oldStream.Unblock();
                 VerificationCompletion.Join(oldWorkerThread, "Old worker thread did not exit.");
 
+                Assert.Null(readException);
                 Assert.Equal(0, disconnectedCount);
                 Assert.True(transport.IsConnected);
 
@@ -446,10 +461,16 @@ namespace Readboard.VerificationTests.Transport
 
         private sealed class BlockingReadStream : Stream
         {
+            private readonly bool cancelRead;
             private readonly ManualResetEventSlim readStarted = new ManualResetEventSlim(false);
             private readonly ManualResetEventSlim unblock = new ManualResetEventSlim(false);
 
             public ManualResetEventSlim ReadStarted => readStarted;
+
+            public BlockingReadStream(bool cancelRead = false)
+            {
+                this.cancelRead = cancelRead;
+            }
 
             public void Unblock()
             {
@@ -460,6 +481,8 @@ namespace Readboard.VerificationTests.Transport
             {
                 readStarted.Set();
                 unblock.Wait();
+                if (cancelRead)
+                    throw new OperationCanceledException("Simulated native pipe read cancellation");
                 return 0;
             }
 
@@ -486,8 +509,17 @@ namespace Readboard.VerificationTests.Transport
 
         private sealed class ThrowingReadStream : Stream
         {
+            private readonly bool cancelRead;
+
+            public ThrowingReadStream(bool cancelRead = false)
+            {
+                this.cancelRead = cancelRead;
+            }
+
             public override int Read(byte[] buffer, int offset, int count)
             {
+                if (cancelRead)
+                    throw new OperationCanceledException("Simulated native pipe read cancellation");
                 throw new IOException("Simulated pipe read failure");
             }
 
