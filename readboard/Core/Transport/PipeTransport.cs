@@ -198,6 +198,14 @@ namespace readboard
                     NotifyUnexpectedDisconnect(gen);
                     return;
                 }
+                catch (NotSupportedException)
+                {
+                    // Stop disposes the reader from another thread. StreamReader.ReadLine checks
+                    // disposal only on entry, so a later buffer refill reaches the disposed
+                    // ConsoleStream, which rejects reads with NotSupportedException.
+                    NotifyUnexpectedDisconnect(gen);
+                    return;
+                }
 
                 if (line == null)
                 {
