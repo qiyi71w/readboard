@@ -3,7 +3,7 @@
   "channels": [
     {
       "id": "legacy-windows",
-      "status": "active",
+      "status": "retired",
       "maximumWindowsVersionExclusive": "10.0.17763",
       "latestTag": "v3.0.10",
       "assetName": "readboard-github-release-v3.0.10.zip",

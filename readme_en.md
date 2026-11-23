@@ -46,15 +46,15 @@ ReadBoard captures board images from external Go clients, recognizes stones with
 
 ## Maintained Branches
 
-This repository maintains two release lines. Update checks automatically select a channel for the current Windows version:
+Only `main` is maintained. Update checks automatically select a channel for the current Windows version:
 
-| Branch | UI framework | Version line | System requirement |
-| --- | --- | --- | --- |
-| `main` | WebView2 | v3.2.x | Windows 10 version 1809 (build 17763)+ |
-| `legacy/winforms` | WinForms | v3.0.x | Earlier Windows releases |
+| Branch | UI framework | Version line | System requirement | Status |
+| --- | --- | --- | --- | --- |
+| `main` | WebView2 | v3.2.x | Windows 10 version 1809 (build 17763)+ | Maintained |
+| `legacy/winforms` | WinForms | v3.0.x | Earlier Windows releases | Retired; final release v3.0.10 |
 
 > [!NOTE]
-> The channels are independent. The WebView2 mainline is not merged wholesale into `legacy/winforms`; older systems continue to receive selected fixes through the legacy channel.
+> On earlier Windows releases, update checks still resolve to v3.0.10 and report that the channel is retired. To keep receiving updates, upgrade to Windows 10 version 1809 or later.
 
 ## Requirements
 
