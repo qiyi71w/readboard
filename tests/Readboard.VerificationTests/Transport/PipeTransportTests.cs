@@ -114,12 +114,13 @@ namespace Readboard.VerificationTests.Transport
         }
 
         [Theory]
-        [InlineData(false)]
-        [InlineData(true)]
-        public void Stop_WhenRunning_DoesNotRaiseDisconnectedEvent(bool cancelRead)
+        [InlineData(null)]
+        [InlineData(typeof(OperationCanceledException))]
+        [InlineData(typeof(NotSupportedException))]
+        public void Stop_WhenRunning_DoesNotRaiseDisconnectedEvent(Type readFailure)
         {
             using PipeTransport transport = new PipeTransport();
-            using BlockingReadStream stream = new BlockingReadStream(cancelRead);
+            using BlockingReadStream stream = new BlockingReadStream(readFailure);
             using StreamReader reader = new StreamReader(stream, System.Text.Encoding.UTF8);
 
             int disconnectedCount = 0;
@@ -164,12 +165,13 @@ namespace Readboard.VerificationTests.Transport
         }
 
         [Theory]
-        [InlineData(false)]
-        [InlineData(true)]
-        public void ReadLoop_OnReadFailure_RaisesDisconnectedOnce_AndIsConnectedIsFalse(bool cancelRead)
+        [InlineData(typeof(IOException))]
+        [InlineData(typeof(OperationCanceledException))]
+        [InlineData(typeof(NotSupportedException))]
+        public void ReadLoop_OnReadFailure_RaisesDisconnectedOnce_AndIsConnectedIsFalse(Type readFailure)
         {
             using PipeTransport transport = new PipeTransport();
-            using ThrowingReadStream stream = new ThrowingReadStream(cancelRead);
+            using ThrowingReadStream stream = new ThrowingReadStream(readFailure);
             using StreamReader reader = new StreamReader(stream, System.Text.Encoding.UTF8);
 
             int disconnectedCount = 0;
@@ -221,12 +223,13 @@ namespace Readboard.VerificationTests.Transport
         }
 
         [Theory]
-        [InlineData(false)]
-        [InlineData(true)]
-        public void OldReader_FromPreviousStart_DoesNotDisconnectFreshStart(bool cancelRead)
+        [InlineData(null)]
+        [InlineData(typeof(OperationCanceledException))]
+        [InlineData(typeof(NotSupportedException))]
+        public void OldReader_FromPreviousStart_DoesNotDisconnectFreshStart(Type readFailure)
         {
             using PipeTransport transport = new PipeTransport();
-            using BlockingReadStream oldStream = new BlockingReadStream(cancelRead);
+            using BlockingReadStream oldStream = new BlockingReadStream(readFailure);
             using StreamReader oldReader = new StreamReader(oldStream, System.Text.Encoding.UTF8);
 
             int disconnectedCount = 0;
@@ -459,17 +462,24 @@ namespace Readboard.VerificationTests.Transport
             }
         }
 
+        private static Exception CreateReadFailure(Type readFailure)
+        {
+            return (Exception)Activator.CreateInstance(readFailure, "Simulated pipe read failure");
+        }
+
         private sealed class BlockingReadStream : Stream
         {
-            private readonly bool cancelRead;
+            private readonly Type readFailure;
             private readonly ManualResetEventSlim readStarted = new ManualResetEventSlim(false);
             private readonly ManualResetEventSlim unblock = new ManualResetEventSlim(false);
 
             public ManualResetEventSlim ReadStarted => readStarted;
 
-            public BlockingReadStream(bool cancelRead = false)
+            // null returns EOF once unblocked; otherwise the read throws that exception type,
+            // e.g. NotSupportedException as a disposed ConsoleStream does.
+            public BlockingReadStream(Type readFailure)
             {
-                this.cancelRead = cancelRead;
+                this.readFailure = readFailure;
             }
 
             public void Unblock()
@@ -481,8 +491,8 @@ namespace Readboard.VerificationTests.Transport
             {
                 readStarted.Set();
                 unblock.Wait();
-                if (cancelRead)
-                    throw new OperationCanceledException("Simulated native pipe read cancellation");
+                if (readFailure != null)
+                    throw CreateReadFailure(readFailure);
                 return 0;
             }
 
@@ -509,18 +519,16 @@ namespace Readboard.VerificationTests.Transport
 
         private sealed class ThrowingReadStream : Stream
         {
-            private readonly bool cancelRead;
+            private readonly Type readFailure;
 
-            public ThrowingReadStream(bool cancelRead = false)
+            public ThrowingReadStream(Type readFailure)
             {
-                this.cancelRead = cancelRead;
+                this.readFailure = readFailure;
             }
 
             public override int Read(byte[] buffer, int offset, int count)
             {
-                if (cancelRead)
-                    throw new OperationCanceledException("Simulated native pipe read cancellation");
-                throw new IOException("Simulated pipe read failure");
+                throw CreateReadFailure(readFailure);
             }
 
             public override bool CanRead => true;
