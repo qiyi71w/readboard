@@ -2,7 +2,7 @@
 
 日期：2026-04-21
 
-> 说明：这份设计记录的是上一轮“主题布局修复”的范围，已被 [2026-04-21-mainform-theme-startup-parity-design.md](/mnt/d/dev/weiqi/readboard/docs/specs/2026-04-21-mainform-theme-startup-parity-design.md) 补充并作为当前执行入口。后续如果涉及“启动主题不同导致窗口尺寸和布局分叉”的修复，以新文档为准。
+> 说明：这份设计记录的是上一轮“主题布局修复”的范围，已被 [2026-04-21-mainform-theme-startup-parity-design.md](2026-04-21-mainform-theme-startup-parity-design.md) 补充并作为当前执行入口。后续如果涉及“启动主题不同导致窗口尺寸和布局分叉”的修复，以新文档为准。
 
 ## 背景
 
@@ -63,7 +63,7 @@
 优点：
 
 - 同时解决头部空白、主题分叉和同步区错位问题。
-- 最符合“原本只有样式不同，布局全都一样”的产品定义。
+- 最符合两个主题只在样式上不同、布局完全一致的产品定义。
 - 更适合继续维护 DPI/分辨率兼容。
 
 缺点：

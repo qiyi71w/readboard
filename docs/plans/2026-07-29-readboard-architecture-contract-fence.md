@@ -20,7 +20,7 @@
 | HEAD | `e4b7cb53d2be563c1da3133c1e2aaf1ad1b9d02f` |
 | 用户已有未跟踪文件 | `CONTEXT.md`、`docs/releases/v3.1.0.md`、`docs/specs/2026-07-29-readboard-unified-target-architecture-design.md`；本轮保留，未纳入提交 |
 | WSL 环境 | Linux 工作区；无 Linux `dotnet` |
-| Windows 验证环境 | Windows 10.0.26200.0、PowerShell 7.6.4、.NET SDK 10.0.104 (`C:\Users\admin\.dotnet\dotnet.exe`) |
+| Windows 验证环境 | Windows 10.0.26200.0、PowerShell 7.6.4、.NET SDK 10.0.104 (`%USERPROFILE%\.dotnet\dotnet.exe`) |
 | 既有测试基线 | Windows `dotnet test --no-restore -c Debug`：725 passed / 0 failed |
 
 ## 合同覆盖

@@ -131,7 +131,7 @@ ReadBoard 侧预计改动：
 
 Lizzie 侧 companion spec 位于 Lizzie feature worktree：
 
-- `/home/dev/.config/superpowers/worktrees/lizzieyzy-next/kata-genmove-analyze-sync/docs/specs/2026-06-26-readboard-last-move-source-gma-turn-trust-design.md`
+- LizzieYzy-Next 仓库 `kata-genmove-analyze-sync` 分支：`docs/specs/2026-06-26-readboard-last-move-source-gma-turn-trust-design.md`
 
 ## 测试要求
 

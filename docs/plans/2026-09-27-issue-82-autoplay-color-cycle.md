@@ -4,7 +4,7 @@
 
 - 来源：[GitHub issue #82](https://github.com/qiyi71w/readboard/issues/82)。
 - 分析基线：刚从 `origin/main` 获取的 `d6e38ae7af615dd7259a73dd79234f222d83e7df`。
-- 工作树：`/home/dev/dev/weiqi/worktrees/readboard/issue-82-autoplay-color-20260927`。
+- 工作树：本地 agent worktree `issue-82-autoplay-color-20260927`。
 - 分支：`plan/issue-82-autoplay-color`。
 - 用户已批准实施并继续交付。代码、聚焦验证及双轴审查已完成；手动棋色每次启用需重选已通过原生 WebView2 与协议链检查。真实 Fox 回归未执行，作为验证覆盖限制记录，不阻塞本次 PR 交付。
 - 原主工作树有本地提交和未跟踪内容，保持原样；独立工作树直接从远程 main 创建，没有合并本地主分支。
@@ -164,7 +164,7 @@ A1–A6 对应 issue 六项明确回归要求。B 行覆盖状态分离容易漏
 
 实现增加 `SelectedAutoPlayColorMode`，把持久偏好与本周期授权分开。关闭自动落子或双向同步清空手动选择；重新开启使 Fox 识别缓存失效。UI 投影、直接签发与持续同步 snapshot 均使用本周期解析。身份取消保留当前选择，删除历史手动色恢复字段及接口参数。JSON 配置、协议、语言和布局不变。
 
-Windows 检查使用此工作树源码的隔离镜像 `D:\dev\weiqi\worktrees\readboard\issue82-validation-bmZZoi`，SDK `10.0.104`；它包含基线加当前未提交改动，不冒称已提交的精确候选。
+Windows 检查使用此工作树源码的隔离镜像（Windows 侧临时目录 `issue82-validation-bmZZoi`），SDK `10.0.104`；它包含基线加当前未提交改动，不冒称已提交的精确候选。
 
 | 检查 | 实测结果 |
 | --- | --- |
