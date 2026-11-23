@@ -6,14 +6,14 @@
 
 ReadBoard 是 [LizzieYzy-Next](https://github.com/wimi321/lizzieyzy-next) 启动的 Windows 外接程序。它从第三方围棋客户端捕获棋盘、识别棋子，将状态通过逐行文本协议发送给宿主，并把宿主下发的落子转换为前台或后台点击。
 
-仓库维护两条发布线：
+仓库只维护 `main` 一条发布线：
 
-| 分支 | 可见 UI | 版本线 | 支持系统 |
-| --- | --- | --- | --- |
-| `main` | WebView2 | v3.2.x | Windows 10 version 1809（build 17763）及以上 |
-| `legacy/winforms` | WinForms | v3.0.x | 更早的 Windows |
+| 分支 | 可见 UI | 版本线 | 支持系统 | 状态 |
+| --- | --- | --- | --- | --- |
+| `main` | WebView2 | v3.2.x | Windows 10 version 1809（build 17763）及以上 | 维护中 |
+| `legacy/winforms` | WinForms | v3.0.x | 更早的 Windows | 已冻结；`legacy-windows` 通道为 `retired`，最终版本 v3.0.10 |
 
-本开发说明描述 `main`。简易版已经停止维护；WebView2 新功能不要回填到旧 WinForms 线，跨线修复应先在 `main` 落地，再按需移植。
+本开发说明描述 `main`。简易版和 WinForms 维护线均已停止维护，修复与新功能只在 `main` 落地。`update-channels.json` 保留 `legacy-windows` 条目并标记为 `retired`：旧系统上的已安装版本据此定位到 v3.0.10 并显示停止维护提示，因此该条目和 v3.0.10 的发布资产都需要保留。
 
 ## 核心边界
 

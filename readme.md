@@ -46,15 +46,15 @@ ReadBoard 通过截屏方式从外部围棋客户端窗口抓取棋盘画面，�
 
 ## 维护分支
 
-本仓库维护两条发布线，更新检查根据当前 Windows 版本自动选择通道：
+当前只维护 `main`。更新检查根据当前 Windows 版本自动选择通道：
 
-| 分支 | UI 框架 | 版本线 | 系统要求 |
-| --- | --- | --- | --- |
-| `main` | WebView2 | v3.2.x | Windows 10 version 1809 (build 17763)+ |
-| `legacy/winforms` | WinForms | v3.0.x | 更早的 Windows 系统 |
+| 分支 | UI 框架 | 版本线 | 系统要求 | 状态 |
+| --- | --- | --- | --- | --- |
+| `main` | WebView2 | v3.2.x | Windows 10 version 1809 (build 17763)+ | 维护中 |
+| `legacy/winforms` | WinForms | v3.0.x | 更早的 Windows 系统 | 已停止维护，最终版本 v3.0.10 |
 
 > [!NOTE]
-> 两条通道互不干扰。WebView2 主线不会整体合并回 `legacy/winforms`，旧系统用户仍可通过 legacy 通道获得选择性修复。
+> 更早的 Windows 系统检查更新时仍会定位到 v3.0.10，并提示该通道已停止维护。如需继续获得更新，请升级到 Windows 10 version 1809 或更高版本。
 
 ## 系统要求
 
