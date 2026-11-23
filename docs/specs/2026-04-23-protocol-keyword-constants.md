@@ -6,7 +6,7 @@
 
 `readboard` 和 `lizzieyzy-next` 之间的同步协议仍是逐行字符串协议。`readboard/Core/Protocol/LegacyProtocolAdapter.cs` 负责发出和解析这些旧协议文本，`lizzieyzy-next/src/main/java/featurecat/lizzie/analysis/ReadBoard.java` 直接用字符串字面值做 `startsWith` / `equals` 解析。
 
-2026-04-23 扫描 `D:\dev\weiqi\lizzieyzy-next` 后确认：集成端没有可复用的跨仓库 enum、proto 或共享常量。readboard 内部常量化只能作为本仓库内的别名，不能改变协议。
+2026-04-23 扫描 LizzieYzy-Next 仓库后确认：集成端没有可复用的跨仓库 enum、proto 或共享常量。readboard 内部常量化只能作为本仓库内的别名，不能改变协议。
 
 ## 边界规则
 

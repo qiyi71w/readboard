@@ -182,7 +182,7 @@ v3.1.0 只发布一个 Evergreen 包：`readboard-webview2-<tag>.zip`。
 创建共享 personal skill：
 
 ```text
-C:\Users\admin\.codex\skills\readboard-release
+%USERPROFILE%\.codex\skills\readboard-release
 ```
 
 WSL 的 `~/.codex` 与 Windows 共用，因此 Windows、WSL 和所有 worktree 使用同一份 skill，不在各 worktree 复制文件。

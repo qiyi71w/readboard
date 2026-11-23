@@ -85,7 +85,7 @@
 - **执行前的问题**: `Core/Protocol/LegacyProtocolAdapter.cs` 散落 `"sync"` / `"start"` / `"place"` / `"end"` / `"placeComplete"` / `"notinboard"` / `"version"` / `"quit"` / `"loss"` / `"bothSync"` / `"foreFoxWithInBoard"` 等裸字符串
 - **依据**: dotnet10-upgrade-design.md 明确 **Non-Goals: 不改变与 LizzieYzy-Next 的通信协议** —— 常量值必须**逐字相同**
 - **补充边界**: 见 `docs/specs/2026-04-23-protocol-keyword-constants.md`。`ProtocolKeywords` 只是内部字符串别名，不是新公共 API；所有值必须与旧 wire 文本逐字相同。
-- **行动前已完成**: 已 grep `D:\dev\weiqi\lizzieyzy-next`，确认集成端 `src/main/java/featurecat/lizzie/analysis/ReadBoard.java` 直接用字面值 `startsWith` / `equals` 解析，没有共享代码或跨仓库 enum 可复用。
+- **行动前已完成**: 已 grep LizzieYzy-Next 仓库，确认集成端 `src/main/java/featurecat/lizzie/analysis/ReadBoard.java` 直接用字面值 `startsWith` / `equals` 解析，没有共享代码或跨仓库 enum 可复用。
 - **实际执行**: 加 `Core/Protocol/ProtocolKeywords.cs` 静态 internal 类（保持 string 类型，wire 协议本身才是公共合约），`LegacyProtocolAdapter` 的 parse / emit 改为引用常量；新增 `ProtocolKeywords_DefineStableLegacyWireTokens` 锁定每个常量的字面值
 - **新文档**: `docs/specs/2026-04-23-protocol-keyword-constants.md`
 - **验证**:
@@ -100,7 +100,7 @@
   1. 删除 `ox1` / `oy1` 字段和 `UpdateSelectionBounds` 中的镜像赋值（不迁移到 Config）
   2. 删除 `type` 字段和 `SetCurrentSyncType` 中的镜像赋值，保留 `CurrentSyncType` 与 `LegacyTypeToken = CurrentSyncType.ToString()` 行为
   3. `boardW` / `boardH` 本轮不动，作为后续单独 commit 候选
-- **行动前已完成**: grep 全仓 + `D:\dev\weiqi\lizzieyzy-next`，未发现 `MainForm.ox1`、`MainForm.oy1`、`MainForm.type`、`readboard.MainForm` 或相关 reflection 字段访问
+- **行动前已完成**: grep 全仓 + LizzieYzy-Next 仓库，未发现 `MainForm.ox1`、`MainForm.oy1`、`MainForm.type`、`readboard.MainForm` 或相关 reflection 字段访问
 - **新文档**: `docs/specs/2026-04-23-mainform-state-boundaries.md`
 - **验证**:
   - 新增 `MainForm_RemovesLegacyPublicStaticSelectionAndTypeMirrors` 源码级回归测试，锁定字段不能复活

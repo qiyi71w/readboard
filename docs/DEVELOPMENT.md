@@ -257,6 +257,6 @@ pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-readboard-rele
 src/main/java/featurecat/lizzie/analysis/ReadBoard.java
 ```
 
-本地常用的 LizzieYzy-Next 工作副本示例路径：`D:\dev\weiqi\lizzieyzy-next`。实际路径以自己的检出位置为准。
+LizzieYzy-Next 工作副本路径以自己的检出位置为准。
 
 宿主默认在工作目录下找 `readboard/readboard.exe` 或 `readboard/readboard.bat`。release 结构、文件名或启动参数变化时，宿主侧同步调整。
