@@ -103,7 +103,7 @@ Assert.True(string.IsNullOrEmpty(config.FoxAutoPlayNicknameSignature));
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~AppConfigDefaultsTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~AppConfigDefaultsTests" -c Debug
 ```
 
 Expected: FAIL because the new properties do not exist.
@@ -167,7 +167,7 @@ Add a partial JSON load test for these fields.
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~DualFormatAppConfigStoreTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~DualFormatAppConfigStoreTests" -c Debug
 ```
 
 Expected: FAIL until load/save supports the fields.
@@ -199,7 +199,7 @@ Use a small helper that replaces `_`, `\r`, and `\n` with spaces, matching the e
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~AppConfigDefaultsTests|FullyQualifiedName~DualFormatAppConfigStoreTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~AppConfigDefaultsTests|FullyQualifiedName~DualFormatAppConfigStoreTests" -c Debug
 git add readboard\Core\AutoPlay\AutoPlayColorMode.cs readboard\Core\Models\AppConfig.cs readboard\Core\Configuration\DualFormatAppConfigStore.cs tests\Readboard.VerificationTests\Configuration\AppConfigDefaultsTests.cs tests\Readboard.VerificationTests\Configuration\DualFormatAppConfigStoreTests.cs
 git commit -m "feat(readboard): 保存野狐自动落子身份配置"
 ```
@@ -235,7 +235,7 @@ Cover:
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxAutoPlayColorResolverTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxAutoPlayColorResolverTests" -c Debug
 ```
 
 Expected: FAIL because files do not exist.
@@ -289,7 +289,7 @@ The final implementation can adjust names, but keep the resolver pure and testab
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxAutoPlayColorResolverTests|FullyQualifiedName~FoxWindowContextTitleParsingTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxAutoPlayColorResolverTests|FullyQualifiedName~FoxWindowContextTitleParsingTests" -c Debug
 git add readboard\Core\AutoPlay readboard\Core\Protocol\FoxWindowContext.cs readboard\Core\Protocol\FoxWindowContextParser.cs tests\Readboard.VerificationTests\AutoPlay tests\Readboard.VerificationTests\Protocol\FoxWindowContextTitleParsingTests.cs
 git commit -m "feat(readboard): 增加自动落子棋色解析器"
 ```
@@ -329,7 +329,7 @@ Use synthetic nickname snippets:
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxPlayerStoneIconDetectorTests|FullyQualifiedName~FoxPlayerNicknameSignatureTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxPlayerStoneIconDetectorTests|FullyQualifiedName~FoxPlayerNicknameSignatureTests" -c Debug
 ```
 
 Expected: FAIL until implementation exists.
@@ -366,7 +366,7 @@ Do not use OCR. Do not store full screenshots in config.
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxPlayerStoneIconDetectorTests|FullyQualifiedName~FoxPlayerNicknameSignatureTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxPlayerStoneIconDetectorTests|FullyQualifiedName~FoxPlayerNicknameSignatureTests" -c Debug
 git add readboard\Core\AutoPlay tests\Readboard.VerificationTests\AutoPlay
 git commit -m "feat(readboard): 识别野狐玩家行棋色"
 ```
@@ -402,7 +402,7 @@ Add assertions that:
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~StartupAndShutdownRegressionTests|FullyQualifiedName~HighDpiSourceRegressionTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~StartupAndShutdownRegressionTests|FullyQualifiedName~HighDpiSourceRegressionTests" -c Debug
 ```
 
 Expected: FAIL on missing controls/keys.
@@ -480,7 +480,7 @@ Assert:
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~StartupAndShutdownRegressionTests|FullyQualifiedName~HighDpiSourceRegressionTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~StartupAndShutdownRegressionTests|FullyQualifiedName~HighDpiSourceRegressionTests" -c Debug
 ```
 
 Expected: FAIL.
@@ -522,7 +522,7 @@ In `SettingsForm`, delete the Fox identity label/button and related language key
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~StartupAndShutdownRegressionTests|FullyQualifiedName~HighDpiSourceRegressionTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~StartupAndShutdownRegressionTests|FullyQualifiedName~HighDpiSourceRegressionTests" -c Debug
 git add readboard\FoxAutoPlayIdentityDialog.cs readboard\FoxAutoPlayIdentityDialog.Designer.cs readboard\Form1.Designer.cs readboard\Form1.cs readboard\Form4.cs readboard\Form4.Designer.cs readboard\Program.cs readboard\language_cn.txt readboard\language_en.txt readboard\language_jp.txt readboard\language_kr.txt tests\Readboard.VerificationTests\Host\StartupAndShutdownRegressionTests.cs tests\Readboard.VerificationTests\Host\HighDpiSourceRegressionTests.cs
 git commit -m "feat(readboard): 添加野狐自动模式身份设置"
 ```
@@ -552,7 +552,7 @@ Use synthetic scaled Fox-like right-panel bitmaps. Cover:
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxPlayerRowLocatorTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxPlayerRowLocatorTests" -c Debug
 ```
 
 Expected: FAIL.
@@ -592,7 +592,7 @@ Use the cache so `CaptureSnapshotCore()` does not perform heavy work on every sa
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxPlayerRowLocatorTests|FullyQualifiedName~FoxAutoPlayColorResolverTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~FoxPlayerRowLocatorTests|FullyQualifiedName~FoxAutoPlayColorResolverTests" -c Debug
 ```
 
 Expected: tests PASS.
@@ -617,7 +617,7 @@ git commit -m "feat(readboard): 接入野狐自动棋色识别"
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~AutoPlay|FullyQualifiedName~DualFormatAppConfigStoreTests|FullyQualifiedName~StartupAndShutdownRegressionTests|FullyQualifiedName~HighDpiSourceRegressionTests" -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj --filter "FullyQualifiedName~AutoPlay|FullyQualifiedName~DualFormatAppConfigStoreTests|FullyQualifiedName~StartupAndShutdownRegressionTests|FullyQualifiedName~HighDpiSourceRegressionTests" -c Debug
 ```
 
 Expected: PASS.
@@ -627,7 +627,7 @@ Expected: PASS.
 Run:
 
 ```powershell
-C:\Users\admin\.dotnet\dotnet.exe test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj -c Debug
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\Readboard.VerificationTests\Readboard.VerificationTests.csproj -c Debug
 ```
 
 Expected: PASS.

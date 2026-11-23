@@ -1,12 +1,12 @@
 # MainForm Theme Layout Implementation Plan
 
-> 说明：这份计划对应上一轮“主题布局修复”的实现范围。当前关于“启动主题不同导致窗口尺寸和布局分叉”的修复，已转由 [2026-04-21-mainform-theme-startup-parity.md](/mnt/d/dev/weiqi/readboard/docs/superpowers/plans/2026-04-21-mainform-theme-startup-parity.md) 作为执行入口；本文件保留用于追溯已完成的布局修复决策。
+> 说明：这份计划对应上一轮“主题布局修复”的实现范围。当前关于“启动主题不同导致窗口尺寸和布局分叉”的修复，已转由 [2026-04-21-mainform-theme-startup-parity.md](2026-04-21-mainform-theme-startup-parity.md) 作为执行入口；本文件保留用于追溯已完成的布局修复决策。
 
 > **For agentic workers:** Choose the execution workflow explicitly. Use `superpowers:executing-plans` when higher-priority instructions prefer inline execution or tasks are tightly coupled. Use `superpowers:subagent-driven-development` only when tasks are truly independent and delegation is explicitly desired. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 修复主窗口新主题的大空白与同步区错位，让默认主题和新版主题共用同一套布局骨架，同时保持不同 DPI / 分辨率下的稳定行为，并把 `修复版主题` 统一更名为 `新版主题`。
 
-**Architecture:** 保持主窗口布局逻辑集中在 [`readboard/Form1.cs`](/mnt/d/dev/weiqi/readboard/readboard/Form1.cs)，引入 `MainHeaderLayoutMetrics` 和一组 theme-neutral measurement helpers，让主题切换只改变视觉样式、不改变排版决策。新增独立的主窗口布局回归测试文件，锁住头部锚点、同步区共享列和主题命名，避免后续 DPI/主题修补再次把布局打散。
+**Architecture:** 保持主窗口布局逻辑集中在 [`readboard/Form1.cs`](../../readboard/Form1.cs)，引入 `MainHeaderLayoutMetrics` 和一组 theme-neutral measurement helpers，让主题切换只改变视觉样式、不改变排版决策。新增独立的主窗口布局回归测试文件，锁住头部锚点、同步区共享列和主题命名，避免后续 DPI/主题修补再次把布局打散。
 
 **Tech Stack:** C# / WinForms / .NET Framework、xUnit 源码回归测试、现有 `DisplayScaling` 缩放逻辑、多语言文本资源。
 
@@ -14,19 +14,19 @@
 
 ## File Map
 
-- Modify: [`readboard/Form1.cs`](/mnt/d/dev/weiqi/readboard/readboard/Form1.cs)
+- Modify: [`readboard/Form1.cs`](../../readboard/Form1.cs)
   - 引入 `MainHeaderLayoutMetrics`
   - 增加主窗口布局专用测量 helper
   - 调整 `ApplyMainFormUi()`、头部/棋盘/同步区布局锚点
   - 统一同步区共享列宽与控件槽位
-- Modify: [`readboard/Program.cs`](/mnt/d/dev/weiqi/readboard/readboard/Program.cs)
+- Modify: [`readboard/Program.cs`](../../readboard/Program.cs)
   - 内置中文字符串 `MainForm_themeOptimized` 改为 `新版主题`
-- Modify: [`readboard/language_cn.txt`](/mnt/d/dev/weiqi/readboard/readboard/language_cn.txt)
-- Modify: [`readboard/language_en.txt`](/mnt/d/dev/weiqi/readboard/readboard/language_en.txt)
-- Modify: [`readboard/language_jp.txt`](/mnt/d/dev/weiqi/readboard/readboard/language_jp.txt)
-- Modify: [`readboard/language_kr.txt`](/mnt/d/dev/weiqi/readboard/readboard/language_kr.txt)
+- Modify: [`readboard/language_cn.txt`](../../readboard/language_cn.txt)
+- Modify: [`readboard/language_en.txt`](../../readboard/language_en.txt)
+- Modify: [`readboard/language_jp.txt`](../../readboard/language_jp.txt)
+- Modify: [`readboard/language_kr.txt`](../../readboard/language_kr.txt)
   - 同步更新主题显示名称
-- Create: [`tests/Readboard.VerificationTests/Host/MainFormThemeLayoutRegressionTests.cs`](/mnt/d/dev/weiqi/readboard/tests/Readboard.VerificationTests/Host/MainFormThemeLayoutRegressionTests.cs)
+- Create: [`tests/Readboard.VerificationTests/Host/MainFormThemeLayoutRegressionTests.cs`](../../tests/Readboard.VerificationTests/Host/MainFormThemeLayoutRegressionTests.cs)
   - 新增主窗口主题布局回归测试
 
 ### Task 1: 锁定主窗口共享布局骨架

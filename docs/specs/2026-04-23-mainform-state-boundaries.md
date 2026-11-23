@@ -18,13 +18,13 @@
 ## 验证
 
 - 全仓 grep `ox1`、`oy1`、`MainForm.type`、`boardW`、`boardH`。
-- 对 `D:\dev\weiqi\lizzieyzy-next` grep `MainForm`、`ox1`、`oy1`、`readboard.MainForm`。
+- 对 LizzieYzy-Next 仓库 grep `MainForm`、`ox1`、`oy1`、`readboard.MainForm`。
 - 修改后运行主测试项目，特别关注启动配置、棋盘尺寸、同步模式、框选校准相关回归测试。
 
 2026-04-23 本轮清理结果：
 
 - `ox1`、`oy1`、`type` 在 readboard 生产代码中只剩历史镜像字段和镜像赋值，已删除。
-- `D:\dev\weiqi\lizzieyzy-next` 未发现 `MainForm.ox1`、`MainForm.oy1`、`MainForm.type`、`readboard.MainForm` 或相关 reflection 字段访问。
+- LizzieYzy-Next 仓库未发现 `MainForm.ox1`、`MainForm.oy1`、`MainForm.type`、`readboard.MainForm` 或相关 reflection 字段访问。
 - `boardW` / `boardH` 保持运行时字段，本轮不改。
 - `LegacyTypeToken = CurrentSyncType.ToString()` 保持不变，并由源代码回归测试锁定。
 
