@@ -16,8 +16,8 @@
 - Existing update behavior: `docs/specs/2026-04-24-update-download-link.md`
 - Protocol boundary: `docs/specs/2026-04-23-protocol-keyword-constants.md`
 - Host integration boundary: `docs/DEVELOPMENT.md`
-- readboard repo: `D:\dev\weiqi\readboard`
-- host repo: `D:\dev\weiqi\lizzieyzy-next`
+- readboard repo: 本仓库根目录
+- host repo: `$HostRepo`（LizzieYzy-Next 本地检出目录；下文路径与命令以它为根）
 
 Do not change readboard launch arguments. Do not let readboard replace files under its own app directory. Keep the old browser-download behavior whenever the host has not explicitly sent `readboardUpdateSupported`.
 
@@ -43,13 +43,13 @@ readboard files:
 
 LizzieYzy-Next files:
 
-- Modify: `D:\dev\weiqi\lizzieyzy-next\src\main\java\featurecat\lizzie\analysis\ReadBoard.java` - parse `readboardUpdateReady`, send `readboardUpdateSupported`, and route update requests.
-- Modify: `D:\dev\weiqi\lizzieyzy-next\src\main\java\featurecat\lizzie\analysis\ReadBoardStream.java` only if a test seam is needed for emitted commands.
-- Modify: `D:\dev\weiqi\lizzieyzy-next\src\main\java\featurecat\lizzie\gui\LizzieFrame.java` - own confirmation, serialized install lifecycle, and native restart.
-- Create: `D:\dev\weiqi\lizzieyzy-next\src\main\java\featurecat\lizzie\analysis\ReadBoardUpdateRequest.java` - parsed update request value object.
-- Create: `D:\dev\weiqi\lizzieyzy-next\src\main\java\featurecat\lizzie\analysis\ReadBoardUpdateInstaller.java` - zip validation, staging, backup, replace, rollback.
-- Create tests under `D:\dev\weiqi\lizzieyzy-next\src\test\java\featurecat\lizzie\analysis`.
-- Modify resources: `D:\dev\weiqi\lizzieyzy-next\src\main\resources\l10n\DisplayStrings*.properties`.
+- Modify: `$HostRepo\src\main\java\featurecat\lizzie\analysis\ReadBoard.java` - parse `readboardUpdateReady`, send `readboardUpdateSupported`, and route update requests.
+- Modify: `$HostRepo\src\main\java\featurecat\lizzie\analysis\ReadBoardStream.java` only if a test seam is needed for emitted commands.
+- Modify: `$HostRepo\src\main\java\featurecat\lizzie\gui\LizzieFrame.java` - own confirmation, serialized install lifecycle, and native restart.
+- Create: `$HostRepo\src\main\java\featurecat\lizzie\analysis\ReadBoardUpdateRequest.java` - parsed update request value object.
+- Create: `$HostRepo\src\main\java\featurecat\lizzie\analysis\ReadBoardUpdateInstaller.java` - zip validation, staging, backup, replace, rollback.
+- Create tests under `$HostRepo\src\test\java\featurecat\lizzie\analysis`.
+- Modify resources: `$HostRepo\src\main\resources\l10n\DisplayStrings*.properties`.
 
 ## Task 1: readboard Protocol Contract And Host Capability State
 
@@ -387,12 +387,12 @@ git commit -m "feat(update): add hosted update dialog flow"
 ## Task 5: LizzieYzy-Next Protocol Parsing And Capability Handshake
 
 **Files:**
-- Modify: `D:\dev\weiqi\lizzieyzy-next\src\main\java\featurecat\lizzie\analysis\ReadBoard.java`
-- Modify: `D:\dev\weiqi\lizzieyzy-next\src\main\java\featurecat\lizzie\analysis\ReadBoardStream.java` if needed to observe sent commands in tests.
-- Create: `D:\dev\weiqi\lizzieyzy-next\src\main\java\featurecat\lizzie\analysis\ReadBoardUpdateRequest.java`
-- Test: `D:\dev\weiqi\lizzieyzy-next\src\test\java\featurecat\lizzie\analysis\ReadBoardUpdateProtocolTest.java`
-- Test: `D:\dev\weiqi\lizzieyzy-next\src\test\java\featurecat\lizzie\analysis\ReadBoardStreamTest.java` or a new native startup protocol test.
-- Test: `D:\dev\weiqi\lizzieyzy-next\src\test\java\featurecat\lizzie\analysis\ReadBoardLaunchPathTest.java` only for directory/path parsing, not handshake behavior.
+- Modify: `$HostRepo\src\main\java\featurecat\lizzie\analysis\ReadBoard.java`
+- Modify: `$HostRepo\src\main\java\featurecat\lizzie\analysis\ReadBoardStream.java` if needed to observe sent commands in tests.
+- Create: `$HostRepo\src\main\java\featurecat\lizzie\analysis\ReadBoardUpdateRequest.java`
+- Test: `$HostRepo\src\test\java\featurecat\lizzie\analysis\ReadBoardUpdateProtocolTest.java`
+- Test: `$HostRepo\src\test\java\featurecat\lizzie\analysis\ReadBoardStreamTest.java` or a new native startup protocol test.
+- Test: `$HostRepo\src\test\java\featurecat\lizzie\analysis\ReadBoardLaunchPathTest.java` only for directory/path parsing, not handshake behavior.
 
 - [ ] **Step 1: Write failing protocol parser tests**
 
@@ -420,7 +420,7 @@ Keep capability assertions in `ReadBoardUpdateProtocolTest` plus `ReadBoardStrea
 - [ ] **Step 3: Run Maven tests to verify failure**
 
 ```powershell
-mvn -f D:\dev\weiqi\lizzieyzy-next\pom.xml -Dtest=ReadBoardUpdateProtocolTest,ReadBoardStreamTest test
+mvn -f $HostRepo\pom.xml -Dtest=ReadBoardUpdateProtocolTest,ReadBoardStreamTest test
 ```
 
 Expected: fails because protocol parser and capability are missing.
@@ -453,7 +453,7 @@ Do not send it for Java readboard or unsupported modes. Keep the send point dete
 - [ ] **Step 7: Run targeted tests**
 
 ```powershell
-mvn -f D:\dev\weiqi\lizzieyzy-next\pom.xml -Dtest=ReadBoardUpdateProtocolTest,ReadBoardStreamTest,ReadBoardLaunchPathTest test
+mvn -f $HostRepo\pom.xml -Dtest=ReadBoardUpdateProtocolTest,ReadBoardStreamTest,ReadBoardLaunchPathTest test
 ```
 
 Expected: pass.
@@ -461,15 +461,15 @@ Expected: pass.
 - [ ] **Step 8: Commit in LizzieYzy-Next**
 
 ```powershell
-git -C D:\dev\weiqi\lizzieyzy-next add src\main\java\featurecat\lizzie\analysis src\test\java\featurecat\lizzie\analysis
-git -C D:\dev\weiqi\lizzieyzy-next commit -m "feat(readboard): add hosted update protocol"
+git -C $HostRepo add src\main\java\featurecat\lizzie\analysis src\test\java\featurecat\lizzie\analysis
+git -C $HostRepo commit -m "feat(readboard): add hosted update protocol"
 ```
 
 ## Task 6: LizzieYzy-Next Installer Service
 
 **Files:**
-- Create: `D:\dev\weiqi\lizzieyzy-next\src\main\java\featurecat\lizzie\analysis\ReadBoardUpdateInstaller.java`
-- Test: `D:\dev\weiqi\lizzieyzy-next\src\test\java\featurecat\lizzie\analysis\ReadBoardUpdateInstallerTest.java`
+- Create: `$HostRepo\src\main\java\featurecat\lizzie\analysis\ReadBoardUpdateInstaller.java`
+- Test: `$HostRepo\src\test\java\featurecat\lizzie\analysis\ReadBoardUpdateInstallerTest.java`
 
 - [ ] **Step 1: Write failing installer tests**
 
@@ -491,7 +491,7 @@ The host installer must revalidate the complete release file set and must not tr
 - [ ] **Step 2: Run tests to verify failure**
 
 ```powershell
-mvn -f D:\dev\weiqi\lizzieyzy-next\pom.xml -Dtest=ReadBoardUpdateInstallerTest test
+mvn -f $HostRepo\pom.xml -Dtest=ReadBoardUpdateInstallerTest test
 ```
 
 Expected: fails because installer class does not exist.
@@ -521,7 +521,7 @@ Rules:
 - [ ] **Step 4: Run installer tests**
 
 ```powershell
-mvn -f D:\dev\weiqi\lizzieyzy-next\pom.xml -Dtest=ReadBoardUpdateInstallerTest test
+mvn -f $HostRepo\pom.xml -Dtest=ReadBoardUpdateInstallerTest test
 ```
 
 Expected: pass.
@@ -529,19 +529,19 @@ Expected: pass.
 - [ ] **Step 5: Commit in LizzieYzy-Next**
 
 ```powershell
-git -C D:\dev\weiqi\lizzieyzy-next add src\main\java\featurecat\lizzie\analysis\ReadBoardUpdateInstaller.java src\test\java\featurecat\lizzie\analysis\ReadBoardUpdateInstallerTest.java
-git -C D:\dev\weiqi\lizzieyzy-next commit -m "feat(readboard): install hosted update packages"
+git -C $HostRepo add src\main\java\featurecat\lizzie\analysis\ReadBoardUpdateInstaller.java src\test\java\featurecat\lizzie\analysis\ReadBoardUpdateInstallerTest.java
+git -C $HostRepo commit -m "feat(readboard): install hosted update packages"
 ```
 
 ## Task 7: LizzieYzy-Next Lifecycle And UI Integration
 
 **Files:**
-- Modify: `D:\dev\weiqi\lizzieyzy-next\src\main\java\featurecat\lizzie\gui\LizzieFrame.java`
-- Modify: `D:\dev\weiqi\lizzieyzy-next\src\main\resources\l10n\DisplayStrings.properties`
-- Modify: `D:\dev\weiqi\lizzieyzy-next\src\main\resources\l10n\DisplayStrings_zh_CN.properties`
+- Modify: `$HostRepo\src\main\java\featurecat\lizzie\gui\LizzieFrame.java`
+- Modify: `$HostRepo\src\main\resources\l10n\DisplayStrings.properties`
+- Modify: `$HostRepo\src\main\resources\l10n\DisplayStrings_zh_CN.properties`
 - Modify: other `DisplayStrings_*.properties`
-- Test: `D:\dev\weiqi\lizzieyzy-next\src\test\java\featurecat\lizzie\analysis\ReadBoardShutdownTest.java`
-- Test: `D:\dev\weiqi\lizzieyzy-next\src\test\java\featurecat\lizzie\gui\LizzieFrameRegressionTest.java`
+- Test: `$HostRepo\src\test\java\featurecat\lizzie\analysis\ReadBoardShutdownTest.java`
+- Test: `$HostRepo\src\test\java\featurecat\lizzie\gui\LizzieFrameRegressionTest.java`
 
 - [ ] **Step 1: Write failing lifecycle tests**
 
@@ -555,7 +555,7 @@ Cover:
 - [ ] **Step 2: Run tests to verify failure**
 
 ```powershell
-mvn -f D:\dev\weiqi\lizzieyzy-next\pom.xml -Dtest=ReadBoardShutdownTest,LizzieFrameRegressionTest test
+mvn -f $HostRepo\pom.xml -Dtest=ReadBoardShutdownTest,LizzieFrameRegressionTest test
 ```
 
 Expected: fails because lifecycle hook is missing.
@@ -590,7 +590,7 @@ Add keys:
 - [ ] **Step 5: Run targeted tests**
 
 ```powershell
-mvn -f D:\dev\weiqi\lizzieyzy-next\pom.xml -Dtest=ReadBoardUpdateProtocolTest,ReadBoardStreamTest,ReadBoardUpdateInstallerTest,ReadBoardShutdownTest,LizzieFrameRegressionTest test
+mvn -f $HostRepo\pom.xml -Dtest=ReadBoardUpdateProtocolTest,ReadBoardStreamTest,ReadBoardUpdateInstallerTest,ReadBoardShutdownTest,LizzieFrameRegressionTest test
 ```
 
 Expected: pass.
@@ -598,8 +598,8 @@ Expected: pass.
 - [ ] **Step 6: Commit in LizzieYzy-Next**
 
 ```powershell
-git -C D:\dev\weiqi\lizzieyzy-next add src\main\java src\main\resources\l10n src\test\java
-git -C D:\dev\weiqi\lizzieyzy-next commit -m "feat(readboard): install updates through host lifecycle"
+git -C $HostRepo add src\main\java src\main\resources\l10n src\test\java
+git -C $HostRepo commit -m "feat(readboard): install updates through host lifecycle"
 ```
 
 ## Task 8: Cross-Repo Verification And Packaging Smoke Test
@@ -619,7 +619,7 @@ Expected: all tests pass.
 - [ ] **Step 2: Run LizzieYzy-Next targeted verification**
 
 ```powershell
-mvn -f D:\dev\weiqi\lizzieyzy-next\pom.xml -Dtest=ReadBoardUpdateProtocolTest,ReadBoardStreamTest,ReadBoardUpdateInstallerTest,ReadBoardLaunchPathTest,ReadBoardShutdownTest,LizzieFrameRegressionTest test
+mvn -f $HostRepo\pom.xml -Dtest=ReadBoardUpdateProtocolTest,ReadBoardStreamTest,ReadBoardUpdateInstallerTest,ReadBoardLaunchPathTest,ReadBoardShutdownTest,LizzieFrameRegressionTest test
 ```
 
 Expected: all tests pass.
@@ -627,7 +627,7 @@ Expected: all tests pass.
 - [ ] **Step 3: Run broader host tests if time permits**
 
 ```powershell
-mvn -f D:\dev\weiqi\lizzieyzy-next\pom.xml test
+mvn -f $HostRepo\pom.xml test
 ```
 
 Expected: pass. If it is too slow or environment-bound, record the reason and the targeted results.
@@ -663,7 +663,7 @@ Ensure both repos are clean except intentional untracked local artifacts:
 
 ```powershell
 git status --short
-git -C D:\dev\weiqi\lizzieyzy-next status --short
+git -C $HostRepo status --short
 ```
 
 If any implementation changed the plan/spec, commit docs separately. Otherwise leave the plan as implementation guidance.

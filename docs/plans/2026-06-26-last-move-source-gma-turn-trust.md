@@ -13,7 +13,7 @@
 ## Specs And Contracts
 
 - Primary spec: `docs/specs/2026-06-26-last-move-source-gma-turn-trust-design.md`
-- Lizzie companion spec: `/home/dev/.config/superpowers/worktrees/lizzieyzy-next/kata-genmove-analyze-sync/docs/specs/2026-06-26-readboard-last-move-source-gma-turn-trust-design.md`
+- Lizzie companion spec: LizzieYzy-Next repo, branch `kata-genmove-analyze-sync`, `docs/specs/2026-06-26-readboard-last-move-source-gma-turn-trust-design.md`
 - Existing contracts to preserve:
   - `docs/specs/2026-06-24-gma-engine-decision-autoplay-design.md`
   - `docs/specs/2026-05-20-fox-auto-play-color-detection-design.md`

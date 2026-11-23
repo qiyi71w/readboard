@@ -9,21 +9,21 @@
 
 ## Architecture
 
-主布局仍集中在 [`Form1.cs`](/mnt/d/dev/weiqi/readboard/readboard/Form1.cs)，共享测量继续由 [`MainForm.LayoutProfile.cs`](/mnt/d/dev/weiqi/readboard/readboard/MainForm.LayoutProfile.cs) 承担，但它只保留旧新版主题口径。主题应用层不再分成“经典视觉”和“新版视觉”两条主路径，而是统一复用旧新版主题样式；`legacy` 桌面布局恢复旧新版主题几何常量，自适应布局继续作为窄屏 / 高 DPI 兜底。
+主布局仍集中在 [`Form1.cs`](../../readboard/Form1.cs)，共享测量继续由 [`MainForm.LayoutProfile.cs`](../../readboard/MainForm.LayoutProfile.cs) 承担，但它只保留旧新版主题口径。主题应用层不再分成“经典视觉”和“新版视觉”两条主路径，而是统一复用旧新版主题样式；`legacy` 桌面布局恢复旧新版主题几何常量，自适应布局继续作为窄屏 / 高 DPI 兜底。
 
 ## File Map
 
-- Modify: [`readboard/Form1.cs`](/mnt/d/dev/weiqi/readboard/readboard/Form1.cs)
+- Modify: [`readboard/Form1.cs`](../../readboard/Form1.cs)
   - 统一默认主题和新版主题的视觉入口
   - 恢复旧新版主题的头部 / 同步区几何下限
   - 保留自适应布局和 DPI 缩放
-- Modify: [`readboard/MainForm.LayoutProfile.cs`](/mnt/d/dev/weiqi/readboard/readboard/MainForm.LayoutProfile.cs)
+- Modify: [`readboard/MainForm.LayoutProfile.cs`](../../readboard/MainForm.LayoutProfile.cs)
   - 继续作为共享测量入口，但仅使用旧新版主题字体口径
-- Modify: [`tests/Readboard.VerificationTests/Host/MainFormThemeStartupParityRegressionTests.cs`](/mnt/d/dev/weiqi/readboard/tests/Readboard.VerificationTests/Host/MainFormThemeStartupParityRegressionTests.cs)
+- Modify: [`tests/Readboard.VerificationTests/Host/MainFormThemeStartupParityRegressionTests.cs`](../../tests/Readboard.VerificationTests/Host/MainFormThemeStartupParityRegressionTests.cs)
   - 锁定两个主题共用旧新版主题视觉入口
-- Modify: [`tests/Readboard.VerificationTests/Host/MainFormThemeLayoutRegressionTests.cs`](/mnt/d/dev/weiqi/readboard/tests/Readboard.VerificationTests/Host/MainFormThemeLayoutRegressionTests.cs)
+- Modify: [`tests/Readboard.VerificationTests/Host/MainFormThemeLayoutRegressionTests.cs`](../../tests/Readboard.VerificationTests/Host/MainFormThemeLayoutRegressionTests.cs)
   - 锁定旧新版主题的 header / sync 几何下限
-- Modify: [`docs/superpowers/specs/2026-04-21-mainform-theme-startup-parity-design.md`](/mnt/d/dev/weiqi/readboard/docs/superpowers/specs/2026-04-21-mainform-theme-startup-parity-design.md)
+- Modify: [`docs/specs/2026-04-21-mainform-theme-startup-parity-design.md`](../specs/2026-04-21-mainform-theme-startup-parity-design.md)
   - 把设计说明切换到方案 A
 
 ## Tasks
